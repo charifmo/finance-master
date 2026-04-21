@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Master - Vision Multi-Années v10.0</title>
+    <!-- Chargement de Tailwind CSS pour le design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chargement de Vue 3 (Exécution native) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Chargement de Chart.js pour les graphiques -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Export PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- API Google pour le Drive -->
+    <script async defer src="https://accounts.google.com/gsi/client"></script>
+    <style>
+        [v-cloak] { display: none !important; }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .log-entry { animation: fadeIn 0.3s ease-out; border-left: 2px solid transparent; }
+        .log-error { border-left-color: #f87171; background: rgba(248, 113, 113, 0.1); }
+        .log-success { border-left-color: #34d399; background: rgba(52, 211, 153, 0.1); }
+        .log-warn { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans md:overflow-hidden">
+    <div id="app" class="min-h-screen md:h-screen w-full flex flex-col md:flex-row relative" v-cloak>
+
+        <!-- SIDEBAR NAVIGATION -->
+        <div class="w-full md:w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 shadow-2xl z-30 md:h-full md:overflow-y-auto custom-scroll border-r border-slate-800">
+            <div>
+                <div class="p-6 border-b border-slate-800 bg-slate-950/40">
+                    <h1 class="text-xl font-bold flex items-center gap-2 text-blue-400 uppercase tracking-tighter italic">📈 Finance App</h1>
+                    <p class="text-slate-400 text-xs mt-2 flex items-center gap-2 font-bold uppercase tracking-widest">
+                        Ultimate Master
+                        <span class="bg-blue-600/30 text-blue-300 px-2 py-0.5 rounded text-[10px] border border-blue-500/30">v{{ CURRENT_VERSION }}</span>
+                    </p>
+                </div>
+                <nav class="px-4 py-4 space-y-2">
+                    <button @click="activeTab = 'dashboard'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'dashboard' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📊 Bilan & Simulation</button>
+                    <button @click="activeTab = 'parametres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'parametres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">⚙️ Moteur Mensuel</button>
+                    <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📅 Calendrier Pluriannuel</button>
+                    <button @click="activeTab = 'studio'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">🏢 Projet Studio</button>
+                    <button @click="showChangelog = true" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-slate-400 hover:bg-slate-800 mt-4 border-t border-slate-800 text-xs font-medium uppercase tracking-widest">📖 Changelog</button>
+                </nav>
+            </div>
+            
+            <!-- SECTIONS DE SYNCHRONISATION MULTIPLES -->
+            <div class="flex flex-col border-t border-slate-800">
+                
+                <!-- 1. VPS CONTABO (LE MAÎTRE) -->
+                <div class="p-4 bg-slate-950/80 border-b border-slate-800">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-[9px] font-black uppercase text-blue-400 tracking-widest">🖥️ Serveur VPS</span>
+                        <div class="flex items-center gap-1">
+                            <button @click="testConnection" class="px-1.5 py-0.5 bg-slate-800 rounded hover:bg-blue-600 transition-colors text-xs" title="Ping Serveur">⚡</button>
+                            <span :class="['text-[8px] font-black uppercase px-2 py-0.5 rounded-full', serverSyncStatus === 'synced' ? 'bg-green-500/20 text-green-400' : (serverSyncStatus === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400')]">
+                                {{ serverSyncStatus === 'synced' ? 'À Jour' : (serverSyncStatus === 'error' ? 'Erreur' : 'Modifié') }}
+                            </span>
+                        </div>
+                    </div>
+                    <button @click="saveToServer" :disabled="serverSyncStatus === 'saving'" :class="['w-full py-2.5 rounded text-[10px] font-black text-white transition-all uppercase tracking-widest shadow-md', serverSyncStatus === 'modified' ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/50 animate-pulse' : (serverSyncStatus === 'saving' ? 'bg-slate-700 cursor-wait' : (serverSyncStatus === 'error' ? 'bg-red-600 hover:bg-red-500' : 'bg-slate-800 border border-slate-700'))]">
+                        {{ serverSyncStatus === 'saving' ? '⏳ Écriture...' : '💾 Sauver sur VPS' }}
+                    </button>
+                    <!-- LOGS VPS -->
+                    <div class="mt-2 bg-black/90 rounded p-1.5 font-mono text-[8px] h-20 overflow-y-auto custom-scroll border border-white/5 relative">
+                        <div v-for="(log, i) in serverLogs" :key="i" :class="['log-entry mb-0.5 p-1 leading-tight rounded', log.type === 'error' ? 'log-error text-red-300' : (log.type === 'success' ? 'log-success text-emerald-300' : (log.type === 'warn' ? 'log-warn text-orange-200' : 'text-slate-400'))]">
+                            <span class="opacity-50">[{{ log.time }}]</span> {{ log.msg }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. GOOGLE DRIVE (LE BACKUP) -->
+                <div class="p-4 bg-slate-900/80 border-b border-slate-800">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest">☁️ Cloud Drive</span>
+                        <button v-if="syncStatus !== 'disconnected'" @click="disconnectDrive" class="text-[8px] text-red-400 hover:text-red-300 uppercase font-bold">Sortir</button>
+                    </div>
+                    <div v-if="syncStatus === 'disconnected'" class="space-y-2">
+                        <button @click="authDrive" class="w-full py-2 bg-slate-800 text-slate-300 border border-slate-700 rounded font-bold text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-colors">Connecter Drive</button>
+                        <div class="text-center"><button @click="showDriveHelp = true" class="text-[8px] text-slate-500 underline uppercase">Configurer Client ID</button></div>
+                    </div>
+                    <div v-else>
+                        <button @click="saveToDrive" :class="['w-full py-2.5 rounded font-black text-[10px] text-white transition-all uppercase tracking-widest', syncStatus === 'modified' ? 'bg-orange-500 shadow-lg shadow-orange-900/30 animate-pulse' : 'bg-blue-600']">
+                            {{ syncStatus === 'saving' ? 'Sync...' : (syncStatus === 'modified' ? '☁️ Sauver Modifs' : '✅ Drive Sync OK') }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. IMPORT / EXPORT LOCAL & RESET -->
+                <div class="p-4 bg-slate-950/20">
+                    <p class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-2 text-center">Gestion des Données</p>
+                    <div class="flex gap-2">
+                        <button @click="exporterDonnees" class="flex-1 py-2 rounded text-[9px] font-bold text-green-400 bg-green-900/20 hover:bg-green-900/40 border border-green-800/50 transition-colors uppercase tracking-widest">💾 Exporter</button>
+                        <button @click="triggerImport" class="flex-1 py-2 rounded text-[9px] font-bold text-yellow-400 bg-yellow-900/20 hover:bg-yellow-900/40 border border-yellow-800/50 transition-colors uppercase tracking-widest">📂 Importer</button>
+                        <input type="file" ref="fileInput" @change="importerDonnees" accept=".json" class="hidden" />
+                    </div>
+                    <button @click="restaurerDefaut" class="w-full mt-2 py-2 rounded text-[9px] font-bold text-red-400 bg-red-900/20 hover:bg-red-900/40 border border-red-800/50 transition-colors uppercase tracking-widest">
+                        🔄 Restaurer Valeurs Initiales
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTENU PRINCIPAL -->
+        <div class="flex-1 flex flex-col bg-gray-50 md:h-full md:overflow-hidden relative">
+            
+            <!-- BANNIÈRE FLOTTANTE -->
+            <div class="sticky top-0 shrink-0 z-50 px-6 py-4 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm flex flex-wrap gap-4 justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <div class="bg-blue-100 p-2.5 rounded-xl shadow-inner text-blue-600"><span class="text-xl">🏦</span></div>
+                    <div>
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">En Banque Actuellement</p>
+                        <p :class="['text-xl font-black', (soldesInitiaux?.courant ?? 0) >= 0 ? 'text-gray-800' : 'text-red-600']">{{ formatMAD(soldesInitiaux?.courant ?? 0) }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4 text-right">
+                    <div>
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Proj. Fin {{ Math.max(...anneesDisponibles) }} {{ (soldesInitiaux?.decalagePaie !== false) ? '(Avant Paie)' : '' }}</p>
+                        <p :class="['text-xl font-black flex items-center justify-end gap-2', soldeFinal >= 0 ? 'text-green-600' : 'text-red-600']">{{ formatMAD(soldeFinal) }}</p>
+                    </div>
+                    <div :class="['p-2.5 rounded-xl shadow-sm', soldeFinal >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']"><span class="text-xl">{{ soldeFinal >= 0 ? '🎉' : '⚠️' }}</span></div>
+                </div>
+            </div>
+
+            <!-- SCROLLABLE AREA -->
+            <div class="flex-1 md:overflow-y-auto custom-scroll p-4 md:p-8 pb-32">
+
+                <!-- TAB 1: DASHBOARD -->
+                <div v-if="activeTab === 'dashboard'" class="max-w-6xl mx-auto space-y-6">
+                    <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-4">
+                        <h2 class="text-2xl font-bold text-gray-800">Tableau de bord & KPIs</h2>
+                        <button @click="exporterPDF" :disabled="pdfExporting" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait text-white text-sm font-black rounded-lg transition-colors shadow-sm uppercase tracking-widest">
+                            <span v-if="pdfExporting">⏳ Génération...</span>
+                            <span v-else>📄 Exporter PDF</span>
+                        </button>
+                    </div>
+
+                    <div id="pdf-kpis" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Surplus Mensuel Net</p>
+                            <h3 :class="['text-2xl lg:text-3xl font-black mt-2', surplusMensuelBase >= 0 ? 'text-green-600' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</h3>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Mensualités Crédits</p>
+                            <h3 class="text-2xl lg:text-3xl font-black mt-2 text-gray-800">{{ formatMAD(totalCreditsMensuels) }}</h3>
+                            <p :class="['text-[10px] mt-1 font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-500')]">Endettement : {{ tauxEndettement.toFixed(1) }} %</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Projection Fin {{ Math.max(...anneesDisponibles) }}</p>
+                            <h3 :class="['text-2xl lg:text-3xl font-black mt-2', soldeFinal >= 0 ? 'text-blue-600' : 'text-red-600']">{{ formatMAD(soldeFinal) }}</h3>
+                            <p v-if="soldeFinal < 0" class="text-[10px] text-red-500 mt-1 font-bold uppercase">⚠️ Risque de découvert</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Épargne Cumulée (Fin {{ Math.max(...anneesDisponibles) }})</p>
+                            <h3 class="text-2xl lg:text-3xl font-black mt-2 text-purple-600">{{ formatMAD(epargneTotaleFinal) }}</h3>
+                        </div>
+                    </div>
+
+                    <!-- CHARTS LIGNE 1 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                            <h3 class="text-lg font-bold text-gray-800 mb-1">Où va votre argent ?</h3>
+                            <p class="text-[10px] text-gray-500 mb-2 uppercase font-bold">Répartition globale (Mensuelle)</p>
+                            <p class="text-xs text-blue-500 font-bold mb-4 animate-pulse">👆 Cliquez sur une section pour voir le détail</p>
+                            <div class="h-64 relative"><base-chart v-if="budgetChartConfig" :config="budgetChartConfig"></base-chart></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                            <h3 class="text-lg font-bold text-gray-800 mb-1">Que consommez-vous ?</h3>
+                            <p class="text-[10px] text-gray-500 mb-2 uppercase font-bold">Sous-catégories</p>
+                            <p class="text-xs text-blue-500 font-bold mb-4 animate-pulse">👆 Cliquez pour auditer</p>
+                            <div class="h-64 relative"><base-chart v-if="consoChartConfig" :config="consoChartConfig"></base-chart></div>
+                        </div>
+                    </div>
+
+                    <!-- CHARTS LIGNE 2 -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-80 flex flex-col">
+                            <h3 class="text-lg font-bold text-gray-800 mb-1">Évolution Pluriannuelle</h3>
+                            <p class="text-[10px] text-gray-500 mb-4 font-bold uppercase">Solde courant estimé</p>
+                            <div class="flex-1 relative w-full h-full min-h-[200px]"><base-chart v-if="lineChartConfig" :config="lineChartConfig"></base-chart></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-80 flex flex-col relative overflow-hidden">
+                            <div v-if="!activeDrilldown" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/90 z-10 p-6 text-center backdrop-blur-sm">
+                                <div class="text-4xl mb-3">🔍</div>
+                                <h3 class="font-bold text-gray-700 text-lg">Audit détaillé</h3>
+                                <p class="text-xs text-gray-500 mt-2 font-medium">Cliquez sur un graphique au-dessus pour disséquer les chiffres.</p>
+                            </div>
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-lg font-black uppercase tracking-tighter" :style="{ color: activeDrilldown ? activeDrilldown.color : '#000' }">{{ activeDrilldown ? activeDrilldown.label : 'Détails' }}</h3>
+                                    <p class="text-[10px] text-gray-500 font-bold uppercase">Valeurs mensuelles</p>
+                                </div>
+                                <button v-if="activeDrilldown" @click="activeDrilldown = null" class="text-gray-500 hover:text-gray-800 text-xs font-bold bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors uppercase">Fermer ✕</button>
+                            </div>
+                            <div class="flex-1 relative w-full h-full min-h-[200px]"><base-chart v-if="detailChartConfig" :config="detailChartConfig"></base-chart></div>
+                        </div>
+                    </div>
+
+                    <!-- TABLEAU -->
+                    <div id="pdf-simulation" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8">
+                        <div class="px-6 py-4 bg-gray-100 font-bold text-gray-800 flex justify-between items-center">
+                            <span>Simulation du Cash Global</span>
+                            <span class="text-[9px] bg-slate-800 text-white px-2 py-1 rounded uppercase tracking-widest">Master Engine</span>
+                        </div>
+                        <div class="overflow-x-auto max-h-[500px] custom-scroll">
+                            <table class="w-full text-left text-sm whitespace-nowrap">
+                                <thead class="bg-gray-50 text-gray-600 text-[10px] font-black uppercase tracking-wider sticky top-0 shadow-sm z-10">
+                                    <tr>
+                                        <th class="p-4">Période</th>
+                                        <th class="p-4 text-right text-blue-600">Budget Entrées</th>
+                                        <th class="p-4 text-right text-red-500">Chocs / Dépenses</th>
+                                        <th class="p-4">Détail Chocs Restants</th>
+                                        <th class="p-4 text-right font-black bg-blue-50 text-blue-900">{{ (soldesInitiaux?.decalagePaie !== false) ? 'Solde (Avant Paie)' : 'Compte Courant' }}</th>
+                                        <th class="p-4 text-right text-purple-600">Total Épargne</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <tr class="bg-blue-50/30 font-medium">
+                                        <td class="p-4 text-blue-800 font-bold italic">Aujourd'hui (Saisie Base)</td>
+                                        <td class="p-4 text-right">-</td>
+                                        <td class="p-4 text-right">-</td>
+                                        <td class="p-4">-</td>
+                                        <td class="p-4 text-right font-black text-lg text-blue-900">{{ formatMAD(soldesInitiaux?.courant ?? 0) }}</td>
+                                        <td class="p-4 text-right text-purple-600">{{ formatMAD((soldesInitiaux?.urgence ?? 0) + (soldesInitiaux?.lt ?? 0)) }}</td>
+                                    </tr>
+                                    <tr v-for="(row, idx) in bilan" :key="idx" :class="['transition-colors', row.numMois === 1 && !row.isCurrent ? 'border-t-2 border-slate-300 bg-slate-50' : 'hover:bg-gray-50']">
+                                        <td class="p-4 font-bold flex items-center gap-2">
+                                            {{ row.mois }} 
+                                            <span v-if="row.isCurrent" class="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded uppercase font-black tracking-widest">Actuel</span>
+                                        </td>
+                                        <td class="p-4 text-right">
+                                            <span :class="['font-bold', row.revenusAppliques >= 0 ? 'text-green-600' : 'text-red-600']">{{ row.revenusAppliques > 0 ? '+' : '' }}{{ formatMAD(row.revenusAppliques) }}</span>
+                                            <div v-if="row.isCurrent && (soldesInitiaux.decalagePaie !== false)" class="text-[9px] text-gray-500 font-bold mt-1 uppercase tracking-widest">Ds Solde Init.</div>
+                                            <div v-if="row.isException" class="text-[9px] text-orange-500 font-bold mt-1 uppercase tracking-widest">Exception Active</div>
+                                        </td>
+                                        <td class="p-4 text-right text-red-500 font-bold">{{ row.sortiesExceptionnelles > 0 ? '-' + formatMAD(row.sortiesExceptionnelles) : '-' }}</td>
+                                        <td class="p-4 text-[10px] text-gray-500 max-w-[150px] truncate font-medium" :title="row.detailsIrreg">{{ row.detailsIrreg || '-' }}</td>
+                                        <td :class="['p-4 text-right font-black text-lg border-l border-gray-100', row.soldeCourant < 0 ? 'text-red-600' : 'text-gray-800']">{{ formatMAD(row.soldeCourant) }}</td>
+                                        <td class="p-4 text-right text-purple-600 font-bold">{{ formatMAD(row.soldeUrgence + row.soldeLT) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: PARAMETRES -->
+                <div v-if="activeTab === 'parametres'" class="max-w-4xl mx-auto space-y-6">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-4 mb-8 gap-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                                Moteur Mensuel
+                                <button @click="modeEdition = !modeEdition" :class="['text-[10px] px-3 py-1.5 rounded-lg font-black transition-colors shadow-sm uppercase tracking-widest border', modeEdition ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-white text-gray-600 hover:bg-gray-100 border-gray-300']">
+                                    {{ modeEdition ? '✅ Terminer Edition' : '✏️ Editer Structure' }}
+                                </button>
+                            </h2>
+                            <p class="text-sm text-gray-500 mt-1">Gérez le pilotage fin du mois ({{ nomDuMois(soldesInitiaux.moisActuel) }} {{ soldesInitiaux.anneeActuelle }}).</p>
+                        </div>
+                        <div class="bg-gray-900 text-white p-4 rounded-2xl shadow-lg border border-gray-700 text-right">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Reste à Vivre Base</p>
+                            <p :class="['text-3xl font-black tracking-tighter', surplusMensuelBase > 0 ? 'text-green-400' : 'text-red-400']">{{ formatMAD(surplusMensuelBase) }}</p>
+                        </div>
+                    </div>
+
+                    <!-- CALIBRAGE TEMPS REEL (V9.2) -->
+                    <div class="bg-white p-8 rounded-[2.5rem] border-t-8 border-blue-500 shadow-sm relative text-center">
+                        <h3 class="font-black text-blue-900 text-xl mb-8 uppercase tracking-tighter flex items-center justify-center gap-3">⚙️ PILOTAGE DU MOIS COURANT</h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                                <label class="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest font-mono">Compte Courant actuel</label>
+                                <input type="number" v-model.number="soldesInitiaux.courant" @input="handleDataChange" class="w-full text-4xl font-black text-blue-700 bg-transparent outline-none text-center"/>
+                            </div>
+                            <div class="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                                <label class="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest font-mono">Épargne Urgence</label>
+                                <input type="number" v-model.number="soldesInitiaux.urgence" @input="handleDataChange" class="w-full text-4xl font-black text-purple-700 bg-transparent outline-none text-center"/>
+                            </div>
+                        </div>
+
+                        <!-- Outils de Prorata et de Temps -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center flex flex-col justify-center">
+                                <label class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2 block">Nous sommes en</label>
+                                <div class="flex gap-2">
+                                    <select v-model.number="soldesInitiaux.moisActuel" @change="handleDataChange" class="flex-1 bg-slate-900 text-white font-bold text-sm p-3 rounded-xl outline-none cursor-pointer border border-slate-600 text-center">
+                                        <option v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :value="m">{{ nomDuMois(m) }}</option>
+                                    </select>
+                                    <input type="number" v-model.number="soldesInitiaux.anneeActuelle" @input="handleDataChange" class="w-24 bg-slate-900 text-blue-300 font-black text-sm p-3 rounded-xl border border-slate-600 text-center outline-none"/>
+                                </div>
+                            </div>
+                            <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center flex flex-col justify-center">
+                                <label class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2 block">Prorata de Consommation</label>
+                                <select v-model.number="soldesInitiaux.semainesRestantes" @change="handleDataChange" class="w-full bg-slate-900 text-white font-bold text-sm p-3 rounded-xl outline-none cursor-pointer border border-slate-600 text-center">
+                                    <option v-for="s in [4,3,2,1,0]" :value="s">{{ s }} semaines restantes</option>
+                                </select>
+                                <p class="text-[10px] text-blue-400 font-black mt-2 uppercase tracking-widest">Budget Semaines : {{ formatMAD(budgetConsoRestant) }}</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Toggle Décalage V9.2 -->
+                        <div class="p-4 bg-slate-800 rounded-2xl border border-slate-700 text-left flex items-center justify-between mb-6 shadow-sm">
+                            <div>
+                                <p class="text-sm font-bold text-white">Mode "Décalage de Paie" actif</p>
+                                <p class="text-[10px] text-slate-400 mt-1">Le salaire reçu fin de mois finance le mois suivant (Ex: Paie de Mars couvre Avril).</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" v-model="soldesInitiaux.decalagePaie" @change="handleDataChange" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                            </label>
+                        </div>
+
+                        <!-- Bouton Global Salaire -->
+                        <div class="p-6 bg-slate-900 text-white rounded-[2rem] shadow-inner space-y-4 text-center">
+                            <button @click="soldesInitiaux.salaireRecu = !soldesInitiaux.salaireRecu; handleDataChange()" :class="['w-full max-w-sm mx-auto p-4 rounded-2xl border-2 transition-all font-black text-sm uppercase tracking-widest shadow-md', soldesInitiaux.salaireRecu ? 'bg-green-600/20 border-green-500 text-green-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500']">
+                                💰 Paie Globale reçue ? {{ soldesInitiaux.salaireRecu ? 'OUI ✅' : 'NON' }}
+                            </button>
+                            
+                            <!-- SUPER CHECKLIST V9.1 (Partiels et Fixes) -->
+                            <div class="mt-6 bg-slate-800/80 rounded-2xl border border-slate-600 overflow-hidden text-left shadow-lg">
+                                <div @click="dropdownFacturesOpen = !dropdownFacturesOpen" class="flex items-center justify-between p-5 cursor-pointer hover:bg-slate-700 transition-colors">
+                                    <div class="flex items-center gap-4">
+                                        <span class="text-blue-400 text-2xl">📋</span>
+                                        <div>
+                                            <span class="text-sm font-black uppercase tracking-widest text-white block">Checklist Détaillée du Mois</span>
+                                            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Paiements pour {{ nomDuMois(soldesInitiaux.moisActuel) }} {{ soldesInitiaux.anneeActuelle }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <span :class="['text-[10px] px-3 py-1.5 rounded-lg font-black shadow-sm border', elementsDuMoisPayes === elementsDuMoisTotal && elementsDuMoisTotal > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
+                                            {{ elementsDuMoisPayes }} / {{ elementsDuMoisTotal }} payés
+                                        </span>
+                                        <span class="text-slate-400 text-lg">{{ dropdownFacturesOpen ? '▲' : '▼' }}</span>
+                                    </div>
+                                </div>
+                                <div v-show="dropdownFacturesOpen" class="p-5 pt-0 space-y-5 border-t border-slate-700 mt-2 max-h-[500px] overflow-y-auto custom-scroll">
+                                    
+                                    <!-- 1. Charges Fixes -->
+                                    <div v-if="Object.keys(chargesFixes).length > 0">
+                                        <p class="text-[9px] text-orange-400 font-black uppercase tracking-widest mb-2 border-b border-orange-900/50 pb-1 mt-2">🏢 Charges Fixes</p>
+                                        <div class="space-y-1.5">
+                                            <div v-for="(f, key) in chargesFixes" :key="key" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-orange-500 transition-all">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                                    <input type="checkbox" :checked="isItemPaid(f, getDueFixe(f))" @change="toggleItemPaid(f, getDueFixe(f))" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer"/>
+                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(f, getDueFixe(f)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-orange-300']">{{ f.label }}</span>
+                                                </label>
+                                                <div class="flex items-center gap-2 ml-4">
+                                                    <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-orange-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-orange-400 transition-colors" />
+                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, getDueFixe(f)) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(getDueFixe(f)).replace(' DH', '') }}</span>
+                                                    <span class="text-[9px] text-slate-500 font-bold">DH</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 2. Factures Mensuelles -->
+                                    <div v-for="cat in Object.values(chargesVariables).filter(c => c.periode === 'mois')" :key="cat.label">
+                                        <p class="text-[9px] text-blue-400 font-black uppercase tracking-widest mb-2 border-b border-blue-900/50 pb-1 mt-2">🧾 {{ cat.label }}</p>
+                                        <div class="space-y-1.5">
+                                            <div v-for="f in cat.details" :key="f.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-blue-500 transition-all">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                                    <input type="checkbox" :checked="isItemPaid(f, f.montant)" @change="toggleItemPaid(f, f.montant)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 cursor-pointer"/>
+                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(f, f.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-blue-300']">{{ f.nom }}</span>
+                                                </label>
+                                                <div class="flex items-center gap-2 ml-4">
+                                                    <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-blue-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors" />
+                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, f.montant) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(f.montant).replace(' DH', '') }}</span>
+                                                    <span class="text-[9px] text-slate-500 font-bold">DH</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 3. Chocs du Mois Actuel -->
+                                    <div v-if="getDepensesMois(soldesInitiaux.moisActuel, soldesInitiaux.anneeActuelle).length > 0">
+                                        <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1 mt-2">⚠️ Chocs de {{ nomDuMois(soldesInitiaux.moisActuel) }}</p>
+                                        <div class="space-y-1.5">
+                                            <div v-for="dep in getDepensesMois(soldesInitiaux.moisActuel, soldesInitiaux.anneeActuelle)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                                    <input type="checkbox" :checked="isItemPaid(dep, dep.montant)" @change="toggleItemPaid(dep, dep.montant)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500 cursor-pointer"/>
+                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-red-300']">{{ dep.nom }}</span>
+                                                </label>
+                                                <div class="flex items-center gap-2 ml-4">
+                                                    <input type="number" v-model.number="dep.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-red-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-red-400 transition-colors" />
+                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(dep, dep.montant) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(dep.montant).replace(' DH', '') }}</span>
+                                                    <span class="text-[9px] text-slate-500 font-bold">DH</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- REVENUS -->
+                    <div class="bg-white p-8 rounded-2xl border-t-8 border-green-500 shadow-sm">
+                        <h3 class="font-black text-green-900 text-xl mb-6 flex justify-between items-center uppercase italic">ENTRÉES MENSUELLES <span class="text-sm font-normal text-gray-400 font-mono">{{formatMAD(totalRevenusBase)}}</span></h3>
+                        <div v-for="(item, key) in revenus" :key="key" class="mb-5 border-b border-gray-100 pb-4 last:border-0">
+                            <div class="flex justify-between items-center mb-2">
+                                <div>
+                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-green-400 w-48" />
+                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}</label>
+                                    <button @click="item.showExceptions = !item.showExceptions" class="text-[10px] text-blue-500 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors mt-1.5 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
+                                        {{ item.showExceptions ? '➖ Masquer options' : '➕ Suspendre / Modifier Période' }}
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <input type="number" v-model.number="item.base" @input="handleDataChange" class="w-32 p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-green-700 text-lg focus:ring-2 focus:ring-green-400 outline-none transition-all"/>
+                                    <span class="text-gray-400 text-xs font-bold">DH</span>
+                                </div>
+                            </div>
+                            <!-- Exceptions -->
+                            <div v-if="item.showExceptions" class="mt-4 bg-blue-50/50 rounded-xl p-4 border border-blue-100 shadow-inner">
+                                <p class="text-[9px] font-black text-blue-800 uppercase tracking-widest mb-3">Règles d'exception (Mois 1 à 12)</p>
+                                <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-blue-100 shadow-sm flex-wrap sm:flex-nowrap">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">De</span>
+                                    <select v-model.number="exc.moisDebut" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">à</span>
+                                    <select v-model.number="exc.moisFin" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase ml-2">Nouvelle Valeur :</span>
+                                    <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" class="w-24 p-1.5 text-sm font-black text-blue-700 border rounded text-right bg-blue-50 outline-none"/>
+                                    <button @click="(item.exceptions || []).splice(idx, 1); handleDataChange()" class="text-red-500 hover:text-red-700 font-bold ml-auto px-2">✕</button>
+                                </div>
+                                <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FIXES -->
+                    <div class="bg-white p-8 rounded-2xl border-t-8 border-orange-500 shadow-sm">
+                        <h3 class="font-black text-orange-900 text-xl mb-6 flex justify-between items-center">
+                            2. CHARGES FIXES <span class="text-sm font-normal text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg">{{ formatMAD(totalFixes) }} / mois</span>
+                        </h3>
+                        <p class="text-xs text-gray-500 italic mb-4">Pour signaler un paiement partiel ou total, rendez-vous dans la <b>Checklist Détaillée</b> plus haut.</p>
+                        <div v-for="(item, key) in chargesFixes" :key="key" class="mb-5 border-b border-gray-100 pb-4 last:border-0">
+                            <div class="flex justify-between items-center mb-2">
+                                <div>
+                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-orange-400 w-48" />
+                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}</label>
+                                    <button @click="item.showExceptions = !item.showExceptions" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold flex items-center gap-1 transition-colors mt-1.5 uppercase tracking-widest bg-orange-50 px-2 py-0.5 rounded">
+                                        {{ item.showExceptions ? '➖ Masquer options' : '➕ Gérer Périodes' }}
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" class="w-32 p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-orange-700 text-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"/>
+                                    <span class="text-gray-400 text-xs font-bold">DH</span>
+                                </div>
+                            </div>
+                            <div v-if="item.showExceptions" class="mt-4 bg-orange-50/50 rounded-xl p-4 border border-orange-100 shadow-inner">
+                                <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-orange-100 shadow-sm flex-wrap sm:flex-nowrap">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">De</span>
+                                    <select v-model.number="exc.moisDebut" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">à</span>
+                                    <select v-model.number="exc.moisFin" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase ml-2">Nouveau :</span>
+                                    <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" class="w-24 p-1.5 text-sm font-black text-orange-700 border rounded text-right bg-orange-50 outline-none"/>
+                                    <button @click="(item.exceptions || []).splice(idx, 1); handleDataChange()" class="text-red-500 hover:text-red-700 font-bold ml-auto px-2">✕</button>
+                                </div>
+                                <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VARIABLES (LIGNES EXCEL) -->
+                    <div class="bg-white p-8 rounded-2xl border-t-8 border-red-500 shadow-sm">
+                        <h3 class="font-black text-red-900 text-xl mb-6 flex justify-between items-center">
+                            3. CONSOMMATION VARIABLE <span class="text-sm font-normal text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg">{{ formatMAD(totalVariables) }} / mois</span>
+                        </h3>
+                        <div v-for="(item, key) in chargesVariables" :key="key" class="mb-6 border-b border-gray-100 pb-5 last:border-0">
+                            <div class="flex justify-between items-start md:items-center mb-2 flex-col md:flex-row gap-3">
+                                <div>
+                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-red-400 w-48" />
+                                    <label v-else class="block text-sm font-black text-gray-800 uppercase tracking-wide">{{ item.label }}</label>
+                                    <button @click="item.showDetails = !item.showDetails" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors mt-1.5 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
+                                        {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.details && item.details.length > 0" :class="['w-28 p-3 border rounded-xl text-right font-black text-lg focus:ring-2 focus:ring-red-400 outline-none transition-all', item.details && item.details.length > 0 ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
+                                    <select v-model="item.periode" @change="handleDataChange" class="p-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-gray-100 outline-none cursor-pointer">
+                                        <option value="semaine">/ sem</option>
+                                        <option value="mois">/ mois</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div v-if="item.periode === 'semaine'" class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mb-2">
+                                Impact mensuel calculé (x4.3) : {{ formatMAD((item.valeur || 0) * 4.3) }}
+                            </div>
+                            
+                            <!-- Sous-Lignes "Excel" -->
+                            <div v-if="item.showDetails" class="mt-4 bg-gray-50 rounded-xl p-5 border border-gray-200 shadow-inner">
+                                <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4 text-center border-b border-gray-200 pb-2">Détail des dépenses (Le total remplace la valeur ci-dessus)</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                    <div v-for="(detail, idx) in (item.details || [])" :key="detail.id" class="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-sm focus-within:border-red-300 transition-colors">
+                                        <input type="text" v-model="detail.nom" @input="handleDataChange" placeholder="Nom..." class="flex-1 p-1.5 text-xs font-bold text-gray-700 outline-none bg-transparent"/>
+                                        <input type="number" v-model.number="detail.montant" @input="handleDataChange" class="w-20 p-1.5 text-sm font-black text-red-600 text-right outline-none bg-gray-50 rounded border border-transparent focus:border-red-200"/>
+                                        <button @click="(item.details || []).splice(idx, 1); handleDataChange()" class="text-red-400 hover:text-red-600 px-1 font-bold">✕</button>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, paye: false, montantPaye: 0 }); handleDataChange()" class="text-[10px] text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 hover:text-blue-600 px-4 py-2 rounded-lg font-black transition-colors shadow-sm uppercase tracking-widest">+ Nouvelle ligne</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- EPARGNE -->
+                    <div class="bg-white p-8 rounded-2xl border-t-8 border-purple-500 shadow-sm">
+                        <h3 class="font-black text-purple-900 text-xl mb-6">4. OBJECTIFS ÉPARGNE</h3>
+                        <div v-for="(item, key) in epargne" :key="key" class="flex justify-between items-center border-b border-gray-100 pb-4 mb-4 last:border-0 last:mb-0">
+                            <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-purple-400 w-48" />
+                            <label v-else class="text-sm font-black text-gray-700 uppercase tracking-wide">Compte {{ item.label }}</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" v-model.number="item.valeur" @input="handleDataChange" class="w-32 p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-purple-700 text-lg focus:ring-2 focus:ring-purple-400 outline-none transition-all"/>
+                                <span class="text-gray-400 text-xs font-bold">DH</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: IRREGULIERES MULTI-ANNEES -->
+                <div v-if="activeTab === 'irregulieres'" class="max-w-4xl mx-auto space-y-6">
+                    <div class="flex justify-between items-center border-b pb-4 mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                            📅 Calendrier Pluriannuel 
+                        </h2>
+                        <div class="flex items-center gap-2">
+                            <select v-model.number="anneeAffichage" class="bg-white border-2 border-slate-200 text-slate-800 font-black p-2 rounded-lg outline-none cursor-pointer text-sm">
+                                <option v-for="a in anneesDisponibles" :key="a" :value="a">Année {{ a }}</option>
+                            </select>
+                            <button @click="ajouterAnnee" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-lg text-xs transition-colors shadow-sm uppercase tracking-widest">
+                                + Ajouter Année
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div v-for="moisNum in 12" :key="moisNum" class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                            <div @click="toggleMois(moisNum)" class="bg-gray-50 px-6 py-4 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors border-b border-gray-100">
+                                <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm">Mois {{ moisNum }} - {{ nomDuMois(moisNum) }} {{ anneeAffichage }}</h3>
+                                <span v-if="totalMoisAffichage(moisNum) > 0" class="text-sm font-black text-red-600 bg-red-100 px-4 py-1.5 rounded-full shadow-inner">{{ formatMAD(totalMoisAffichage(moisNum)) }}</span>
+                            </div>
+                            <div v-show="moisOuverts.includes(moisNum)" class="p-6 bg-white space-y-3">
+                                <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
+                                    <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
+                                    <input type="number" v-model.number="depense.montant" @input="handleDataChange" class="w-24 text-right font-black text-red-600 bg-transparent outline-none"/>
+                                    
+                                    <!-- LISTE DÉROULANTE DÉPLACEMENT MOIS V9.0 -->
+                                    <select v-model.number="depense.mois" @change="deplacerDepense(depense)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-2 rounded-lg font-black transition-colors text-xs uppercase tracking-widest shadow-sm outline-none cursor-pointer" title="Déplacer vers un autre mois de la même année">
+                                        <option disabled :value="moisNum">Vers... ⏭️</option>
+                                        <option v-for="m in 12" :key="m" :value="m" v-show="m !== moisNum" class="text-gray-800 bg-white">{{ nomDuMois(m) }}</option>
+                                    </select>
+                                    
+                                    <button @click="supprimerDepense(depense.id); handleDataChange()" class="text-red-400 hover:text-red-600 px-2 font-bold md:opacity-50 md:group-hover:opacity-100 transition-opacity text-lg">✕</button>
+                                </div>
+                                <button @click="ajouterDepense(moisNum, anneeAffichage); handleDataChange()" class="w-full py-3.5 mt-2 rounded-xl border-2 border-dashed border-gray-200 text-[10px] font-black text-gray-500 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 uppercase transition-all tracking-[0.2em]">+ Ajouter un choc en {{ nomDuMois(moisNum) }} {{ anneeAffichage }}</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: STUDIO -->
+                <div v-if="activeTab === 'studio'" class="max-w-5xl mx-auto space-y-6">
+                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">🏢 Simulateur Projet Immobilier</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Parametres -->
+                        <div class="space-y-6">
+                            <div class="bg-white p-8 rounded-2xl border shadow-sm">
+                                <h3 class="font-black text-gray-800 mb-6 uppercase tracking-widest text-sm">Données d'Acquisition</h3>
+                                <div class="space-y-4">
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Prix m²</span><div class="flex items-center gap-2"><input type="number" v-model.number="projetStudio.prixM2" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/><span class="text-xs text-gray-400">DH</span></div></div>
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Surface</span><div class="flex items-center gap-2"><input type="number" v-model.number="projetStudio.surface" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/><span class="text-xs text-gray-400">m²</span></div></div>
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Avance payée</span><div class="flex items-center gap-2"><input type="number" v-model.number="projetStudio.avance" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/><span class="text-xs text-gray-400">DH</span></div></div>
+                                    <div class="flex justify-between font-black pt-4 border-t text-gray-800"><span class="uppercase">Reste Promoteur</span><span class="text-lg">{{ formatMAD(studioCalc.restePromoteur) }}</span></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-8 rounded-2xl border shadow-sm">
+                                <h3 class="font-black text-gray-800 mb-6 uppercase tracking-widest text-sm">Structure Crédit & Reliquat</h3>
+                                <div class="space-y-4">
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Taxes Notaire/Syndic</span><input type="number" v-model.number="projetStudio.taxSyndic" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/></div>
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Travaux prévus</span><input type="number" v-model.number="projetStudio.travaux" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/></div>
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-blue-600">Taxes incluses ds Crédit</span><input type="number" v-model.number="projetStudio.taxCouvertCredit" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-blue-50 text-blue-700 outline-none"/></div>
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-emerald-600">Surplus Crédit demandé</span><input type="number" v-model.number="projetStudio.surplusCredit" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-black bg-emerald-50 text-emerald-700 outline-none"/></div>
+                                    <div class="flex justify-between items-center pt-2 border-t"><span class="text-sm font-bold text-gray-600">Taux (%)</span><input type="number" step="0.1" v-model.number="projetStudio.taux" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/></div>
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Durée (Ans)</span><input type="number" v-model.number="projetStudio.duree" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/></div>
+                                    <div class="flex justify-between items-center pt-2"><span class="text-sm font-black text-gray-800">Assurance Mensuelle</span><input type="number" v-model.number="projetStudio.assuranceMensuelle" @input="handleDataChange" class="w-28 text-right p-2 border-2 border-gray-300 rounded-lg font-black outline-none focus:border-blue-400"/></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Bilan Droit -->
+                        <div class="space-y-6">
+                            <div class="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl border-b-8 border-blue-600 text-center relative overflow-hidden">
+                                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50"></div>
+                                <h3 class="font-black text-blue-400 mb-8 uppercase tracking-[0.3em] text-[10px] font-mono">Bilan Mensualité</h3>
+                                <div class="space-y-3 text-sm text-left font-bold mb-8 bg-black/30 p-6 rounded-3xl border border-white/5">
+                                    <div class="flex justify-between"><span class="text-gray-400 uppercase text-[10px] tracking-widest">Capital Emprunté Total</span><span class="text-lg">{{ formatMAD(studioCalc.capitalEmprunte) }}</span></div>
+                                    <div class="flex justify-between border-t border-white/10 pt-3 mt-3"><span class="text-gray-400 uppercase text-[10px] tracking-widest">Génération de Cash (Reliquat)</span><span class="text-lg text-emerald-400">{{ formatMAD(projetStudio.surplusCredit) }}</span></div>
+                                </div>
+                                <p class="text-[10px] text-blue-200 font-bold uppercase tracking-widest mb-2">Mensualité Globale (Prêt + Assur)</p>
+                                <p class="text-6xl font-black tracking-tighter drop-shadow-xl">{{ formatMAD(studioCalc.totalMensuel) }}</p>
+                                <button @click="appliquerMensualiteStudio" class="w-full py-5 mt-10 bg-blue-600 text-white font-black rounded-2xl shadow-xl hover:bg-blue-500 hover:scale-105 transition-all active:scale-95 uppercase text-xs tracking-widest shadow-blue-500/30 border border-blue-400/50">👉 Injecter dans Charges Fixes</button>
+                            </div>
+
+                            <div class="bg-white p-8 rounded-[2.5rem] border shadow-sm">
+                                <h3 class="font-black text-gray-800 mb-6 uppercase text-sm tracking-widest text-center border-b pb-4">Test Trésorerie Cash</h3>
+                                <div class="flex justify-between items-center mb-6"><span class="text-sm font-bold text-gray-500">Épargne perso disponible</span><input type="number" v-model.number="projetStudio.epargneDispo" @input="handleDataChange" class="w-32 text-right p-3 border rounded-xl font-black bg-gray-50 outline-none"/></div>
+                                <div class="flex justify-between mb-4 text-sm font-bold"><span class="text-gray-500">Cash requis (Taxes Notaire + Travaux)</span><span class="text-lg text-gray-800">{{ formatMAD(studioCalc.cashRequis) }}</span></div>
+                                <div :class="['p-6 rounded-2xl text-center font-black border-2', studioCalc.cashRestant >= 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800']">
+                                    <p class="text-[9px] mb-2 uppercase tracking-widest opacity-80">{{ studioCalc.cashRestant >= 0 ? 'Reliquat Cash Sécurisé' : 'Déficit de Trésorerie' }}</p>
+                                    <p class="text-3xl">{{ formatMAD(studioCalc.cashRestant) }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODALS -->
+            <div v-if="showDriveHelp" class="fixed inset-0 bg-slate-900/90 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                <div class="bg-white rounded-[2rem] max-w-xl w-full p-8 shadow-2xl relative text-center">
+                    <button @click="showDriveHelp = false" class="absolute top-6 right-6 text-gray-400 hover:text-gray-800 text-2xl">&times;</button>
+                    <h3 class="text-2xl font-black text-gray-900 mb-2 uppercase">Google Drive API</h3>
+                    <p class="text-xs text-gray-500 mb-8 font-medium">Liez votre compte Google. L'ID Client sera mémorisé sur votre ordinateur.</p>
+                    <input type="text" v-model="gConfig.clientId" placeholder="Entrez le Client ID OAuth..." class="w-full p-4 border-2 border-gray-200 rounded-xl bg-gray-50 text-xs font-mono outline-none focus:border-blue-500 mb-6 text-center"/>
+                    <button @click="showDriveHelp = false; handleDataChange()" class="w-full py-4 bg-slate-900 text-white font-black rounded-xl uppercase text-[10px] tracking-widest shadow-lg hover:bg-blue-600 transition-colors">Enregistrer le Client ID</button>
+                </div>
+            </div>
+
+            <div v-if="showImportWarning" class="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                <div class="bg-white rounded-3xl shadow-2xl max-w-xl w-full border-4 border-orange-400 overflow-hidden">
+                    <div class="p-6 bg-orange-50 border-b border-orange-200 flex items-center gap-4 text-orange-800 font-black text-lg uppercase tracking-tighter">⚠️ Mise à jour de structure requise</div>
+                    <div class="p-6">
+                        <p class="text-sm mb-4 font-medium text-gray-700">Vous importez un fichier <span class="font-bold bg-gray-200 px-1 rounded">v{{fileVersionImported}}</span> dans l'application <span class="font-bold bg-blue-100 text-blue-800 px-1 rounded">v{{CURRENT_VERSION}}</span>.</p>
+                        <p class="text-xs text-gray-500 mb-2 font-bold uppercase">Champs manquants auto-injectés :</p>
+                        <div class="bg-gray-900 text-green-400 p-4 rounded-xl max-h-40 overflow-auto text-[10px] font-mono shadow-inner border border-gray-700">
+                            <div v-for="(d, i) in importDeltas" :key="i" class="mb-1">> Ajout: {{ d }}</div>
+                            <div v-if="importDeltas.length === 0" class="text-gray-400">> Structure compatible.</div>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+                        <button @click="annulerImport" class="px-6 py-2.5 border-2 border-gray-300 text-gray-600 font-bold rounded-xl hover:bg-gray-100 text-xs uppercase tracking-widest">Annuler</button>
+                        <button @click="confirmerImport" class="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black shadow-lg text-xs uppercase tracking-widest transition-colors">Fusionner & Continuer</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Changelog -->
+            <div v-if="showChangelog" class="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden">
+                    <div class="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <h3 class="text-xl font-black text-gray-800 uppercase tracking-tighter">📖 Historique des Versions</h3>
+                        <button @click="showChangelog = false" class="text-gray-400 hover:text-gray-900 text-2xl font-bold transition-colors">&times;</button>
+                    </div>
+                    <div class="p-8 overflow-y-auto flex-1 custom-scroll bg-white">
+                        <div v-for="log in CHANGELOG" :key="log.version" class="mb-8 last:mb-0 relative">
+                            <div class="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-blue-500"></div>
+                            <div class="pl-6 border-l-2 border-gray-100 pb-2">
+                                <div class="font-black text-blue-600 text-lg flex items-center gap-3">
+                                    v{{ log.version }} <span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded font-bold uppercase">{{ log.date }}</span>
+                                </div>
+                                <ul class="mt-3 space-y-2">
+                                    <li v-for="(c, i) in log.changes" :key="i" class="text-sm text-gray-600 font-medium flex items-start gap-2">
+                                        <span class="text-gray-300 mt-0.5">▹</span> {{ c }}
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted, onBeforeUnmount, toRaw } = Vue;
+
+        const BaseChart = {
+            template: '<canvas ref="canvasEl"></canvas>',
+            props: ['config'],
+            setup(props) {
+                const canvasEl = ref(null); let chartInstance = null;
+                const renderChart = () => {
+                    if (typeof Chart === 'undefined') return;
+                    if (chartInstance) chartInstance.destroy();
+                    if (canvasEl.value && props.config) chartInstance = new Chart(canvasEl.value, toRaw(props.config));
+                };
+                onMounted(() => renderChart());
+                watch(() => props.config, () => renderChart(), { deep: true });
+                onBeforeUnmount(() => { if (chartInstance) chartInstance.destroy(); });
+                return { canvasEl };
+            }
+        };
+
+        try {
+            const app = createApp({
+                components: { 'base-chart': BaseChart },
+                setup() {
+                    const CURRENT_VERSION = "10.0";
+                    const CHANGELOG = [
+                        { version: "10.0", date: "Vision Multi-Années", changes: ["Refonte du moteur annuel : ajoutez 2027, 2028, etc.", "Duplication automatique des chocs annuels vers la nouvelle année.", "Tableau Bilan dynamique s'étendant à la fin de la dernière année."] },
+                        { version: "9.2", date: "Décalage de Paie", changes: ["Refonte du calcul de trésorerie : le salaire de fin de mois finance le mois d'après."] },
+                        { version: "9.1", date: "Paiements Partiels", changes: ["Les Charges Fixes sont désormais individuelles et cochables (disparition du bouton global)."] },
+                        { version: "9.0", date: "Déplacement Précis", changes: ["Remplacement du bouton 'Report' par une liste déroulante."] }
+                    ];
+
+                    const activeTab = ref('parametres');
+                    const modeEdition = ref(false);
+                    const calculationTick = ref(0);
+                    const dropdownFacturesOpen = ref(true);
+                    
+                    const forceUpdateCalculations = () => { calculationTick.value++; };
+                    
+                    // VPS
+                    const serverSyncStatus = ref('loading');
+                    const serverLastSync = ref('');
+                    const serverLogs = ref([]);
+                    const SERVER_PATH = '/finance/save_data.php';
+                    const DATA_PATH = '/finance/finance_data.json';
+                    
+                    // DRIVE
+                    const syncStatus = ref('disconnected');
+                    const showDriveHelp = ref(false); 
+                    const driveFileId = ref(localStorage.getItem('gdrive_file_id'));
+                    const gConfig = ref({ clientId: localStorage.getItem('gclient_id') || '' });
+                    let accessToken = null;
+
+                    // IMPORT LOCAL
+                    const fileInput = ref(null);
+                    const showChangelog = ref(false);
+                    const pdfExporting = ref(false);
+                    const showImportWarning = ref(false);
+                    const importDeltas = ref([]);
+                    const pendingImportData = ref(null);
+                    const fileVersionImported = ref("1.0");
+                    const activeDrilldown = ref(null);
+
+                    // MOTEUR MULTI-ANNEES
+                    const anneeAffichage = ref(2026);
+
+                    // DONNEES PAR DEFAUT (Depuis finance_v9.2 (2).json)
+                    const getDefaultState = () => ({
+                        soldesInitiaux: { courant: 125000, urgence: 0, lt: 0, bourse: 0, moisActuel: 4, anneeActuelle: 2026, salaireRecu: false, semainesRestantes: 3, decalagePaie: true },
+                        revenus: { 
+                            salaire: { label: 'Salaire', base: 19324, showExceptions: false, exceptions: [] }, 
+                            bonif: { label: 'Bonification', base: 13239, showExceptions: false, exceptions: [] }, 
+                            magasin: { label: 'Magasin', base: 7000, showExceptions: true, exceptions: [{ id: 1, moisDebut: 1, moisFin: 4, nouvelleValeur: 0 }] }, 
+                            cnss: { label: 'CNSS', base: 300, showExceptions: false, exceptions: [] }, 
+                            appart: { label: 'Appartement', base: 2750, showExceptions: true, exceptions: [{ id: 1775546659428, moisDebut: 1, moisFin: 4, nouvelleValeur: 0 }] }, 
+                            studio: { label: 'Studio', base: 0, showExceptions: false, exceptions: [] } 
+                        },
+                        chargesFixes: { 
+                            creditImmo: { label: 'Crédit Immo + Assur', valeur: 8340, showExceptions: false, exceptions: [], montantPaye: 8340, paye: true }, 
+                            creditStudio: { label: 'Crédit Studio', valeur: 4911, showExceptions: true, exceptions: [{ id: 1775548016229, moisDebut: 1, moisFin: 6, nouvelleValeur: 0 }], montantPaye: 0, paye: false }, 
+                            syndic: { label: 'Syndic', valeur: 420, showExceptions: false, exceptions: [], montantPaye: 420, paye: true }, 
+                            nounou: { label: 'Nounou', valeur: 2750, showExceptions: false, exceptions: [], montantPaye: 2750, paye: true }, 
+                            ecole: { label: 'École', valeur: 1300, showExceptions: false, exceptions: [], montantPaye: 1300, paye: true }, 
+                            femmeMenage: { label: 'Femme de ménage', valeur: 600, showExceptions: false, exceptions: [], montantPaye: 300, paye: true }, 
+                            habitsCharif: { label: 'Habits Charif', valeur: 600, showExceptions: false, exceptions: [], montantPaye: 0, paye: false }, 
+                            habitsBebe: { label: 'Habits Bébé', valeur: 200, showExceptions: false, exceptions: [], montantPaye: 0, paye: false }, 
+                            jouets: { label: 'Jouets', valeur: 200, showExceptions: false, exceptions: [], montantPaye: 0, paye: false } 
+                        },
+                        chargesVariables: { 
+                            alimentation: { label: 'Alimentation (Tqdya)', valeur: 1487, periode: 'semaine', showDetails: true, details: [{ id: 1, nom: 'samak', montant: 60 }, { id: 2, nom: 'l7m', montant: 60 }, { id: 3, nom: 'kfta', montant: 100 }, { id: 4, nom: 'djaj', montant: 50 }, { id: 5, nom: '60', montant: 76 }, { id: 6, nom: 'sqata', montant: 50 }, { id: 7, nom: 'khdra', montant: 200 }, { id: 8, nom: 'dessert', montant: 100 }, { id: 9, nom: 'Œufs', montant: 50 }, { id: 10, nom: 'Marjan danup', montant: 30 }, { id: 11, nom: 'Marjane Lait', montant: 70 }, { id: 12, nom: 'Marjane 7lib', montant: 70 }, { id: 13, nom: 'Marjane Fromage blanc', montant: 100 }, { id: 14, nom: 'Marjane Calin', montant: 40 }, { id: 15, nom: 'Marjane Farine', montant: 16 }, { id: 16, nom: 'Marjane Edam', montant: 65 }, { id: 17, nom: 'Marjane Parmesan', montant: 20 }, { id: 18, nom: 'lhrri', montant: 330 }] }, 
+                            sante: { label: 'Santé', valeur: 1100, periode: 'semaine', showDetails: false, details: [{ id: 1, nom: 'psy charif', montant: 500 }, { id: 2, nom: 'Medicam (reste à charge)', montant: 100 }, { id: 3, nom: 'Medecin (reste à charge)', montant: 100 }, { id: 4, nom: 'complement', montant: 400 }] }, 
+                            sorties: { label: 'Sorties', valeur: 1040, periode: 'semaine', showDetails: false, details: [{ id: 1, nom: 'cafe Resto Wknd', montant: 700 }, { id: 2, nom: 'Cafe Charif', montant: 300 }, { id: 3, nom: 'barber', montant: 40 }] }, 
+                            voiture: { label: 'Voiture', valeur: 440, periode: 'semaine', showDetails: false, details: [{ id: 1, nom: 'essence picanto', montant: 250 }, { id: 2, nom: 'diesel skoda', montant: 150 }, { id: 3, nom: 'Ghsil voiture', montant: 40 }] },
+                            factures: { label: 'Factures', valeur: 2167, periode: 'mois', showDetails: true, details: [{ id: 1, nom: 'elect', montant: 1200, paye: false, montantPaye: 1000 }, { id: 2, nom: 'tel', montant: 99, paye: true }, { id: 3, nom: 'internet', montant: 250, paye: true }, { id: 4, nom: 'eau', montant: 300, paye: false, montantPaye: 100 }, { id: 5, nom: 'netflix', montant: 98, paye: true }, { id: 6, nom: 'chatgpt', montant: 220, paye: true }] } 
+                        },
+                        epargne: { urgence: { label: 'Urgence', valeur: 0 }, lt: { label: 'Long Terme', valeur: 0 } },
+                        depensesIrregulieres: [
+                            { id: 1, mois: 4, annee: 2026, nom: 'Reste Tanger', montant: 6000 }, 
+                            { id: 2, mois: 4, annee: 2026, nom: 'Assurance skoda', montant: 6800, paye: false }, 
+                            { id: 3, mois: 6, annee: 2026, nom: 'Livraison Studio', montant: 50000 }, 
+                            { id: 4, mois: 4, annee: 2026, nom: 'Vidange/Entretien skoda', montant: 2500, paye: false }, 
+                            { id: 5, mois: 8, annee: 2026, nom: 'Aid Zwaj', montant: 1200 }, 
+                            { id: 6, mois: 6, annee: 2026, nom: 'Voyage Europe', montant: 27000, paye: false }, 
+                            { id: 7, mois: 10, annee: 2026, nom: 'Aid Milad', montant: 6500 }, 
+                            { id: 8, mois: 11, annee: 2026, nom: 'Vidange/Entretien 2', montant: 7250, paye: false }, 
+                            { id: 9, mois: 12, annee: 2026, nom: 'Assurance kia', montant: 5000 }, 
+                            { id: 10, mois: 12, annee: 2026, nom: 'Remplacement', montant: 3000 }, 
+                            { id: 11, mois: 12, annee: 2026, nom: 'Cadeaux Mamans', montant: 1600 },
+                            { id: 1775546382320, mois: 7, annee: 2026, nom: 'Vidange picanto 1', montant: 1800, paye: false },
+                            { id: 1775546491630, mois: 9, annee: 2026, nom: 'Voyage Espagn', montant: 25000, paye: false },
+                            { id: 1775561033465, mois: 8, annee: 2026, nom: 'Vidange/Entretien skoda', montant: 8000, paye: false, montantPaye: 0 }
+                        ],
+                        projetStudio: { prixM2: 26000, surface: 40, avance: 500000, taux: 4.5, duree: 20, taxSyndic: 70240, taxCouvertCredit: 45000, surplusCredit: 85000, assuranceMensuelle: 380, travaux: 80000, epargneDispo: 53000 }
+                    });
+
+                    const state = getDefaultState();
+                    const soldesInitiaux = ref(state.soldesInitiaux);
+                    const revenus = ref(state.revenus);
+                    const chargesFixes = ref(state.chargesFixes);
+                    const chargesVariables = ref(state.chargesVariables);
+                    const epargne = ref(state.epargne);
+                    const depensesIrregulieres = ref(state.depensesIrregulieres);
+                    const projetStudio = ref(state.projetStudio);
+
+                    const anneesDisponibles = computed(() => {
+                        const years = new Set((depensesIrregulieres.value || []).map(d => d.annee || 2026));
+                        years.add((soldesInitiaux.value || {}).anneeActuelle || 2026);
+                        return Array.from(years).sort();
+                    });
+
+                    const ajouterAnnee = () => {
+                        const maxYear = Math.max(...anneesDisponibles.value);
+                        const newYear = maxYear + 1;
+                        if(confirm(`Créer l'année prévisionnelle ${newYear} en copiant tous les chocs de l'année ${maxYear} ?`)) {
+                            const expensesToCopy = (depensesIrregulieres.value || []).filter(d => (d.annee || 2026) === maxYear);
+                            const newExpenses = expensesToCopy.map(d => ({
+                                ...d,
+                                id: Date.now() + Math.random(),
+                                annee: newYear,
+                                paye: false,
+                                montantPaye: 0
+                            }));
+                            depensesIrregulieres.value.push(...newExpenses);
+                            anneeAffichage.value = newYear;
+                            handleDataChange();
+                            addLog(`Année ${newYear} générée avec succès.`, 'success');
+                        }
+                    };
+
+                    const restaurerDefaut = () => {
+                        if(confirm("Attention : Voulez-vous vraiment écraser les données du VPS et restaurer les valeurs par défaut incluses dans cette version ?")) {
+                            const d = getDefaultState();
+                            soldesInitiaux.value = d.soldesInitiaux;
+                            revenus.value = d.revenus;
+                            chargesFixes.value = d.chargesFixes;
+                            chargesVariables.value = d.chargesVariables;
+                            epargne.value = d.epargne;
+                            projetStudio.value = d.projetStudio;
+                            depensesIrregulieres.value = d.depensesIrregulieres;
+                            anneeAffichage.value = 2026;
+                            addLog("Valeurs par défaut restaurées.", "info");
+                            forceUpdateCalculations();
+                            saveToServer();
+                        }
+                    };
+
+                    const getExportData = () => ({ version: CURRENT_VERSION, soldesInitiaux: soldesInitiaux.value, revenus: revenus.value, chargesFixes: chargesFixes.value, chargesVariables: chargesVariables.value, epargne: epargne.value, depensesIrregulieres: depensesIrregulieres.value, projetStudio: projetStudio.value, gConfig: gConfig.value });
+                    const handleDataChange = () => { forceUpdateCalculations(); serverSyncStatus.value = 'modified'; if(syncStatus.value === 'synced') syncStatus.value = 'modified'; };
+
+                    const getMissingFields = (defaultObj, importedObj, prefix = '') => {
+                        let missing = []; if (!importedObj || typeof importedObj !== 'object') return [prefix || 'Section'];
+                        for (const key in defaultObj) { if (!(key in importedObj)) missing.push(prefix ? `${prefix}➔${key}` : key); else if (typeof defaultObj[key] === 'object' && defaultObj[key] !== null && !Array.isArray(defaultObj[key])) missing.push(...getMissingFields(defaultObj[key], importedObj[key], prefix ? `${prefix}➔${key}` : key)); }
+                        return missing;
+                    };
+                    
+                    const safeMerge = (target, source) => {
+                        if (!source || typeof source !== 'object' || Array.isArray(source)) return target;
+                        const result = { ...target }; 
+                        for (const key in target) {
+                            if (source[key] !== undefined && source[key] !== null) {
+                                if (typeof target[key] === 'object' && !Array.isArray(target[key]) && target[key] !== null) {
+                                    result[key] = safeMerge(target[key], source[key]);
+                                } else {
+                                    result[key] = source[key];
+                                }
+                            }
+                        }
+                        return result;
+                    };
+
+                    const addLog = (msg, type = 'info') => {
+                        const time = new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                        serverLogs.value.unshift({ msg, type, time });
+                        if (serverLogs.value.length > 25) serverLogs.value.pop();
+                    };
+
+                    const testConnection = async () => {
+                        addLog("Test Ping forcé...", 'info');
+                        try {
+                            const res = await fetch(SERVER_PATH, { method: 'OPTIONS' });
+                            if (res.ok) { addLog("Liaison établie avec PHP.", 'success'); }
+                            else { addLog(`Erreur ${res.status}: n8n intercepte encore ?`, 'warn'); }
+                        } catch (e) { addLog("Coupure réseau ou CORS.", 'error'); }
+                    };
+
+                    const saveToServer = async () => {
+                        serverSyncStatus.value = 'saving';
+                        addLog("Écriture vers VPS...", 'info');
+                        try {
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 10000);
+                            const res = await fetch(SERVER_PATH, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(getExportData()), signal: controller.signal });
+                            clearTimeout(timeoutId);
+                            
+                            const text = (await res.text()).trim();
+                            if (text.startsWith('<!DOCTYPE html>')) { addLog("CONFLIT : Caddy envoie vers n8n.", 'error'); serverSyncStatus.value = 'error'; return; }
+
+                            let data = JSON.parse(text);
+                            if (data.status === 'ok') { serverSyncStatus.value = 'synced'; serverLastSync.value = new Date().toLocaleTimeString(); addLog("Sauvegarde VPS OK.", 'success'); } 
+                            else { throw new Error(data.message); }
+                        } catch(e) { serverSyncStatus.value = 'error'; addLog(`ÉCHEC: ${e.message}`, 'error'); }
+                    };
+
+                    watch(gConfig, (v) => { localStorage.setItem('gclient_id', v.clientId); }, { deep: true });
+                    const authDrive = () => {
+                        if (!gConfig.value.clientId) { showDriveHelp.value = true; return; }
+                        const client = google.accounts.oauth2.initTokenClient({
+                            client_id: gConfig.value.clientId, scope: 'https://www.googleapis.com/auth/drive.file',
+                            callback: async (resp) => { 
+                                try {
+                                    accessToken = resp.access_token; syncStatus.value = 'loading';
+                                    const s = await fetch('https://www.googleapis.com/drive/v3/files?q=name="finance_data_sync_v8.json"', { headers: { Authorization: `Bearer ${accessToken}` } });
+                                    const d = await s.json();
+                                    if(d.files && d.files.length) {
+                                        driveFileId.value = d.files[0].id;
+                                        const f = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId.value}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
+                                        const content = await f.json();
+                                        executerImportFusion(content);
+                                    }
+                                    syncStatus.value = 'synced';
+                                } catch(e) { syncStatus.value = 'disconnected'; alert("Erreur de synchronisation Google Drive"); }
+                            }
+                        });
+                        client.requestAccessToken({ prompt: 'consent' });
+                    };
+
+                    const saveToDrive = async () => {
+                        syncStatus.value = 'saving';
+                        try {
+                            const metadata = { name: 'finance_data_sync_v8.json', mimeType: 'application/json' };
+                            const form = new FormData(); form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' })); form.append('file', new Blob([JSON.stringify(getExportData())], { type: 'application/json' }));
+                            const url = driveFileId.value ? `https://www.googleapis.com/upload/drive/v3/files/${driveFileId.value}?uploadType=multipart` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+                            await fetch(url, { method: driveFileId.value ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: form });
+                            syncStatus.value = 'synced';
+                        } catch(e) { syncStatus.value = 'error'; }
+                    };
+
+                    const exporterDonnees = () => { const blob = new Blob([JSON.stringify(getExportData(), null, 2)], { type: "application/json" }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `finance_v${CURRENT_VERSION}.json`; a.click(); };
+
+                    const exporterPDF = async () => {
+                        if (pdfExporting.value) return;
+                        pdfExporting.value = true;
+                        try {
+                            const { jsPDF } = window.jspdf;
+                            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                            const pageW = pdf.internal.pageSize.getWidth();
+                            const pageH = pdf.internal.pageSize.getHeight();
+                            const margin = 10;
+                            const contentW = pageW - margin * 2;
+                            let curY = margin;
+
+                            // En-tête
+                            pdf.setFillColor(30, 41, 59);
+                            pdf.rect(0, 0, pageW, 22, 'F');
+                            pdf.setTextColor(255, 255, 255);
+                            pdf.setFontSize(14);
+                            pdf.setFont('helvetica', 'bold');
+                            pdf.text('Bilan Mensuel — Finance Master', margin, 10);
+                            pdf.setFontSize(8);
+                            pdf.setFont('helvetica', 'normal');
+                            pdf.text('Généré le ' + new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }), margin, 17);
+                            curY = 28;
+
+                            // Capture KPIs
+                            const kpisEl = document.getElementById('pdf-kpis');
+                            if (kpisEl) {
+                                const kpisCanvas = await html2canvas(kpisEl, { scale: 2, backgroundColor: '#f9fafb', logging: false, useCORS: true });
+                                const kpisImgData = kpisCanvas.toDataURL('image/png');
+                                const kpisH = contentW * (kpisCanvas.height / kpisCanvas.width);
+                                pdf.addImage(kpisImgData, 'PNG', margin, curY, contentW, kpisH);
+                                curY += kpisH + 8;
+                            }
+
+                            // Capture tableau de simulation (sans contrainte de hauteur)
+                            const simEl = document.getElementById('pdf-simulation');
+                            if (simEl) {
+                                const scrollDiv = simEl.querySelector('.overflow-x-auto');
+                                const prevMaxH = scrollDiv ? scrollDiv.style.maxHeight : null;
+                                const prevOvY = scrollDiv ? scrollDiv.style.overflowY : null;
+                                if (scrollDiv) { scrollDiv.style.maxHeight = 'none'; scrollDiv.style.overflowY = 'visible'; }
+
+                                const simCanvas = await html2canvas(simEl, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+                                const simImgData = simCanvas.toDataURL('image/png');
+                                const simImgH = contentW * (simCanvas.height / simCanvas.width);
+
+                                if (scrollDiv) { scrollDiv.style.maxHeight = prevMaxH; scrollDiv.style.overflowY = prevOvY; }
+
+                                if (curY + simImgH > pageH - margin) {
+                                    pdf.addPage();
+                                    curY = margin;
+                                }
+                                pdf.addImage(simImgData, 'PNG', margin, curY, contentW, simImgH);
+                            }
+
+                            pdf.save('bilan-finance-' + new Date().toISOString().slice(0, 10) + '.pdf');
+                        } catch (e) {
+                            console.error('Erreur export PDF:', e);
+                            alert('Erreur lors de la génération du PDF : ' + e.message);
+                        } finally {
+                            pdfExporting.value = false;
+                        }
+                    };
+                    const triggerImport = () => { fileInput.value.click(); };
+                    const importerDonnees = (event) => {
+                        const file = event.target.files[0]; if (!file) return;
+                        const reader = new FileReader(); reader.onload = (e) => {
+                            try {
+                                const data = JSON.parse(e.target.result);
+                                executerImportFusion(data); alert("✅ Fichier Importé !"); handleDataChange();
+                            } catch (error) { alert("❌ Format non valide."); }
+                            event.target.value = '';
+                        }; reader.readAsText(file);
+                    };
+
+                    const executerImportFusion = (data) => {
+                        try {
+                            const d = getDefaultState(); 
+                            if (!data || typeof data !== 'object') throw new Error("Le fichier serveur est vide ou corrompu.");
+                            
+                            soldesInitiaux.value = safeMerge(d.soldesInitiaux, data.soldesInitiaux); 
+                            // Assurance compatibilité ancien fichier sans anneeActuelle
+                            if (!soldesInitiaux.value.anneeActuelle) soldesInitiaux.value.anneeActuelle = 2026;
+
+                            revenus.value = safeMerge(d.revenus, data.revenus); 
+                            chargesFixes.value = safeMerge(d.chargesFixes, data.chargesFixes); 
+                            chargesVariables.value = safeMerge(d.chargesVariables, data.chargesVariables); 
+                            epargne.value = safeMerge(d.epargne, data.epargne); 
+                            projetStudio.value = safeMerge(d.projetStudio, data.projetStudio);
+                            
+                            let deps = Array.isArray(data.depensesIrregulieres) && data.depensesIrregulieres.length > 0 ? data.depensesIrregulieres : d.depensesIrregulieres; 
+                            // Assurance compatibilité : toutes les vieilles dépenses ont 2026
+                            deps = deps.map(dep => ({ ...dep, annee: dep.annee || 2026 }));
+                            depensesIrregulieres.value = deps;
+
+                            if(data.gConfig) gConfig.value = data.gConfig;
+                            
+                            // Mettre l'affichage sur l'année actuelle par défaut
+                            anneeAffichage.value = soldesInitiaux.value.anneeActuelle || 2026;
+
+                            forceUpdateCalculations();
+                        } catch(err) {
+                            addLog("Erreur de fusion: " + err.message, "error");
+                            throw err; 
+                        }
+                    };
+                    
+                    const confirmerImport = () => { executerImportFusion(pendingImportData.value); handleDataChange(); showImportWarning.value = false; };
+                    const annulerImport = () => { showImportWarning.value = false; };
+
+                    watch(chargesVariables, (newVal) => { 
+                        Object.keys(newVal || {}).forEach(key => { if (newVal[key]?.details?.length > 0) newVal[key].valeur = newVal[key].details.reduce((sum, d) => sum + (Number(d.montant) || 0), 0); }); 
+                        handleDataChange();
+                    }, { deep: true });
+
+                    const nomDuMois = (m) => ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'][m];
+                    const moisOuverts = ref([1, 4, 6, 7, 8, 9, 10, 12]);
+                    const toggleMois = (m) => { if (moisOuverts.value.includes(m)) moisOuverts.value = moisOuverts.value.filter(x => x !== m); else moisOuverts.value.push(m); };
+                    
+                    const getDepensesMois = (m, a) => (depensesIrregulieres.value || []).filter(d => d.mois === m && (d.annee || 2026) === a);
+                    const totalMoisAffichage = (m) => getDepensesMois(m, anneeAffichage.value).reduce((sum, d) => sum + (Number(d.montant) || 0), 0);
+                    
+                    const ajouterDepense = (m, a) => { depensesIrregulieres.value.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouvelle dépense', montant: 0, paye: false, montantPaye: 0 }); handleDataChange(); };
+                    const supprimerDepense = (id) => { depensesIrregulieres.value = depensesIrregulieres.value.filter(d => d.id !== id); handleDataChange(); };
+                    
+                    const deplacerDepense = (dep) => {
+                        dep.paye = false; dep.montantPaye = 0;
+                        if (!moisOuverts.value.includes(dep.mois)) moisOuverts.value.push(dep.mois);
+                        handleDataChange();
+                        addLog(`Choc "${dep.nom}" déplacé vers ${nomDuMois(dep.mois)} ${dep.annee}.`, "success");
+                    };
+
+                    // --- LOGIQUE PAIEMENTS PARTIELS ---
+                    const getDueFixe = (item) => {
+                        let due = Number(item.valeur || 0);
+                        const mNum = Number((soldesInitiaux.value || {}).moisActuel || 4);
+                        (item.exceptions || []).forEach(e => {
+                            if (mNum >= e.moisDebut && mNum <= e.moisFin) due = Number(e.nouvelleValeur || 0);
+                        });
+                        return due;
+                    };
+
+                    const isItemPaid = (item, dueAmount) => {
+                        if (item.paye && !item.montantPaye) return true;
+                        return Number(item.montantPaye || 0) >= dueAmount;
+                    };
+
+                    const toggleItemPaid = (item, dueAmount) => {
+                        if (isItemPaid(item, dueAmount)) {
+                            item.paye = false;
+                            item.montantPaye = 0;
+                        } else {
+                            item.paye = true;
+                            item.montantPaye = dueAmount;
+                        }
+                        handleDataChange();
+                    };
+
+                    const getPaidAmount = (item, dueAmount) => {
+                        if (item.paye && !item.montantPaye) return dueAmount;
+                        if (item.montantPaye !== undefined && item.montantPaye !== null) return Number(item.montantPaye);
+                        return item.paye ? dueAmount : 0;
+                    };
+
+                    const elementsDuMoisPayes = computed(() => {
+                        calculationTick.value; let count = 0;
+                        Object.values(chargesVariables.value || {}).filter(c => c?.periode === 'mois').forEach(c => { 
+                            count += (c?.details || []).filter(d => isItemPaid(d, Number(d.montant||0))).length; 
+                        });
+                        Object.values(chargesFixes.value || {}).forEach(f => {
+                            if(isItemPaid(f, getDueFixe(f))) count++;
+                        });
+                        count += getDepensesMois((soldesInitiaux.value || {}).moisActuel || 4, (soldesInitiaux.value || {}).anneeActuelle || 2026).filter(d => isItemPaid(d, Number(d.montant||0))).length;
+                        return count;
+                    });
+
+                    const elementsDuMoisTotal = computed(() => {
+                        calculationTick.value; let count = 0;
+                        Object.values(chargesVariables.value || {}).filter(c => c?.periode === 'mois').forEach(c => { count += (c?.details || []).length; });
+                        count += Object.keys(chargesFixes.value || {}).length;
+                        count += getDepensesMois((soldesInitiaux.value || {}).moisActuel || 4, (soldesInitiaux.value || {}).anneeActuelle || 2026).length;
+                        return count;
+                    });
+
+                    const getMonthlyVariableValue = (item) => { const v = Number((item || {}).valeur) || 0; return item?.periode === 'semaine' ? v * 4.3 : v; };
+
+                    const totalRevenusBase = computed(() => { calculationTick.value; return Object.values(revenus.value || {}).reduce((sum, item) => sum + Number((item || {}).base||0), 0); });
+                    const totalFixes = computed(() => { calculationTick.value; return Object.values(chargesFixes.value || {}).reduce((sum, item) => sum + Number((item || {}).valeur||0), 0); });
+                    const totalVariables = computed(() => { calculationTick.value; return Object.values(chargesVariables.value || {}).reduce((acc, curr) => acc + getMonthlyVariableValue(curr || {}), 0); });
+                    const totalEpargne = computed(() => { calculationTick.value; return Object.values(epargne.value || {}).reduce((sum, item) => sum + Number((item || {}).valeur||0), 0); });
+                    const surplusMensuelBase = computed(() => totalRevenusBase.value - totalFixes.value - totalVariables.value - totalEpargne.value);
+
+                    const budgetConsoRestant = computed(() => {
+                        calculationTick.value; const semRest = Number((soldesInitiaux.value || {}).semainesRestantes || 0);
+                        return Object.values(chargesVariables.value || {}).filter(c => c?.periode === 'semaine').reduce((acc, curr) => acc + (Number(curr?.valeur||0)*semRest), 0);
+                    });
+
+                    const studioCalc = computed(() => {
+                        const p = projetStudio.value || {}; const prixHT = (Number(p.prixM2)||0) * (Number(p.surface)||0); const resteP = prixHT - (Number(p.avance)||0); const s = Number(p.surplusCredit) || 0; const cap = resteP + (Number(p.taxCouvertCredit)||0) + s;
+                        const t = (Number(p.taux)||0)/100/12; const n = (Number(p.duree)||0)*12; const mens = t===0?(n>0?cap/n:0):(cap*t)/(1-Math.pow(1+t,-n));
+                        const assur = Number(p.assuranceMensuelle) || 0; const cashReq = ((Number(p.taxSyndic)||0) - (Number(p.taxCouvertCredit)||0)) + (Number(p.travaux)||0);
+                        return { prixTotal: prixHT, restePromoteur: resteP, capitalEmprunte: cap, mensualite: mens, totalMensuel: mens + assur, coutTotalCredit: (mens*n)-cap, cashRequis: cashReq, cashRestant: (Number(p.epargneDispo)||0)+s-cashReq, surplus: s };
+                    });
+                    
+                    const totalCreditsMensuels = computed(() => { calculationTick.value; return (Number((chargesFixes.value?.creditImmo || {}).valeur)||0) + (Number((chargesFixes.value?.creditStudio || {}).valeur)||0); });
+                    const tauxEndettement = computed(() => totalRevenusBase.value===0?0:(totalCreditsMensuels.value/totalRevenusBase.value)*100);
+                    const appliquerMensualiteStudio = () => { if(chargesFixes.value?.creditStudio) chargesFixes.value.creditStudio.valeur = Math.round(studioCalc.value.totalMensuel); activeTab.value = 'parametres'; handleDataChange(); };
+
+                    // MOTEUR MULTI-ANNEES (V10.0)
+                    const bilan = computed(() => {
+                        calculationTick.value;
+                        let curSolde = Number((soldesInitiaux.value || {}).courant || 0);
+                        const moisActuel = Number((soldesInitiaux.value || {}).moisActuel || 4);
+                        const anneeActuelle = Number((soldesInitiaux.value || {}).anneeActuelle || 2026);
+                        const decalagePaie = (soldesInitiaux.value || {}).decalagePaie !== false;
+                        
+                        const depTriees = [...(depensesIrregulieres.value || [])].sort((a,b) => {
+                            if ((a.annee||2026) !== (b.annee||2026)) return (a.annee||2026) - (b.annee||2026);
+                            return a.mois - b.mois;
+                        });
+                        
+                        let revMoisPrecedent = 0;
+                        let totalMoisEcoules = 0;
+                        const maxAnnee = Math.max(anneeActuelle, ...depTriees.map(d => d.annee||2026));
+                        
+                        let periods = [];
+                        for(let a = anneeActuelle; a <= maxAnnee; a++) {
+                            let startM = (a === anneeActuelle) ? moisActuel : 1;
+                            for(let m = startM; m <= 12; m++) {
+                                periods.push({ mois: m, annee: a });
+                            }
+                        }
+
+                        return periods.map(p => {
+                            const mNum = p.mois;
+                            const aNum = p.annee;
+                            const isCurrentMonth = (mNum === moisActuel && aNum === anneeActuelle);
+
+                            const revMoisGenere = Object.values(revenus.value || {}).reduce((s,r)=>{ let v=Number((r || {}).base||0); (r?.exceptions || []).forEach(e=>{ if(mNum>=e.moisDebut && mNum<=e.moisFin) v=Number(e.nouvelleValeur||0); }); return s+v; },0);
+                            const fixMois = Object.values(chargesFixes.value || {}).reduce((s,f)=>{ let v=Number((f || {}).valeur||0); (f?.exceptions || []).forEach(e=>{ if(mNum>=e.moisDebut && mNum<=e.moisFin) v=Number(e.nouvelleValeur||0); }); return s+v; },0);
+                            
+                            let entreesAppliquees = 0; let solde_fin = 0; let totalIrregRestant = 0; let detailsIrreg = '';
+                            
+                            if (isCurrentMonth) {
+                                // 1. Chocs
+                                totalIrregRestant = depTriees.filter(d=>d.mois===mNum && (d.annee||2026)===aNum).reduce((s,d)=> {
+                                    let due = Number(d.montant || 0);
+                                    return s + Math.max(0, due - getPaidAmount(d, due));
+                                }, 0);
+                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (d.annee||2026)===aNum && !isItemPaid(d, Number(d.montant||0))).map(d=>d.nom).join(', ');
+                                
+                                // 2. Fixes
+                                let fRest = 0;
+                                Object.values(chargesFixes.value || {}).forEach(f => {
+                                    let due = getDueFixe(f);
+                                    fRest += Math.max(0, due - getPaidAmount(f, due));
+                                });
+                                
+                                const semRest = Number((soldesInitiaux.value || {}).semainesRestantes || 0);
+                                const rConso = semRest / 4.3;
+                                
+                                // 3. Variables
+                                let vRest = Object.values(chargesVariables.value || {}).reduce((acc, curr) => { 
+                                    if (curr?.periode === 'semaine') return acc + (Number(curr?.valeur||0) * semRest); 
+                                    else {
+                                        if (curr?.details && curr.details.length > 0) return acc + curr.details.reduce((sum, d) => sum + Math.max(0, Number(d.montant||0) - getPaidAmount(d, Number(d.montant||0))), 0);
+                                        return acc + Number(curr?.valeur||0) * rConso;
+                                    }
+                                }, 0);
+                                
+                                if (decalagePaie) {
+                                    entreesAppliquees = 0; 
+                                    solde_fin = curSolde - fRest - vRest - totalEpargne.value - totalIrregRestant;
+                                    if ((soldesInitiaux.value || {}).salaireRecu) revMoisPrecedent = 0; 
+                                    else revMoisPrecedent = revMoisGenere;
+                                    curSolde = solde_fin;
+                                } else {
+                                    entreesAppliquees = revMoisGenere;
+                                    solde_fin = curSolde - fRest - vRest - totalEpargne.value - totalIrregRestant;
+                                    if (!(soldesInitiaux.value || {}).salaireRecu) solde_fin += revMoisGenere;
+                                    curSolde = solde_fin;
+                                }
+                                
+                                return { 
+                                    mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, charges: fRest+vRest+totalEpargne.value, 
+                                    sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg, 
+                                    soldeCourant: solde_fin, 
+                                    soldeUrgence: Number((soldesInitiaux.value || {}).urgence||0), 
+                                    soldeLT: Number((soldesInitiaux.value || {}).lt||0), 
+                                    isCurrent: true, isException: false 
+                                };
+                            } 
+                            else {
+                                totalIrregRestant = depTriees.filter(d=>d.mois===mNum && (d.annee||2026)===aNum).reduce((s,d)=> s + Math.max(0, Number(d.montant||0) - getPaidAmount(d, Number(d.montant||0))), 0);
+                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (d.annee||2026)===aNum && !isItemPaid(d, Number(d.montant||0))).map(d=>d.nom).join(', ');
+                                
+                                if (decalagePaie) {
+                                    entreesAppliquees = revMoisPrecedent;
+                                    const surplusMois = entreesAppliquees - fixMois - totalVariables.value - totalEpargne.value;
+                                    solde_fin = curSolde + surplusMois - totalIrregRestant;
+                                    curSolde = solde_fin;
+                                    revMoisPrecedent = revMoisGenere;
+                                } else {
+                                    entreesAppliquees = revMoisGenere;
+                                    const surplusMois = entreesAppliquees - fixMois - totalVariables.value - totalEpargne.value;
+                                    solde_fin = curSolde + surplusMois - totalIrregRestant;
+                                    curSolde = solde_fin;
+                                }
+                                
+                                totalMoisEcoules++;
+                                return { 
+                                    mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, 
+                                    charges: fixMois+totalVariables.value+totalEpargne.value, 
+                                    sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg, 
+                                    soldeCourant: curSolde, 
+                                    soldeUrgence: Number((soldesInitiaux.value || {}).urgence||0) + totalMoisEcoules*Number((epargne.value?.urgence || {}).valeur || 0), 
+                                    soldeLT: Number((soldesInitiaux.value || {}).lt||0) + totalMoisEcoules*Number((epargne.value?.lt || {}).valeur || 0), 
+                                    isCurrent: false, isException: (revMoisGenere !== totalRevenusBase.value) || (fixMois !== totalFixes.value) 
+                                };
+                            }
+                        });
+                    });
+
+                    const soldeFinal = computed(() => { const am = bilan.value.filter(b => !b.isPassed); return am.length > 0 ? am[am.length - 1].soldeCourant : 0; });
+                    const epargneTotaleFinal = computed(() => { const am = bilan.value.filter(b => !b.isPassed); return am.length > 0 ? am[am.length - 1].soldeUrgence + am[am.length - 1].soldeLT : 0; });
+
+                    const budgetChartConfig = computed(() => {
+                        calculationTick.value;
+                        return { type: 'doughnut', data: { labels: ['Fixes', 'Conso', 'Épargne', 'Surplus'], datasets: [{ data: [totalFixes.value, totalVariables.value, totalEpargne.value, Math.max(0, surplusMensuelBase.value)], backgroundColor: ['#f97316', '#ef4444', '#a855f7', '#22c55e'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'right' } }, onClick: (e, el) => { if(el.length>0) { const l = ['Charges Fixes', 'Consommation', 'Épargne', 'Surplus Net'][el[0].index]; if(l!=='Surplus Net') activeDrilldown.value = { source: 'budget', key: l, label: l, color: ['#f97316', '#ef4444', '#a855f7', '#22c55e'][el[0].index] }; } } } };
+                    });
+
+                    const consoChartConfig = computed(() => { 
+                        calculationTick.value;
+                        const ks = Object.keys(chargesVariables.value || {}); const vs = Object.values(chargesVariables.value || {}); 
+                        return { type: 'doughnut', data: { labels: vs.map(c=>c.label), datasets: [{ data: vs.map(c=>getMonthlyVariableValue(c)), backgroundColor: ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#8b5cf6'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'right' } }, onClick: (e, el) => { if(el.length>0) activeDrilldown.value = { source: 'conso', key: ks[el[0].index], label: vs[el[0].index].label, color: ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#8b5cf6'][el[0].index] }; } } }; 
+                    });
+
+                    const detailChartConfig = computed(() => { 
+                        calculationTick.value;
+                        if (!activeDrilldown.value) return null; 
+                        const { source, key, color } = activeDrilldown.value; 
+                        let lbs=[], dt=[]; 
+                        if (source==='budget') { 
+                            if(key==='Charges Fixes'){ const itms=Object.values(chargesFixes.value || {}).sort((a,b)=>b.valeur-a.valeur); lbs=itms.map(i=>i.label); dt=itms.map(i=>i.valeur); } 
+                            else if(key==='Consommation'){ const itms=Object.values(chargesVariables.value || {}).sort((a,b)=>getMonthlyVariableValue(b)-getMonthlyVariableValue(a)); lbs=itms.map(i=>i.label); dt=itms.map(i=>getMonthlyVariableValue(i)); } 
+                            else if(key==='Épargne'){ const itms=Object.values(epargne.value || {}).sort((a,b)=>b.valeur-a.valeur); lbs=itms.map(i=>i.label); dt=itms.map(i=>i.valeur); } 
+                        } else { 
+                            const cat=(chargesVariables.value || {})[key]; if(!cat?.details?.length) return null; 
+                            lbs=cat.details.map(d=>d.nom); dt=cat.details.map(d=>cat.periode==='semaine'?d.montant*4.3:d.montant); 
+                        } return { type: 'bar', data: { labels: lbs, datasets: [{ data: dt, backgroundColor: color+'CC', borderColor: color, borderWidth: 1, borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } }; 
+                    });
+
+                    const lineChartConfig = computed(() => {
+                        calculationTick.value;
+                        const b = bilan.value.filter(x => !x.isPassed);
+                        return { type: 'line', data: { labels: b.map(x=>x.mois), datasets: [{ label: 'Solde', data: b.map(x=>x.soldeCourant), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } };
+                    });
+
+                    const formatMAD = (v) => new Intl.NumberFormat('fr-MA', { maximumFractionDigits: 0 }).format(v || 0) + ' DH';
+
+                    onMounted(async () => {
+                        addLog("Initialisation VPS...", 'info');
+                        try {
+                            const res = await fetch(DATA_PATH + '?t=' + Date.now());
+                            if (res.ok) {
+                                const text = await res.text();
+                                if(!text || text.trim()==="") { addLog("Fichier vide sur le serveur.", "warn"); return; }
+                                const d = JSON.parse(text);
+                                executerImportFusion(d);
+                                serverSyncStatus.value = 'synced'; 
+                                serverLastSync.value = new Date().toLocaleTimeString();
+                                addLog("Structure distante synchronisée.", 'success');
+                            } else { addLog("Aucun fichier distant trouvé.", 'warn'); serverSyncStatus.value = 'synced'; }
+                        } catch (e) { addLog("Mode hors-ligne local activé.", 'warn'); }
+                    });
+
+                    return { 
+                        CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
+                        activeTab, modeEdition, fileInput, soldesInitiaux, revenus, chargesFixes, chargesVariables, epargne, depensesIrregulieres, projetStudio, 
+                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, formatMAD, exporterDonnees, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, 
+                        budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio,
+                        forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
+                        getDueFixe, isItemPaid, toggleItemPaid,
+                        anneeAffichage, anneesDisponibles, ajouterAnnee,
+                        pdfExporting, exporterPDF
+                    };
+                }
+            });
+
+            // GESTIONNAIRE D'ERREUR GLOBAL NON-DESTRUCTIF
+            app.config.errorHandler = (err, vm, info) => {
+                console.error("Vue Error:", err, info);
+                if (err.message && err.message.includes('removeAttribute')) return;
+
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = "position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.9); padding: 20px;";
+                errorDiv.innerHTML = `
+                    <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 40px; border-radius: 20px; max-w: 600px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+                        <h1 style="color: #b91c1c; font-size: 24px; font-weight: 900; margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                            <span>❌</span> Erreur de Fusion de Données
+                        </h1>
+                        <p style="color: #7f1d1d; font-size: 14px; margin-bottom: 20px; line-height: 1.5;">
+                            Une anomalie a été détectée dans la structure des données du serveur.
+                        </p>
+                        <div style="background: #7f1d1d; color: #fca5a5; padding: 15px; border-radius: 10px; font-family: monospace; font-size: 11px; overflow-x: auto; margin-bottom: 30px;">
+                            <strong>Détail technique :</strong><br/>
+                            ${err.message}
+                        </div>
+                        <div style="display: flex; gap: 15px;">
+                            <button onclick="this.parentElement.parentElement.parentElement.remove()" style="flex: 1; padding: 15px; background: white; color: #b91c1c; border: 2px solid #fca5a5; border-radius: 10px; font-weight: bold; cursor: pointer;">Fermer ce panneau</button>
+                            <button onclick="fetch('/finance/save_data.php', {method: 'POST', body: '{}'}).then(() => window.location.reload())" style="flex: 1; padding: 15px; background: #ef4444; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.5);">Réinitialiser le VPS</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(errorDiv);
+            };
+            
+            app.mount('#app');
+            
+        } catch (fatalError) {
+            document.body.innerHTML = `<div style="padding: 2rem; color: red;">Erreur fatale au lancement : ${fatalError.message}</div>`;
+        }
+    </script>
+</body>
+</html>
