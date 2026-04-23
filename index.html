@@ -577,6 +577,8 @@
                                     <p class="text-[9px] mb-2 uppercase tracking-widest opacity-80">{{ studioCalc.cashRestant >= 0 ? 'Reliquat Cash Sécurisé' : 'Déficit de Trésorerie' }}</p>
                                     <p class="text-3xl">{{ formatMAD(studioCalc.cashRestant) }}</p>
                                 </div>
+                                <button @click="injecterFluxCashStudio" class="w-full py-4 mt-6 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-500 hover:scale-105 transition-all active:scale-95 uppercase text-xs tracking-widest shadow-indigo-500/30 border border-indigo-400/50">👉 Injecter les flux Cash dans les Chocs</button>
+                                <p class="text-[9px] text-gray-400 text-center mt-2 italic">Crée 2 lignes dans les chocs : déblocage crédit (négatif) + paiement notaire & travaux (positif)</p>
                             </div>
                         </div>
                     </div>
@@ -1106,6 +1108,45 @@
                     const tauxEndettement = computed(() => totalRevenusBase.value===0?0:(totalCreditsMensuels.value/totalRevenusBase.value)*100);
                     const appliquerMensualiteStudio = () => { const d = donneesAnnuelles.value[anneeAffichage.value]; if(d && d.chargesFixes?.creditStudio) { d.chargesFixes.creditStudio.valeur = Math.round(studioCalc.value.totalMensuel); activeTab.value = 'parametres'; handleDataChange(); } };
 
+                    const injecterFluxCashStudio = () => {
+                        const aNum = anneeAffichage.value;
+                        const dAnnee = donneesAnnuelles.value[aNum];
+                        if (!dAnnee) { alert("❌ Année inexistante."); return; }
+                        const p = dAnnee.projetStudio || {};
+                        const moisStr = prompt(`À quel mois aura lieu le déblocage du crédit et les travaux en ${aNum} ? (1 à 12)`, '6');
+                        if (moisStr === null) return;
+                        const mois = parseInt(moisStr, 10);
+                        if (isNaN(mois) || mois < 1 || mois > 12) { alert("❌ Mois invalide (1 à 12)."); return; }
+
+                        const montantDeblocage = Math.round((Number(p.taxCouvertCredit)||0) + (Number(p.surplusCredit)||0));
+                        const montantPaiement = Math.round((Number(p.taxSyndic)||0) + (Number(p.travaux)||0));
+
+                        if (!Array.isArray(dAnnee.depensesIrregulieres)) dAnnee.depensesIrregulieres = [];
+
+                        dAnnee.depensesIrregulieres.push({
+                            id: Date.now(),
+                            mois: mois,
+                            annee: aNum,
+                            nom: 'Déblocage Crédit (Taxes + Surplus)',
+                            montant: -montantDeblocage,
+                            paye: false,
+                            montantPaye: 0
+                        });
+                        dAnnee.depensesIrregulieres.push({
+                            id: Date.now() + 1,
+                            mois: mois,
+                            annee: aNum,
+                            nom: 'Paiement Notaire & Travaux',
+                            montant: montantPaiement,
+                            paye: false,
+                            montantPaye: 0
+                        });
+
+                        addLog(`Flux Cash Studio injectés au mois ${mois}/${aNum} : -${montantDeblocage} DH / +${montantPaiement} DH`, 'success');
+                        handleDataChange();
+                        alert(`✅ 2 lignes ajoutées aux Chocs de ${aNum} (mois ${mois}).`);
+                    };
+
                     // MOTEUR MULTI-ANNEES (V11.0)
                     const bilan = computed(() => {
                         calculationTick.value;
@@ -1143,9 +1184,10 @@
                             let entreesAppliquees = 0; let solde_fin = 0; let totalIrregRestant = 0; let detailsIrreg = '';
                             
                             if (isCurrentMonth) {
-                                // 1. Chocs
+                                // 1. Chocs (un montant négatif = injection de cash, conservé tel quel)
                                 totalIrregRestant = depTriees.filter(d=>d.mois===mNum).reduce((s,d)=> {
                                     let due = Number(d.montant || 0);
+                                    if (due < 0) return s + due; // Entrée: pas d'écrêtage
                                     return s + Math.max(0, due - getPaidAmount(d, due));
                                 }, 0);
                                 detailsIrreg = depTriees.filter(d=>d.mois===mNum && !isItemPaid(d, Number(d.montant||0))).map(d=>d.nom).join(', ');
@@ -1192,7 +1234,11 @@
                                 };
                             } 
                             else {
-                                totalIrregRestant = depTriees.filter(d=>d.mois===mNum).reduce((s,d)=> s + Math.max(0, Number(d.montant||0) - getPaidAmount(d, Number(d.montant||0))), 0);
+                                totalIrregRestant = depTriees.filter(d=>d.mois===mNum).reduce((s,d)=> {
+                                    let due = Number(d.montant||0);
+                                    if (due < 0) return s + due; // Entrée de cash (ex: déblocage crédit)
+                                    return s + Math.max(0, due - getPaidAmount(d, due));
+                                }, 0);
                                 detailsIrreg = depTriees.filter(d=>d.mois===mNum && !isItemPaid(d, Number(d.montant||0))).map(d=>d.nom).join(', ');
                                 
                                 if (decalagePaie) {
@@ -1288,7 +1334,7 @@
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, 
-                        budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio,
+                        budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee
