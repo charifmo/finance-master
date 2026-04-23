@@ -232,7 +232,16 @@
                                             <div v-if="row.isCurrent && (soldesInitiaux.decalagePaie !== false)" class="text-[9px] text-gray-500 font-bold mt-1 uppercase tracking-widest">Ds Solde Init.</div>
                                             <div v-if="row.isException" class="text-[9px] text-orange-500 font-bold mt-1 uppercase tracking-widest">Exception Active</div>
                                         </td>
-                                        <td class="p-4 text-right text-red-500 font-bold">{{ row.sortiesExceptionnelles > 0 ? '-' + formatMAD(row.sortiesExceptionnelles) : '-' }}</td>
+                                        <td :class="['p-4 text-right font-bold', row.sortiesExceptionnelles < 0 ? 'text-green-600' : 'text-red-500']">
+                                            <template v-if="row.sortiesExceptionnelles < 0">
+                                                +{{ formatMAD(Math.abs(row.sortiesExceptionnelles)) }}
+                                                <div class="text-[8px] text-green-500 uppercase tracking-widest mt-1">Injection Banque</div>
+                                            </template>
+                                            <template v-else-if="row.sortiesExceptionnelles > 0">
+                                                -{{ formatMAD(row.sortiesExceptionnelles) }}
+                                            </template>
+                                            <template v-else>-</template>
+                                        </td>
                                         <td class="p-4 text-[10px] text-gray-500 max-w-[200px] truncate font-medium" :title="row.detailsIrreg">{{ row.detailsIrreg || '-' }}</td>
                                         <td :class="['p-4 text-right font-black text-lg border-l border-gray-100', row.soldeCourant < 0 ? 'text-red-600' : 'text-gray-800']">{{ formatMAD(row.soldeCourant) }}</td>
                                         <td class="p-4 text-right text-purple-600 font-bold">{{ formatMAD(row.soldeUrgence + row.soldeLT) }}</td>
@@ -515,7 +524,8 @@
                             <div v-show="moisOuverts.includes(moisNum)" class="p-6 bg-white space-y-3">
                                 <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
                                     <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
-                                    <input type="number" v-model.number="depense.montant" @input="handleDataChange" class="w-24 text-right font-black text-red-600 bg-transparent outline-none"/>
+                                    <input type="number" v-model.number="depense.montant" @input="handleDataChange" :class="['w-24 text-right font-black bg-transparent outline-none', depense.montant < 0 ? 'text-green-600' : 'text-red-600']"/>
+                                    <span v-if="depense.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase">Injection Banque</span>
                                     
                                     <select v-model.number="depense.mois" @change="deplacerDepense(depense)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-2 rounded-lg font-black transition-colors text-xs uppercase tracking-widest shadow-sm outline-none cursor-pointer" title="Déplacer vers un autre mois de cette année">
                                         <option disabled :value="moisNum">Vers... ⏭️</option>
@@ -1123,6 +1133,10 @@
 
                         if (!Array.isArray(dAnnee.depensesIrregulieres)) dAnnee.depensesIrregulieres = [];
 
+                        // Nettoyage des anciennes injections (évite les doublons)
+                        const nomsReserves = ['Déblocage Crédit (Taxes + Surplus)', 'Paiement Notaire & Travaux'];
+                        dAnnee.depensesIrregulieres = dAnnee.depensesIrregulieres.filter(d => !nomsReserves.includes(d.nom));
+
                         dAnnee.depensesIrregulieres.push({
                             id: Date.now(),
                             mois: mois,
@@ -1190,7 +1204,7 @@
                                     if (due < 0) return s + due; // Entrée: pas d'écrêtage
                                     return s + Math.max(0, due - getPaidAmount(d, due));
                                 }, 0);
-                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && !isItemPaid(d, Number(d.montant||0))).map(d=>d.nom).join(', ');
+                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0)))).map(d=>d.nom).join(', ');
                                 
                                 // 2. Fixes
                                 let fRest = 0;
@@ -1239,7 +1253,7 @@
                                     if (due < 0) return s + due; // Entrée de cash (ex: déblocage crédit)
                                     return s + Math.max(0, due - getPaidAmount(d, due));
                                 }, 0);
-                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && !isItemPaid(d, Number(d.montant||0))).map(d=>d.nom).join(', ');
+                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0)))).map(d=>d.nom).join(', ');
                                 
                                 if (decalagePaie) {
                                     entreesAppliquees = revMoisPrecedent;
