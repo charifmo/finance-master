@@ -949,13 +949,16 @@
                             // Migration automatique V10 -> V11
                             if (data.revenus && !data.donneesAnnuelles) {
                                 let anneeBase = soldesInitiaux.value.anneeActuelle || 2026;
+                                const chocsDistants = Array.isArray(data.depensesIrregulieres) && data.depensesIrregulieres.length > 0
+                                    ? data.depensesIrregulieres.map(dep => ({ ...dep, annee: dep.annee || anneeBase }))
+                                    : d.donneesAnnuelles[2026].depensesIrregulieres;
                                 let newDataAnnuelles = {
                                     [anneeBase]: {
                                         revenus: safeMerge(d.donneesAnnuelles[2026].revenus, data.revenus),
                                         chargesFixes: safeMerge(d.donneesAnnuelles[2026].chargesFixes, data.chargesFixes),
                                         chargesVariables: safeMerge(d.donneesAnnuelles[2026].chargesVariables, data.chargesVariables),
                                         epargne: safeMerge(d.donneesAnnuelles[2026].epargne, data.epargne),
-                                        depensesIrregulieres: Array.isArray(data.depensesIrregulieres) ? data.depensesIrregulieres.map(dep => ({ ...dep, annee: dep.annee || anneeBase })) : d.donneesAnnuelles[2026].depensesIrregulieres,
+                                        depensesIrregulieres: chocsDistants,
                                         projetStudio: safeMerge(getDefaultProjetStudio(), data.projetStudio)
                                     }
                                 };
@@ -963,9 +966,15 @@
                             } else if (data.donneesAnnuelles) {
                                 donneesAnnuelles.value = safeMerge(d.donneesAnnuelles, data.donneesAnnuelles);
                                 // Propage projetStudio global legacy vers chaque année si absente
+                                // ET restaure les chocs par défaut si l'année distante en a zéro
                                 Object.keys(donneesAnnuelles.value).forEach(k => {
-                                    if (!donneesAnnuelles.value[k].projetStudio) {
-                                        donneesAnnuelles.value[k].projetStudio = safeMerge(getDefaultProjetStudio(), data.projetStudio);
+                                    const annee = donneesAnnuelles.value[k];
+                                    if (!annee.projetStudio) {
+                                        annee.projetStudio = safeMerge(getDefaultProjetStudio(), data.projetStudio);
+                                    }
+                                    if (!Array.isArray(annee.depensesIrregulieres) || annee.depensesIrregulieres.length === 0) {
+                                        // Si 2026 par défaut existe, copie les chocs ; sinon tableau vide
+                                        annee.depensesIrregulieres = (d.donneesAnnuelles[k]?.depensesIrregulieres || d.donneesAnnuelles[2026]?.depensesIrregulieres || []).map(dep => ({ ...dep, annee: Number(k) }));
                                     }
                                 });
                             }
