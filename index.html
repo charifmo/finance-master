@@ -38,6 +38,7 @@
                     <button @click="activeTab = 'parametres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'parametres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">⚙️ Moteur Mensuel</button>
                     <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📅 Calendrier Pluriannuel</button>
                     <button @click="activeTab = 'studio'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">🏢 Projet Studio</button>
+                    <button @click="activeTab = 'audit'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'audit' ? 'bg-fuchsia-600 shadow-lg shadow-fuchsia-900/50' : 'hover:bg-slate-800 text-slate-300']">🧠 Audit Financier</button>
                     <button @click="showChangelog = true" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-slate-400 hover:bg-slate-800 mt-4 border-t border-slate-800 text-xs font-medium uppercase tracking-widest">📖 Changelog</button>
                 </nav>
             </div>
@@ -622,6 +623,114 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- === AUDIT FINANCIER === -->
+                <div v-if="activeTab === 'audit'" class="max-w-6xl mx-auto space-y-6">
+                    <div class="flex items-end justify-between border-b pb-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-800">🧠 Audit Financier</h2>
+                            <p class="text-sm text-gray-500 mt-1 font-medium">Diagnostic automatique de votre santé financière (Année {{ anneeAffichage }}).</p>
+                        </div>
+                        <div :class="['px-5 py-3 rounded-2xl font-black text-center border-2 shadow-sm', auditFinancier.scoreGlobal === 'vert' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : (auditFinancier.scoreGlobal === 'orange' ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-red-50 border-red-300 text-red-700')]">
+                            <p class="text-[9px] uppercase tracking-widest font-bold opacity-80">Score Global</p>
+                            <p class="text-2xl tracking-tighter">
+                                <span v-if="auditFinancier.scoreGlobal === 'vert'">🟢 SAIN</span>
+                                <span v-else-if="auditFinancier.scoreGlobal === 'orange'">🟠 VIGILANCE</span>
+                                <span v-else>🔴 CRITIQUE</span>
+                            </p>
+                            <p class="text-[10px] font-bold opacity-70 mt-1">{{ auditFinancier.scoreTotal }}/6 points</p>
+                        </div>
+                    </div>
+
+                    <!-- 3 JAUGES -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Jauge 1 : Trésorerie -->
+                        <div :class="['p-6 rounded-3xl border-2 shadow-sm transition-all', auditFinancier.tresorerie.score === 'vert' ? 'bg-emerald-50 border-emerald-300' : (auditFinancier.tresorerie.score === 'orange' ? 'bg-orange-50 border-orange-300' : 'bg-red-50 border-red-300')]">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-black uppercase tracking-widest text-gray-500">Jauge 1</span>
+                                <span :class="['text-2xl', auditFinancier.tresorerie.score === 'vert' ? '' : (auditFinancier.tresorerie.score === 'orange' ? '' : '')]">
+                                    {{ auditFinancier.tresorerie.score === 'vert' ? '🟢' : (auditFinancier.tresorerie.score === 'orange' ? '🟠' : '🔴') }}
+                                </span>
+                            </div>
+                            <h3 class="font-black text-gray-800 text-lg mb-1">💰 Santé Trésorerie</h3>
+                            <p :class="['text-sm font-bold mb-4', auditFinancier.tresorerie.score === 'vert' ? 'text-emerald-700' : (auditFinancier.tresorerie.score === 'orange' ? 'text-orange-700' : 'text-red-700')]">{{ auditFinancier.tresorerie.label }}</p>
+                            <!-- barre -->
+                            <div class="w-full bg-white/70 rounded-full h-3 overflow-hidden border border-white mb-3">
+                                <div :class="['h-full rounded-full transition-all', auditFinancier.tresorerie.score === 'vert' ? 'bg-emerald-500 w-full' : (auditFinancier.tresorerie.score === 'orange' ? 'bg-orange-500 w-1/2' : 'bg-red-500 w-1/4')]"></div>
+                            </div>
+                            <p class="text-xs text-gray-600 font-medium leading-relaxed">{{ auditFinancier.tresorerie.detail }}</p>
+                            <div class="mt-4 pt-3 border-t border-white/60 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                                Seuils : 🟢 ≥ 10 000 DH · 🟠 0-10k · 🔴 découvert
+                            </div>
+                        </div>
+
+                        <!-- Jauge 2 : Flux exceptionnels -->
+                        <div :class="['p-6 rounded-3xl border-2 shadow-sm transition-all', auditFinancier.fluxExceptionnels.score === 'vert' ? 'bg-emerald-50 border-emerald-300' : (auditFinancier.fluxExceptionnels.score === 'orange' ? 'bg-orange-50 border-orange-300' : 'bg-red-50 border-red-300')]">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-black uppercase tracking-widest text-gray-500">Jauge 2</span>
+                                <span class="text-2xl">{{ auditFinancier.fluxExceptionnels.score === 'vert' ? '🟢' : (auditFinancier.fluxExceptionnels.score === 'orange' ? '🟠' : '🔴') }}</span>
+                            </div>
+                            <h3 class="font-black text-gray-800 text-lg mb-1">⚡ Poids Flux Exceptionnels</h3>
+                            <p :class="['text-sm font-bold mb-4', auditFinancier.fluxExceptionnels.score === 'vert' ? 'text-emerald-700' : (auditFinancier.fluxExceptionnels.score === 'orange' ? 'text-orange-700' : 'text-red-700')]">{{ auditFinancier.fluxExceptionnels.label }}</p>
+                            <div class="w-full bg-white/70 rounded-full h-3 overflow-hidden border border-white mb-3">
+                                <div :class="['h-full rounded-full transition-all', auditFinancier.fluxExceptionnels.score === 'vert' ? 'bg-emerald-500' : (auditFinancier.fluxExceptionnels.score === 'orange' ? 'bg-orange-500' : 'bg-red-500')]" :style="{ width: Math.min(100, Math.max(5, auditFinancier.fluxExceptionnels.impact)) + '%' }"></div>
+                            </div>
+                            <p class="text-xs text-gray-600 font-medium leading-relaxed">{{ auditFinancier.fluxExceptionnels.detail }}</p>
+                            <div class="mt-4 pt-3 border-t border-white/60 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                                Seuils : 🟢 ≤ 30% · 🟠 30-70% · 🔴 &gt; 70%
+                            </div>
+                        </div>
+
+                        <!-- Jauge 3 : Concentration Charges Fixes -->
+                        <div :class="['p-6 rounded-3xl border-2 shadow-sm transition-all', auditFinancier.chargesFixes.score === 'vert' ? 'bg-emerald-50 border-emerald-300' : (auditFinancier.chargesFixes.score === 'orange' ? 'bg-orange-50 border-orange-300' : 'bg-red-50 border-red-300')]">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-black uppercase tracking-widest text-gray-500">Jauge 3</span>
+                                <span class="text-2xl">{{ auditFinancier.chargesFixes.score === 'vert' ? '🟢' : (auditFinancier.chargesFixes.score === 'orange' ? '🟠' : '🔴') }}</span>
+                            </div>
+                            <h3 class="font-black text-gray-800 text-lg mb-1">🔒 Concentration Charges Fixes</h3>
+                            <p :class="['text-sm font-bold mb-4', auditFinancier.chargesFixes.score === 'vert' ? 'text-emerald-700' : (auditFinancier.chargesFixes.score === 'orange' ? 'text-orange-700' : 'text-red-700')]">{{ auditFinancier.chargesFixes.label }}</p>
+                            <div class="w-full bg-white/70 rounded-full h-3 overflow-hidden border border-white mb-3">
+                                <div :class="['h-full rounded-full transition-all', auditFinancier.chargesFixes.score === 'vert' ? 'bg-emerald-500' : (auditFinancier.chargesFixes.score === 'orange' ? 'bg-orange-500' : 'bg-red-500')]" :style="{ width: Math.min(100, Math.max(5, auditFinancier.chargesFixes.taux)) + '%' }"></div>
+                            </div>
+                            <p class="text-xs text-gray-600 font-medium leading-relaxed">{{ auditFinancier.chargesFixes.detail }}</p>
+                            <div class="mt-4 pt-3 border-t border-white/60 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                                Seuils : 🟢 ≤ 40% · 🟠 40-60% · 🔴 &gt; 60%
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BLOC COPIE IA -->
+                    <div class="bg-gradient-to-br from-slate-900 via-fuchsia-950 to-slate-900 p-8 rounded-3xl shadow-2xl border border-fuchsia-500/30 relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-64 h-64 bg-fuchsia-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                        <div class="relative">
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="text-3xl">🤖</span>
+                                <div>
+                                    <h3 class="text-xl font-black text-white uppercase tracking-tighter">Copier les données pour l'IA</h3>
+                                    <p class="text-fuchsia-200 text-xs font-medium">Un prompt prêt à coller dans ChatGPT / Claude.ai / Gemini.</p>
+                                </div>
+                            </div>
+                            <p class="text-slate-300 text-sm font-medium leading-relaxed mb-6 max-w-3xl">
+                                Génère automatiquement un résumé condensé de votre situation : revenus, charges, flux exceptionnels, top dépenses, diagnostic des 3 jauges et questions ciblées. Collez-le dans une IA pour obtenir des conseils personnalisés.
+                            </p>
+                            <button @click="copierPromptIA" :class="['px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all active:scale-95', promptIACopied ? 'bg-emerald-500 text-white shadow-emerald-500/50' : 'bg-white text-fuchsia-700 hover:bg-fuchsia-100 shadow-fuchsia-900/50']">
+                                <span v-if="promptIACopied">✅ Copié ! Prompt prêt à coller</span>
+                                <span v-else>📋 Copier le prompt IA</span>
+                            </button>
+                            <p class="text-[10px] text-fuchsia-200/70 mt-4 font-mono uppercase tracking-widest">Presse-papiers → Ctrl+V dans ChatGPT / Claude.ai</p>
+                        </div>
+                    </div>
+
+                    <!-- NOTE METHODO -->
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm text-xs text-gray-500 font-medium leading-relaxed">
+                        <p class="font-black uppercase text-gray-700 mb-2 tracking-widest text-[10px]">🛈 Méthodologie</p>
+                        <ul class="space-y-1 list-disc pl-5">
+                            <li><b>Trésorerie</b> : minimum du solde courant projeté sur toute la période restante (Bilan pluriannuel).</li>
+                            <li><b>Flux exceptionnels</b> : (net annuel / 12) / surplus mensuel moyen. Mesure la pression des chocs sur votre épargne récurrente.</li>
+                            <li><b>Charges fixes</b> : total des charges fixes mensuelles rapporté aux revenus mensuels bruts.</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <div v-if="showDriveHelp" class="fixed inset-0 bg-slate-900/90 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
@@ -703,8 +812,10 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "12.0";
+                    const CURRENT_VERSION = "12.1";
                     const CHANGELOG = [
+                        { version: "12.1", date: "Audit Financier & Prompt IA", changes: ["Nouvel onglet 🧠 Audit Financier avec 3 jauges visuelles (Trésorerie, Flux Exceptionnels, Charges Fixes).", "Score global (Sain/Vigilance/Critique) basé sur les 3 jauges.", "Bouton 'Copier le prompt IA' : résumé financier prêt à coller dans ChatGPT / Claude.ai."] },
+                        { version: "12.0", date: "Ergonomie Flux & Impact Surplus", changes: ["Renommage 'Chocs' → 'Flux Exceptionnels'.", "Header stats annuelles : Entrées / Sorties / Poids sur Surplus.", "Solde banque éditable en un clic."] },
                         { version: "11.0", date: "Time Engine & Data Restored", changes: ["Refonte globale multi-années (Moteur V11).", "Restauration complète de l'historique des données V10.", "Réintégration du Drill-Down Chart."] },
                         { version: "10.0", date: "Vision Multi-Années", changes: ["Refonte du moteur annuel : ajoutez 2027, 2028, etc.", "Duplication automatique des chocs annuels vers la nouvelle année.", "Tableau Bilan dynamique s'étendant à la fin de la dernière année."] }
                     ];
@@ -1332,6 +1443,186 @@
                     const soldeFinal = computed(() => { const am = bilan.value.filter(b => !b.isPassed); return am.length > 0 ? am[am.length - 1].soldeCourant : 0; });
                     const epargneTotaleFinal = computed(() => { const am = bilan.value.filter(b => !b.isPassed); return am.length > 0 ? am[am.length - 1].soldeUrgence + am[am.length - 1].soldeLT : 0; });
 
+                    // === AUDIT FINANCIER (v12.1) ===
+                    const promptIACopied = ref(false);
+
+                    const scoreFromThresholds = (value, lowIsGood, seuilVert, seuilOrange) => {
+                        // lowIsGood: true => plus la valeur est basse, mieux c'est
+                        if (lowIsGood) {
+                            if (value <= seuilVert) return 'vert';
+                            if (value <= seuilOrange) return 'orange';
+                            return 'rouge';
+                        } else {
+                            if (value >= seuilVert) return 'vert';
+                            if (value >= seuilOrange) return 'orange';
+                            return 'rouge';
+                        }
+                    };
+
+                    const auditFinancier = computed(() => {
+                        calculationTick.value;
+                        const b = bilan.value || [];
+                        const future = b.filter(x => !x.isPassed);
+
+                        // ---- Jauge 1 : Santé de la Trésorerie ----
+                        // On mesure le solde minimum projeté du compte courant (découvert = risque)
+                        let soldeMin = Infinity, moisMin = '-';
+                        future.forEach(r => {
+                            if (typeof r.soldeCourant === 'number' && r.soldeCourant < soldeMin) {
+                                soldeMin = r.soldeCourant;
+                                moisMin = r.mois + ' ' + r.annee;
+                            }
+                        });
+                        if (soldeMin === Infinity) soldeMin = Number((soldesInitiaux.value || {}).courant || 0);
+                        // Seuils : découvert = rouge ; < 10 000 DH = orange ; sinon vert
+                        let treso = 'vert';
+                        if (soldeMin < 0) treso = 'rouge';
+                        else if (soldeMin < 10000) treso = 'orange';
+
+                        // ---- Jauge 2 : Poids des Flux Exceptionnels / Surplus ----
+                        const impact = statsFluxAnnee.value.impactSurplus || 0;
+                        // Seuils : <= 30% vert, <= 70% orange, sinon rouge
+                        const flux = scoreFromThresholds(impact, true, 30, 70);
+
+                        // ---- Jauge 3 : Concentration Charges Fixes / Revenus ----
+                        const rev = totalRevenusBase.value || 0;
+                        const tauxFixes = rev > 0 ? (totalFixes.value / rev) * 100 : 0;
+                        // Seuils : <= 40% vert, <= 60% orange, sinon rouge
+                        const fixes = scoreFromThresholds(tauxFixes, true, 40, 60);
+
+                        // Score global
+                        const scores = { vert: 2, orange: 1, rouge: 0 };
+                        const total = scores[treso] + scores[flux] + scores[fixes];
+                        let scoreGlobal = 'rouge';
+                        if (total >= 5) scoreGlobal = 'vert';
+                        else if (total >= 3) scoreGlobal = 'orange';
+
+                        return {
+                            tresorerie: {
+                                score: treso,
+                                soldeMin: Math.round(soldeMin),
+                                moisMin: moisMin,
+                                label: treso === 'vert' ? 'Trésorerie saine' : (treso === 'orange' ? 'Vigilance trésorerie' : 'Risque de découvert'),
+                                detail: treso === 'rouge'
+                                    ? `Découvert projeté de ${formatMAD(soldeMin)} en ${moisMin}.`
+                                    : (treso === 'orange'
+                                        ? `Solde bas prévu : ${formatMAD(soldeMin)} en ${moisMin}.`
+                                        : `Solde minimum projeté : ${formatMAD(soldeMin)} (${moisMin}).`)
+                            },
+                            fluxExceptionnels: {
+                                score: flux,
+                                impact: impact,
+                                label: flux === 'vert' ? 'Flux exceptionnels absorbés' : (flux === 'orange' ? 'Flux exceptionnels lourds' : 'Flux exceptionnels critiques'),
+                                detail: `Les flux exceptionnels absorbent ${impact.toFixed(0)}% de votre surplus mensuel moyen.`
+                            },
+                            chargesFixes: {
+                                score: fixes,
+                                taux: tauxFixes,
+                                label: fixes === 'vert' ? 'Charges fixes maîtrisées' : (fixes === 'orange' ? 'Charges fixes élevées' : 'Charges fixes excessives'),
+                                detail: `${tauxFixes.toFixed(1)}% de vos revenus sont captés par les charges fixes (${formatMAD(totalFixes.value)} / ${formatMAD(rev)}).`
+                            },
+                            scoreGlobal,
+                            scoreTotal: total
+                        };
+                    });
+
+                    const copierPromptIA = async () => {
+                        const a = auditFinancier.value;
+                        const aNum = anneeAffichage.value;
+                        const rev = totalRevenusBase.value;
+                        const fixes = totalFixes.value;
+                        const conso = totalVariables.value;
+                        const surplus = surplusMensuelBase.value;
+                        const flux = statsFluxAnnee.value;
+                        const sf = soldeFinal.value;
+                        const ep = epargneTotaleFinal.value;
+                        const tauxEnd = tauxEndettement.value;
+
+                        // Top 5 charges fixes
+                        const d = donneesAnnuelles.value[aNum] || {};
+                        const topFixes = Object.values(d.chargesFixes || {})
+                            .filter(x => Number(x?.valeur) > 0)
+                            .sort((x, y) => Number(y.valeur) - Number(x.valeur))
+                            .slice(0, 5)
+                            .map(x => `  - ${x.label}: ${formatMAD(x.valeur)}/mois`)
+                            .join('\n');
+
+                        const chocs = Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [];
+                        const chocsResume = chocs.length === 0 ? '  (aucun)' : chocs
+                            .slice(0, 10)
+                            .map(c => `  - M${c.mois}/${c.annee || aNum} · ${c.nom} : ${Number(c.montant) < 0 ? '+' : '-'}${formatMAD(Math.abs(Number(c.montant)||0))}`)
+                            .join('\n');
+
+                        const emoji = { vert: '🟢', orange: '🟠', rouge: '🔴' };
+
+                        const prompt = `Tu es mon conseiller financier personnel. Voici la situation de mon foyer au Maroc (devise : DH). Analyse-la et donne-moi 3 recommandations concrètes et priorisées pour améliorer ma santé financière sur les 12 prochains mois.
+
+═══════════════════════════════
+📊 AUDIT FINANCIER — Année ${aNum}
+═══════════════════════════════
+
+▸ Solde banque actuel : ${formatMAD((soldesInitiaux.value || {}).courant || 0)}
+▸ Épargne projetée fin période : ${formatMAD(ep)}
+▸ Solde courant projeté fin période : ${formatMAD(sf)}
+
+━━ FLUX MENSUELS ━━
+• Revenus : ${formatMAD(rev)}
+• Charges fixes : ${formatMAD(fixes)} (${rev > 0 ? ((fixes/rev)*100).toFixed(1) : 0}% des revenus)
+• Consommation variable : ${formatMAD(conso)}
+• Surplus mensuel net : ${formatMAD(surplus)}
+• Taux d'endettement (crédits) : ${tauxEnd.toFixed(1)}%
+
+━━ FLUX EXCEPTIONNELS ${aNum} ━━
+• Entrées exceptionnelles : +${formatMAD(flux.totalEntrees)}
+• Sorties exceptionnelles : -${formatMAD(flux.totalSorties)}
+• Net annuel : ${formatMAD(flux.netAnnuel)}
+• Impact sur surplus mensuel : ${flux.impactSurplus.toFixed(0)}%
+
+━━ TOP 5 CHARGES FIXES ━━
+${topFixes || '  (aucune)'}
+
+━━ FLUX EXCEPTIONNELS (détail) ━━
+${chocsResume}
+
+━━ DIAGNOSTIC JAUGES ━━
+${emoji[a.tresorerie.score]} Trésorerie (${a.tresorerie.score.toUpperCase()}) — ${a.tresorerie.detail}
+${emoji[a.fluxExceptionnels.score]} Flux exceptionnels (${a.fluxExceptionnels.score.toUpperCase()}) — ${a.fluxExceptionnels.detail}
+${emoji[a.chargesFixes.score]} Charges fixes (${a.chargesFixes.score.toUpperCase()}) — ${a.chargesFixes.detail}
+
+Score global : ${emoji[a.scoreGlobal]} ${a.scoreGlobal.toUpperCase()} (${a.scoreTotal}/6)
+
+═══════════════════════════════
+❓ QUESTIONS
+1. Quels sont les 3 risques les plus critiques dans cette situation ?
+2. Quelles 3 actions concrètes dois-je prioriser dans les 3 prochains mois ?
+3. Mon projet studio est-il soutenable compte tenu de ce profil ?
+Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
+
+                        try {
+                            await navigator.clipboard.writeText(prompt);
+                            promptIACopied.value = true;
+                            addLog('Prompt IA copié dans le presse-papiers.', 'success');
+                            setTimeout(() => { promptIACopied.value = false; }, 3000);
+                        } catch (e) {
+                            // Fallback legacy
+                            const ta = document.createElement('textarea');
+                            ta.value = prompt;
+                            ta.style.position = 'fixed';
+                            ta.style.opacity = '0';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            try {
+                                document.execCommand('copy');
+                                promptIACopied.value = true;
+                                addLog('Prompt IA copié (fallback).', 'success');
+                                setTimeout(() => { promptIACopied.value = false; }, 3000);
+                            } catch (err) {
+                                alert('❌ Impossible de copier automatiquement. Voici le prompt :\n\n' + prompt);
+                            }
+                            document.body.removeChild(ta);
+                        }
+                    };
+
                     const budgetChartConfig = computed(() => {
                         calculationTick.value;
                         return { type: 'doughnut', data: { labels: ['Fixes', 'Conso', 'Épargne', 'Surplus'], datasets: [{ data: [totalFixes.value, totalVariables.value, totalEpargne.value, Math.max(0, surplusMensuelBase.value)], backgroundColor: ['#f97316', '#ef4444', '#a855f7', '#22c55e'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'right' } }, onClick: (e, el) => { if(el.length>0) { const l = ['Charges Fixes', 'Consommation', 'Épargne', 'Surplus Net'][el[0].index]; if(l!=='Surplus Net') activeDrilldown.value = { source: 'budget', key: l, label: l, color: ['#f97316', '#ef4444', '#a855f7', '#22c55e'][el[0].index] }; } } } };
@@ -1396,6 +1687,7 @@
                         surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
+                        auditFinancier, copierPromptIA, promptIACopied,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee
