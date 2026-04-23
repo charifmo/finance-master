@@ -242,7 +242,19 @@
                                             </template>
                                             <template v-else>-</template>
                                         </td>
-                                        <td class="p-4 text-[10px] text-gray-500 max-w-[200px] truncate font-medium" :title="row.detailsIrreg">{{ row.detailsIrreg || '-' }}</td>
+                                        <td class="p-4 text-[11px] font-medium align-top">
+                                            <template v-if="Array.isArray(row.detailsIrreg) && row.detailsIrreg.length > 0">
+                                                <div v-for="choc in row.detailsIrreg" :key="choc.id" class="flex items-center gap-2 mb-1 last:mb-0">
+                                                    <span v-if="choc.montant < 0" class="text-green-600 font-black whitespace-nowrap">+{{ formatMAD(Math.abs(choc.montant)) }}</span>
+                                                    <span v-else class="text-red-500 font-bold whitespace-nowrap">-{{ formatMAD(choc.montant) }}</span>
+                                                    <span class="text-gray-600">{{ choc.nom }}</span>
+                                                    <span v-if="choc.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase tracking-widest">Injection Banque</span>
+                                                </div>
+                                            </template>
+                                            <template v-else>
+                                                <span class="text-gray-400">-</span>
+                                            </template>
+                                        </td>
                                         <td :class="['p-4 text-right font-black text-lg border-l border-gray-100', row.soldeCourant < 0 ? 'text-red-600' : 'text-gray-800']">{{ formatMAD(row.soldeCourant) }}</td>
                                         <td class="p-4 text-right text-purple-600 font-bold">{{ formatMAD(row.soldeUrgence + row.soldeLT) }}</td>
                                     </tr>
@@ -1195,7 +1207,7 @@
                             const totVarBase = Object.values(dataAnnee.chargesVariables || {}).reduce((acc, curr) => acc + getMonthlyVariableValue(curr || {}), 0);
                             const totEpBase = Object.values(dataAnnee.epargne || {}).reduce((sum, item) => sum + Number((item || {}).valeur||0), 0);
                             
-                            let entreesAppliquees = 0; let solde_fin = 0; let totalIrregRestant = 0; let detailsIrreg = '';
+                            let entreesAppliquees = 0; let solde_fin = 0; let totalIrregRestant = 0; let detailsIrreg = [];
                             
                             if (isCurrentMonth) {
                                 // 1. Chocs (un montant négatif = injection de cash, conservé tel quel)
@@ -1204,8 +1216,8 @@
                                     if (due < 0) return s + due; // Entrée: pas d'écrêtage
                                     return s + Math.max(0, due - getPaidAmount(d, due));
                                 }, 0);
-                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0)))).map(d=>d.nom).join(', ');
-                                
+                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
+
                                 // 2. Fixes
                                 let fRest = 0;
                                 Object.values(dataAnnee.chargesFixes || {}).forEach(f => {
@@ -1253,8 +1265,8 @@
                                     if (due < 0) return s + due; // Entrée de cash (ex: déblocage crédit)
                                     return s + Math.max(0, due - getPaidAmount(d, due));
                                 }, 0);
-                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0)))).map(d=>d.nom).join(', ');
-                                
+                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
+
                                 if (decalagePaie) {
                                     entreesAppliquees = revMoisPrecedent;
                                     const surplusMois = entreesAppliquees - fixMois - totVarBase - totEpBase;
