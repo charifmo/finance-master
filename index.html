@@ -24,7 +24,7 @@
 <body class="bg-gray-50 text-gray-800 font-sans md:overflow-hidden">
     <div id="app" class="min-h-screen md:h-screen w-full flex flex-col md:flex-row relative" v-cloak>
 
-        <div class="w-full md:w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 shadow-2xl z-30 md:h-full md:overflow-y-auto custom-scroll border-r border-slate-800">
+        <div v-if="!isMobile" class="w-full md:w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 shadow-2xl z-30 md:h-full md:overflow-y-auto custom-scroll border-r border-slate-800">
             <div>
                 <div class="p-6 border-b border-slate-800 bg-slate-950/40 text-center">
                     <h1 class="text-xl font-bold text-blue-400 italic uppercase tracking-tighter">📈 Finance App</h1>
@@ -96,7 +96,7 @@
             </div>
         </div>
 
-        <div class="flex-1 flex flex-col bg-gray-50 md:h-full md:overflow-hidden relative">
+        <div v-if="!isMobile" class="flex-1 flex flex-col bg-gray-50 md:h-full md:overflow-hidden relative">
             
             <div class="sticky top-0 shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <div class="px-6 py-3 flex flex-wrap gap-4 justify-between items-center bg-slate-50 border-b border-gray-200">
@@ -786,6 +786,306 @@
             </div>
 
         </div>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- === MOBILE LAYOUT (v12.2) - Hybrid responsive switch    === -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div v-if="isMobile" class="mobile-app-layout w-full min-h-screen bg-gray-50 pb-24 relative">
+
+            <!-- TOP BAR (sticky) -->
+            <div class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm px-4 py-3">
+                <div class="flex items-start justify-between mb-2 gap-3">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">Solde En Banque</p>
+                        <p :class="['text-2xl font-black tracking-tight truncate', soldesInitiaux.courant >= 0 ? 'text-blue-700' : 'text-red-600']">{{ formatMAD(soldesInitiaux.courant) }}</p>
+                    </div>
+                    <select v-model.number="anneeAffichage" class="bg-blue-600 text-white font-black py-1.5 px-2 rounded-lg text-xs shadow-md border border-blue-700 outline-none shrink-0">
+                        <option v-for="a in anneesDisponibles" :key="a" :value="a">{{ a }}</option>
+                    </select>
+                </div>
+                <!-- Impact surplus + surplus mensuel -->
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div :class="['flex items-center gap-1.5 rounded-lg px-2 py-1 border', statsFluxAnnee.impactSurplus > 70 ? 'bg-red-50 border-red-200' : (statsFluxAnnee.impactSurplus > 30 ? 'bg-orange-50 border-orange-200' : 'bg-emerald-50 border-emerald-200')]">
+                        <span class="text-[8px] font-black uppercase tracking-widest text-gray-500">Impact Flux</span>
+                        <span :class="['text-xs font-black', statsFluxAnnee.impactSurplus > 70 ? 'text-red-600' : (statsFluxAnnee.impactSurplus > 30 ? 'text-orange-600' : 'text-emerald-600')]">
+                            {{ statsFluxAnnee.impactSurplus > 0 ? statsFluxAnnee.impactSurplus.toFixed(0) + '%' : '✅' }}
+                        </span>
+                    </div>
+                    <div :class="['flex items-center gap-1.5 rounded-lg px-2 py-1 border', surplusMensuelBase >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200']">
+                        <span class="text-[8px] font-black uppercase tracking-widest text-gray-500">Surplus /mois</span>
+                        <span :class="['text-xs font-black', surplusMensuelBase >= 0 ? 'text-green-700' : 'text-red-700']">{{ formatMAD(surplusMensuelBase) }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONTENT -->
+            <div class="px-3 py-4">
+
+                <!-- ━━ BILAN (Cards) ━━ -->
+                <div v-if="activeMobileTab === 'bilan'">
+                    <h2 class="text-lg font-black text-gray-800 mb-3 uppercase tracking-tighter px-1">📊 Bilan Mensuel</h2>
+
+                    <!-- Base card -->
+                    <div class="bg-blue-50 p-4 rounded-2xl border border-blue-200 mb-3">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">Aujourd'hui (base de calcul)</p>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold text-gray-600">Compte courant</span>
+                            <span class="text-lg font-black text-blue-900">{{ formatMAD(soldesInitiaux.courant) }}</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-1">
+                            <span class="text-xs font-bold text-gray-500">Épargne (Urgence + LT)</span>
+                            <span class="text-sm font-bold text-purple-700">{{ formatMAD((soldesInitiaux.urgence || 0) + (soldesInitiaux.lt || 0)) }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Month cards -->
+                    <div v-for="(row, idx) in bilan" :key="idx"
+                         :class="['rounded-2xl border shadow-sm mb-3 overflow-hidden', row.isCurrent ? 'border-blue-400 border-2 bg-white' : (row.numMois === 1 && !row.isCurrent ? 'border-slate-300 bg-slate-50' : 'border-gray-200 bg-white')]">
+                        <!-- Header -->
+                        <div class="px-4 pt-3 pb-2 flex justify-between items-center">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="font-black text-gray-800 truncate">{{ row.mois }}</span>
+                                <span v-if="row.isCurrent" class="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded uppercase font-black tracking-widest shrink-0">Actuel</span>
+                                <span v-if="row.isException" class="text-[8px] bg-orange-500 text-white px-1.5 py-0.5 rounded uppercase font-black tracking-widest shrink-0">Exc</span>
+                            </div>
+                            <span :class="['text-base font-black shrink-0', row.soldeCourant < 0 ? 'text-red-600' : 'text-gray-800']">{{ formatMAD(row.soldeCourant) }}</span>
+                        </div>
+                        <!-- Summary 3 columns -->
+                        <div class="px-4 pb-3 grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-green-50 rounded-lg p-2">
+                                <p class="text-[8px] font-black text-green-600 uppercase tracking-widest">Revenus</p>
+                                <p class="text-[11px] font-bold text-green-700">{{ formatMAD(row.revenusAppliques) }}</p>
+                            </div>
+                            <div :class="['rounded-lg p-2', row.sortiesExceptionnelles < 0 ? 'bg-green-50' : (row.sortiesExceptionnelles > 0 ? 'bg-red-50' : 'bg-gray-50')]">
+                                <p :class="['text-[8px] font-black uppercase tracking-widest', row.sortiesExceptionnelles < 0 ? 'text-green-600' : (row.sortiesExceptionnelles > 0 ? 'text-red-500' : 'text-gray-500')]">Flux Exc.</p>
+                                <p :class="['text-[11px] font-bold', row.sortiesExceptionnelles < 0 ? 'text-green-700' : (row.sortiesExceptionnelles > 0 ? 'text-red-600' : 'text-gray-500')]">
+                                    <template v-if="row.sortiesExceptionnelles < 0">+{{ formatMAD(Math.abs(row.sortiesExceptionnelles)) }}</template>
+                                    <template v-else-if="row.sortiesExceptionnelles > 0">-{{ formatMAD(row.sortiesExceptionnelles) }}</template>
+                                    <template v-else>—</template>
+                                </p>
+                            </div>
+                            <div class="bg-purple-50 rounded-lg p-2">
+                                <p class="text-[8px] font-black text-purple-600 uppercase tracking-widest">Épargne</p>
+                                <p class="text-[11px] font-bold text-purple-700">{{ formatMAD(row.soldeUrgence + row.soldeLT) }}</p>
+                            </div>
+                        </div>
+                        <!-- Accordion details -->
+                        <details v-if="Array.isArray(row.detailsIrreg) && row.detailsIrreg.length > 0" class="border-t border-gray-100">
+                            <summary class="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-600 cursor-pointer hover:bg-gray-50 list-none flex items-center justify-between">
+                                <span>▸ Détail Flux ({{ row.detailsIrreg.length }})</span>
+                                <span class="text-gray-300">⌄</span>
+                            </summary>
+                            <div class="px-4 py-3 bg-gray-50 space-y-1.5">
+                                <div v-for="choc in row.detailsIrreg" :key="choc.id" class="flex items-center justify-between text-xs gap-2">
+                                    <span class="text-gray-700 flex-1 truncate">{{ choc.nom }}</span>
+                                    <span :class="['font-black whitespace-nowrap', choc.montant < 0 ? 'text-green-600' : 'text-red-600']">
+                                        {{ choc.montant < 0 ? '+' : '-' }}{{ formatMAD(Math.abs(choc.montant)) }}
+                                    </span>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- ━━ FLUX EXCEPTIONNELS ━━ -->
+                <div v-if="activeMobileTab === 'flux'">
+                    <h2 class="text-lg font-black text-gray-800 mb-3 uppercase tracking-tighter px-1">⚡ Flux Exceptionnels {{ anneeAffichage }}</h2>
+                    <!-- Summary -->
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <div class="bg-green-50 border border-green-200 rounded-xl p-3">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-green-600">↑ Entrées</p>
+                            <p class="text-base font-black text-green-700">+{{ formatMAD(statsFluxAnnee.totalEntrees) }}</p>
+                        </div>
+                        <div class="bg-red-50 border border-red-200 rounded-xl p-3">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-red-600">↓ Sorties</p>
+                            <p class="text-base font-black text-red-700">-{{ formatMAD(statsFluxAnnee.totalSorties) }}</p>
+                        </div>
+                    </div>
+                    <!-- Items -->
+                    <template v-if="donneesAnnuelles[anneeAffichage] && Array.isArray(donneesAnnuelles[anneeAffichage].depensesIrregulieres)">
+                        <div v-for="(choc, i) in donneesAnnuelles[anneeAffichage].depensesIrregulieres" :key="choc.id || i"
+                             :class="['rounded-2xl border p-3 mb-3 shadow-sm', choc.montant < 0 ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200']">
+                            <div class="mb-2">
+                                <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1 block">Nom</label>
+                                <input type="text" v-model="choc.nom" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-white outline-none text-sm"/>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1 block">Mois</label>
+                                    <select v-model.number="choc.mois" @change="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-white outline-none text-sm">
+                                        <option v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :value="m">{{ nomDuMois(m) }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label :class="['text-[9px] font-black uppercase tracking-widest mb-1 block', choc.montant < 0 ? 'text-green-700' : 'text-gray-500']">Montant (DH)</label>
+                                    <input type="number" v-model.number="choc.montant" @input="handleDataChange"
+                                        :class="['w-full p-3 border rounded-lg font-black outline-none text-sm', choc.montant < 0 ? 'bg-green-100 text-green-800 border-green-300' : 'bg-white']"/>
+                                </div>
+                            </div>
+                            <div v-if="choc.montant < 0" class="mt-2">
+                                <span class="text-[9px] bg-green-200 text-green-800 px-2 py-1 rounded font-black uppercase tracking-widest">✅ Injection Banque</span>
+                            </div>
+                        </div>
+                        <p v-if="donneesAnnuelles[anneeAffichage].depensesIrregulieres.length === 0" class="text-center text-sm text-gray-400 italic py-4">Aucun flux exceptionnel enregistré.</p>
+                    </template>
+                </div>
+
+                <!-- ━━ STUDIO ━━ -->
+                <div v-if="activeMobileTab === 'studio'">
+                    <h2 class="text-lg font-black text-gray-800 mb-3 uppercase tracking-tighter px-1">🏢 Projet Studio</h2>
+                    <!-- Mensualité card -->
+                    <div class="bg-slate-900 text-white p-5 rounded-2xl shadow-lg mb-4 text-center">
+                        <p class="text-[9px] text-blue-300 font-bold uppercase tracking-widest mb-1">Mensualité Globale</p>
+                        <p class="text-4xl font-black tracking-tighter">{{ formatMAD(studioCalc.totalMensuel) }}</p>
+                        <div class="flex justify-between text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-3 pt-3 border-t border-white/10">
+                            <span>Capital: {{ formatMAD(studioCalc.capitalEmprunte) }}</span>
+                            <span class="text-emerald-400">Reliquat: {{ formatMAD(projetStudio.surplusCredit) }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Cash treso card -->
+                    <div :class="['p-4 rounded-2xl border-2 mb-4 text-center', studioCalc.cashRestant >= 0 ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300']">
+                        <p :class="['text-[9px] font-black uppercase tracking-widest mb-1', studioCalc.cashRestant >= 0 ? 'text-green-700' : 'text-red-700']">
+                            {{ studioCalc.cashRestant >= 0 ? 'Reliquat Cash Sécurisé' : 'Déficit de Trésorerie' }}
+                        </p>
+                        <p :class="['text-2xl font-black', studioCalc.cashRestant >= 0 ? 'text-green-800' : 'text-red-800']">{{ formatMAD(studioCalc.cashRestant) }}</p>
+                    </div>
+
+                    <!-- Form -->
+                    <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3 mb-3">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-500 border-b pb-2">Acquisition</p>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Prix m² (DH)</label>
+                            <input type="number" v-model.number="projetStudio.prixM2" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Surface (m²)</label>
+                            <input type="number" v-model.number="projetStudio.surface" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Avance payée (DH)</label>
+                            <input type="number" v-model.number="projetStudio.avance" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3 mb-3">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-500 border-b pb-2">Crédit</p>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Taxes notaire/syndic</label>
+                            <input type="number" v-model.number="projetStudio.taxSyndic" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Travaux prévus</label>
+                            <input type="number" v-model.number="projetStudio.travaux" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-1 block">Taxes incluses ds crédit</label>
+                            <input type="number" v-model.number="projetStudio.taxCouvertCredit" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-blue-50 text-blue-700 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-1 block">Surplus crédit demandé</label>
+                            <input type="number" v-model.number="projetStudio.surplusCredit" @input="handleDataChange" class="w-full p-3 border rounded-lg font-black bg-emerald-50 text-emerald-700 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Taux (%)</label>
+                            <input type="number" step="0.1" v-model.number="projetStudio.taux" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Durée (années)</label>
+                            <input type="number" v-model.number="projetStudio.duree" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Assurance mensuelle (DH)</label>
+                            <input type="number" v-model.number="projetStudio.assuranceMensuelle" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-1 block">Épargne perso dispo</label>
+                            <input type="number" v-model.number="projetStudio.epargneDispo" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-gray-50 outline-none"/>
+                        </div>
+                    </div>
+
+                    <button @click="appliquerMensualiteStudio" class="w-full py-4 mb-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest">👉 Injecter dans Charges Fixes</button>
+                    <button @click="injecterFluxCashStudio" class="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest">👉 Injecter Flux Cash (Flux Exc.)</button>
+                </div>
+
+                <!-- ━━ CFO (Audit) ━━ -->
+                <div v-if="activeMobileTab === 'audit'">
+                    <h2 class="text-lg font-black text-gray-800 mb-3 uppercase tracking-tighter px-1">🧠 CFO Financier</h2>
+                    <!-- Score global -->
+                    <div :class="['p-4 rounded-2xl mb-4 text-center border-2 shadow-sm', auditFinancier.scoreGlobal === 'vert' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : (auditFinancier.scoreGlobal === 'orange' ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-red-50 border-red-300 text-red-700')]">
+                        <p class="text-[9px] uppercase tracking-widest font-bold opacity-80">Score Global</p>
+                        <p class="text-xl font-black tracking-tighter">
+                            {{ auditFinancier.scoreGlobal === 'vert' ? '🟢 SAIN' : (auditFinancier.scoreGlobal === 'orange' ? '🟠 VIGILANCE' : '🔴 CRITIQUE') }}
+                        </p>
+                        <p class="text-[10px] font-bold opacity-70 mt-1">{{ auditFinancier.scoreTotal }}/6 points</p>
+                    </div>
+                    <!-- Gauge 1 -->
+                    <div :class="['p-4 rounded-2xl mb-3 border-2', auditFinancier.tresorerie.score === 'vert' ? 'bg-emerald-50 border-emerald-300' : (auditFinancier.tresorerie.score === 'orange' ? 'bg-orange-50 border-orange-300' : 'bg-red-50 border-red-300')]">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-black text-gray-800">💰 Trésorerie</span>
+                            <span class="text-xl">{{ auditFinancier.tresorerie.score === 'vert' ? '🟢' : (auditFinancier.tresorerie.score === 'orange' ? '🟠' : '🔴') }}</span>
+                        </div>
+                        <p :class="['text-xs font-bold mb-2', auditFinancier.tresorerie.score === 'vert' ? 'text-emerald-700' : (auditFinancier.tresorerie.score === 'orange' ? 'text-orange-700' : 'text-red-700')]">{{ auditFinancier.tresorerie.label }}</p>
+                        <p class="text-[10px] text-gray-600 leading-relaxed">{{ auditFinancier.tresorerie.detail }}</p>
+                    </div>
+                    <!-- Gauge 2 -->
+                    <div :class="['p-4 rounded-2xl mb-3 border-2', auditFinancier.fluxExceptionnels.score === 'vert' ? 'bg-emerald-50 border-emerald-300' : (auditFinancier.fluxExceptionnels.score === 'orange' ? 'bg-orange-50 border-orange-300' : 'bg-red-50 border-red-300')]">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-black text-gray-800">⚡ Flux Exceptionnels</span>
+                            <span class="text-xl">{{ auditFinancier.fluxExceptionnels.score === 'vert' ? '🟢' : (auditFinancier.fluxExceptionnels.score === 'orange' ? '🟠' : '🔴') }}</span>
+                        </div>
+                        <p :class="['text-xs font-bold mb-2', auditFinancier.fluxExceptionnels.score === 'vert' ? 'text-emerald-700' : (auditFinancier.fluxExceptionnels.score === 'orange' ? 'text-orange-700' : 'text-red-700')]">{{ auditFinancier.fluxExceptionnels.label }}</p>
+                        <p class="text-[10px] text-gray-600 leading-relaxed">{{ auditFinancier.fluxExceptionnels.detail }}</p>
+                    </div>
+                    <!-- Gauge 3 -->
+                    <div :class="['p-4 rounded-2xl mb-4 border-2', auditFinancier.chargesFixes.score === 'vert' ? 'bg-emerald-50 border-emerald-300' : (auditFinancier.chargesFixes.score === 'orange' ? 'bg-orange-50 border-orange-300' : 'bg-red-50 border-red-300')]">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-black text-gray-800">🔒 Charges Fixes</span>
+                            <span class="text-xl">{{ auditFinancier.chargesFixes.score === 'vert' ? '🟢' : (auditFinancier.chargesFixes.score === 'orange' ? '🟠' : '🔴') }}</span>
+                        </div>
+                        <p :class="['text-xs font-bold mb-2', auditFinancier.chargesFixes.score === 'vert' ? 'text-emerald-700' : (auditFinancier.chargesFixes.score === 'orange' ? 'text-orange-700' : 'text-red-700')]">{{ auditFinancier.chargesFixes.label }}</p>
+                        <p class="text-[10px] text-gray-600 leading-relaxed">{{ auditFinancier.chargesFixes.detail }}</p>
+                    </div>
+                    <!-- Copy prompt -->
+                    <button @click="copierPromptIA" :class="['w-full py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all', promptIACopied ? 'bg-emerald-500 text-white' : 'bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white']">
+                        {{ promptIACopied ? '✅ Prompt copié !' : '🤖 Copier prompt IA' }}
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- FLOATING SAVE VPS (si modifié) -->
+            <button v-if="serverSyncStatus === 'modified'" @click="saveToServer"
+                class="fixed bottom-20 right-4 z-50 bg-purple-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl shadow-purple-900/50 animate-pulse text-xl"
+                title="Sauver sur VPS">
+                💾
+            </button>
+
+            <!-- BOTTOM NAV -->
+            <nav class="fixed bottom-0 left-0 right-0 w-full z-50 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] flex justify-around items-stretch h-16">
+                <button @click="activeMobileTab = 'bilan'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'bilan' ? 'text-blue-600 bg-blue-50' : 'text-gray-500']">
+                    <span class="text-xl">📊</span>
+                    <span class="text-[9px] font-black uppercase tracking-widest">Bilan</span>
+                </button>
+                <button @click="activeMobileTab = 'flux'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'flux' ? 'text-red-600 bg-red-50' : 'text-gray-500']">
+                    <span class="text-xl">⚡</span>
+                    <span class="text-[9px] font-black uppercase tracking-widest">Flux</span>
+                </button>
+                <button @click="activeMobileTab = 'studio'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'studio' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-500']">
+                    <span class="text-xl">🏢</span>
+                    <span class="text-[9px] font-black uppercase tracking-widest">Studio</span>
+                </button>
+                <button @click="activeMobileTab = 'audit'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'audit' ? 'text-fuchsia-600 bg-fuchsia-50' : 'text-gray-500']">
+                    <span class="text-xl">🧠</span>
+                    <span class="text-[9px] font-black uppercase tracking-widest">CFO</span>
+                </button>
+            </nav>
+        </div>
+
     </div>
 
     <script>
@@ -812,8 +1112,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "12.1";
+                    const CURRENT_VERSION = "12.2";
                     const CHANGELOG = [
+                        { version: "12.2", date: "Responsive Mobile Natif", changes: ["Switch automatique Desktop / Mobile selon la largeur d'écran (≤ 768 px).", "Interface mobile dédiée : top-bar sticky (solde + impact flux), bottom-nav 4 onglets (📊 Bilan · ⚡ Flux · 🏢 Studio · 🧠 CFO).", "Bilan mobile en cartes empilées (plus de tableaux) avec accordéon détails flux par mois.", "Formulaires Flux & Studio optimisés tactile (label au-dessus, inputs 100% largeur, padding p-3).", "Aucune altération de la logique de calcul."] },
                         { version: "12.1", date: "Audit Financier & Prompt IA", changes: ["Nouvel onglet 🧠 Audit Financier avec 3 jauges visuelles (Trésorerie, Flux Exceptionnels, Charges Fixes).", "Score global (Sain/Vigilance/Critique) basé sur les 3 jauges.", "Bouton 'Copier le prompt IA' : résumé financier prêt à coller dans ChatGPT / Claude.ai."] },
                         { version: "12.0", date: "Ergonomie Flux & Impact Surplus", changes: ["Renommage 'Chocs' → 'Flux Exceptionnels'.", "Header stats annuelles : Entrées / Sorties / Poids sur Surplus.", "Solde banque éditable en un clic."] },
                         { version: "11.0", date: "Time Engine & Data Restored", changes: ["Refonte globale multi-années (Moteur V11).", "Restauration complète de l'historique des données V10.", "Réintégration du Drill-Down Chart."] },
@@ -824,7 +1125,14 @@
                     const modeEdition = ref(false);
                     const calculationTick = ref(0);
                     const dropdownFacturesOpen = ref(true);
-                    
+
+                    // === v12.2 : Responsive Hybride ===
+                    const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+                    const activeMobileTab = ref('bilan');
+                    const mobileMonthOpen = ref({}); // accordéon détails mois
+                    const toggleMobileMonth = (key) => { mobileMonthOpen.value[key] = !mobileMonthOpen.value[key]; };
+                    let _resizeHandler = null;
+
                     const forceUpdateCalculations = () => { calculationTick.value++; };
                     
                     // VPS
@@ -1659,26 +1967,34 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     });
 
                     onMounted(async () => {
+                        // Responsive listener (v12.2)
+                        _resizeHandler = () => { isMobile.value = window.innerWidth <= 768; };
+                        window.addEventListener('resize', _resizeHandler);
+
                         addLog("Initialisation VPS...", 'info');
                         try {
                             const res = await fetch(DATA_PATH + '?t=' + Date.now());
                             if (res.ok) {
                                 const text = await res.text();
-                                if(!text || text.trim()==="") { 
-                                    addLog("Fichier vide. Chargement de vos données récupérées.", "warn"); 
+                                if(!text || text.trim()==="") {
+                                    addLog("Fichier vide. Chargement de vos données récupérées.", "warn");
                                     handleDataChange(); // Force un recalcul avec les données de secours
-                                    return; 
+                                    return;
                                 }
                                 const d = JSON.parse(text);
                                 executerImportFusion(d);
-                                serverSyncStatus.value = 'synced'; 
+                                serverSyncStatus.value = 'synced';
                                 serverLastSync.value = new Date().toLocaleTimeString();
                                 addLog("Structure distante synchronisée.", 'success');
-                            } else { 
-                                addLog("Aucun fichier distant trouvé.", 'warn'); 
-                                serverSyncStatus.value = 'synced'; 
+                            } else {
+                                addLog("Aucun fichier distant trouvé.", 'warn');
+                                serverSyncStatus.value = 'synced';
                             }
                         } catch (e) { addLog("Mode hors-ligne local activé.", 'warn'); }
+                    });
+
+                    onBeforeUnmount(() => {
+                        if (_resizeHandler) window.removeEventListener('resize', _resizeHandler);
                     });
 
                     return { 
@@ -1688,6 +2004,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, copierPromptIA, promptIACopied,
+                        isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee
