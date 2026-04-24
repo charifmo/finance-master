@@ -1,0 +1,358 @@
+{
+  "name": "Super-Agent CFO v13.0",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ]
+      },
+      "id": "trigger-telegram",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -680,
+        -120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "fn59pzxSFtgQkLhN",
+          "name": "Finance telegram"
+        }
+      },
+      "webhookId": "super-agent-cfo-telegram"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "finance-cfo-web",
+        "options": {
+          "allowedOrigins": "*"
+        },
+        "responseMode": "responseNode"
+      },
+      "id": "trigger-webhook",
+      "name": "Webhook CFO Web",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -680,
+        160
+      ],
+      "webhookId": "finance-cfo-web"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════\n// Normalisation : unifie Telegram + Webhook en 1 payload commun\n// ════════════════════════════════════════════════════════\nconst item = $input.first();\nconst src = item.json;\n\nlet source, session_id, question, finance_data, chat_id;\n\nif (src.message && src.message.chat) {\n  // ── Telegram ──\n  source = 'telegram';\n  chat_id = String(src.message.chat.id);\n  session_id = 'tg_' + chat_id;\n  question = (src.message.text || '').trim();\n  finance_data = null; // chargé via RAG/outil si besoin\n} else if (src.body || src.question || src.session_id) {\n  // ── Webhook Web ──\n  const body = src.body || src;\n  source = 'web';\n  session_id = body.session_id || ('web_' + Date.now());\n  chat_id = null;\n  question = (body.question || '').trim();\n  finance_data = body.finance_data || null;\n} else {\n  throw new Error('Payload inconnu : impossible de normaliser.');\n}\n\nif (!question) {\n  throw new Error('Question vide.');\n}\n\nreturn [{\n  json: {\n    source,\n    session_id,\n    chat_id,\n    question,\n    finance_data_json: finance_data ? JSON.stringify(finance_data) : null,\n    finance_data\n  }\n}];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.question }}\n\n---\nCONTEXTE FINANCIER (JSON) :\n{{ $json.finance_data_json || 'Non fourni dans cette requête — utilise l\\'outil finance_rag pour retrouver le contexte.' }}",
+        "options": {
+          "systemMessage": "Tu es le CFO personnel de Mohamed, responsable du pilotage budgétaire du foyer (Maroc, devise DH).\n\n═══ RÈGLES IMPÉRATIVES ═══\n\n1. FORMAT RÉPONSE — HTML COMPACT UNIQUEMENT\n   • Utilise <b>, <br>, <ul><li>, <span style=\"color:#059669\"> (vert) et <span style=\"color:#dc2626\"> (rouge).\n   • JAMAIS de Markdown (pas de **, pas de ###, pas de ```).\n   • Montants toujours formatés : \"12 500 DH\".\n\n2. TON — FROID, MATHÉMATIQUE, RIGOUREUX\n   • Pas d'émoticônes superflus. 1 emoji max par réponse pour le titre.\n   • Chiffres > opinions.\n   • Si une donnée manque : demande-la ou utilise finance_rag.\n\n3. MODIFICATION BUDGÉTAIRE — WORKFLOW STRICT\n   Avant TOUTE écriture (budget_engine → committer) :\n   Étape A) Appeler budget_engine en mode simulate=true pour obtenir le delta Avant/Après.\n   Étape B) Présenter clairement :\n      <b>📊 Plan de modification</b><br>\n      <ul><li>Poste X : 1 200 DH → 900 DH (−300 DH)</li>...</ul>\n      <b>Confirmez-vous ? Tapez <span style=\"color:#059669\">OUI</span> pour exécuter.</b>\n   Étape C) ATTENDRE la réponse \"OUI\" (exact, insensible à la casse) de l'utilisateur dans le TOUR SUIVANT.\n   Étape D) SEULEMENT après réception de \"OUI\" → committer.\n\n4. GARDE-FOU COMMITTER\n   • Si l'utilisateur n'a pas écrit \"OUI\" dans son DERNIER message : interdiction absolue d'appeler committer.\n   • Si un doute : ne commits PAS, redemande.\n\n5. OUTILS\n   • finance_rag : recherche sémantique sur l'historique et règles financières.\n   • budget_engine : simulateur (simulate=true) OU mutateur (simulate=false) du JSON budget.\n   • committer : POST save_data.php pour persister le nouveau JSON sur le VPS.\n\n6. JAMAIS inventer un chiffre. Cite toujours la source (finance_data / RAG).\n\n═══ OBJECTIF ═══\nDonner 3 recommandations chiffrées et actionnables par tour quand possible."
+      },
+      "id": "node-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -120,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "model": "deepseek-chat",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 2000
+        }
+      },
+      "id": "node-llm",
+      "name": "Deepseek LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        260
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "7QibYEfnaV5yDVxk",
+          "name": "Deepseek account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normalize Input').item.json.session_id }}",
+        "tableName": "chat_history",
+        "contextWindowLength": 20
+      },
+      "id": "node-memory",
+      "name": "Postgres Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        260
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7cQfM9fXdo0Pso5h",
+          "name": "charif_finance_db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "finance_rag",
+        "description": "Recherche sémantique dans la base de connaissance financière (table finance_vectors). Entrée : string (la requête). Sortie : extraits pertinents. Utilise-le pour retrouver règles, historique de décisions, patterns budgétaires.",
+        "tableName": "finance_vectors",
+        "topK": 5
+      },
+      "id": "node-tool-rag",
+      "name": "Tool: Finance RAG",
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "typeVersion": 1,
+      "position": [
+        120,
+        260
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7cQfM9fXdo0Pso5h",
+          "name": "charif_finance_db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "budget_engine",
+        "description": "Moteur de calcul budgétaire. Paramètres attendus en JSON :\n{\n  \"simulate\": true|false,   // true = calcul sans écriture, false = applique\n  \"operations\": [            // liste d'opérations à appliquer sur finance_data\n    {\"type\":\"set_charge_fixe\", \"key\":\"loyer\", \"valeur\":4500},\n    {\"type\":\"set_revenu\", \"key\":\"salairePrincipal\", \"base\":18000},\n    {\"type\":\"add_depense_ponctuelle\", \"annee\":2026, \"mois\":6, \"nom\":\"Notaire\", \"montant\":25000},\n    {\"type\":\"set_epargne\", \"key\":\"urgence\", \"valeur\":1500}\n  ],\n  \"annee\": 2026\n}\nRenvoie : résumé Avant/Après + totaux + JSON modifié (prêt pour committer).",
+        "language": "javaScript",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// BUDGET ENGINE (JS) — simulate / mutate du JSON budget\n// ════════════════════════════════════════════════════════\nlet input;\ntry {\n  input = typeof query === 'string' ? JSON.parse(query) : query;\n} catch (e) {\n  return JSON.stringify({ error: 'JSON d\\'entrée invalide : ' + e.message });\n}\n\nconst simulate = input.simulate !== false; // défaut : simulate=true (sécurité)\nconst operations = Array.isArray(input.operations) ? input.operations : [];\nconst anneeTarget = input.annee || new Date().getFullYear();\n\n// Récupère finance_data depuis le contexte du workflow\nconst normalized = $('Normalize Input').first().json;\nconst financeData = normalized.finance_data ? JSON.parse(JSON.stringify(normalized.finance_data)) : null;\n\nif (!financeData) {\n  return JSON.stringify({\n    error: 'Aucun finance_data dans la requête actuelle. L\\'utilisateur doit relancer via l\\'interface web.'\n  });\n}\n\n// Snapshot \"Avant\"\nconst snapshot = (d, annee) => {\n  const y = d.donneesAnnuelles && d.donneesAnnuelles[annee];\n  if (!y) return null;\n  const sum = obj => Object.values(obj || {}).reduce((s, v) => s + (Number(v && v.valeur) || Number(v && v.base) || 0), 0);\n  return {\n    revenus: sum(y.revenus),\n    fixes: sum(y.chargesFixes),\n    variables: sum(y.chargesVariables),\n    epargne: sum(y.epargne),\n    depensesIrreg: (y.depensesIrregulieres || []).length\n  };\n};\n\nconst before = snapshot(financeData, anneeTarget);\nconst log = [];\n\n// Applique les opérations\nfor (const op of operations) {\n  const y = financeData.donneesAnnuelles && financeData.donneesAnnuelles[op.annee || anneeTarget];\n  if (!y) { log.push({ op, status: 'skip', reason: 'année absente' }); continue; }\n  try {\n    if (op.type === 'set_charge_fixe' && y.chargesFixes && y.chargesFixes[op.key]) {\n      const old = y.chargesFixes[op.key].valeur;\n      y.chargesFixes[op.key].valeur = Number(op.valeur);\n      log.push({ op: op.type, key: op.key, avant: old, apres: Number(op.valeur) });\n    } else if (op.type === 'set_revenu' && y.revenus && y.revenus[op.key]) {\n      const old = y.revenus[op.key].base;\n      y.revenus[op.key].base = Number(op.base);\n      log.push({ op: op.type, key: op.key, avant: old, apres: Number(op.base) });\n    } else if (op.type === 'set_epargne' && y.epargne && y.epargne[op.key]) {\n      const old = y.epargne[op.key].valeur;\n      y.epargne[op.key].valeur = Number(op.valeur);\n      log.push({ op: op.type, key: op.key, avant: old, apres: Number(op.valeur) });\n    } else if (op.type === 'add_depense_ponctuelle') {\n      if (!Array.isArray(y.depensesIrregulieres)) y.depensesIrregulieres = [];\n      y.depensesIrregulieres.push({\n        id: Date.now() + Math.floor(Math.random() * 1000),\n        mois: Number(op.mois), annee: Number(op.annee || anneeTarget),\n        nom: String(op.nom), montant: Number(op.montant),\n        paye: false, montantPaye: 0\n      });\n      log.push({ op: op.type, nom: op.nom, montant: Number(op.montant) });\n    } else {\n      log.push({ op, status: 'skip', reason: 'type inconnu ou clé absente' });\n    }\n  } catch (e) {\n    log.push({ op, status: 'error', reason: e.message });\n  }\n}\n\n// Validation structurelle\nconst valid = financeData.donneesAnnuelles && typeof financeData.donneesAnnuelles === 'object' &&\n              financeData.soldesInitiaux && typeof financeData.soldesInitiaux === 'object';\n\nconst after = snapshot(financeData, anneeTarget);\n\nconst result = {\n  mode: simulate ? 'SIMULATION' : 'APPLY',\n  valid,\n  annee: anneeTarget,\n  avant: before,\n  apres: after,\n  delta: before && after ? {\n    revenus: after.revenus - before.revenus,\n    fixes: after.fixes - before.fixes,\n    variables: after.variables - before.variables,\n    epargne: after.epargne - before.epargne\n  } : null,\n  operations_appliquees: log,\n  // Le JSON modifié n'est renvoyé QU'en mode apply et si valid\n  finance_data_modifie: (!simulate && valid) ? financeData : null\n};\n\nreturn JSON.stringify(result, null, 2);"
+      },
+      "id": "node-tool-budget",
+      "name": "Tool: Budget Engine",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "name": "committer",
+        "description": "Écrit le JSON finance modifié sur le VPS via save_data.php. ⚠️ N'appeler que si l'utilisateur a explicitement tapé 'OUI' dans son dernier message. Paramètre : { \"finance_data\": <objet complet modifié>, \"confirmation\": \"OUI\" }. Ne fournis JAMAIS ce paramètre sans confirmation.",
+        "language": "javaScript",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// COMMITTER — POST save_data.php avec double garde \"OUI\"\n// ════════════════════════════════════════════════════════\nlet input;\ntry {\n  input = typeof query === 'string' ? JSON.parse(query) : query;\n} catch (e) {\n  return JSON.stringify({ error: 'JSON invalide' });\n}\n\n// ── GARDE 1 : paramètre confirmation=\"OUI\" ──\nif (!input.confirmation || String(input.confirmation).toUpperCase().trim() !== 'OUI') {\n  return JSON.stringify({\n    error: 'REFUS : le paramètre `confirmation` doit être la chaîne \"OUI\" (majuscule). L\\'utilisateur doit taper OUI dans le chat avant que tu appelles cet outil.'\n  });\n}\n\n// ── GARDE 2 : le dernier message utilisateur DOIT contenir \"OUI\" ──\nconst normalized = $('Normalize Input').first().json;\nconst lastUserMsg = (normalized.question || '').toUpperCase();\nif (!/\\bOUI\\b/.test(lastUserMsg)) {\n  return JSON.stringify({\n    error: 'REFUS : le dernier message utilisateur ne contient pas \"OUI\". Demande confirmation avant de relancer.'\n  });\n}\n\n// ── GARDE 3 : finance_data valide ──\nif (!input.finance_data || typeof input.finance_data !== 'object' ||\n    !input.finance_data.donneesAnnuelles) {\n  return JSON.stringify({ error: 'finance_data invalide ou structure manquante.' });\n}\n\n// ── POST save_data.php ──\nconst url = 'https://charifmo.com/finance/save_data.php';\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'POST',\n    url,\n    body: input.finance_data,\n    json: true,\n    headers: { 'Content-Type': 'application/json' },\n    timeout: 15000\n  });\n  return JSON.stringify({\n    status: 'ok',\n    committed: true,\n    server_response: resp\n  });\n} catch (e) {\n  return JSON.stringify({\n    status: 'error',\n    committed: false,\n    error: e.message\n  });\n}"
+      },
+      "id": "node-tool-commit",
+      "name": "Tool: Committer",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        520,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Input').item.json.source }}",
+                    "rightValue": "telegram",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "telegram"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Input').item.json.source }}",
+                    "rightValue": "web",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "web"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-switch",
+      "name": "Route Response",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        180,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalize Input').item.json.chat_id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "node-send-telegram",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        -120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "fn59pzxSFtgQkLhN",
+          "name": "Finance telegram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"html\": $json.output, \"session_id\": $('Normalize Input').item.json.session_id } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type" },
+              { "name": "Content-Type", "value": "application/json; charset=utf-8" }
+            ]
+          }
+        }
+      },
+      "id": "node-respond-webhook",
+      "name": "Respond Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          { "node": "Normalize Input", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Webhook CFO Web": {
+      "main": [
+        [
+          { "node": "Normalize Input", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          { "node": "AI Agent", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          { "node": "Route Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Deepseek LLM": {
+      "ai_languageModel": [
+        [
+          { "node": "AI Agent", "type": "ai_languageModel", "index": 0 }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          { "node": "AI Agent", "type": "ai_memory", "index": 0 }
+        ]
+      ]
+    },
+    "Tool: Finance RAG": {
+      "ai_tool": [
+        [
+          { "node": "AI Agent", "type": "ai_tool", "index": 0 }
+        ]
+      ]
+    },
+    "Tool: Budget Engine": {
+      "ai_tool": [
+        [
+          { "node": "AI Agent", "type": "ai_tool", "index": 0 }
+        ]
+      ]
+    },
+    "Tool: Committer": {
+      "ai_tool": [
+        [
+          { "node": "AI Agent", "type": "ai_tool", "index": 0 }
+        ]
+      ]
+    },
+    "Route Response": {
+      "main": [
+        [
+          { "node": "Send Telegram", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Respond Webhook", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Africa/Casablanca"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "cfo" },
+    { "name": "finance" }
+  ],
+  "versionId": "v13.0",
+  "meta": {
+    "templateCreatedBy": "Finance Master v13.0"
+  },
+  "active": false
+}

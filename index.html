@@ -19,6 +19,16 @@
         .log-success { border-left-color: #34d399; background: rgba(52, 211, 153, 0.1); }
         .log-warn { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+        /* === v13.0 CFO agent HTML === */
+        .cfo-html { line-height: 1.55; }
+        .cfo-html b, .cfo-html strong { font-weight: 800; }
+        .cfo-html ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+        .cfo-html ol { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+        .cfo-html li { margin: 0.15rem 0; }
+        .cfo-html br + br { display: block; content: ""; margin-top: 0.4rem; }
+        .cfo-html code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+        .cfo-html table { border-collapse: collapse; margin: 0.5rem 0; }
+        .cfo-html th, .cfo-html td { border: 1px solid #e5e7eb; padding: 3px 8px; font-size: 0.85em; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans md:overflow-hidden">
@@ -39,6 +49,7 @@
                     <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📅 Calendrier Pluriannuel</button>
                     <button @click="activeTab = 'studio'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">🏢 Projet Studio</button>
                     <button @click="activeTab = 'audit'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'audit' ? 'bg-fuchsia-600 shadow-lg shadow-fuchsia-900/50' : 'hover:bg-slate-800 text-slate-300']">🧠 Audit Financier</button>
+                    <button @click="activeTab = 'cfo'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'cfo' ? 'bg-gradient-to-r from-fuchsia-600 to-purple-700 shadow-lg shadow-purple-900/50' : 'hover:bg-slate-800 text-slate-300']">💬 CFO Agent <span class="ml-auto text-[9px] bg-purple-900/80 text-purple-100 px-1.5 py-0.5 rounded border border-purple-400/30">v13</span></button>
                     <button @click="showChangelog = true" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-slate-400 hover:bg-slate-800 mt-4 border-t border-slate-800 text-xs font-medium uppercase tracking-widest">📖 Changelog</button>
                 </nav>
             </div>
@@ -731,6 +742,89 @@
                         </ul>
                     </div>
                 </div>
+
+                <!-- === CFO AGENT (v13.0) === -->
+                <div v-if="activeTab === 'cfo'" class="max-w-5xl mx-auto space-y-6">
+                    <div class="flex items-end justify-between border-b pb-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-800">💬 Super-Agent CFO</h2>
+                            <p class="text-sm text-gray-500 mt-1 font-medium">Dialogue direct avec votre directeur financier IA. Toute modification exige votre validation par <b>OUI</b>.</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[9px] uppercase tracking-widest font-bold text-gray-400">Session</p>
+                            <p class="text-[10px] font-mono text-gray-600">{{ cfoSessionId.slice(0, 13) }}…</p>
+                            <button @click="resetCFOSession" class="text-[9px] text-fuchsia-600 hover:underline font-bold uppercase tracking-widest mt-1">🔄 Nouvelle session</button>
+                        </div>
+                    </div>
+
+                    <!-- Webhook URL config -->
+                    <div v-if="!cfoWebhookUrl" class="bg-orange-50 border-2 border-orange-300 p-5 rounded-2xl">
+                        <p class="text-xs font-black uppercase tracking-widest text-orange-800 mb-2">⚠️ Configuration requise</p>
+                        <p class="text-xs text-orange-700 mb-3 leading-relaxed">Collez ici l'URL du Webhook n8n (path <code class="bg-white px-1 rounded font-mono">finance-cfo-web</code>) :</p>
+                        <input v-model="cfoWebhookInput" @keyup.enter="saveCFOWebhook" type="url" placeholder="https://n8n.votre-vps.com/webhook/finance-cfo-web" class="w-full p-3 border-2 border-orange-300 rounded-lg font-mono text-xs bg-white outline-none focus:border-orange-500 mb-3" />
+                        <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest hover:bg-orange-700">Enregistrer l'URL</button>
+                    </div>
+
+                    <!-- CHAT HISTORY -->
+                    <div v-if="cfoWebhookUrl" class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-700 min-h-[480px] max-h-[600px] overflow-y-auto" ref="cfoChatContainer">
+                        <div v-if="cfoMessages.length === 0" class="text-center py-16">
+                            <p class="text-5xl mb-4">🤖</p>
+                            <p class="text-slate-300 font-bold text-sm uppercase tracking-widest mb-2">CFO prêt</p>
+                            <p class="text-slate-500 text-xs font-medium max-w-md mx-auto leading-relaxed">Exemple : <i>« Je veux épargner 2000 DH de plus par mois, comment faire ? »</i> ou <i>« Passe mon loyer à 4500 DH »</i>.</p>
+                        </div>
+                        <div v-else class="space-y-4">
+                            <div v-for="(msg, idx) in cfoMessages" :key="idx" :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
+                                <div :class="['max-w-[80%] p-4 rounded-2xl shadow-lg', msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border border-slate-200']">
+                                    <p v-if="msg.role === 'user'" class="text-sm font-medium whitespace-pre-wrap">{{ msg.content }}</p>
+                                    <div v-else class="text-sm cfo-html" v-html="msg.content"></div>
+                                    <p :class="['text-[9px] mt-2 font-mono uppercase tracking-widest', msg.role === 'user' ? 'text-blue-200' : 'text-gray-400']">{{ msg.time }}</p>
+                                </div>
+                            </div>
+                            <div v-if="cfoLoading" class="flex justify-start">
+                                <div class="bg-white text-gray-800 p-4 rounded-2xl shadow-lg border border-slate-200">
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse"></span>
+                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" style="animation-delay: 0.2s"></span>
+                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" style="animation-delay: 0.4s"></span>
+                                        <span class="text-xs text-gray-500 font-bold ml-2">Le CFO analyse…</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- INPUT -->
+                    <div v-if="cfoWebhookUrl" class="bg-white p-4 rounded-2xl shadow-lg border border-gray-200 flex gap-3">
+                        <input v-model="cfoInput" @keyup.enter="envoyerCFO" :disabled="cfoLoading" type="text" placeholder="Posez votre question au CFO…" class="flex-1 p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-fuchsia-500 text-sm disabled:bg-gray-100" />
+                        <button @click="envoyerCFO" :disabled="cfoLoading || !cfoInput.trim()" class="px-6 py-4 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white font-black rounded-xl uppercase text-[10px] tracking-widest shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:scale-100">Envoyer</button>
+                    </div>
+
+                    <!-- QUICK ACTIONS -->
+                    <div v-if="cfoWebhookUrl && cfoMessages.length === 0" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button @click="cfoInput = 'Fais un diagnostic complet de ma situation financière'; envoyerCFO()" class="p-4 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors">
+                            <p class="text-xs font-black uppercase tracking-widest text-fuchsia-700 mb-1">📊 Diagnostic</p>
+                            <p class="text-[10px] text-gray-600">Bilan global de ma santé financière</p>
+                        </button>
+                        <button @click="cfoInput = 'Comment puis-je augmenter mon épargne de 2000 DH/mois ?'; envoyerCFO()" class="p-4 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors">
+                            <p class="text-xs font-black uppercase tracking-widest text-fuchsia-700 mb-1">💰 Épargne</p>
+                            <p class="text-[10px] text-gray-600">Plan pour épargner +2000 DH/mois</p>
+                        </button>
+                        <button @click="cfoInput = 'Analyse mes charges fixes et propose 3 pistes d\'optimisation'; envoyerCFO()" class="p-4 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors">
+                            <p class="text-xs font-black uppercase tracking-widest text-fuchsia-700 mb-1">🔒 Optimiser</p>
+                            <p class="text-[10px] text-gray-600">Réduire mes charges fixes</p>
+                        </button>
+                    </div>
+
+                    <!-- INFO BOX -->
+                    <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-xs text-gray-600 font-medium leading-relaxed">
+                        <p class="font-black uppercase text-slate-700 mb-2 tracking-widest text-[10px]">🔐 Sécurité</p>
+                        <ul class="space-y-1 list-disc pl-5">
+                            <li>Le CFO ne modifie jamais vos données sans votre accord explicite par <b>OUI</b>.</li>
+                            <li>Chaque simulation est affichée <b>Avant / Après</b> pour validation.</li>
+                            <li>La mémoire conversationnelle est conservée côté VPS (PostgreSQL).</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <div v-if="showDriveHelp" class="fixed inset-0 bg-slate-900/90 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
@@ -1008,9 +1102,48 @@
                     <button @click="injecterFluxCashStudio" class="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest">👉 Injecter Flux Cash (Flux Exc.)</button>
                 </div>
 
-                <!-- ━━ CFO (Audit) ━━ -->
-                <div v-if="activeMobileTab === 'audit'">
-                    <h2 class="text-lg font-black text-gray-800 mb-3 uppercase tracking-tighter px-1">🧠 CFO Financier</h2>
+                <!-- ━━ CFO AGENT (v13.0 - Mobile) ━━ -->
+                <div v-if="activeMobileTab === 'cfo'">
+                    <h2 class="text-lg font-black text-gray-800 mb-3 uppercase tracking-tighter px-1">💬 Super-Agent CFO</h2>
+
+                    <!-- Webhook config -->
+                    <div v-if="!cfoWebhookUrl" class="bg-orange-50 border-2 border-orange-300 p-4 rounded-2xl mb-4">
+                        <p class="text-xs font-black uppercase tracking-widest text-orange-800 mb-2">⚠️ URL Webhook requise</p>
+                        <input v-model="cfoWebhookInput" type="url" placeholder="https://n8n.../webhook/finance-cfo-web" class="w-full p-3 border-2 border-orange-300 rounded-lg font-mono text-[11px] bg-white outline-none mb-2" />
+                        <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest">Enregistrer</button>
+                    </div>
+
+                    <!-- Chat zone -->
+                    <div v-if="cfoWebhookUrl" class="bg-slate-900 p-4 rounded-2xl min-h-[320px] max-h-[420px] overflow-y-auto mb-3">
+                        <div v-if="cfoMessages.length === 0" class="text-center py-12">
+                            <p class="text-4xl mb-2">🤖</p>
+                            <p class="text-slate-300 text-xs font-bold">CFO prêt. Posez votre question.</p>
+                        </div>
+                        <div v-else class="space-y-3">
+                            <div v-for="(msg, idx) in cfoMessages" :key="idx" :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
+                                <div :class="['max-w-[85%] p-3 rounded-2xl text-xs', msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800']">
+                                    <p v-if="msg.role === 'user'" class="whitespace-pre-wrap">{{ msg.content }}</p>
+                                    <div v-else class="cfo-html" v-html="msg.content"></div>
+                                </div>
+                            </div>
+                            <div v-if="cfoLoading" class="flex justify-start">
+                                <div class="bg-white p-3 rounded-2xl">
+                                    <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse"></span>
+                                    <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse mx-1" style="animation-delay: 0.2s"></span>
+                                    <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" style="animation-delay: 0.4s"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Input mobile -->
+                    <div v-if="cfoWebhookUrl" class="flex gap-2 mb-6">
+                        <input v-model="cfoInput" @keyup.enter="envoyerCFO" :disabled="cfoLoading" type="text" placeholder="Votre question…" class="flex-1 p-3 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-fuchsia-500" />
+                        <button @click="envoyerCFO" :disabled="cfoLoading || !cfoInput.trim()" class="px-4 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white font-black rounded-xl text-xs uppercase tracking-widest disabled:opacity-50">➤</button>
+                    </div>
+
+                    <!-- Audit gauges below -->
+                    <h3 class="text-sm font-black text-gray-700 uppercase tracking-widest mb-3 px-1">🧠 Diagnostic ({{ anneeAffichage }})</h3>
                     <!-- Score global -->
                     <div :class="['p-4 rounded-2xl mb-4 text-center border-2 shadow-sm', auditFinancier.scoreGlobal === 'vert' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : (auditFinancier.scoreGlobal === 'orange' ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-red-50 border-red-300 text-red-700')]">
                         <p class="text-[9px] uppercase tracking-widest font-bold opacity-80">Score Global</p>
@@ -1391,9 +1524,9 @@
                     <span class="text-xl">🏢</span>
                     <span class="text-[9px] font-black uppercase tracking-widest">Studio</span>
                 </button>
-                <button @click="activeMobileTab = 'audit'"
-                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'audit' ? 'text-fuchsia-600 bg-fuchsia-50' : 'text-gray-500']">
-                    <span class="text-xl">🧠</span>
+                <button @click="activeMobileTab = 'cfo'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'cfo' ? 'text-fuchsia-600 bg-fuchsia-50' : 'text-gray-500']">
+                    <span class="text-xl">💬</span>
                     <span class="text-[9px] font-black uppercase tracking-widest">CFO</span>
                 </button>
             </nav>
@@ -1425,8 +1558,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "12.3";
+                    const CURRENT_VERSION = "13.0";
                     const CHANGELOG = [
+                        { version: "13.0", date: "Super-Agent CFO Unifié", changes: ["Nouvel onglet 💬 CFO Agent (Desktop) + intégration dans l'onglet 💬 CFO (Mobile) : console de chat avec l'IA CFO.", "Backend n8n unifié (Telegram + Webhook) : même agent, même mémoire Postgres, même RAG sur finance_vectors.", "Outil Budget Engine (simulate/apply) + Outil Committer protégé par triple garde 'OUI'.", "Session persistante (localStorage) côté web, session 'tg_<chat_id>' côté Telegram.", "Réponses CFO en HTML riche (listes, gras, couleurs). Zéro modification sans validation explicite par 'OUI'."] },
                         { version: "12.3", date: "Moteur Mensuel Mobile", changes: ["Ajout du 5ème onglet ⚙️ Moteur dans la bottom-nav mobile (centre).", "Layout Moteur dédié : header Reste à Vivre + 5 accordéons (🧭 Pilotage, 💰 Entrées, 🏢 Fixes, 🛒 Variable, 🏦 Épargne).", "Inputs tactiles empilés (label au-dessus, w-full p-3, police plus grande).", "Checklist détaillée mobile avec checkbox 6×6, inputs espacés pour les pouces.", "Boutons 'Gérer Périodes' transformés en gros boutons pleine largeur."] },
                         { version: "12.2", date: "Responsive Mobile Natif", changes: ["Switch automatique Desktop / Mobile selon la largeur d'écran (≤ 768 px).", "Interface mobile dédiée : top-bar sticky (solde + impact flux), bottom-nav 4 onglets (📊 Bilan · ⚡ Flux · 🏢 Studio · 🧠 CFO).", "Bilan mobile en cartes empilées (plus de tableaux) avec accordéon détails flux par mois.", "Formulaires Flux & Studio optimisés tactile (label au-dessus, inputs 100% largeur, padding p-3).", "Aucune altération de la logique de calcul."] },
                         { version: "12.1", date: "Audit Financier & Prompt IA", changes: ["Nouvel onglet 🧠 Audit Financier avec 3 jauges visuelles (Trésorerie, Flux Exceptionnels, Charges Fixes).", "Score global (Sain/Vigilance/Critique) basé sur les 3 jauges.", "Bouton 'Copier le prompt IA' : résumé financier prêt à coller dans ChatGPT / Claude.ai."] },
@@ -1446,6 +1580,81 @@
                     const mobileMonthOpen = ref({}); // accordéon détails mois
                     const toggleMobileMonth = (key) => { mobileMonthOpen.value[key] = !mobileMonthOpen.value[key]; };
                     let _resizeHandler = null;
+
+                    // === v13.0 : Super-Agent CFO ===
+                    const cfoMessages = ref([]); // { role: 'user'|'agent', content: string, time: 'HH:MM' }
+                    const cfoInput = ref('');
+                    const cfoLoading = ref(false);
+                    const cfoSessionId = ref(localStorage.getItem('cfo_session_id') || (crypto && crypto.randomUUID ? crypto.randomUUID() : ('web_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10))));
+                    if (!localStorage.getItem('cfo_session_id')) localStorage.setItem('cfo_session_id', cfoSessionId.value);
+                    const cfoWebhookUrl = ref(localStorage.getItem('cfo_webhook_url') || '');
+                    const cfoWebhookInput = ref('');
+                    const cfoChatContainer = ref(null);
+
+                    const saveCFOWebhook = () => {
+                        const url = (cfoWebhookInput.value || '').trim();
+                        if (!url || !url.startsWith('http')) { alert('URL invalide. Elle doit commencer par http(s)://'); return; }
+                        cfoWebhookUrl.value = url;
+                        localStorage.setItem('cfo_webhook_url', url);
+                        cfoWebhookInput.value = '';
+                    };
+
+                    const resetCFOSession = () => {
+                        const newId = crypto && crypto.randomUUID ? crypto.randomUUID() : ('web_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10));
+                        cfoSessionId.value = newId;
+                        localStorage.setItem('cfo_session_id', newId);
+                        cfoMessages.value = [];
+                    };
+
+                    const scrollCFOToBottom = () => {
+                        setTimeout(() => {
+                            const el = cfoChatContainer.value;
+                            if (el && el.scrollTo) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                        }, 50);
+                    };
+
+                    const consulterCFO = async (question) => {
+                        if (!cfoWebhookUrl.value) { alert('Configurez d\'abord l\'URL du Webhook n8n.'); return; }
+                        if (!question || !question.trim()) return;
+                        const now = new Date();
+                        const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+                        cfoMessages.value.push({ role: 'user', content: question, time });
+                        cfoLoading.value = true;
+                        scrollCFOToBottom();
+                        try {
+                            const res = await fetch(cfoWebhookUrl.value, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    session_id: cfoSessionId.value,
+                                    question: question,
+                                    source: 'web',
+                                    finance_data: getExportData()
+                                })
+                            });
+                            const raw = await res.text();
+                            let html = '';
+                            try {
+                                const j = JSON.parse(raw);
+                                html = j.html || j.output || j.response || j.message || raw;
+                            } catch (_) { html = raw; }
+                            const t2 = new Date();
+                            const time2 = t2.getHours().toString().padStart(2, '0') + ':' + t2.getMinutes().toString().padStart(2, '0');
+                            cfoMessages.value.push({ role: 'agent', content: html, time: time2 });
+                        } catch (e) {
+                            cfoMessages.value.push({ role: 'agent', content: '<b style="color:#b91c1c">❌ Erreur de connexion au CFO</b><br/><span style="font-size:11px;color:#6b7280">' + (e.message || e) + '</span>', time: '--:--' });
+                        } finally {
+                            cfoLoading.value = false;
+                            scrollCFOToBottom();
+                        }
+                    };
+
+                    const envoyerCFO = () => {
+                        const q = (cfoInput.value || '').trim();
+                        if (!q) return;
+                        cfoInput.value = '';
+                        consulterCFO(q);
+                    };
 
                     const forceUpdateCalculations = () => { calculationTick.value++; };
                     
@@ -2319,6 +2528,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
+                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee
