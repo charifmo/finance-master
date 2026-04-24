@@ -1052,6 +1052,314 @@
                     </button>
                 </div>
 
+                <!-- ━━ MOTEUR MENSUEL (v12.3) ━━ -->
+                <div v-if="activeMobileTab === 'parametres' && donneesAnnuelles[anneeAffichage]">
+                    <div class="flex items-center justify-between mb-3 px-1">
+                        <h2 class="text-lg font-black text-gray-800 uppercase tracking-tighter">⚙️ Moteur Mensuel</h2>
+                        <button @click="modeEdition = !modeEdition" :class="['text-[10px] px-3 py-2 rounded-lg font-black uppercase tracking-widest border', modeEdition ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-white text-gray-600 border-gray-300']">
+                            {{ modeEdition ? '✅ Fin' : '✏️ Noms' }}
+                        </button>
+                    </div>
+
+                    <!-- HEADER : Reste à vivre base (en évidence) -->
+                    <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-lg border border-gray-700 text-center mb-4">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Reste à Vivre Base {{ anneeAffichage }}</p>
+                        <p :class="['text-4xl font-black tracking-tighter', surplusMensuelBase > 0 ? 'text-green-400' : 'text-red-400']">{{ formatMAD(surplusMensuelBase) }}</p>
+                        <div class="mt-3 pt-3 border-t border-white/10 grid grid-cols-3 gap-2 text-[9px] font-black uppercase tracking-widest">
+                            <div><p class="text-gray-500">Rev.</p><p class="text-green-300 text-xs">{{ formatMAD(totalRevenusBase) }}</p></div>
+                            <div><p class="text-gray-500">Fixes</p><p class="text-orange-300 text-xs">{{ formatMAD(totalFixes) }}</p></div>
+                            <div><p class="text-gray-500">Conso</p><p class="text-red-300 text-xs">{{ formatMAD(totalVariables) }}</p></div>
+                        </div>
+                    </div>
+
+                    <!-- ACCORDÉON 1 : PILOTAGE & CHECKLIST (ouvert par défaut) -->
+                    <details open class="bg-white rounded-2xl border border-gray-200 shadow-sm mb-3 overflow-hidden">
+                        <summary class="p-4 cursor-pointer bg-gradient-to-r from-blue-50 to-white flex items-center justify-between list-none">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🧭</span>
+                                <div>
+                                    <p class="text-sm font-black text-blue-900 uppercase tracking-tighter">Pilotage & Checklist</p>
+                                    <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Mois courant · {{ nomDuMois(soldesInitiaux.moisActuel) }} {{ soldesInitiaux.anneeActuelle }}</p>
+                                </div>
+                            </div>
+                            <span class="text-blue-400 text-lg">⌄</span>
+                        </summary>
+                        <div class="p-4 border-t border-gray-100 space-y-4">
+
+                            <template v-if="anneeAffichage === soldesInitiaux.anneeActuelle">
+                                <!-- Mois actuel + année -->
+                                <div class="bg-slate-800 p-3 rounded-2xl border border-slate-700">
+                                    <label class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2 block">Aujourd'hui, nous sommes en</label>
+                                    <div class="flex gap-2">
+                                        <select v-model.number="soldesInitiaux.moisActuel" @change="handleDataChange" class="flex-1 bg-slate-900 text-white font-bold text-sm p-3 rounded-xl outline-none border border-slate-600 text-center">
+                                            <option v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :value="m">{{ nomDuMois(m) }}</option>
+                                        </select>
+                                        <input type="number" v-model.number="soldesInitiaux.anneeActuelle" @input="handleDataChange" class="w-24 bg-slate-900 text-blue-300 font-black text-sm p-3 rounded-xl border border-slate-600 text-center outline-none"/>
+                                    </div>
+                                </div>
+                                <!-- Prorata conso -->
+                                <div class="bg-slate-800 p-3 rounded-2xl border border-slate-700">
+                                    <label class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2 block">Prorata Consommation Restant</label>
+                                    <select v-model.number="soldesInitiaux.semainesRestantes" @change="handleDataChange" class="w-full bg-slate-900 text-white font-bold text-sm p-3 rounded-xl outline-none border border-slate-600 text-center">
+                                        <option v-for="s in [4,3,2,1,0]" :value="s">{{ s }} semaines restantes</option>
+                                    </select>
+                                    <p class="text-[10px] text-blue-400 font-black mt-2 uppercase tracking-widest text-center">Budget : {{ formatMAD(budgetConsoRestant) }}</p>
+                                </div>
+                                <!-- Switch Décalage Paie -->
+                                <div class="p-3 bg-slate-800 rounded-2xl border border-slate-700 flex items-center justify-between gap-3">
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-xs font-bold text-white">Décalage de Paie actif</p>
+                                        <p class="text-[9px] text-slate-400 mt-0.5">Salaire fin de mois → mois suivant.</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                                        <input type="checkbox" v-model="soldesInitiaux.decalagePaie" @change="handleDataChange" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                                    </label>
+                                </div>
+                                <!-- Paie reçue -->
+                                <button @click="soldesInitiaux.salaireRecu = !soldesInitiaux.salaireRecu; handleDataChange()" :class="['w-full p-4 rounded-2xl border-2 font-black text-sm uppercase tracking-widest shadow-md', soldesInitiaux.salaireRecu ? 'bg-green-600/20 border-green-500 text-green-700' : 'bg-slate-100 border-slate-300 text-slate-600']">
+                                    💰 Paie Globale reçue ? {{ soldesInitiaux.salaireRecu ? 'OUI ✅' : 'NON' }}
+                                </button>
+
+                                <!-- Checklist détaillée -->
+                                <div class="bg-slate-900 text-white rounded-2xl overflow-hidden shadow-lg">
+                                    <div @click="dropdownFacturesOpen = !dropdownFacturesOpen" class="p-4 flex items-center justify-between cursor-pointer">
+                                        <div class="flex items-center gap-3 min-w-0">
+                                            <span class="text-blue-400 text-xl shrink-0">📋</span>
+                                            <div class="min-w-0">
+                                                <p class="text-xs font-black uppercase tracking-widest truncate">Checklist Détaillée</p>
+                                                <p class="text-[9px] text-slate-400 font-bold uppercase truncate">{{ nomDuMois(soldesInitiaux.moisActuel) }} {{ soldesInitiaux.anneeActuelle }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2 shrink-0">
+                                            <span :class="['text-[9px] px-2 py-1 rounded font-black border', elementsDuMoisPayes === elementsDuMoisTotal && elementsDuMoisTotal > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-800 border-slate-600 text-blue-300']">
+                                                {{ elementsDuMoisPayes }}/{{ elementsDuMoisTotal }}
+                                            </span>
+                                            <span class="text-slate-400">{{ dropdownFacturesOpen ? '▲' : '▼' }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-show="dropdownFacturesOpen" class="px-3 pb-3 border-t border-slate-700 max-h-[60vh] overflow-y-auto custom-scroll">
+                                        <!-- Charges fixes -->
+                                        <div v-if="donneesAnnuelles[soldesInitiaux.anneeActuelle] && Object.keys(donneesAnnuelles[soldesInitiaux.anneeActuelle].chargesFixes || {}).length > 0" class="mt-3">
+                                            <p class="text-[9px] text-orange-400 font-black uppercase tracking-widest mb-2 border-b border-orange-900/50 pb-1">🏢 Charges Fixes</p>
+                                            <div class="space-y-2">
+                                                <div v-for="(f, key) in donneesAnnuelles[soldesInitiaux.anneeActuelle].chargesFixes" :key="key" class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+                                                    <label class="flex items-start gap-3 cursor-pointer mb-2">
+                                                        <input type="checkbox" :checked="isItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle))" @change="toggleItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle))" class="w-6 h-6 rounded border-slate-600 bg-slate-800 text-orange-500 shrink-0 mt-0.5"/>
+                                                        <span :class="['text-sm font-bold flex-1', isItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle)) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ f.label }}</span>
+                                                    </label>
+                                                    <div class="flex items-center gap-2">
+                                                        <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="flex-1 bg-slate-900 text-orange-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(getDueFixe(f, soldesInitiaux.anneeActuelle)).replace(' DH', '') }} DH</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- Charges variables mois -->
+                                        <div v-for="cat in Object.values(donneesAnnuelles[soldesInitiaux.anneeActuelle]?.chargesVariables || {}).filter(c => c.periode === 'mois')" :key="cat.label" class="mt-3">
+                                            <p class="text-[9px] text-blue-400 font-black uppercase tracking-widest mb-2 border-b border-blue-900/50 pb-1">🧾 {{ cat.label }}</p>
+                                            <div class="space-y-2">
+                                                <div v-for="f in cat.details" :key="f.id" class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+                                                    <label class="flex items-start gap-3 cursor-pointer mb-2">
+                                                        <input type="checkbox" :checked="isItemPaid(f, f.montant)" @change="toggleItemPaid(f, f.montant)" class="w-6 h-6 rounded border-slate-600 bg-slate-800 text-blue-500 shrink-0 mt-0.5"/>
+                                                        <span :class="['text-sm font-bold flex-1', isItemPaid(f, f.montant) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ f.nom }}</span>
+                                                    </label>
+                                                    <div class="flex items-center gap-2">
+                                                        <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="flex-1 bg-slate-900 text-blue-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(f.montant).replace(' DH', '') }} DH</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- Flux exceptionnels du mois -->
+                                        <div v-if="getDepensesMois(soldesInitiaux.moisActuel, soldesInitiaux.anneeActuelle).length > 0" class="mt-3">
+                                            <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1">⚠️ Flux Exceptionnels</p>
+                                            <div class="space-y-2">
+                                                <div v-for="dep in getDepensesMois(soldesInitiaux.moisActuel, soldesInitiaux.anneeActuelle)" :key="'dep'+dep.id" class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+                                                    <label class="flex items-start gap-3 cursor-pointer mb-2">
+                                                        <input type="checkbox" :checked="isItemPaid(dep, dep.montant)" @change="toggleItemPaid(dep, dep.montant)" class="w-6 h-6 rounded border-slate-600 bg-slate-800 text-red-500 shrink-0 mt-0.5"/>
+                                                        <span :class="['text-sm font-bold flex-1', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ dep.nom }}</span>
+                                                    </label>
+                                                    <div class="flex items-center gap-2">
+                                                        <input type="number" v-model.number="dep.montantPaye" @input="handleDataChange" placeholder="0" class="flex-1 bg-slate-900 text-red-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(dep.montant).replace(' DH', '') }} DH</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <div v-else class="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-center">
+                                <p class="text-xs font-bold text-yellow-800">Le pilotage au jour le jour n'est actif que pour l'année courante ({{ soldesInitiaux.anneeActuelle }}).</p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- ACCORDÉON 2 : ENTRÉES MENSUELLES -->
+                    <details class="bg-white rounded-2xl border-l-4 border-green-500 border border-gray-200 shadow-sm mb-3 overflow-hidden">
+                        <summary class="p-4 cursor-pointer flex items-center justify-between list-none bg-gradient-to-r from-green-50 to-white">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">💰</span>
+                                <div>
+                                    <p class="text-sm font-black text-green-900 uppercase tracking-tighter">Entrées Mensuelles</p>
+                                    <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{{ anneeAffichage }}</p>
+                                </div>
+                            </div>
+                            <span class="text-green-600 text-sm font-black bg-green-100 px-2 py-1 rounded">{{ formatMAD(totalRevenusBase) }}</span>
+                        </summary>
+                        <div class="p-4 border-t border-gray-100 space-y-4">
+                            <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].revenus" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                                <div class="flex items-center justify-between gap-2 mb-2">
+                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
+                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}</label>
+                                </div>
+                                <input type="number" v-model.number="item.base" @input="handleDataChange" class="w-full p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-green-700 text-xl outline-none"/>
+                                <button @click="item.showExceptions = !item.showExceptions" class="w-full py-2 mt-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
+                                    {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Suspendre / Modifier Période' }}
+                                </button>
+                                <div v-if="item.showExceptions" class="mt-3 bg-blue-50 rounded-xl p-3 border border-blue-100">
+                                    <p class="text-[9px] font-black text-blue-800 uppercase tracking-widest mb-2">Règles d'exception</p>
+                                    <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-blue-100 mb-2">
+                                        <div class="grid grid-cols-2 gap-2 mb-2">
+                                            <div>
+                                                <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Mois début</label>
+                                                <select v-model.number="exc.moisDebut" @change="handleDataChange" class="w-full p-2 text-sm font-bold border rounded bg-gray-50"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Mois fin</label>
+                                                <select v-model.number="exc.moisFin" @change="handleDataChange" class="w-full p-2 text-sm font-bold border rounded bg-gray-50"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                            </div>
+                                        </div>
+                                        <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Nouvelle valeur</label>
+                                        <div class="flex gap-2">
+                                            <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" class="flex-1 p-3 text-sm font-black text-blue-700 border rounded bg-blue-50 outline-none"/>
+                                            <button @click="(item.exceptions || []).splice(idx, 1); handleDataChange()" class="px-4 text-red-500 font-black text-lg bg-red-50 rounded border border-red-200">✕</button>
+                                        </div>
+                                    </div>
+                                    <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2 text-xs text-white bg-blue-600 rounded-lg font-bold uppercase tracking-widest">+ Ajouter Règle</button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- ACCORDÉON 3 : CHARGES FIXES -->
+                    <details class="bg-white rounded-2xl border-l-4 border-orange-500 border border-gray-200 shadow-sm mb-3 overflow-hidden">
+                        <summary class="p-4 cursor-pointer flex items-center justify-between list-none bg-gradient-to-r from-orange-50 to-white">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🏢</span>
+                                <div>
+                                    <p class="text-sm font-black text-orange-900 uppercase tracking-tighter">Charges Fixes</p>
+                                    <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{{ anneeAffichage }}</p>
+                                </div>
+                            </div>
+                            <span class="text-orange-600 text-sm font-black bg-orange-100 px-2 py-1 rounded">{{ formatMAD(totalFixes) }}</span>
+                        </summary>
+                        <div class="p-4 border-t border-gray-100 space-y-4">
+                            <p class="text-[10px] text-gray-500 italic">Pour signaler un paiement, utilisez la <b>Checklist</b> ci-dessus.</p>
+                            <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesFixes" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                                <div class="flex items-center justify-between gap-2 mb-2">
+                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
+                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}</label>
+                                </div>
+                                <input type="number" v-model.number="item.valeur" @input="handleDataChange" class="w-full p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-orange-700 text-xl outline-none"/>
+                                <button @click="item.showExceptions = !item.showExceptions" class="w-full py-2 mt-2 text-[10px] text-orange-600 font-bold uppercase tracking-widest bg-orange-50 rounded-lg">
+                                    {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Gérer Périodes' }}
+                                </button>
+                                <div v-if="item.showExceptions" class="mt-3 bg-orange-50 rounded-xl p-3 border border-orange-100">
+                                    <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-orange-100 mb-2">
+                                        <div class="grid grid-cols-2 gap-2 mb-2">
+                                            <div>
+                                                <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Mois début</label>
+                                                <select v-model.number="exc.moisDebut" @change="handleDataChange" class="w-full p-2 text-sm font-bold border rounded bg-gray-50"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Mois fin</label>
+                                                <select v-model.number="exc.moisFin" @change="handleDataChange" class="w-full p-2 text-sm font-bold border rounded bg-gray-50"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                            </div>
+                                        </div>
+                                        <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Nouvelle valeur</label>
+                                        <div class="flex gap-2">
+                                            <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" class="flex-1 p-3 text-sm font-black text-orange-700 border rounded bg-orange-50 outline-none"/>
+                                            <button @click="(item.exceptions || []).splice(idx, 1); handleDataChange()" class="px-4 text-red-500 font-black text-lg bg-red-50 rounded border border-red-200">✕</button>
+                                        </div>
+                                    </div>
+                                    <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2 text-xs text-white bg-orange-600 rounded-lg font-bold uppercase tracking-widest">+ Ajouter Règle</button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- ACCORDÉON 4 : CONSOMMATION VARIABLE -->
+                    <details class="bg-white rounded-2xl border-l-4 border-red-500 border border-gray-200 shadow-sm mb-3 overflow-hidden">
+                        <summary class="p-4 cursor-pointer flex items-center justify-between list-none bg-gradient-to-r from-red-50 to-white">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🛒</span>
+                                <div>
+                                    <p class="text-sm font-black text-red-900 uppercase tracking-tighter">Consommation Variable</p>
+                                    <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{{ anneeAffichage }}</p>
+                                </div>
+                            </div>
+                            <span class="text-red-600 text-sm font-black bg-red-100 px-2 py-1 rounded">{{ formatMAD(totalVariables) }}</span>
+                        </summary>
+                        <div class="p-4 border-t border-gray-100 space-y-4">
+                            <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesVariables" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                                <div class="flex items-center justify-between gap-2 mb-2">
+                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
+                                    <label v-else class="text-xs font-black text-gray-800 uppercase tracking-wide flex-1">{{ item.label }}</label>
+                                </div>
+                                <div class="flex items-stretch gap-2">
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.details && item.details.length > 0" :class="['flex-1 p-3 border rounded-xl text-right font-black text-xl outline-none', item.details && item.details.length > 0 ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
+                                    <select v-model="item.periode" @change="handleDataChange" class="p-3 border border-gray-200 rounded-xl text-xs font-black text-gray-700 bg-gray-100 outline-none min-w-[80px]">
+                                        <option value="semaine">/ sem</option>
+                                        <option value="mois">/ mois</option>
+                                    </select>
+                                </div>
+                                <p v-if="item.periode === 'semaine'" class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mt-1">
+                                    Mensuel (x4.3) : {{ formatMAD((item.valeur || 0) * 4.3) }}
+                                </p>
+                                <button @click="item.showDetails = !item.showDetails" class="w-full py-2 mt-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
+                                    {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
+                                </button>
+                                <div v-if="item.showDetails" class="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
+                                    <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3 text-center border-b border-gray-200 pb-1">Détail (total remplace la valeur)</p>
+                                    <div class="space-y-2">
+                                        <div v-for="(detail, idx) in (item.details || [])" :key="detail.id" class="bg-white p-2 rounded-lg border border-gray-200 flex items-stretch gap-2">
+                                            <input type="text" v-model="detail.nom" @input="handleDataChange" placeholder="Nom..." class="flex-1 p-3 text-sm font-bold text-gray-700 outline-none bg-gray-50 rounded"/>
+                                            <input type="number" v-model.number="detail.montant" @input="handleDataChange" class="w-24 p-3 text-sm font-black text-red-600 text-right outline-none bg-gray-50 rounded"/>
+                                            <button @click="(item.details || []).splice(idx, 1); handleDataChange()" class="px-3 text-red-500 hover:text-red-700 font-black text-lg bg-red-50 rounded border border-red-200">✕</button>
+                                        </div>
+                                    </div>
+                                    <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, paye: false, montantPaye: 0 }); handleDataChange()" class="w-full py-2 mt-3 text-xs text-white bg-gray-700 rounded-lg font-bold uppercase tracking-widest">+ Nouvelle ligne</button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- ACCORDÉON 5 : ÉPARGNE -->
+                    <details class="bg-white rounded-2xl border-l-4 border-purple-500 border border-gray-200 shadow-sm mb-3 overflow-hidden">
+                        <summary class="p-4 cursor-pointer flex items-center justify-between list-none bg-gradient-to-r from-purple-50 to-white">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🏦</span>
+                                <div>
+                                    <p class="text-sm font-black text-purple-900 uppercase tracking-tighter">Objectifs Épargne</p>
+                                    <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{{ anneeAffichage }}</p>
+                                </div>
+                            </div>
+                            <span class="text-purple-600 text-sm font-black bg-purple-100 px-2 py-1 rounded">{{ formatMAD(totalEpargne) }}</span>
+                        </summary>
+                        <div class="p-4 border-t border-gray-100 space-y-4">
+                            <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].epargne" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                                <div class="flex items-center justify-between gap-2 mb-2">
+                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
+                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">Compte {{ item.label }}</label>
+                                </div>
+                                <input type="number" v-model.number="item.valeur" @input="handleDataChange" class="w-full p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-purple-700 text-xl outline-none"/>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
             </div>
 
             <!-- FLOATING SAVE VPS (si modifié) -->
@@ -1061,12 +1369,17 @@
                 💾
             </button>
 
-            <!-- BOTTOM NAV -->
+            <!-- BOTTOM NAV (v12.3 : 5 onglets) -->
             <nav class="fixed bottom-0 left-0 right-0 w-full z-50 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] flex justify-around items-stretch h-16">
                 <button @click="activeMobileTab = 'bilan'"
                         :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'bilan' ? 'text-blue-600 bg-blue-50' : 'text-gray-500']">
                     <span class="text-xl">📊</span>
                     <span class="text-[9px] font-black uppercase tracking-widest">Bilan</span>
+                </button>
+                <button @click="activeMobileTab = 'parametres'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'parametres' ? 'text-amber-600 bg-amber-50' : 'text-gray-500']">
+                    <span class="text-xl">⚙️</span>
+                    <span class="text-[9px] font-black uppercase tracking-widest">Moteur</span>
                 </button>
                 <button @click="activeMobileTab = 'flux'"
                         :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'flux' ? 'text-red-600 bg-red-50' : 'text-gray-500']">
@@ -1112,8 +1425,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "12.2";
+                    const CURRENT_VERSION = "12.3";
                     const CHANGELOG = [
+                        { version: "12.3", date: "Moteur Mensuel Mobile", changes: ["Ajout du 5ème onglet ⚙️ Moteur dans la bottom-nav mobile (centre).", "Layout Moteur dédié : header Reste à Vivre + 5 accordéons (🧭 Pilotage, 💰 Entrées, 🏢 Fixes, 🛒 Variable, 🏦 Épargne).", "Inputs tactiles empilés (label au-dessus, w-full p-3, police plus grande).", "Checklist détaillée mobile avec checkbox 6×6, inputs espacés pour les pouces.", "Boutons 'Gérer Périodes' transformés en gros boutons pleine largeur."] },
                         { version: "12.2", date: "Responsive Mobile Natif", changes: ["Switch automatique Desktop / Mobile selon la largeur d'écran (≤ 768 px).", "Interface mobile dédiée : top-bar sticky (solde + impact flux), bottom-nav 4 onglets (📊 Bilan · ⚡ Flux · 🏢 Studio · 🧠 CFO).", "Bilan mobile en cartes empilées (plus de tableaux) avec accordéon détails flux par mois.", "Formulaires Flux & Studio optimisés tactile (label au-dessus, inputs 100% largeur, padding p-3).", "Aucune altération de la logique de calcul."] },
                         { version: "12.1", date: "Audit Financier & Prompt IA", changes: ["Nouvel onglet 🧠 Audit Financier avec 3 jauges visuelles (Trésorerie, Flux Exceptionnels, Charges Fixes).", "Score global (Sain/Vigilance/Critique) basé sur les 3 jauges.", "Bouton 'Copier le prompt IA' : résumé financier prêt à coller dans ChatGPT / Claude.ai."] },
                         { version: "12.0", date: "Ergonomie Flux & Impact Surplus", changes: ["Renommage 'Chocs' → 'Flux Exceptionnels'.", "Header stats annuelles : Entrées / Sorties / Poids sur Surplus.", "Solde banque éditable en un clic."] },
