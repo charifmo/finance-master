@@ -123,7 +123,13 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Proj. Fin {{ Math.max(...anneesDisponibles) }} {{ (soldesInitiaux.decalagePaie !== false) ? '(Avant Paie)' : '' }}</p>
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest italic flex items-center justify-end gap-1">
+                            <span>Proj. Fin</span>
+                            <select v-model.number="anneeCibleProjection" class="bg-transparent border-none outline-none text-gray-500 font-black uppercase tracking-widest cursor-pointer hover:text-blue-600 focus:text-blue-600 text-[10px] px-0 py-0">
+                                <option v-for="a in anneesProjectionOptions" :key="a" :value="a">{{ a }}</option>
+                            </select>
+                            <span v-if="(soldesInitiaux.decalagePaie !== false)">(Avant Paie)</span>
+                        </p>
                         <p :class="['text-xl font-black flex items-center justify-end gap-2', soldeFinal >= 0 ? 'text-green-600' : 'text-red-600']">
                             {{ formatMAD(soldeFinal) }}
                             <span :class="['p-1.5 rounded-lg shadow-sm text-sm', soldeFinal >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']">{{ soldeFinal >= 0 ? '🎉' : '⚠️' }}</span>
@@ -178,7 +184,12 @@
                             <p :class="['text-[10px] mt-1 font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-500')]">Endettement : {{ tauxEndettement.toFixed(1) }} %</p>
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Projection Fin {{ Math.max(...anneesDisponibles) }}</p>
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                                <span>Projection Fin</span>
+                                <select v-model.number="anneeCibleProjection" class="bg-transparent border-none outline-none text-gray-500 font-bold uppercase tracking-widest cursor-pointer hover:text-blue-600 focus:text-blue-600 text-xs px-0 py-0">
+                                    <option v-for="a in anneesProjectionOptions" :key="a" :value="a">{{ a }}</option>
+                                </select>
+                            </p>
                             <h3 :class="['text-2xl lg:text-3xl font-black mt-2', soldeFinal >= 0 ? 'text-blue-600' : 'text-red-600']">{{ formatMAD(soldeFinal) }}</h3>
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
@@ -1558,8 +1569,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "13.0";
+                    const CURRENT_VERSION = "13.1";
                     const CHANGELOG = [
+                        { version: "13.1", date: "RAG Fix & Horizon Dynamique", changes: ["Backend n8n : ajout des nœuds Postgres Vector Store + Embeddings OpenAI manquants pour brancher l'outil finance_rag (résout l'erreur 'No node connected to required input Vector Store and Model').", "Nouveau sélecteur d'horizon dans le sticky header (Proj. Fin <select> 2024 → 2029) lié à `anneeCibleProjection`.", "Le solde projeté et l'épargne cumulée se recalculent désormais en temps réel jusqu'à la fin de l'année cible choisie.", "Préférence persistée en localStorage. Aucun changement de logique pour le bilan pluriannuel ni le responsive v12.3."] },
                         { version: "13.0", date: "Super-Agent CFO Unifié", changes: ["Nouvel onglet 💬 CFO Agent (Desktop) + intégration dans l'onglet 💬 CFO (Mobile) : console de chat avec l'IA CFO.", "Backend n8n unifié (Telegram + Webhook) : même agent, même mémoire Postgres, même RAG sur finance_vectors.", "Outil Budget Engine (simulate/apply) + Outil Committer protégé par triple garde 'OUI'.", "Session persistante (localStorage) côté web, session 'tg_<chat_id>' côté Telegram.", "Réponses CFO en HTML riche (listes, gras, couleurs). Zéro modification sans validation explicite par 'OUI'."] },
                         { version: "12.3", date: "Moteur Mensuel Mobile", changes: ["Ajout du 5ème onglet ⚙️ Moteur dans la bottom-nav mobile (centre).", "Layout Moteur dédié : header Reste à Vivre + 5 accordéons (🧭 Pilotage, 💰 Entrées, 🏢 Fixes, 🛒 Variable, 🏦 Épargne).", "Inputs tactiles empilés (label au-dessus, w-full p-3, police plus grande).", "Checklist détaillée mobile avec checkbox 6×6, inputs espacés pour les pouces.", "Boutons 'Gérer Périodes' transformés en gros boutons pleine largeur."] },
                         { version: "12.2", date: "Responsive Mobile Natif", changes: ["Switch automatique Desktop / Mobile selon la largeur d'écran (≤ 768 px).", "Interface mobile dédiée : top-bar sticky (solde + impact flux), bottom-nav 4 onglets (📊 Bilan · ⚡ Flux · 🏢 Studio · 🧠 CFO).", "Bilan mobile en cartes empilées (plus de tableaux) avec accordéon détails flux par mois.", "Formulaires Flux & Studio optimisés tactile (label au-dessus, inputs 100% largeur, padding p-3).", "Aucune altération de la logique de calcul."] },
@@ -1683,6 +1695,11 @@
 
                     // MOTEUR MULTI-ANNEES
                     const anneeAffichage = ref(2026);
+
+                    // === v13.1 : Sélecteur d'horizon de projection ===
+                    const anneeCibleProjection = ref(Number(localStorage.getItem('annee_cible_projection')) || 2029);
+                    const anneesProjectionOptions = [2024, 2025, 2026, 2027, 2028, 2029];
+                    watch(anneeCibleProjection, (v) => { localStorage.setItem('annee_cible_projection', String(v)); });
 
                     // --- RÉINJECTION DES DONNÉES EXACTES V10 DEPUIS LE FICHIER SECOURS ---
                     const getDefaultState = () => {
@@ -2271,8 +2288,20 @@
                         });
                     });
 
-                    const soldeFinal = computed(() => { const am = bilan.value.filter(b => !b.isPassed); return am.length > 0 ? am[am.length - 1].soldeCourant : 0; });
-                    const epargneTotaleFinal = computed(() => { const am = bilan.value.filter(b => !b.isPassed); return am.length > 0 ? am[am.length - 1].soldeUrgence + am[am.length - 1].soldeLT : 0; });
+                    // v13.1 : on coupe le bilan à l'année cible de projection (sélecteur d'horizon)
+                    const soldeFinal = computed(() => {
+                        const target = Number(anneeCibleProjection.value);
+                        const am = bilan.value.filter(b => !b.isPassed && Number(b.annee) <= target);
+                        if (am.length > 0) return am[am.length - 1].soldeCourant;
+                        // Année cible antérieure au mois courant : on retombe sur le solde initial
+                        return Number((soldesInitiaux.value || {}).courant || 0);
+                    });
+                    const epargneTotaleFinal = computed(() => {
+                        const target = Number(anneeCibleProjection.value);
+                        const am = bilan.value.filter(b => !b.isPassed && Number(b.annee) <= target);
+                        if (am.length > 0) return am[am.length - 1].soldeUrgence + am[am.length - 1].soldeLT;
+                        return Number((soldesInitiaux.value || {}).urgence || 0) + Number((soldesInitiaux.value || {}).lt || 0);
+                    });
 
                     // === AUDIT FINANCIER (v12.1) ===
                     const promptIACopied = ref(false);
@@ -2531,7 +2560,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, isItemPaid, toggleItemPaid,
-                        anneeAffichage, anneesDisponibles, ajouterAnnee
+                        anneeAffichage, anneesDisponibles, ajouterAnnee,
+                        anneeCibleProjection, anneesProjectionOptions
                     };
                 }
             });
