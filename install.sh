@@ -70,7 +70,13 @@ fix_permissions() {
   mkdir -p "${FINANCE_DIR}/backups"
   chown "${WEB_USER}:${WEB_GROUP}" "${FINANCE_DIR}/backups"
   chmod 775 "${FINANCE_DIR}/backups"
-  ok "Permissions OK (${WEB_USER}:${WEB_GROUP}, 775)."
+
+  # dossier pending pour pending_commit.php (v13.5 stateful tools cache)
+  mkdir -p "${FINANCE_DIR}/pending"
+  chown "${WEB_USER}:${WEB_GROUP}" "${FINANCE_DIR}/pending"
+  chmod 775 "${FINANCE_DIR}/pending"
+
+  ok "Permissions OK (${WEB_USER}:${WEB_GROUP}, 775 + pending/)."
 }
 
 # -----------------------------------------------------------------------------
