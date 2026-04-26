@@ -309,7 +309,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ════════════════════════════════════════════════════════\n// FORMAT FOR TELEGRAM — convertit HTML riche → texte Telegram\n// Telegram parse_mode=HTML supporte uniquement :\n//   <b>, <strong>, <i>, <em>, <u>, <s>, <code>, <pre>, <a href=\"\">\n// On supprime le reste, on convertit <br>/<li>/<ul> en texte plat.\n// ════════════════════════════════════════════════════════\nconst item = $input.first().json;\nlet html = item.output || item.text || '';\n\nif (typeof html !== 'string') html = String(html);\n\nconst text = html\n  // Sauts de ligne\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>\\s*<p[^>]*>/gi, '\\n\\n')\n  .replace(/<\\/?p[^>]*>/gi, '')\n  // Listes\n  .replace(/<\\/li>/gi, '\\n')\n  .replace(/<li[^>]*>/gi, '• ')\n  .replace(/<\\/?ul[^>]*>/gi, '\\n')\n  .replace(/<\\/?ol[^>]*>/gi, '\\n')\n  // Séparateurs\n  .replace(/<hr\\s*\\/?>/gi, '\\n———\\n')\n  // Spans (couleurs) : on garde le contenu, on supprime les balises\n  .replace(/<\\/?span[^>]*>/gi, '')\n  .replace(/<\\/?div[^>]*>/gi, '\\n')\n  // Normalise <strong>→<b> et <em>→<i> (Telegram supporte les 2 mais on canonise)\n  .replace(/<strong>/gi, '<b>').replace(/<\\/strong>/gi, '</b>')\n  .replace(/<em>/gi, '<i>').replace(/<\\/em>/gi, '</i>')\n  // Strip toutes les autres balises non supportées par Telegram\n  .replace(/<(?!\\/?(b|i|u|s|code|pre|a)\\b)[^>]+>/gi, '')\n  // Décode entités HTML courantes\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#39;/g, \"'\")\n  // Nettoie multi-lignes vides\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nreturn [{\n  json: {\n    telegram_text: text,\n    chat_id: $('Telegram Trigger').first().json.message.chat.id\n  }\n}];"
+        "jsCode": "// ════════════════════════════════════════════════════════\n// FORMAT FOR TELEGRAM v13.4 — convertit HTML riche → texte Telegram\n// FIX : lit la sortie DIRECTEMENT depuis AI Agent (pas $input qui contient\n//        le retour de Save Conversation = INSERT Postgres = vide d'output).\n// Telegram parse_mode=HTML supporte uniquement :\n//   <b>, <strong>, <i>, <em>, <u>, <s>, <code>, <pre>, <a href=\"\">\n// ════════════════════════════════════════════════════════\nlet html = '';\ntry {\n  const agentOut = $('AI Agent').first().json;\n  html = agentOut.output || agentOut.text || agentOut.response || '';\n} catch (e) {\n  html = '';\n}\n\nif (!html) {\n  // Fallback ultime : tente de lire depuis $input si jamais l'agent n'est pas accessible\n  try {\n    const fallback = $input.first().json;\n    html = fallback.output || fallback.text || '⚠️ Aucune réponse générée par l\\'agent.';\n  } catch (e) {\n    html = '⚠️ Aucune réponse générée par l\\'agent.';\n  }\n}\n\nif (typeof html !== 'string') html = String(html);\n\nconst text = html\n  // Sauts de ligne\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>\\s*<p[^>]*>/gi, '\\n\\n')\n  .replace(/<\\/?p[^>]*>/gi, '')\n  // Listes\n  .replace(/<\\/li>/gi, '\\n')\n  .replace(/<li[^>]*>/gi, '• ')\n  .replace(/<\\/?ul[^>]*>/gi, '\\n')\n  .replace(/<\\/?ol[^>]*>/gi, '\\n')\n  // Séparateurs\n  .replace(/<hr\\s*\\/?>/gi, '\\n———\\n')\n  // Spans (couleurs) : on garde le contenu, on supprime les balises\n  .replace(/<\\/?span[^>]*>/gi, '')\n  .replace(/<\\/?div[^>]*>/gi, '\\n')\n  // Normalise <strong>→<b> et <em>→<i> (Telegram supporte les 2 mais on canonise)\n  .replace(/<strong>/gi, '<b>').replace(/<\\/strong>/gi, '</b>')\n  .replace(/<em>/gi, '<i>').replace(/<\\/em>/gi, '</i>')\n  // Strip toutes les autres balises non supportées par Telegram\n  .replace(/<(?!\\/?(b|i|u|s|code|pre|a)\\b)[^>]+>/gi, '')\n  // Décode entités HTML courantes\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#39;/g, \"'\")\n  // Nettoie multi-lignes vides\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nreturn [{\n  json: {\n    telegram_text: text,\n    chat_id: $('Telegram Trigger').first().json.message.chat.id\n  }\n}];"
       },
       "id": "node-format-telegram",
       "name": "Format for Telegram",
@@ -346,7 +346,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"html\": $json.output, \"session_id\": $('Normalize Input').item.json.session_id } }}",
+        "responseBody": "={{ { \"html\": $('AI Agent').first().json.output, \"session_id\": $('Normalize Input').first().json.session_id } }}",
         "options": {
           "responseHeaders": {
             "entries": [
@@ -575,9 +575,9 @@
       "name": "finance"
     }
   ],
-  "versionId": "v13.3",
+  "versionId": "v13.4",
   "meta": {
-    "templateCreatedBy": "Finance Master v13.3 (manual memory)"
+    "templateCreatedBy": "Finance Master v13.4 (manual memory + explicit AI Agent output routing)"
   },
   "active": false
 }
