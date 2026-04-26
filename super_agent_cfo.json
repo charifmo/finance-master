@@ -98,7 +98,7 @@
     {
       "parameters": {
         "sessionIdType": "customKey",
-        "sessionKey": "={{ $('Normalize Input').item.json.session_id }}",
+        "sessionKey": "={{ $if($('Telegram Trigger').isExecuted, $('Telegram Trigger').first().json.message.chat.id, 'charif_master_session') }}",
         "tableName": "chat_history",
         "contextWindowLength": 20
       },
@@ -214,15 +214,16 @@
                 "options": {
                   "caseSensitive": true,
                   "leftValue": "",
-                  "typeValidation": "strict"
+                  "typeValidation": "loose"
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $('Normalize Input').item.json.source }}",
-                    "rightValue": "telegram",
+                    "leftValue": "={{ $('Telegram Trigger').isExecuted }}",
+                    "rightValue": true,
                     "operator": {
-                      "type": "string",
-                      "operation": "equals"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
@@ -235,15 +236,16 @@
                 "options": {
                   "caseSensitive": true,
                   "leftValue": "",
-                  "typeValidation": "strict"
+                  "typeValidation": "loose"
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $('Normalize Input').item.json.source }}",
-                    "rightValue": "web",
+                    "leftValue": "={{ $('Webhook CFO Web').isExecuted }}",
+                    "rightValue": true,
                     "operator": {
-                      "type": "string",
-                      "operation": "equals"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
@@ -266,8 +268,21 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $('Normalize Input').item.json.chat_id }}",
-        "text": "={{ $json.output }}",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// FORMAT FOR TELEGRAM — convertit HTML riche → texte Telegram\n// Telegram parse_mode=HTML supporte uniquement :\n//   <b>, <strong>, <i>, <em>, <u>, <s>, <code>, <pre>, <a href=\"\">\n// On supprime le reste, on convertit <br>/<li>/<ul> en texte plat.\n// ════════════════════════════════════════════════════════\nconst item = $input.first().json;\nlet html = item.output || item.text || '';\n\nif (typeof html !== 'string') html = String(html);\n\nconst text = html\n  // Sauts de ligne\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>\\s*<p[^>]*>/gi, '\\n\\n')\n  .replace(/<\\/?p[^>]*>/gi, '')\n  // Listes\n  .replace(/<\\/li>/gi, '\\n')\n  .replace(/<li[^>]*>/gi, '• ')\n  .replace(/<\\/?ul[^>]*>/gi, '\\n')\n  .replace(/<\\/?ol[^>]*>/gi, '\\n')\n  // Séparateurs\n  .replace(/<hr\\s*\\/?>/gi, '\\n———\\n')\n  // Spans (couleurs) : on garde le contenu, on supprime les balises\n  .replace(/<\\/?span[^>]*>/gi, '')\n  .replace(/<\\/?div[^>]*>/gi, '\\n')\n  // Normalise <strong>→<b> et <em>→<i> (Telegram supporte les 2 mais on canonise)\n  .replace(/<strong>/gi, '<b>').replace(/<\\/strong>/gi, '</b>')\n  .replace(/<em>/gi, '<i>').replace(/<\\/em>/gi, '</i>')\n  // Strip toutes les autres balises non supportées par Telegram\n  .replace(/<(?!\\/?(b|i|u|s|code|pre|a)\\b)[^>]+>/gi, '')\n  // Décode entités HTML courantes\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#39;/g, \"'\")\n  // Nettoie multi-lignes vides\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nreturn [{\n  json: {\n    telegram_text: text,\n    chat_id: $('Telegram Trigger').first().json.message.chat.id\n  }\n}];"
+      },
+      "id": "node-format-telegram",
+      "name": "Format for Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ $json.telegram_text }}",
         "additionalFields": {
           "parse_mode": "HTML"
         }
@@ -277,7 +292,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        440,
+        560,
         -120
       ],
       "credentials": {
@@ -455,7 +470,7 @@
       "main": [
         [
           {
-            "node": "Send Telegram",
+            "node": "Format for Telegram",
             "type": "main",
             "index": 0
           }
@@ -463,6 +478,17 @@
         [
           {
             "node": "Respond Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Telegram": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
             "type": "main",
             "index": 0
           }
