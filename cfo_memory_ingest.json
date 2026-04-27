@@ -1,5 +1,5 @@
 {
-  "name": "CFO Memory Ingest v1.0",
+  "name": "CFO Memory Ingest v1.1",
   "nodes": [
     {
       "parameters": {
@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ════════════════════════════════════════════════════════\n// CFO MEMORY INGEST — Validate & Prepare v1.0\n// Valide l'entrée, enrichit le texte et formate le document\n// au format LangChain attendu par vectorStorePGVector (insert mode).\n// ════════════════════════════════════════════════════════\nconst body = $input.first().json.body || $input.first().json;\n\nconst texte      = (body.texte || body.text || '').trim();\nconst categorie  = (body.categorie || body.category || 'general').toLowerCase();\nconst session_id = body.session_id || 'unknown';\n\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  throw new Error('Texte vide ou trop court (min 5 caractères).');\n}\nif (!VALID_CATS.includes(categorie)) {\n  throw new Error('Catégorie invalide: ' + categorie + '. Autorisées: ' + VALID_CATS.join(', '));\n}\n\n// Enrichissement du texte : préfixe structuré pour améliorer le rappel RAG\nconst date_iso = new Date().toISOString().slice(0, 10);\nconst texte_enrichi = `[CFO-MEMORY | ${categorie.toUpperCase()} | ${date_iso}]\\n${texte}`;\n\n// Format LangChain Document attendu par vectorStorePGVector en mode insert\nreturn [{\n  json: {\n    pageContent: texte_enrichi,\n    metadata: {\n      categorie,\n      session_id,\n      source: 'cfo_agent_memory_writer',\n      texte_original: texte,\n      date_ingestion: new Date().toISOString()\n    }\n  }\n}];"
+        "jsCode": "// ════════════════════════════════════════════════════════\n// CFO MEMORY INGEST — Validate & Prepare v1.1\n// Valide l'entrée et enrichit le texte.\n// Le wrapping en Document LangChain est délégué au noeud\n// Default Data Loader (sub-node ai_document de Insert Into Memory).\n// ════════════════════════════════════════════════════════\nconst body = $input.first().json.body || $input.first().json;\n\nconst texte      = (body.texte || body.text || '').trim();\nconst categorie  = (body.categorie || body.category || 'general').toLowerCase();\nconst session_id = body.session_id || 'unknown';\n\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  throw new Error('Texte vide ou trop court (min 5 caractères).');\n}\nif (!VALID_CATS.includes(categorie)) {\n  throw new Error('Catégorie invalide: ' + categorie + '. Autorisées: ' + VALID_CATS.join(', '));\n}\n\n// Enrichissement du texte : préfixe structuré pour améliorer le rappel RAG\nconst date_iso = new Date().toISOString().slice(0, 10);\nconst texte_enrichi = `[CFO-MEMORY | ${categorie.toUpperCase()} | ${date_iso}]\\n${texte}`;\n\nreturn [{\n  json: {\n    pageContent: texte_enrichi,\n    metadata: {\n      categorie,\n      session_id,\n      source: 'cfo_agent_memory_writer',\n      texte_original: texte,\n      date_ingestion: new Date().toISOString()\n    }\n  }\n}];"
       },
       "id": "mem-validate",
       "name": "Validate & Prepare",
@@ -54,13 +54,27 @@
       "name": "Gemini Embeddings Ingest",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
-      "position": [-240, 220],
+      "position": [-300, 240],
       "credentials": {
         "googlePalmApi": {
           "id": "mngXZBBjSSHswcb5",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
+    },
+    {
+      "parameters": {
+        "dataType": "textInput",
+        "textInput": "={{ $('Validate & Prepare').first().json.pageContent }}",
+        "options": {
+          "metadata": "={{ JSON.stringify($('Validate & Prepare').first().json.metadata) }}"
+        }
+      },
+      "id": "mem-data-loader",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [-100, 240]
     },
     {
       "parameters": {
@@ -124,6 +138,17 @@
           {
             "node": "Insert Into Memory",
             "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Insert Into Memory",
+            "type": "ai_document",
             "index": 0
           }
         ]
