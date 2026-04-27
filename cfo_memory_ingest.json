@@ -1,0 +1,136 @@
+{
+  "name": "CFO Memory Ingest v1.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "finance-memory-ingest",
+        "options": {
+          "allowedOrigins": "*"
+        },
+        "responseMode": "responseNode"
+      },
+      "id": "mem-trigger",
+      "name": "Memory Ingest Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-640, 0],
+      "webhookId": "finance-memory-ingest"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════\n// CFO MEMORY INGEST — Validate & Prepare v1.0\n// Valide l'entrée, enrichit le texte et formate le document\n// au format LangChain attendu par vectorStorePGVector (insert mode).\n// ════════════════════════════════════════════════════════\nconst body = $input.first().json.body || $input.first().json;\n\nconst texte      = (body.texte || body.text || '').trim();\nconst categorie  = (body.categorie || body.category || 'general').toLowerCase();\nconst session_id = body.session_id || 'unknown';\n\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  throw new Error('Texte vide ou trop court (min 5 caractères).');\n}\nif (!VALID_CATS.includes(categorie)) {\n  throw new Error('Catégorie invalide: ' + categorie + '. Autorisées: ' + VALID_CATS.join(', '));\n}\n\n// Enrichissement du texte : préfixe structuré pour améliorer le rappel RAG\nconst date_iso = new Date().toISOString().slice(0, 10);\nconst texte_enrichi = `[CFO-MEMORY | ${categorie.toUpperCase()} | ${date_iso}]\\n${texte}`;\n\n// Format LangChain Document attendu par vectorStorePGVector en mode insert\nreturn [{\n  json: {\n    pageContent: texte_enrichi,\n    metadata: {\n      categorie,\n      session_id,\n      source: 'cfo_agent_memory_writer',\n      texte_original: texte,\n      date_ingestion: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "mem-validate",
+      "name": "Validate & Prepare",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-420, 0]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": "finance_vectors",
+        "options": {}
+      },
+      "id": "mem-vectorstore-insert",
+      "name": "Insert Into Memory",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1,
+      "position": [-200, 0],
+      "credentials": {
+        "postgres": {
+          "id": "7cQfM9fXdo0Pso5h",
+          "name": "charif_finance_db"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "id": "mem-embeddings",
+      "name": "Gemini Embeddings Ingest",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [-240, 220],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mngXZBBjSSHswcb5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', memorise: true, texte: $('Validate & Prepare').first().json.metadata?.texte_original || '', categorie: $('Validate & Prepare').first().json.metadata?.categorie || 'general' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "mem-respond",
+      "name": "Respond Memory",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [40, 0]
+    }
+  ],
+  "connections": {
+    "Memory Ingest Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate & Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Prepare": {
+      "main": [
+        [
+          {
+            "node": "Insert Into Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Into Memory": {
+      "main": [
+        [
+          {
+            "node": "Respond Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embeddings Ingest": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Insert Into Memory",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
