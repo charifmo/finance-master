@@ -1,5 +1,5 @@
 {
-  "name": "Super-Agent CFO v13.0",
+  "name": "Super-Agent CFO v13.12",
   "nodes": [
     {
       "parameters": {
@@ -108,14 +108,16 @@
       "position": [
         -120,
         20
-      ]
+      ],
+      "continueOnFail": true,
+      "alwaysOutputData": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO chat_history (session_id, message, created_at) VALUES\n  ($1, jsonb_build_object('type','human','data',jsonb_build_object('content',$2::text,'additional_kwargs','{}'::jsonb,'response_metadata','{}'::jsonb)), NOW()),\n  ($1, jsonb_build_object('type','ai','data',jsonb_build_object('content',$3::text,'additional_kwargs','{}'::jsonb,'response_metadata','{}'::jsonb,'tool_calls','[]'::jsonb,'invalid_tool_calls','[]'::jsonb)), NOW())",
         "options": {
-          "queryReplacement": "={{ [$('Build Agent Input').first().json.session_id, $('Build Agent Input').first().json.question, $json.output] }}"
+          "queryReplacement": "={{ [$('Build Agent Input').first().json.session_id, $('Build Agent Input').first().json.question, $json.output ?? $json.error ?? ''] }}"
         }
       },
       "id": "node-save-conv",
@@ -296,7 +298,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "node-switch",
       "name": "Route Response",
@@ -517,6 +521,13 @@
         [
           {
             "node": "Format for Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Webhook",
             "type": "main",
             "index": 0
           }
