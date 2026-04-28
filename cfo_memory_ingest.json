@@ -1,5 +1,5 @@
 {
-  "name": "CFO Memory Ingest v1.2",
+  "name": "CFO Memory Ingest v1.3",
   "nodes": [
     {
       "parameters": {
@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ════════════════════════════════════════════════════════\n// CFO MEMORY INGEST — Validate & Prepare v1.1\n// Valide l'entrée et enrichit le texte.\n// Le wrapping en Document LangChain est délégué au noeud\n// Default Data Loader (sub-node ai_document de Insert Into Memory).\n// ════════════════════════════════════════════════════════\nconst body = $input.first().json.body || $input.first().json;\n\nconst texte      = (body.texte || body.text || '').trim();\nconst categorie  = (body.categorie || body.category || 'general').toLowerCase();\nconst session_id = body.session_id || 'unknown';\n\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  throw new Error('Texte vide ou trop court (min 5 caractères).');\n}\nif (!VALID_CATS.includes(categorie)) {\n  throw new Error('Catégorie invalide: ' + categorie + '. Autorisées: ' + VALID_CATS.join(', '));\n}\n\n// Enrichissement du texte : préfixe structuré pour améliorer le rappel RAG\nconst date_iso = new Date().toISOString().slice(0, 10);\nconst texte_enrichi = `[CFO-MEMORY | ${categorie.toUpperCase()} | ${date_iso}]\\n${texte}`;\n\nreturn [{\n  json: {\n    pageContent: texte_enrichi,\n    metadata: {\n      categorie,\n      session_id,\n      source: 'cfo_agent_memory_writer',\n      texte_original: texte,\n      date_ingestion: new Date().toISOString()\n    }\n  }\n}];"
+        "jsCode": "// ════════════════════════════════════════════════════════\n// CFO MEMORY INGEST — Validate & Prepare v1.3\n// v1.3 : une seule chaîne propre → 1 vecteur garanti\n//   • Contexte encodé DANS le texte (pas dans metadata séparée)\n//   • Metadata réduite à 2 clés plates (rollback + filtre RAG)\n//   • Pas de texte_original redondant\n// ════════════════════════════════════════════════════════\nconst body = $input.first().json.body || $input.first().json;\n\nconst texte      = (body.texte || body.text || '').trim();\nconst categorie  = (body.categorie || body.category || 'general').toLowerCase();\nconst session_id = body.session_id || 'unknown';\n\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  throw new Error('Texte vide ou trop court (min 5 caractères).');\n}\nif (!VALID_CATS.includes(categorie)) {\n  throw new Error('Catégorie invalide: ' + categorie + '. Autorisées: ' + VALID_CATS.join(', '));\n}\n\n// v1.3 : texte enrichi AUTO-SUFFISANT — contexte encodé dans le préfixe\n// Format : [CFO-MEMORY | CAT | DATE | SESSION]\n// → le RAG voit un texte propre et cohérent, pas de JSON parasite\nconst date_iso = new Date().toISOString().slice(0, 10);\nconst pageContent = `[CFO-MEMORY | ${categorie.toUpperCase()} | ${date_iso} | session:${session_id}]\\n${texte}`;\n\n// Metadata MINIMALE : 2 clés plates uniquement\n// → ni texte_original (doublon), ni session_id complet, ni date_ingestion longue\nreturn [{\n  json: {\n    pageContent,\n    meta_categorie: categorie,\n    meta_source: 'cfo_agent_memory_writer'\n  }\n}];"
       },
       "id": "mem-validate",
       "name": "Validate & Prepare",
@@ -67,7 +67,7 @@
         "dataType": "textInput",
         "textInput": "={{ $('Validate & Prepare').first().json.pageContent }}",
         "options": {
-          "metadata": "={{ JSON.stringify($('Validate & Prepare').first().json.metadata) }}"
+          "metadata": "={{ JSON.stringify({ categorie: $('Validate & Prepare').first().json.meta_categorie, source: $('Validate & Prepare').first().json.meta_source }) }}"
         }
       },
       "id": "mem-data-loader",
@@ -78,8 +78,8 @@
     },
     {
       "parameters": {
-        "chunkSize": 1000,
-        "chunkOverlap": 200
+        "chunkSize": 100000,
+        "chunkOverlap": 0
       },
       "id": "mem-text-splitter",
       "name": "Recursive Character Text Splitter",
@@ -90,7 +90,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'ok', memorise: true, texte: $('Validate & Prepare').first().json.metadata?.texte_original || '', categorie: $('Validate & Prepare').first().json.metadata?.categorie || 'general' }) }}",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', memorise: true, texte: ($input.first().json.meta_source ? $('Validate & Prepare').first().json.pageContent.split('\\n').slice(1).join('\\n') : ''), categorie: $('Validate & Prepare').first().json.meta_categorie || 'general' }) }}",
         "options": {
           "responseHeaders": {
             "entries": [
