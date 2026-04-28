@@ -1,5 +1,5 @@
 {
-  "name": "Super-Agent CFO v13.14",
+  "name": "Super-Agent CFO v13.15",
   "nodes": [
     {
       "parameters": {
@@ -390,7 +390,8 @@
         "language": "javaScript",
         "jsCode": "// ════════════════════════════════════════════════════════\n// MEMORY WRITER v1.0 — ingestion mémoire long terme (RAG)\n// Appelle le sous-workflow CFO Memory Ingest via webhook interne.\n// Utiliser UNIQUEMENT sur demande EXPLICITE de mémorisation.\n// ════════════════════════════════════════════════════════\nlet input;\ntry {\n  input = typeof query === 'string' ? JSON.parse(query) : query;\n} catch (e) {\n  return JSON.stringify({ error: 'JSON invalide: ' + e.message });\n}\n\nconst texte     = (input.texte || input.text || '').trim();\nconst categorie = (input.categorie || input.category || 'general').toLowerCase();\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  return JSON.stringify({ error: 'Texte trop court (min 5 caractères).' });\n}\nif (!VALID_CATS.includes(categorie)) {\n  return JSON.stringify({ error: 'Catégorie invalide. Autorisées: ' + VALID_CATS.join(', ') });\n}\n\n// Récupère session_id depuis le contexte de l'agent\nlet session_id = null;\ntry { session_id = $('Build Agent Input').first().json.session_id; } catch (e) {}\nif (!session_id) {\n  try { session_id = $('Normalize Input').first().json.session_id; } catch (e) {}\n}\n\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://n8n.beau.ink/webhook/finance-memory-ingest',\n    body: { texte, categorie, session_id: session_id || 'unknown' },\n    json: true,\n    timeout: 20000\n  });\n\n  if (resp && resp.status === 'ok') {\n    return JSON.stringify({\n      status: 'ok',\n      memorise: true,\n      texte,\n      categorie,\n      message: 'Information enregistrée dans la mémoire long terme. Disponible dans toutes les sessions futures via finance_rag.'\n    });\n  } else {\n    return JSON.stringify({ error: 'Ingestion échouée', detail: resp });\n  }\n} catch (e) {\n  return JSON.stringify({ error: 'Erreur appel webhook mémoire: ' + e.message });\n}",
         "specifyInputSchema": true,
-        "jsonSchema": "{\"type\": \"object\", \"properties\": {\"texte\": {\"type\": \"string\", \"description\": \"La phrase exacte a memoriser (ex: Le studio est pour Airbnb).\"}, \"categorie\": {\"type\": \"string\", \"description\": \"Obligatoire. Choisir parmi : preference, regle, ou general.\"}}, \"required\": [\"texte\", \"categorie\"]}"
+        "schema": "{\"type\": \"object\", \"properties\": {\"texte\": {\"type\": \"string\", \"description\": \"La phrase exacte a memoriser (ex: Le studio est pour Airbnb).\"}, \"categorie\": {\"type\": \"string\", \"description\": \"Obligatoire. Choisir parmi : preference, regle, ou general.\"}}, \"required\": [\"texte\", \"categorie\"]}",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"texte\": {\"type\": \"string\", \"description\": \"La phrase exacte a memoriser (ex: Le studio est pour Airbnb).\"}, \"categorie\": {\"type\": \"string\", \"description\": \"Obligatoire. Choisir parmi : preference, regle, ou general.\"}}, \"required\": [\"texte\", \"categorie\"]}"
       },
       "id": "node-tool-memory",
       "name": "Tool: Memory Writer",
