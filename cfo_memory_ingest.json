@@ -1,5 +1,5 @@
 {
-  "name": "CFO Memory Ingest v1.3",
+  "name": "CFO Memory Ingest v1.4",
   "nodes": [
     {
       "parameters": {
@@ -14,18 +14,24 @@
       "name": "Memory Ingest Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-640, 0],
+      "position": [
+        -640,
+        0
+      ],
       "webhookId": "finance-memory-ingest"
     },
     {
       "parameters": {
-        "jsCode": "// ════════════════════════════════════════════════════════\n// CFO MEMORY INGEST — Validate & Prepare v1.3\n// v1.3 : une seule chaîne propre → 1 vecteur garanti\n//   • Contexte encodé DANS le texte (pas dans metadata séparée)\n//   • Metadata réduite à 2 clés plates (rollback + filtre RAG)\n//   • Pas de texte_original redondant\n// ════════════════════════════════════════════════════════\nconst body = $input.first().json.body || $input.first().json;\n\nconst texte      = (body.texte || body.text || '').trim();\nconst categorie  = (body.categorie || body.category || 'general').toLowerCase();\nconst session_id = body.session_id || 'unknown';\n\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  throw new Error('Texte vide ou trop court (min 5 caractères).');\n}\nif (!VALID_CATS.includes(categorie)) {\n  throw new Error('Catégorie invalide: ' + categorie + '. Autorisées: ' + VALID_CATS.join(', '));\n}\n\n// v1.3 : texte enrichi AUTO-SUFFISANT — contexte encodé dans le préfixe\n// Format : [CFO-MEMORY | CAT | DATE | SESSION]\n// → le RAG voit un texte propre et cohérent, pas de JSON parasite\nconst date_iso = new Date().toISOString().slice(0, 10);\nconst pageContent = `[CFO-MEMORY | ${categorie.toUpperCase()} | ${date_iso} | session:${session_id}]\\n${texte}`;\n\n// Metadata MINIMALE : 2 clés plates uniquement\n// → ni texte_original (doublon), ni session_id complet, ni date_ingestion longue\nreturn [{\n  json: {\n    pageContent,\n    meta_categorie: categorie,\n    meta_source: 'cfo_agent_memory_writer'\n  }\n}];"
+        "jsCode": "// ════════════════════════════════════════════════════════\n// CFO MEMORY INGEST — Validate & Prepare v1.4\n// v1.4 : pageContent = TEXTE BRUT UNIQUEMENT (zéro préfixe)\n//   • [CFO-MEMORY | ...] supprimé du contenu vectorisé (c'était le bug BUG2)\n//   • Contexte encodé dans metadata JSONB (non vectorisé par pgvector)\n//   • 1 vecteur par entrée garanti (chunkSize=100000, overlap=0)\n// ════════════════════════════════════════════════════════\nconst body = $input.first().json.body || $input.first().json;\n\nconst texte      = (body.texte || body.text || '').trim();\nconst categorie  = (body.categorie || body.category || 'general').toLowerCase();\nconst session_id = body.session_id || 'unknown';\n\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\n\nif (!texte || texte.length < 5) {\n  throw new Error('Texte vide ou trop court (min 5 caractères).');\n}\nif (!VALID_CATS.includes(categorie)) {\n  throw new Error('Catégorie invalide: ' + categorie + '. Autorisées: ' + VALID_CATS.join(', '));\n}\n\n// v1.4 : pageContent = texte PROPRE, sans aucun préfixe technique\n// Les tokens [CFO-MEMORY], [PREFERENCE], [2026-04-28] ne doivent PAS\n// être dans l'espace vectoriel — ils polluaient la similarité sémantique\nconst pageContent = texte;\n\n// Metadata complète stockée en JSONB (colonne metadata, NON vectorisée)\nconst date_iso = new Date().toISOString().slice(0, 10);\nreturn [{\n  json: {\n    pageContent,\n    meta_categorie:    categorie,\n    meta_source:       'cfo_agent_memory_writer',\n    meta_date:         date_iso,\n    meta_session:      session_id,\n    meta_date_full:    new Date().toISOString()\n  }\n}];"
       },
       "id": "mem-validate",
       "name": "Validate & Prepare",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-420, 0]
+      "position": [
+        -420,
+        0
+      ]
     },
     {
       "parameters": {
@@ -37,7 +43,10 @@
       "name": "Insert Into Memory",
       "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
       "typeVersion": 1,
-      "position": [-200, 0],
+      "position": [
+        -200,
+        0
+      ],
       "credentials": {
         "postgres": {
           "id": "7cQfM9fXdo0Pso5h",
@@ -54,7 +63,10 @@
       "name": "Gemini Embeddings Ingest",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
-      "position": [-300, 240],
+      "position": [
+        -300,
+        240
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "mngXZBBjSSHswcb5",
@@ -67,14 +79,17 @@
         "dataType": "textInput",
         "textInput": "={{ $('Validate & Prepare').first().json.pageContent }}",
         "options": {
-          "metadata": "={{ JSON.stringify({ categorie: $('Validate & Prepare').first().json.meta_categorie, source: $('Validate & Prepare').first().json.meta_source }) }}"
+          "metadata": "={{ JSON.stringify({ categorie: $('Validate & Prepare').first().json.meta_categorie, source: $('Validate & Prepare').first().json.meta_source, date: $('Validate & Prepare').first().json.meta_date, session_id: $('Validate & Prepare').first().json.meta_session }) }}"
         }
       },
       "id": "mem-data-loader",
       "name": "Default Data Loader",
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1,
-      "position": [-100, 240]
+      "position": [
+        -100,
+        240
+      ]
     },
     {
       "parameters": {
@@ -85,12 +100,15 @@
       "name": "Recursive Character Text Splitter",
       "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
       "typeVersion": 1,
-      "position": [-100, 460]
+      "position": [
+        -100,
+        460
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'ok', memorise: true, texte: ($input.first().json.meta_source ? $('Validate & Prepare').first().json.pageContent.split('\\n').slice(1).join('\\n') : ''), categorie: $('Validate & Prepare').first().json.meta_categorie || 'general' }) }}",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', memorise: true, texte: $('Validate & Prepare').first().json.pageContent, categorie: $('Validate & Prepare').first().json.meta_categorie || 'general' }) }}",
         "options": {
           "responseHeaders": {
             "entries": [
@@ -106,7 +124,10 @@
       "name": "Respond Memory",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.2,
-      "position": [40, 0]
+      "position": [
+        40,
+        0
+      ]
     }
   ],
   "connections": {
