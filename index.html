@@ -1790,7 +1790,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "13.8";
+                    const CURRENT_VERSION = "15.0";
                     const CHANGELOG = [
                         { version: "13.8", date: "Schema Sanitization (Purge Dirty Synonyms)", changes: ["Backend n8n : Budget Engine v5 — résout le bug de Dirty Data hérité de v13.6 (clé parasite montant:1000 cohabitant avec valeur:1487, désynchronisant l'UI et le LLM).", "Nouveau sanitizeFinanceData() : passe globale en début ET en fin de chaque appel Budget Engine qui purge montant/value/amount (canonical=valeur), nom (canonical=label), et récupère les valeurs perdues si la canonique manque.", "Helpers writeCharge/writeRevenu/writeEpargne : chaque écriture est CANONIQUE et DESTRUCTIVE — la nouvelle valeur va dans la clé officielle ET les synonymes parasites sont supprimés du bloc.", "Réponse enrichie avec sanitize_report {pre_ops, post_ops, total_keys_purged} pour observabilité du nettoyage.", "Workflow stateful adapté : si total_keys_purged > 0 mais aucune op effective, le pending est sauvegardé pour permettre à l'utilisateur de valider le nettoyage seul par OUI."] },
                         { version: "13.7", date: "Partial Update Fix (Tolerant Ops)", changes: ["Backend n8n : refonte Budget Engine v4 — résout le bug de mise à jour partielle silencieuse (cas 'baisse alimentation à 1000 / mois' où seule la période était appliquée).", "Nouvelles ops UNIFIÉES update_* (recommandées) : update_revenu, update_charge_fixe, update_charge_variable, update_epargne, update_depense_ponctuelle. Combinent valeur + periode + label en une seule op atomique.", "Tolérance aux synonymes : valeur ↔ montant ↔ value ↔ amount (charges/épargne) · base ↔ valeur ↔ montant ↔ salaire (revenus). Plus aucune op qui échoue à cause d'un nom de champ.", "Type d'op INCONNU = erreur DURE (plus de skip silencieux) : Budget Engine renvoie status=error et REFUSE de remplir la cache pending. L'agent doit corriger avant de proposer OUI.", "Nouveau champ ops_summary {total, success, errors, skipped} dans la réponse Budget Engine + warning explicite si errors > 0. systemMessage §5 enrichi pour imposer la vérification post-appel."] },
@@ -1992,6 +1992,15 @@
                     const state = getDefaultState();
                     const soldesInitiaux = ref(state.soldesInitiaux);
                     const donneesAnnuelles = ref(state.donneesAnnuelles);
+
+                    // ── v15.0 : Multi-comptes dynamique ──────────────────
+                    const comptes = ref([]);
+                    const parametres = ref({
+                        moisActuel: 4, anneeActuelle: 2026, semainesRestantes: 3,
+                        objectifFondsSecuriteMois: 6, hypotheseInflation: 2.5,
+                        ribbon: { soldeMois: true, cumulatif: true, statsAnnuelles: true, projection: true },
+                        branding: { logoUrl: null, faviconUrl: null, appName: 'Finance Master' }
+                    });
                     const projetStudio = computed(() => {
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return getDefaultProjetStudio();
@@ -2038,7 +2047,7 @@
                         }
                     };
 
-                    const getExportData = () => ({ version: CURRENT_VERSION, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 15, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value });
                     const handleDataChange = () => { forceUpdateCalculations(); serverSyncStatus.value = 'modified'; if(syncStatus.value === 'synced') syncStatus.value = 'modified'; };
 
                     const safeMerge = (target, source) => {
@@ -2165,11 +2174,43 @@
                         }; reader.readAsText(file);
                     };
 
+                    // ── v15.0 : Migration schéma v14 -> v15 (multi-comptes) ──────────
+                    const migrateToV15 = (data) => {
+                        if ((data._schemaVersion || 0) >= 15) return data;
+                        // Backup cold — fire-and-forget, non bloquant
+                        fetch('/finance/backup_legacy.php', { method: 'POST' }).catch(() => {});
+                        const si = data.soldesInitiaux || {};
+                        const genId = () => 'acc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+                        if (!data.comptes || !Array.isArray(data.comptes) || !data.comptes.length) {
+                            data.comptes = [
+                                { id: genId(), label: 'Compte Courant',     type: 'courant',        soldeInitial: si.courant || 0, couleur: '#3b82f6', icone: '💳', ordre: 1, inclureLiquidite: true,  inclureNetWorth: true },
+                                { id: genId(), label: 'Fonds Urgence',      type: 'epargne',        soldeInitial: si.urgence || 0, couleur: '#10b981', icone: '🛡️', ordre: 2, inclureLiquidite: true,  inclureNetWorth: true },
+                                { id: genId(), label: 'Épargne Long Terme', type: 'epargne',        soldeInitial: si.lt      || 0, couleur: '#8b5cf6', icone: '🎯', ordre: 3, inclureLiquidite: false, inclureNetWorth: true },
+                                { id: genId(), label: 'Bourse / CTO',       type: 'investissement', soldeInitial: si.bourse  || 0, couleur: '#f59e0b', icone: '📈', ordre: 4, inclureLiquidite: false, inclureNetWorth: true }
+                            ];
+                        }
+                        if (!data.parametres || typeof data.parametres !== 'object') {
+                            data.parametres = {
+                                moisActuel: si.moisActuel || new Date().getMonth() + 1,
+                                anneeActuelle: si.anneeActuelle || new Date().getFullYear(),
+                                semainesRestantes: si.semainesRestantes || 4,
+                                objectifFondsSecuriteMois: 6,
+                                hypotheseInflation: 2.5,
+                                ribbon: { soldeMois: true, cumulatif: true, statsAnnuelles: true, projection: true },
+                                branding: { logoUrl: null, faviconUrl: null, appName: 'Finance Master' }
+                            };
+                        }
+                        data._schemaVersion = 15;
+                        addLog('✅ Migration v14→v15 : multi-comptes activé.', 'success');
+                        return data;
+                    };
+
                     const executerImportFusion = (data) => {
                         try {
                             const d = getDefaultState(); 
                             if (!data || typeof data !== 'object') throw new Error("Le fichier serveur est vide ou corrompu.");
-                            
+                            migrateToV15(data);
+
                             soldesInitiaux.value = safeMerge(d.soldesInitiaux, data.soldesInitiaux); 
                             if (!soldesInitiaux.value.anneeActuelle) soldesInitiaux.value.anneeActuelle = 2026;
 
@@ -2206,7 +2247,10 @@
                                 });
                             }
                             if(data.gConfig) gConfig.value = data.gConfig;
-                            
+                            // v15 : hydratation multi-comptes
+                            if (Array.isArray(data.comptes) && data.comptes.length) comptes.value = data.comptes;
+                            if (data.parametres && typeof data.parametres === 'object') parametres.value = data.parametres;
+
                             anneeAffichage.value = soldesInitiaux.value.anneeActuelle || 2026;
                             forceUpdateCalculations();
                         } catch(err) {
@@ -2788,7 +2832,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
-                        anneeCibleProjection, anneesProjectionOptions
+                        anneeCibleProjection, anneesProjectionOptions,
+                        comptes, parametres
                     };
                 }
             });
