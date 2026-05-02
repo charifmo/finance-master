@@ -60,7 +60,8 @@
                     <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📅 Calendrier Pluriannuel</button>
                     <button @click="activeTab = 'studio'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">🏢 Projet Studio</button>
                     <button @click="activeTab = 'audit'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'audit' ? 'bg-fuchsia-600 shadow-lg shadow-fuchsia-900/50' : 'hover:bg-slate-800 text-slate-300']">🧠 Audit Financier</button>
-                    <button @click="activeTab = 'cfo'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'cfo' ? 'bg-gradient-to-r from-fuchsia-600 to-purple-700 shadow-lg shadow-purple-900/50' : 'hover:bg-slate-800 text-slate-300']">💬 CFO Agent <span class="ml-auto text-[9px] bg-purple-900/80 text-purple-100 px-1.5 py-0.5 rounded border border-purple-400/30">v13</span></button>
+                    <button @click="activeTab = 'cfo'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'cfo' ? 'bg-gradient-to-r from-fuchsia-600 to-purple-700 shadow-lg shadow-purple-900/50' : 'hover:bg-slate-800 text-slate-300']">💬 CFO Agent <span class="ml-auto text-[9px] bg-purple-900/80 text-purple-100 px-1.5 py-0.5 rounded border border-purple-400/30">v14</span></button>
+                    <button @click="activeTab = 'settings'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'settings' ? 'bg-slate-700 shadow-lg' : 'hover:bg-slate-800 text-slate-300']">🛠️ Paramètres</button>
                     <button @click="showChangelog = true" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-slate-400 hover:bg-slate-800 mt-4 border-t border-slate-800 text-xs font-medium uppercase tracking-widest">📖 Changelog</button>
                 </nav>
             </div>
@@ -190,7 +191,7 @@
                             <span class="cfo-chevron text-gray-400 text-xs">▼</span>
                         </div>
                         <div class="cfo-collapsible-body">
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
                             <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Surplus Mensuel Base</p>
                             <h3 :class="['text-2xl lg:text-3xl font-black mt-2', surplusMensuelBase >= 0 ? 'text-green-600' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</h3>
@@ -212,6 +213,12 @@
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
                             <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Épargne Cumulée Finale</p>
                             <h3 class="text-2xl lg:text-3xl font-black mt-2 text-purple-600">{{ formatMAD(epargneTotaleFinal) }}</h3>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-emerald-200 flex flex-col justify-center cursor-pointer hover:border-emerald-400 transition-colors" @click="activeTab = 'settings'" title="Configurer dans Paramètres">
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Patrimoine Net</p>
+                            <h3 :class="['text-2xl lg:text-3xl font-black mt-2', patrimoineNet >= 0 ? 'text-emerald-600' : 'text-red-600']">{{ formatMAD(patrimoineNet) }}</h3>
+                            <p class="text-[10px] mt-1 font-bold uppercase text-gray-400" v-if="comptes.length === 0">↗ Configurer les comptes</p>
+                            <p class="text-[10px] mt-1 font-bold uppercase text-emerald-500" v-else>{{ comptes.length }} compte{{ comptes.length > 1 ? 's' : '' }}</p>
                         </div>
                     </div>
                         </div><!-- /cfo-collapsible-body kpi -->
@@ -895,6 +902,174 @@
                             <li>Chaque simulation est affichée <b>Avant / Après</b> pour validation.</li>
                             <li>La mémoire conversationnelle est conservée côté VPS (PostgreSQL).</li>
                         </ul>
+                    </div>
+                </div>
+
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <!-- ONGLET PARAMÈTRES v15                                       -->
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <div v-if="activeTab === 'settings'" class="max-w-5xl mx-auto space-y-8">
+                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">🛠️ Paramètres de l'Application</h2>
+
+                    <!-- ── COMPTES FINANCIERS ── -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+                            <div>
+                                <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm">🏦 Comptes Financiers</h3>
+                                <p class="text-[10px] text-gray-400 mt-0.5">Patrimoine total : <span class="font-black text-emerald-600">{{ formatMAD(patrimoineNet) }}</span> — Liquide : <span class="font-black text-blue-600">{{ formatMAD(patrimoineLiquide) }}</span></p>
+                            </div>
+                        </div>
+
+                        <div v-if="comptes.length === 0" class="p-8 text-center text-gray-400">
+                            <p class="text-3xl mb-2">🏦</p>
+                            <p class="text-sm font-bold">Aucun compte configuré.</p>
+                            <p class="text-xs mt-1">Utilisez le formulaire ci-dessous pour ajouter vos comptes.</p>
+                        </div>
+
+                        <div class="divide-y divide-gray-100">
+                            <template v-for="(compte, idx) in comptes" :key="compte.id">
+                                <!-- mode affichage -->
+                                <div v-if="editingCompteId !== compte.id" class="px-6 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors group">
+                                    <div class="flex flex-col gap-0.5">
+                                        <button @click="moveCompte(idx, -1)" :disabled="idx === 0" class="text-[10px] text-gray-300 hover:text-blue-600 disabled:opacity-20 leading-tight font-black">↑</button>
+                                        <button @click="moveCompte(idx, 1)" :disabled="idx === comptes.length - 1" class="text-[10px] text-gray-300 hover:text-blue-600 disabled:opacity-20 leading-tight font-black">↓</button>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="font-black text-gray-800 truncate">{{ compte.label }}</p>
+                                        <span :class="['text-[9px] font-black uppercase px-2 py-0.5 rounded-full', compte.type === 'liquide' ? 'bg-blue-100 text-blue-700' : compte.type === 'epargne' ? 'bg-green-100 text-green-700' : compte.type === 'investissement' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700']">{{ compte.type }}</span>
+                                    </div>
+                                    <p :class="['text-lg font-black tabular-nums', compte.solde >= 0 ? 'text-gray-800' : 'text-red-600']">{{ formatMAD(compte.solde) }}</p>
+                                    <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button @click="startEditCompte(compte)" class="text-xs text-blue-600 hover:underline font-bold px-2 py-1 bg-blue-50 rounded">Modifier</button>
+                                        <button @click="deleteCompte(compte.id)" class="text-xs text-red-500 hover:underline font-bold px-2 py-1 bg-red-50 rounded">Supprimer</button>
+                                    </div>
+                                </div>
+                                <!-- mode édition inline -->
+                                <div v-else class="px-6 py-4 bg-blue-50 border-l-4 border-blue-500">
+                                    <div class="flex items-center gap-3 flex-wrap">
+                                        <input v-model="editingCompte.label" class="flex-1 min-w-[160px] p-2.5 border-2 border-blue-300 rounded-xl text-sm font-bold outline-none focus:border-blue-500" placeholder="Nom du compte"/>
+                                        <select v-model="editingCompte.type" class="p-2.5 border-2 border-blue-300 rounded-xl text-sm font-bold outline-none focus:border-blue-500 bg-white">
+                                            <option value="liquide">Liquide</option>
+                                            <option value="epargne">Épargne</option>
+                                            <option value="investissement">Investissement</option>
+                                            <option value="credit">Crédit</option>
+                                        </select>
+                                        <input v-model.number="editingCompte.solde" type="number" class="w-36 p-2.5 border-2 border-blue-300 rounded-xl text-sm font-black text-right outline-none focus:border-blue-500" placeholder="Solde"/>
+                                        <button @click="saveEditCompte" class="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700">✓ Sauver</button>
+                                        <button @click="cancelEditCompte" class="px-4 py-2.5 bg-white border border-gray-300 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-50">✕ Annuler</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Formulaire ajout -->
+                        <div class="px-6 py-5 bg-gray-50 border-t border-gray-100">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">+ Ajouter un nouveau compte</p>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <input v-model="newCompte.label" @keyup.enter="addCompte" class="flex-1 min-w-[160px] p-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-green-400" placeholder="Nom du compte (ex: Livret A, CIH…)"/>
+                                <select v-model="newCompte.type" class="p-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-green-400 bg-white">
+                                    <option value="liquide">Liquide</option>
+                                    <option value="epargne">Épargne</option>
+                                    <option value="investissement">Investissement</option>
+                                    <option value="credit">Crédit</option>
+                                </select>
+                                <input v-model.number="newCompte.solde" type="number" @keyup.enter="addCompte" class="w-36 p-2.5 border-2 border-gray-200 rounded-xl text-sm font-black text-right outline-none focus:border-green-400" placeholder="Solde initial"/>
+                                <button @click="addCompte" class="px-5 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-green-700 shadow-md shadow-green-900/20 transition-colors">+ Ajouter</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ── RIBBON TOGGLES ── -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">🎛️ Cartes du Tableau de Bord (Ribbon)</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <label class="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border-2 cursor-pointer transition-colors" :class="parametres.ribbon.soldeMois ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                <input type="checkbox" v-model="parametres.ribbon.soldeMois" @change="handleDataChange" class="w-4 h-4 accent-blue-600"/>
+                                <span class="text-sm font-bold text-gray-700">Solde du Mois</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border-2 cursor-pointer transition-colors" :class="parametres.ribbon.cumulatif ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                <input type="checkbox" v-model="parametres.ribbon.cumulatif" @change="handleDataChange" class="w-4 h-4 accent-blue-600"/>
+                                <span class="text-sm font-bold text-gray-700">Cumulatif</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border-2 cursor-pointer transition-colors" :class="parametres.ribbon.statsAnnuelles ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                <input type="checkbox" v-model="parametres.ribbon.statsAnnuelles" @change="handleDataChange" class="w-4 h-4 accent-blue-600"/>
+                                <span class="text-sm font-bold text-gray-700">Stats Annuelles</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border-2 cursor-pointer transition-colors" :class="parametres.ribbon.projection ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                <input type="checkbox" v-model="parametres.ribbon.projection" @change="handleDataChange" class="w-4 h-4 accent-blue-600"/>
+                                <span class="text-sm font-bold text-gray-700">Projection</span>
+                            </label>
+                        </div>
+                    </section>
+
+                    <!-- ── FINANCES GLOBALES ── -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">📊 Paramètres Financiers Globaux</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Objectif Fonds de Sécurité <span class="text-blue-600">({{ parametres.objectifFondsSecuriteMois }} mois)</span></label>
+                                <input type="range" v-model.number="parametres.objectifFondsSecuriteMois" min="1" max="24" step="1" @change="handleDataChange" class="w-full accent-blue-600"/>
+                                <div class="flex justify-between text-[9px] text-gray-400 mt-1">
+                                    <span>1 mois</span><span>6 mois (recommandé)</span><span>24 mois</span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-2">Cible de liquidité : <span class="font-black text-blue-700">{{ formatMAD(surplusMensuelBase * parametres.objectifFondsSecuriteMois) }}</span></p>
+                            </div>
+                            <div>
+                                <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Hypothèse d'Inflation</label>
+                                <div class="flex items-center gap-3">
+                                    <input type="number" v-model.number="parametres.hypotheseInflation" @change="handleDataChange" step="0.1" min="0" max="20" class="flex-1 p-3 border-2 border-gray-200 rounded-xl text-xl font-black text-right outline-none focus:border-blue-500"/>
+                                    <span class="text-lg font-black text-gray-400">%</span>
+                                </div>
+                                <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">Utilisée pour les projections multi-années</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ── BRANDING ── -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">🎨 Branding de l'Application</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Logo</label>
+                                <div class="flex items-center gap-5">
+                                    <div class="w-20 h-20 flex items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 overflow-hidden shrink-0">
+                                        <img v-if="parametres.branding.logoUrl" :src="parametres.branding.logoUrl" class="w-full h-full object-contain"/>
+                                        <span v-else class="text-3xl">📷</span>
+                                    </div>
+                                    <div>
+                                        <label class="inline-block px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer hover:bg-blue-700 transition-colors shadow-md shadow-blue-900/20">
+                                            Choisir un fichier
+                                            <input type="file" accept="image/*" class="hidden" @change="uploadMedia('logo', $event.target.files[0])"/>
+                                        </label>
+                                        <p class="text-[9px] text-gray-400 mt-2">PNG, JPG, SVG, WebP — max 2 Mo</p>
+                                        <button v-if="parametres.branding.logoUrl" @click="parametres.branding.logoUrl = null; handleDataChange()" class="text-[9px] text-red-400 hover:underline mt-1 block">Supprimer</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Favicon</label>
+                                <div class="flex items-center gap-5">
+                                    <div class="w-20 h-20 flex items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 overflow-hidden shrink-0">
+                                        <img v-if="parametres.branding.faviconUrl" :src="parametres.branding.faviconUrl" class="w-full h-full object-contain"/>
+                                        <span v-else class="text-3xl">🌐</span>
+                                    </div>
+                                    <div>
+                                        <label class="inline-block px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer hover:bg-blue-700 transition-colors shadow-md shadow-blue-900/20">
+                                            Choisir un fichier
+                                            <input type="file" accept="image/*,.ico" class="hidden" @change="uploadMedia('favicon', $event.target.files[0])"/>
+                                        </label>
+                                        <p class="text-[9px] text-gray-400 mt-2">PNG, ICO, SVG — max 2 Mo</p>
+                                        <button v-if="parametres.branding.faviconUrl" @click="parametres.branding.faviconUrl = null; handleDataChange()" class="text-[9px] text-red-400 hover:underline mt-1 block">Supprimer</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ── INFO V15 ── -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-xs text-gray-500 leading-relaxed">
+                        <p class="font-black uppercase tracking-widest text-slate-600 mb-2 text-[10px]">ℹ️ Architecture v15.0</p>
+                        <p>Les comptes définis ici remplacent les soldes initiaux codés en dur des versions antérieures. Le patrimoine net est calculé en temps réel depuis la liste des comptes. Les données sont sauvegardées avec le reste du fichier JSON sur le VPS.</p>
                     </div>
                 </div>
             </div>
@@ -2001,6 +2176,85 @@
                         ribbon: { soldeMois: true, cumulatif: true, statsAnnuelles: true, projection: true },
                         branding: { logoUrl: null, faviconUrl: null, appName: 'Finance Master' }
                     });
+                    // ── v15.0 : Patrimoine & Settings ────────────────────
+                    const newCompte = ref({ label: '', type: 'liquide', solde: 0 });
+                    const editingCompteId = ref(null);
+                    const editingCompte = ref(null);
+
+                    const patrimoineLiquide = computed(() =>
+                        comptes.value.filter(c => c.type === 'liquide' || c.type === 'epargne')
+                            .reduce((s, c) => s + (Number(c.solde) || 0), 0)
+                    );
+                    const patrimoineNet = computed(() =>
+                        comptes.value.reduce((s, c) => s + (Number(c.solde) || 0), 0)
+                    );
+
+                    const addCompte = () => {
+                        if (!newCompte.value.label.trim()) return;
+                        comptes.value = [...comptes.value, { id: Date.now(), label: newCompte.value.label.trim(), type: newCompte.value.type, solde: Number(newCompte.value.solde) || 0 }];
+                        newCompte.value = { label: '', type: 'liquide', solde: 0 };
+                        handleDataChange();
+                    };
+
+                    const deleteCompte = (id) => {
+                        if (!confirm('Supprimer ce compte ?')) return;
+                        comptes.value = comptes.value.filter(c => c.id !== id);
+                        handleDataChange();
+                    };
+
+                    const startEditCompte = (compte) => {
+                        editingCompteId.value = compte.id;
+                        editingCompte.value = { ...compte };
+                    };
+
+                    const saveEditCompte = () => {
+                        const idx = comptes.value.findIndex(c => c.id === editingCompteId.value);
+                        if (idx !== -1) {
+                            const arr = [...comptes.value];
+                            arr[idx] = { ...editingCompte.value, solde: Number(editingCompte.value.solde) || 0 };
+                            comptes.value = arr;
+                        }
+                        editingCompteId.value = null;
+                        editingCompte.value = null;
+                        handleDataChange();
+                    };
+
+                    const cancelEditCompte = () => {
+                        editingCompteId.value = null;
+                        editingCompte.value = null;
+                    };
+
+                    const moveCompte = (idx, dir) => {
+                        const arr = [...comptes.value];
+                        const target = idx + dir;
+                        if (target < 0 || target >= arr.length) return;
+                        [arr[idx], arr[target]] = [arr[target], arr[idx]];
+                        comptes.value = arr;
+                        handleDataChange();
+                    };
+
+                    const uploadMedia = async (type, file) => {
+                        if (!file) return;
+                        const form = new FormData();
+                        form.append('file', file);
+                        form.append('type', type);
+                        try {
+                            addLog(`Upload ${type} en cours…`, 'info');
+                            const res = await fetch('/finance/upload_media.php', { method: 'POST', body: form });
+                            const json = await res.json();
+                            if (json.status === 'ok') {
+                                if (type === 'logo') parametres.value.branding.logoUrl = json.url;
+                                else parametres.value.branding.faviconUrl = json.url;
+                                handleDataChange();
+                                addLog(`${type} uploadé : ${json.filename}`, 'success');
+                            } else {
+                                addLog(`Upload ${type} échoué : ${json.error}`, 'error');
+                            }
+                        } catch (e) {
+                            addLog(`Upload ${type} erreur : ${e.message}`, 'error');
+                        }
+                    };
+
                     const projetStudio = computed(() => {
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return getDefaultProjetStudio();
@@ -2833,7 +3087,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
                         anneeCibleProjection, anneesProjectionOptions,
-                        comptes, parametres
+                        comptes, parametres,
+                        patrimoineLiquide, patrimoineNet,
+                        newCompte, editingCompteId, editingCompte,
+                        addCompte, deleteCompte, startEditCompte, saveEditCompte, cancelEditCompte, moveCompte, uploadMedia
                     };
                 }
             });
