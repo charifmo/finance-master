@@ -5,6 +5,23 @@ Format : [version] — date — description
 
 ---
 
+## [15.1] — 2026-05-03 — Corrections UX/UI (Sous-étape 3)
+
+### Corrections critiques
+- **Ruban fixe** : le solde affiché est maintenant `patrimoineLiquide` (somme des comptes avec `inclureLiquidite: true`) — plus de valeur statique hardcodée
+- **`inclureLiquidite`** : nouveau toggle par compte — contrôle quels comptes entrent dans le calcul du patrimoine liquide (affiché dans le header)
+- **Bug Changelog UI** : entrée v15.0 ajoutée dans le tableau `CHANGELOG` du setup Vue — la modale affiche maintenant les vraies notes de mise à jour
+
+### Restructuration des onglets
+- **⚙️ Moteur Mensuel → ⚙️ Budget Structurel** : renommage + CRUD comptes déplacé ici (architecture financière au même endroit)
+- **🎯 Pilotage Mensuel** : nouvel onglet dédié extrait de Budget Structurel — contient checklist, pointage factures, toggles décalage paie, sélecteur mois/semaines
+- **🛠️ Paramètres** : ne contient plus le CRUD comptes (déplacé dans Budget Structurel) — reste ribbon, finances globales, branding
+
+### Nettoyage UI
+- Suppression définitive du bloc "Copier le prompt IA" (desktop audit + mobile audit + mobile CFO) — sera remplacé par injection directe au CFO Agent (Phase 3)
+
+---
+
 ## [15.0] — 2026-05-01
 
 ### Architecture
@@ -19,7 +36,7 @@ Format : [version] — date — description
 - `parametres` : objet de configuration globale (moisActuel, anneeActuelle, semainesRestantes, ribbon, branding)
 
 ### Calculs
-- `patrimoineLiquide` : somme des soldes de tous les comptes de type `liquide`
+- `patrimoineLiquide` : somme des comptes dont `inclureLiquidite !== false` (défaut : true pour tous)
 - `patrimoineNet` : somme de tous les soldes de tous les comptes
 
 ### UI — Onglet Paramètres (🛠️)
