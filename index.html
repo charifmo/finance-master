@@ -1923,6 +1923,7 @@
                 setup() {
                     const CURRENT_VERSION = "15.0";
                     const CHANGELOG = [
+                        { version: "15.5", date: "2026-05-03 — Fix Bilan Current Month Math", changes: ["Mois courant : solde_fin = curSolde - totalIrregRestant (plus de déduction fRest/vRest/totEpBase qui amputait artificiellement le patrimoineLiquide initial déjà NET).", "Appliqué aux 2 branches (decalagePaie + else). Conservation de l'ajout de revMoisGenere si !salaireRecu dans le bloc else."] },
                         { version: "15.4", date: "2026-05-03 — Fix Moteur Trésorerie Multi-Comptes", changes: ["Moteur bilan : curSolde initialisé sur patrimoineLiquide.value (somme réelle comptes[]) — plus jamais soldesInitiaux.courant.", "Épargne projetée dans chaque row du bilan : soldeUrgence/soldeLT calculés depuis comptes[] filtrés par type (epargne/investissement).", "Fallbacks soldeFinal → patrimoineLiquide.value, epargneTotaleFinal → patrimoineNet - patrimoineLiquide.", "Dashboard table ligne Aujourd'hui : patrimoineLiquide + patrimoineNet−patrimoineLiquide.", "Suppression des 2 inputs fantômes v-model=soldesInitiaux.courant (mobile top-bar + Pilotage base card) — remplacés par affichage lecture-seule + bouton Gérer les comptes."] },
                         { version: "15.3", date: "2026-05-03 — Patchs critiques de trésorerie (QA Audit)", changes: ["Fix 1 : injections de cash irrégulières déjà pointées comme payées comptées en double dans bilan computed — corrigé avec isItemPaid(d, due) dans les deux blocs (isCurrentMonth et else).", "Fix 2 : variable fantôme isPassed retirée des filtres soldeFinal, epargneTotaleFinal, auditFinancier et lineChartConfig — la propriété n'existe pas dans les objets bilan (boucle startM garantit déjà présent+futur).", "Fix 3 : surplusMensuelMoyen dans statsFluxAnnee utilisait totalRevenusBase − fixes − variables sans déduire l'épargne, gonflant la Jauge 2 Audit. Remplacé par surplusMensuelBase.value."] },
                         { version: "15.0", date: "2026-05-03 — Architecture Multi-Comptes & UX", changes: ["Schema v15 : comptes[] dynamiques + parametres{} remplacent les soldesInitiaux hardcodés.", "Migration idempotente migrateToV15() avec backup automatique finance_data_v14_legacy.backup.json.", "Nouvel onglet ⚙️ Budget Structurel : CRUD comptes (ajout, édition inline, suppression, réordonnancement) + toggle inclureLiquidite par compte.", "Nouvel onglet 🎯 Pilotage Mensuel : checklist, pointage factures, décalage paie — séparé du structurel.", "Onglet 🛠️ Paramètres : toggles ribbon, objectif fonds sécurité, hypothèse inflation, upload logo/favicon.", "Sticky header : affiche patrimoineLiquide (somme comptes inclureLiquidite=true) au lieu du champ courant statique.", "KPI dashboard : carte Patrimoine Net (xl:grid-cols-5).", "Suppression du bouton Copier Prompt IA (remplacé par injection directe CFO Agent).", "CHANGELOG.md créé."] },
@@ -2750,14 +2751,14 @@
                                 }, 0);
                                 
                                 if (decalagePaie) {
-                                    entreesAppliquees = 0; 
-                                    solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant;
-                                    if ((soldesInitiaux.value || {}).salaireRecu) revMoisPrecedent = 0; 
+                                    entreesAppliquees = 0;
+                                    solde_fin = curSolde - totalIrregRestant;
+                                    if ((soldesInitiaux.value || {}).salaireRecu) revMoisPrecedent = 0;
                                     else revMoisPrecedent = revMoisGenere;
                                     curSolde = solde_fin;
                                 } else {
                                     entreesAppliquees = revMoisGenere;
-                                    solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant;
+                                    solde_fin = curSolde - totalIrregRestant;
                                     if (!(soldesInitiaux.value || {}).salaireRecu) solde_fin += revMoisGenere;
                                     curSolde = solde_fin;
                                 }

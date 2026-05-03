@@ -5,6 +5,14 @@ Format : [version] — date — description
 
 ---
 
+## [15.5] — 2026-05-03 — Fix Bilan Current Month Math
+
+### Correction critique
+- **Mois courant ne déduit plus les charges du capital initial** : dans le bloc `isCurrentMonth` du computed `bilan`, la ligne `solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant` amputait artificiellement le `patrimoineLiquide` (qui est déjà du cash NET disponible) des charges courantes du mois → chute brutale dès le premier mois.
+- **Nouveau calcul** : `solde_fin = curSolde - totalIrregRestant` (uniquement les flux exceptionnels restants). Appliqué aux deux branches (`decalagePaie` et `else`). L'ajout de `revMoisGenere` quand `!salaireRecu` est conservé dans le bloc else.
+
+---
+
 ## [15.4] — 2026-05-03 — Fix Moteur Trésorerie Multi-Comptes
 
 ### Corrections critiques
