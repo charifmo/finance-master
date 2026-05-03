@@ -5,6 +5,15 @@ Format : [version] — date — description
 
 ---
 
+## [15.7] — 2026-05-03 — Fix déduction charges mois courant
+
+### Correction critique
+- **Rétablissement de la déduction `fRest + vRest + totEpBase`** dans le bloc `isCurrentMonth` du computed `bilan` (revert partiel de v15.5).
+- Sans cette déduction, le solde de fin d'année était faussé par un excédent fictif (les charges courantes du mois en cours étaient ignorées de la projection).
+- Nouveau (et définitif) calcul des 2 branches : `solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant;` — l'ajout de `revMoisGenere` quand `!salaireRecu` est conservé dans le bloc `else`.
+
+---
+
 ## [15.6] — 2026-05-03 — Fix calcul injections cash
 
 ### Correction critique

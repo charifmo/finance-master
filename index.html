@@ -1923,6 +1923,7 @@
                 setup() {
                     const CURRENT_VERSION = "15.0";
                     const CHANGELOG = [
+                        { version: "15.7", date: "2026-05-03 — Fix déduction charges mois courant", changes: ["Rétablissement de la déduction fRest+vRest+totEpBase dans le bloc isCurrentMonth (revert partiel v15.5).", "Sans cette déduction, le solde de fin d'année était faussé par un excédent fictif.", "Calcul définitif : solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant (les 2 branches)."] },
                         { version: "15.6", date: "2026-05-03 — Fix calcul injections cash", changes: ["isItemPaid() retournait true pour tout montant négatif (0 >= -115600 → true) — les injections de cash du Studio étaient considérées comme déjà encaissées et ignorées du bilan.", "Fix : si dueAmount < 0, on se fie strictement à item.paye === true (case à cocher manuelle)."] },
                         { version: "15.5", date: "2026-05-03 — Fix Bilan Current Month Math", changes: ["Mois courant : solde_fin = curSolde - totalIrregRestant (plus de déduction fRest/vRest/totEpBase qui amputait artificiellement le patrimoineLiquide initial déjà NET).", "Appliqué aux 2 branches (decalagePaie + else). Conservation de l'ajout de revMoisGenere si !salaireRecu dans le bloc else."] },
                         { version: "15.4", date: "2026-05-03 — Fix Moteur Trésorerie Multi-Comptes", changes: ["Moteur bilan : curSolde initialisé sur patrimoineLiquide.value (somme réelle comptes[]) — plus jamais soldesInitiaux.courant.", "Épargne projetée dans chaque row du bilan : soldeUrgence/soldeLT calculés depuis comptes[] filtrés par type (epargne/investissement).", "Fallbacks soldeFinal → patrimoineLiquide.value, epargneTotaleFinal → patrimoineNet - patrimoineLiquide.", "Dashboard table ligne Aujourd'hui : patrimoineLiquide + patrimoineNet−patrimoineLiquide.", "Suppression des 2 inputs fantômes v-model=soldesInitiaux.courant (mobile top-bar + Pilotage base card) — remplacés par affichage lecture-seule + bouton Gérer les comptes."] },
@@ -2755,13 +2756,13 @@
                                 
                                 if (decalagePaie) {
                                     entreesAppliquees = 0;
-                                    solde_fin = curSolde - totalIrregRestant;
+                                    solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant;
                                     if ((soldesInitiaux.value || {}).salaireRecu) revMoisPrecedent = 0;
                                     else revMoisPrecedent = revMoisGenere;
                                     curSolde = solde_fin;
                                 } else {
                                     entreesAppliquees = revMoisGenere;
-                                    solde_fin = curSolde - totalIrregRestant;
+                                    solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant;
                                     if (!(soldesInitiaux.value || {}).salaireRecu) solde_fin += revMoisGenere;
                                     curSolde = solde_fin;
                                 }
