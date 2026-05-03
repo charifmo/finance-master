@@ -1945,6 +1945,7 @@
                 setup() {
                     const CURRENT_VERSION = "15.0";
                     const CHANGELOG = [
+                        { version: "15.3", date: "2026-05-03 — Patchs critiques de trésorerie (QA Audit)", changes: ["Fix 1 : injections de cash irrégulières déjà pointées comme payées comptées en double dans bilan computed — corrigé avec isItemPaid(d, due) dans les deux blocs (isCurrentMonth et else).", "Fix 2 : variable fantôme isPassed retirée des filtres soldeFinal, epargneTotaleFinal, auditFinancier et lineChartConfig — la propriété n'existe pas dans les objets bilan (boucle startM garantit déjà présent+futur).", "Fix 3 : surplusMensuelMoyen dans statsFluxAnnee utilisait totalRevenusBase − fixes − variables sans déduire l'épargne, gonflant la Jauge 2 Audit. Remplacé par surplusMensuelBase.value."] },
                         { version: "15.0", date: "2026-05-03 — Architecture Multi-Comptes & UX", changes: ["Schema v15 : comptes[] dynamiques + parametres{} remplacent les soldesInitiaux hardcodés.", "Migration idempotente migrateToV15() avec backup automatique finance_data_v14_legacy.backup.json.", "Nouvel onglet ⚙️ Budget Structurel : CRUD comptes (ajout, édition inline, suppression, réordonnancement) + toggle inclureLiquidite par compte.", "Nouvel onglet 🎯 Pilotage Mensuel : checklist, pointage factures, décalage paie — séparé du structurel.", "Onglet 🛠️ Paramètres : toggles ribbon, objectif fonds sécurité, hypothèse inflation, upload logo/favicon.", "Sticky header : affiche patrimoineLiquide (somme comptes inclureLiquidite=true) au lieu du champ courant statique.", "KPI dashboard : carte Patrimoine Net (xl:grid-cols-5).", "Suppression du bouton Copier Prompt IA (remplacé par injection directe CFO Agent).", "CHANGELOG.md créé."] },
                         { version: "13.8", date: "Schema Sanitization (Purge Dirty Synonyms)", changes: ["Backend n8n : Budget Engine v5 — résout le bug de Dirty Data hérité de v13.6 (clé parasite montant:1000 cohabitant avec valeur:1487, désynchronisant l'UI et le LLM).", "Nouveau sanitizeFinanceData() : passe globale en début ET en fin de chaque appel Budget Engine qui purge montant/value/amount (canonical=valeur), nom (canonical=label), et récupère les valeurs perdues si la canonique manque.", "Helpers writeCharge/writeRevenu/writeEpargne : chaque écriture est CANONIQUE et DESTRUCTIVE — la nouvelle valeur va dans la clé officielle ET les synonymes parasites sont supprimés du bloc.", "Réponse enrichie avec sanitize_report {pre_ops, post_ops, total_keys_purged} pour observabilité du nettoyage.", "Workflow stateful adapté : si total_keys_purged > 0 mais aucune op effective, le pending est sauvegardé pour permettre à l'utilisateur de valider le nettoyage seul par OUI."] },
                         { version: "13.7", date: "Partial Update Fix (Tolerant Ops)", changes: ["Backend n8n : refonte Budget Engine v4 — résout le bug de mise à jour partielle silencieuse (cas 'baisse alimentation à 1000 / mois' où seule la période était appliquée).", "Nouvelles ops UNIFIÉES update_* (recommandées) : update_revenu, update_charge_fixe, update_charge_variable, update_epargne, update_depense_ponctuelle. Combinent valeur + periode + label en une seule op atomique.", "Tolérance aux synonymes : valeur ↔ montant ↔ value ↔ amount (charges/épargne) · base ↔ valeur ↔ montant ↔ salaire (revenus). Plus aucune op qui échoue à cause d'un nom de champ.", "Type d'op INCONNU = erreur DURE (plus de skip silencieux) : Budget Engine renvoie status=error et REFUSE de remplir la cache pending. L'agent doit corriger avant de proposer OUI.", "Nouveau champ ops_summary {total, success, errors, skipped} dans la réponse Budget Engine + warning explicite si errors > 0. systemMessage §5 enrichi pour imposer la vérification post-appel."] },
@@ -2637,7 +2638,7 @@
                         });
                         const netAnnuel = totalSorties - totalEntrees;
                         // Surplus mensuel reel = Revenus - Fixes - Variables (conso), hors epargne
-                        const surplusMensuelMoyen = totalRevenusBase.value - totalFixes.value - totalVariables.value;
+                        const surplusMensuelMoyen = surplusMensuelBase.value;
                         const impactSurplus = surplusMensuelMoyen > 0 ? ((netAnnuel / 12) / surplusMensuelMoyen) * 100 : 0;
                         return { totalEntrees, totalSorties, netAnnuel, surplusMensuelMoyen, impactSurplus };
                     });
@@ -2743,7 +2744,7 @@
                                 // 1. Chocs (un montant négatif = injection de cash, conservé tel quel)
                                 totalIrregRestant = depTriees.filter(d=>d.mois===mNum).reduce((s,d)=> {
                                     let due = Number(d.montant || 0);
-                                    if (due < 0) return s + due; // Entrée: pas d'écrêtage
+                                    if (due < 0) return isItemPaid(d, due) ? s : s + due; // Entrée: exclure si déjà pointée
                                     return s + Math.max(0, due - getPaidAmount(d, due));
                                 }, 0);
                                 detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
@@ -2792,7 +2793,7 @@
                             else {
                                 totalIrregRestant = depTriees.filter(d=>d.mois===mNum).reduce((s,d)=> {
                                     let due = Number(d.montant||0);
-                                    if (due < 0) return s + due; // Entrée de cash (ex: déblocage crédit)
+                                    if (due < 0) return isItemPaid(d, due) ? s : s + due; // Entrée: exclure si déjà pointée
                                     return s + Math.max(0, due - getPaidAmount(d, due));
                                 }, 0);
                                 detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
@@ -2827,14 +2828,14 @@
                     // v13.1 : on coupe le bilan à l'année cible de projection (sélecteur d'horizon)
                     const soldeFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
-                        const am = bilan.value.filter(b => !b.isPassed && Number(b.annee) <= target);
+                        const am = bilan.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0) return am[am.length - 1].soldeCourant;
                         // Année cible antérieure au mois courant : on retombe sur le solde initial
                         return Number((soldesInitiaux.value || {}).courant || 0);
                     });
                     const epargneTotaleFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
-                        const am = bilan.value.filter(b => !b.isPassed && Number(b.annee) <= target);
+                        const am = bilan.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0) return am[am.length - 1].soldeUrgence + am[am.length - 1].soldeLT;
                         return Number((soldesInitiaux.value || {}).urgence || 0) + Number((soldesInitiaux.value || {}).lt || 0);
                     });
@@ -2858,7 +2859,7 @@
                     const auditFinancier = computed(() => {
                         calculationTick.value;
                         const b = bilan.value || [];
-                        const future = b.filter(x => !x.isPassed);
+                        const future = b;
 
                         // ---- Jauge 1 : Santé de la Trésorerie ----
                         // On mesure le solde minimum projeté du compte courant (découvert = risque)
@@ -3050,7 +3051,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
 
                     const lineChartConfig = computed(() => {
                         calculationTick.value;
-                        const b = bilan.value.filter(x => !x.isPassed);
+                        const b = bilan.value;
                         return { type: 'line', data: { labels: b.map(x=>x.mois), datasets: [{ label: 'Cash Flow', data: b.map(x=>x.soldeCourant), borderColor: '#3b82f6', tension: 0.4, fill: true, backgroundColor: 'rgba(59,130,246,0.05)' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } };
                     });
 
