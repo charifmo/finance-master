@@ -2427,10 +2427,10 @@
                         const genId = () => 'acc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
                         if (!data.comptes || !Array.isArray(data.comptes) || !data.comptes.length) {
                             data.comptes = [
-                                { id: genId(), label: 'Compte Courant',     type: 'courant',        soldeInitial: si.courant || 0, couleur: '#3b82f6', icone: '💳', ordre: 1, inclureLiquidite: true,  inclureNetWorth: true },
-                                { id: genId(), label: 'Fonds Urgence',      type: 'epargne',        soldeInitial: si.urgence || 0, couleur: '#10b981', icone: '🛡️', ordre: 2, inclureLiquidite: true,  inclureNetWorth: true },
-                                { id: genId(), label: 'Épargne Long Terme', type: 'epargne',        soldeInitial: si.lt      || 0, couleur: '#8b5cf6', icone: '🎯', ordre: 3, inclureLiquidite: false, inclureNetWorth: true },
-                                { id: genId(), label: 'Bourse / CTO',       type: 'investissement', soldeInitial: si.bourse  || 0, couleur: '#f59e0b', icone: '📈', ordre: 4, inclureLiquidite: false, inclureNetWorth: true }
+                                { id: genId(), label: 'Compte Courant',     type: 'courant',        solde: si.courant || 0, couleur: '#3b82f6', icone: '💳', ordre: 1, inclureLiquidite: true, inclureNetWorth: true },
+                                { id: genId(), label: 'Fonds Urgence',      type: 'epargne',        solde: si.urgence || 0, couleur: '#10b981', icone: '🛡️', ordre: 2, inclureLiquidite: true, inclureNetWorth: true },
+                                { id: genId(), label: 'Épargne Long Terme', type: 'epargne',        solde: si.lt      || 0, couleur: '#8b5cf6', icone: '🎯', ordre: 3, inclureLiquidite: true, inclureNetWorth: true },
+                                { id: genId(), label: 'Bourse / CTO',       type: 'investissement', solde: si.bourse  || 0, couleur: '#f59e0b', icone: '📈', ordre: 4, inclureLiquidite: true, inclureNetWorth: true }
                             ];
                         }
                         if (!data.parametres || typeof data.parametres !== 'object') {
@@ -2449,11 +2449,32 @@
                         return data;
                     };
 
+                    // ── Patch v15.1 : corrige soldeInitial→solde + inclureLiquidite ──
+                    const patchV151 = (data) => {
+                        if ((data._patchVersion || 0) >= 151) return data;
+                        if (Array.isArray(data.comptes)) {
+                            data.comptes = data.comptes.map(c => {
+                                const p = { ...c };
+                                // Rename soldeInitial → solde si solde absent ou zéro
+                                if (p.soldeInitial !== undefined && !p.solde) {
+                                    p.solde = Number(p.soldeInitial) || 0;
+                                }
+                                // Tous les comptes inclus dans patrimoineLiquide par défaut
+                                if (p.inclureLiquidite === false) p.inclureLiquidite = true;
+                                return p;
+                            });
+                        }
+                        data._patchVersion = 151;
+                        addLog('✅ Patch v15.1 : soldes et inclureLiquidite corrigés.', 'success');
+                        return data;
+                    };
+
                     const executerImportFusion = (data) => {
                         try {
                             const d = getDefaultState(); 
                             if (!data || typeof data !== 'object') throw new Error("Le fichier serveur est vide ou corrompu.");
                             migrateToV15(data);
+                            patchV151(data);
 
                             soldesInitiaux.value = safeMerge(d.soldesInitiaux, data.soldesInitiaux); 
                             if (!soldesInitiaux.value.anneeActuelle) soldesInitiaux.value.anneeActuelle = 2026;

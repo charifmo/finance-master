@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [15.2] — 2026-05-03 — Patch patrimoineLiquide (double bug migration)
+
+### Corrections critiques
+- **Bug `soldeInitial` → `solde`** : `migrateToV15()` créait les comptes avec le champ `soldeInitial` alors que tous les calculés (`patrimoineLiquide`, `patrimoineNet`) lisent `c.solde` → tous les comptes migrés affichaient 0
+- **Bug `inclureLiquidite: false`** : migration posait `false` pour "Épargne Long Terme" et "Bourse / CTO" → exclus du ruban alors que l'utilisateur les veut comptés
+- **`patchV151()`** : patch idempotent appliqué au chargement — renomme `soldeInitial→solde` si `solde` absent, passe `inclureLiquidite` à `true` pour tous les comptes existants en base
+- **`migrateToV15()` corrigée** : utilise désormais `solde` (pas `soldeInitial`) et `inclureLiquidite: true` pour les 4 comptes legacy — correct pour les futures installations fraîches
+
+---
+
 ## [15.1] — 2026-05-03 — Corrections UX/UI (Sous-étape 3)
 
 ### Corrections critiques
