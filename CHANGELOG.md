@@ -5,6 +5,14 @@ Format : [version] — date — description
 
 ---
 
+## [15.6] — 2026-05-03 — Fix calcul injections cash
+
+### Correction critique
+- **Injections de cash ignorées par le bilan** : `isItemPaid()` retournait `true` pour tout montant négatif (rentrée d'argent) car `Number(item.montantPaye || 0) >= dueAmount` évalue `0 >= -115600` → `true`. Conséquence : toutes les injections de cash du Studio étaient considérées comme déjà encaissées et exclues de la projection du bilan.
+- **Fix** : si `dueAmount < 0`, on se fie strictement au flag `item.paye === true` (la case à cocher manuelle), au lieu de comparer le `montantPaye` au montant dû.
+
+---
+
 ## [15.5] — 2026-05-03 — Fix Bilan Current Month Math
 
 ### Correction critique
