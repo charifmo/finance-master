@@ -309,8 +309,8 @@
                                         <td class="p-4 text-right">-</td>
                                         <td class="p-4 text-right">-</td>
                                         <td class="p-4">-</td>
-                                        <td class="p-4 text-right font-black text-lg text-blue-900">{{ formatMAD(soldesInitiaux.courant) }}</td>
-                                        <td class="p-4 text-right text-purple-600">{{ formatMAD((soldesInitiaux.urgence || 0) + (soldesInitiaux.lt || 0)) }}</td>
+                                        <td class="p-4 text-right font-black text-lg text-blue-900">{{ formatMAD(patrimoineLiquide) }}</td>
+                                        <td class="p-4 text-right text-purple-600">{{ formatMAD(patrimoineNet - patrimoineLiquide) }}</td>
                                     </tr>
                                     <tr v-for="(row, idx) in bilan" :key="idx" :class="['transition-colors', row.numMois === 1 && !row.isCurrent ? 'border-t-4 border-slate-300 bg-slate-50' : 'hover:bg-gray-50']">
                                         <td class="p-4 font-bold flex items-center gap-2">
@@ -1133,22 +1133,11 @@
             <div class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm px-4 py-3">
                 <div class="flex items-start justify-between mb-2 gap-3">
                     <div class="flex-1 min-w-0">
-                        <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">✏️ Solde En Banque ({{ nomDuMois(soldesInitiaux.moisActuel) }})</p>
+                        <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">Patrimoine Liquide ({{ nomDuMois(soldesInitiaux.moisActuel) }})</p>
                         <div class="flex items-baseline gap-1.5 mt-0.5">
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="100"
-                                :readonly="false"
-                                :disabled="false"
-                                v-model.number="soldesInitiaux.courant"
-                                @input="handleDataChange"
-                                @change="handleDataChange"
-                                :class="['text-2xl font-black tracking-tight bg-blue-50/50 border-b-2 border-blue-300 focus:border-blue-600 focus:bg-blue-100 outline-none w-full min-w-0 px-2 py-1 rounded-t cursor-text', soldesInitiaux.courant >= 0 ? 'text-blue-700' : 'text-red-600']"
-                                aria-label="Solde courant éditable"
-                            />
-                            <span class="text-[10px] font-bold text-gray-400 shrink-0">DH</span>
+                            <span :class="['text-2xl font-black tracking-tight', patrimoineLiquide >= 0 ? 'text-blue-700' : 'text-red-600']">{{ formatMAD(patrimoineLiquide) }}</span>
                         </div>
+                        <button @click="activeTab = 'parametres'" class="text-[8px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-700 mt-0.5">⚙ Gérer les comptes</button>
                     </div>
                     <select v-model.number="anneeAffichage" class="bg-blue-600 text-white font-black py-1.5 px-2 rounded-lg text-xs shadow-md border border-blue-700 outline-none shrink-0">
                         <option v-for="a in anneesDisponibles" :key="a" :value="a">{{ a }}</option>
@@ -1218,29 +1207,18 @@
                         </div>
                     </div>
 
-                    <!-- Base card (Compte courant ÉDITABLE - 2e point d'édition) -->
+                    <!-- Base card (lecture seule - source: comptes[]) -->
                     <div class="bg-blue-50 p-4 rounded-2xl border border-blue-200 mb-3">
                         <p class="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">Aujourd'hui (base de calcul)</p>
                         <div class="flex justify-between items-center gap-2">
-                            <label class="text-sm font-bold text-gray-600 shrink-0">✏️ Compte courant</label>
-                            <div class="flex items-baseline gap-1 flex-1 justify-end">
-                                <input
-                                    type="number"
-                                    inputmode="numeric"
-                                    step="100"
-                                    v-model.number="soldesInitiaux.courant"
-                                    @input="handleDataChange"
-                                    @change="handleDataChange"
-                                    class="text-lg font-black text-blue-900 bg-white border border-blue-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-300 outline-none w-32 text-right px-2 py-1 rounded"
-                                    aria-label="Compte courant éditable"
-                                />
-                                <span class="text-[10px] font-bold text-gray-400">DH</span>
-                            </div>
+                            <span class="text-sm font-bold text-gray-600 shrink-0">Patrimoine Liquide</span>
+                            <span :class="['text-lg font-black', patrimoineLiquide >= 0 ? 'text-blue-900' : 'text-red-600']">{{ formatMAD(patrimoineLiquide) }}</span>
                         </div>
                         <div class="flex justify-between items-center mt-2">
-                            <span class="text-xs font-bold text-gray-500">Épargne (Urgence + LT)</span>
-                            <span class="text-sm font-bold text-purple-700">{{ formatMAD((soldesInitiaux.urgence || 0) + (soldesInitiaux.lt || 0)) }}</span>
+                            <span class="text-xs font-bold text-gray-500">Épargne &amp; Investissements</span>
+                            <span class="text-sm font-bold text-purple-700">{{ formatMAD(patrimoineNet - patrimoineLiquide) }}</span>
                         </div>
+                        <button @click="activeTab = 'parametres'" class="mt-2 text-[9px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-700">⚙ Gérer les comptes →</button>
                     </div>
 
                     <!-- Month cards -->
@@ -1945,6 +1923,7 @@
                 setup() {
                     const CURRENT_VERSION = "15.0";
                     const CHANGELOG = [
+                        { version: "15.4", date: "2026-05-03 — Fix Moteur Trésorerie Multi-Comptes", changes: ["Moteur bilan : curSolde initialisé sur patrimoineLiquide.value (somme réelle comptes[]) — plus jamais soldesInitiaux.courant.", "Épargne projetée dans chaque row du bilan : soldeUrgence/soldeLT calculés depuis comptes[] filtrés par type (epargne/investissement).", "Fallbacks soldeFinal → patrimoineLiquide.value, epargneTotaleFinal → patrimoineNet - patrimoineLiquide.", "Dashboard table ligne Aujourd'hui : patrimoineLiquide + patrimoineNet−patrimoineLiquide.", "Suppression des 2 inputs fantômes v-model=soldesInitiaux.courant (mobile top-bar + Pilotage base card) — remplacés par affichage lecture-seule + bouton Gérer les comptes."] },
                         { version: "15.3", date: "2026-05-03 — Patchs critiques de trésorerie (QA Audit)", changes: ["Fix 1 : injections de cash irrégulières déjà pointées comme payées comptées en double dans bilan computed — corrigé avec isItemPaid(d, due) dans les deux blocs (isCurrentMonth et else).", "Fix 2 : variable fantôme isPassed retirée des filtres soldeFinal, epargneTotaleFinal, auditFinancier et lineChartConfig — la propriété n'existe pas dans les objets bilan (boucle startM garantit déjà présent+futur).", "Fix 3 : surplusMensuelMoyen dans statsFluxAnnee utilisait totalRevenusBase − fixes − variables sans déduire l'épargne, gonflant la Jauge 2 Audit. Remplacé par surplusMensuelBase.value."] },
                         { version: "15.0", date: "2026-05-03 — Architecture Multi-Comptes & UX", changes: ["Schema v15 : comptes[] dynamiques + parametres{} remplacent les soldesInitiaux hardcodés.", "Migration idempotente migrateToV15() avec backup automatique finance_data_v14_legacy.backup.json.", "Nouvel onglet ⚙️ Budget Structurel : CRUD comptes (ajout, édition inline, suppression, réordonnancement) + toggle inclureLiquidite par compte.", "Nouvel onglet 🎯 Pilotage Mensuel : checklist, pointage factures, décalage paie — séparé du structurel.", "Onglet 🛠️ Paramètres : toggles ribbon, objectif fonds sécurité, hypothèse inflation, upload logo/favicon.", "Sticky header : affiche patrimoineLiquide (somme comptes inclureLiquidite=true) au lieu du champ courant statique.", "KPI dashboard : carte Patrimoine Net (xl:grid-cols-5).", "Suppression du bouton Copier Prompt IA (remplacé par injection directe CFO Agent).", "CHANGELOG.md créé."] },
                         { version: "13.8", date: "Schema Sanitization (Purge Dirty Synonyms)", changes: ["Backend n8n : Budget Engine v5 — résout le bug de Dirty Data hérité de v13.6 (clé parasite montant:1000 cohabitant avec valeur:1487, désynchronisant l'UI et le LLM).", "Nouveau sanitizeFinanceData() : passe globale en début ET en fin de chaque appel Budget Engine qui purge montant/value/amount (canonical=valeur), nom (canonical=label), et récupère les valeurs perdues si la canonique manque.", "Helpers writeCharge/writeRevenu/writeEpargne : chaque écriture est CANONIQUE et DESTRUCTIVE — la nouvelle valeur va dans la clé officielle ET les synonymes parasites sont supprimés du bloc.", "Réponse enrichie avec sanitize_report {pre_ops, post_ops, total_keys_purged} pour observabilité du nettoyage.", "Workflow stateful adapté : si total_keys_purged > 0 mais aucune op effective, le pending est sauvegardé pour permettre à l'utilisateur de valider le nettoyage seul par OUI."] },
@@ -2707,7 +2686,9 @@
                     // MOTEUR MULTI-ANNEES (V11.0)
                     const bilan = computed(() => {
                         calculationTick.value;
-                        let curSolde = Number((soldesInitiaux.value || {}).courant || 0);
+                        let curSolde = patrimoineLiquide.value;
+                        const epargneInitial = comptes.value.filter(c => c.type === 'epargne').reduce((s,c) => s + (Number(c.solde)||0), 0);
+                        const investInitial  = comptes.value.filter(c => c.type === 'investissement').reduce((s,c) => s + (Number(c.solde)||0), 0);
                         const moisActuel = Number((soldesInitiaux.value || {}).moisActuel || 4);
                         const anneeActuelle = Number((soldesInitiaux.value || {}).anneeActuelle || 2026);
                         const decalagePaie = (soldesInitiaux.value || {}).decalagePaie !== false;
@@ -2785,8 +2766,8 @@
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, charges: fRest+vRest+totEpBase, 
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg, 
                                     soldeCourant: solde_fin, 
-                                    soldeUrgence: Number((soldesInitiaux.value || {}).urgence||0), 
-                                    soldeLT: Number((soldesInitiaux.value || {}).lt||0), 
+                                    soldeUrgence: epargneInitial,
+                                    soldeLT: investInitial,
                                     isCurrent: true, isException: false 
                                 };
                             } 
@@ -2817,8 +2798,8 @@
                                     charges: fixMois+totVarBase+totEpBase, 
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg, 
                                     soldeCourant: curSolde, 
-                                    soldeUrgence: Number((soldesInitiaux.value || {}).urgence||0) + totalMoisEcoules*Number((dataAnnee.epargne?.urgence || {}).valeur || 0), 
-                                    soldeLT: Number((soldesInitiaux.value || {}).lt||0) + totalMoisEcoules*Number((dataAnnee.epargne?.lt || {}).valeur || 0), 
+                                    soldeUrgence: epargneInitial + totalMoisEcoules*Number((dataAnnee.epargne?.urgence || {}).valeur || 0),
+                                    soldeLT: investInitial + totalMoisEcoules*Number((dataAnnee.epargne?.lt || {}).valeur || 0), 
                                     isCurrent: false, isException: (revMoisGenere !== totalRevenusBase.value) || (fixMois !== totalFixes.value) 
                                 };
                             }
@@ -2830,14 +2811,14 @@
                         const target = Number(anneeCibleProjection.value);
                         const am = bilan.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0) return am[am.length - 1].soldeCourant;
-                        // Année cible antérieure au mois courant : on retombe sur le solde initial
-                        return Number((soldesInitiaux.value || {}).courant || 0);
+                        // Année cible antérieure au mois courant : on retombe sur le patrimoine liquide
+                        return patrimoineLiquide.value;
                     });
                     const epargneTotaleFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
                         const am = bilan.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0) return am[am.length - 1].soldeUrgence + am[am.length - 1].soldeLT;
-                        return Number((soldesInitiaux.value || {}).urgence || 0) + Number((soldesInitiaux.value || {}).lt || 0);
+                        return patrimoineNet.value - patrimoineLiquide.value;
                     });
 
                     // === AUDIT FINANCIER (v12.1) ===

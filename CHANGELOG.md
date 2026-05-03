@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [15.4] — 2026-05-03 — Fix Moteur Trésorerie Multi-Comptes
+
+### Corrections critiques
+- **Fix moteur `bilan`** : `curSolde` initialisé sur `patrimoineLiquide.value` (somme réelle des comptes) au lieu de `soldesInitiaux.courant` (champ legacy abandonné)
+- **Fix épargne projetée** : `soldeUrgence`/`soldeLT` dans chaque row du bilan initialisés depuis `comptes[]` filtrés par type (`epargne`/`investissement`) au lieu de `soldesInitiaux.urgence/lt`
+- **Fix fallbacks** : `soldeFinal` retourne `patrimoineLiquide.value` et `epargneTotaleFinal` retourne `patrimoineNet.value - patrimoineLiquide.value` quand le bilan est vide
+- **Fix dashboard table** : ligne "Aujourd'hui" affiche `patrimoineLiquide` et `patrimoineNet − patrimoineLiquide` au lieu des champs legacy
+- **Suppression inputs fantômes** : les deux champs `<input v-model="soldesInitiaux.courant">` (mobile top-bar + Pilotage base card) remplacés par affichage lecture-seule `patrimoineLiquide` + bouton "Gérer les comptes" → Budget Structurel
+
+---
+
 ## [15.3] — 2026-05-03 — Patchs critiques de trésorerie (QA Audit)
 
 ### Corrections critiques
