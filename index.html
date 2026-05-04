@@ -927,7 +927,7 @@
                 <div v-if="activeTab === 'cfo'" class="grid lg:grid-cols-12 gap-5">
 
                     <!-- ── GAUCHE : Audit 7-KPI ── -->
-                    <div class="lg:col-span-5 space-y-3">
+                    <div v-show="!chatFullScreen" class="lg:col-span-5 space-y-3">
                         <!-- Header -->
                         <div class="flex items-center justify-between pb-2 border-b border-gray-200">
                             <div>
@@ -1053,7 +1053,7 @@
                     </div>
 
                     <!-- ── DROITE : Chat CFO ── -->
-                    <div class="lg:col-span-7 space-y-4">
+                    <div :class="[chatFullScreen ? 'lg:col-span-12' : 'lg:col-span-7', 'space-y-4']">
                         <div class="flex items-end justify-between border-b pb-4">
                             <div>
                                 <h2 class="text-2xl font-bold text-gray-800">💬 Super-Agent CFO</h2>
@@ -1062,7 +1062,10 @@
                             <div class="text-right">
                                 <p class="text-[9px] uppercase tracking-widest font-bold text-gray-400">Session</p>
                                 <p class="text-[10px] font-mono text-gray-600">{{ cfoSessionId.slice(0, 13) }}…</p>
-                                <button @click="resetCFOSession" class="text-[9px] text-fuchsia-600 hover:underline font-bold uppercase tracking-widest mt-1">🔄 Nouvelle session</button>
+                                <div class="flex items-center gap-3 justify-end mt-1">
+                                    <button @click="resetCFOSession" class="text-[9px] text-fuchsia-600 hover:underline font-bold uppercase tracking-widest">🔄 Nouvelle session</button>
+                                    <button @click="chatFullScreen = !chatFullScreen" class="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border transition-colors" :class="chatFullScreen ? 'border-slate-400 text-slate-600 hover:bg-slate-100' : 'border-fuchsia-300 text-fuchsia-600 hover:bg-fuchsia-50'">{{ chatFullScreen ? '🗗 Réduire' : '⛶ Plein écran' }}</button>
+                                </div>
                             </div>
                         </div>
 
@@ -1073,7 +1076,7 @@
                             <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest hover:bg-orange-700">Enregistrer l'URL</button>
                         </div>
 
-                        <div v-if="cfoWebhookUrl" class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-700 min-h-[400px] max-h-[520px] overflow-y-auto" ref="cfoChatContainer">
+                        <div v-if="cfoWebhookUrl" :class="['bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-700 min-h-[400px] overflow-y-auto', chatFullScreen ? 'max-h-[85vh]' : 'max-h-[520px]']" ref="cfoChatContainer">
                             <div v-if="cfoMessages.length === 0" class="text-center py-16">
                                 <p class="text-5xl mb-4">🤖</p>
                                 <p class="text-slate-300 font-bold text-sm uppercase tracking-widest mb-2">CFO prêt</p>
@@ -2124,8 +2127,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "15.11";
+                    const CURRENT_VERSION = "15.12";
                     const CHANGELOG = [
+                        { version: "15.12", date: "2026-05-04 — CFO Chat Fullscreen Mode", changes: ["Nouveau bouton '⛶ Plein écran / 🗗 Réduire' dans l'en-tête du chat CFO (à côté de Nouvelle session).", "En plein écran : colonne Audit masquée (v-show), chat passe en lg:col-span-12 pour occuper toute la grille.", "Hauteur du conteneur chat : max-h-[520px] → max-h-[85vh] en plein écran pour afficher les longs rapports.", "Basculement fluide sans rechargement — variable réactive chatFullScreen exposée dans le setup."] },
                         { version: "15.11", date: "2026-05-04 — CFO Chat History Persistence", changes: ["L'historique du chat CFO Agent survit aux rechargements de page (localStorage, clé dynamique par session).", "Restauration automatique au démarrage : les 12 derniers messages sont rechargés depuis 'cfo_history_<session_id>'.", "Watch deep sur cfoMessages : sauvegarde automatique après chaque nouveau message (slice(-12) pour limiter la taille).", "resetCFOSession() nettoie l'ancienne clé localStorage avant de générer le nouvel ID — aucune donnée morte accumulée."] },
                         { version: "15.10", date: "2026-05-04 — CFO & Audit Unified Control Center", changes: ["Fusion Audit + CFO : l'onglet 'Audit Financier' est supprimé du menu — tout est dans '🧠 CFO & Audit'.", "Desktop : split-screen 5/7 colonnes (audit gauche, chat CFO droite) sans scroll superflu.", "Mobile : accordéon <details> '📊 Audit Financier' au-dessus du chat CFO, collapse par défaut.", "Réécriture complète de auditFinancier computed : 7 KPIs professionnels en 3 catégories (⚡ Court terme · 🛡️ Moyen terme · 📈 Long terme). Score /14 (vert ≥11, orange ≥7).", "KPI 1 Liquidité : solde courant minimum projeté (vert >10k).", "KPI 2 Budget Jour : surplus / 30 (vert >300 DH/j).", "KPI 3 Fonds de Survie : liquidités / dépenses mensuelles en mois (vert ≥6 mois).", "KPI 4 Rigidité : charges fixes / revenus (vert <40%).", "KPI 5 Endettement : crédits / revenus (vert <33%).", "KPI 6 Taux d'Épargne : épargne / revenus (vert ≥15%).", "KPI 7 Cash Drag : liquidités / patrimoine net (vert <40%).", "transfererAuditAuCFO() mis à jour avec prompt 7-KPI structuré par catégorie + scroll auto mobile."] },
                         { version: "15.8", date: "2026-05-04 — Advanced Financial Audit & CFO Integration", changes: ["Audit enrichi : 3 nouvelles jauges (Taux d'endettement, Effort d'épargne, Fonds de Sécurité) — score total passe à /12.", "Seuils endettement : 🟢 ≤30% · 🟠 30-40% · 🔴 >40%. Épargne : 🟢 ≥20% · 🟠 10-20% · 🔴 <10%. Fonds sécurité : 🟢 ≥100% cible · 🟠 50-100% · 🔴 <50%.", "Grille audit desktop : 2×3 (lg:grid-cols-3). Score global : vert ≥10, orange ≥6.", "Bouton ⚡ Soumettre l'Audit au CFO : injecte un prompt d'analyse critique dans le chat CFO et l'envoie automatiquement.", "Parité mobile : 6 jauges + bouton CFO dans l'onglet Audit mobile. Badge score /12 mis à jour partout."] },
@@ -2171,6 +2175,7 @@
                     const cfoMessages = ref(_loadCFOHistory()); // { role: 'user'|'agent', content: string, time: 'HH:MM' }
                     const cfoInput = ref('');
                     const cfoLoading = ref(false);
+                    const chatFullScreen = ref(false);
                     const cfoWebhookUrl = ref(localStorage.getItem('cfo_webhook_url') || '');
                     const cfoWebhookInput = ref('');
                     const cfoChatContainer = ref(null);
@@ -3338,7 +3343,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
-                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
+                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
