@@ -399,7 +399,12 @@
                                             <span v-if="compte.inclureLiquidite !== false" class="text-[9px] text-blue-500 font-bold">💧 inclus liquide</span>
                                         </div>
                                     </div>
-                                    <p :class="['text-base font-black tabular-nums', compte.solde >= 0 ? 'text-gray-800' : 'text-red-600']">{{ formatMAD(compte.solde) }}</p>
+                                    <div class="text-right shrink-0">
+                                        <input type="number" v-model.number="compte.solde" @change="handleDataChange"
+                                            :class="['w-32 text-base font-black text-right tabular-nums bg-transparent border-b-2 outline-none transition-colors', compte.solde >= 0 ? 'text-gray-800 border-transparent hover:border-gray-300 focus:border-blue-500' : 'text-red-600 border-red-200 hover:border-red-400 focus:border-red-500']"
+                                            step="100" />
+                                        <p class="text-[10px] font-bold text-purple-500 mt-0.5 tabular-nums">→ {{ formatMAD(getCompteProjection(compte)) }}</p>
+                                    </div>
                                     <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button @click="startEditCompte(compte)" class="text-xs text-blue-600 font-bold px-2 py-1 bg-blue-50 rounded hover:bg-blue-100">Modifier</button>
                                         <button @click="deleteCompte(compte.id)" class="text-xs text-red-500 font-bold px-2 py-1 bg-red-50 rounded hover:bg-red-100">✕</button>
@@ -2135,8 +2140,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "15.15";
+                    const CURRENT_VERSION = "15.16";
                     const CHANGELOG = [
+                        { version: "15.16", date: "2026-05-04 — Direct Account Editing & Individual Projections", changes: ["Édition directe du solde : input inline invisible (border-b au hover/focus) sans entrer en mode édition — modifie compte.solde + handleDataChange.", "Projection individuelle par compte : getCompteProjection(compte) affiché en violet '→ X DH' sous chaque solde.", "Compte liquide/courant → soldeFinal.value (moteur bilan complet). Épargne/investissement → Smart Match label du compte vs clés epargne JSON + solde initial + flux × totalMois.", "Smart Match : split par séparateurs, filtre mots >3 chars, lookup inclusif dans labelEp."] },
                         { version: "15.15", date: "2026-05-04 — Dynamic Savings Projection Engine", changes: ["Fix 'Trou Noir' de l'épargne : soldeUrgence+soldeLT (hardcodés sur epargne.urgence et epargne.lt) remplacés par soldeEpargneProjete dynamique.", "soldeEpargneProjete = (comptes épargne+investissement initiaux) + totalMoisEcoules × totEpBase — couvre TOUTES les clés JSON automatiquement (Bourse, CTO, etc.).", "epargneTotaleFinal mis à jour pour lire soldeEpargneProjete (dashboard KPI + projection).", "UI tableau desktop + mobile : colonne 'Total Épargne' lit row.soldeEpargneProjete.", "sanitizeEpargneKeys() : renomme la clé vide '' en clé technique basée sur le label au chargement des données — résout le bug Bourse sans clé."] },
                         { version: "15.14", date: "2026-05-04 — Master Prompt Excellence & Multi-Add Key Collision Fix", changes: ["Backend n8n : refonte complète du Master System Prompt avec 'Hiérarchie de la Vérité' anti-hallucination en 4 niveaux (Loi utilisateur > RAG > JSON > savoir IA).", "§2 'Politique Anti-Dérive Sémantique' : interdiction explicite de déduire la fréquence d'un flux à partir de son nom (Bonification, Prime, Allocation = mensuel par défaut).", "§3 Outils stricts, §4 Règles Studio/Airbnb consolidées, §5 Workflow Tour 1/Tour 2 réécrit, §6 Format HTML+qualité fusionnés.", "Fix CRITIQUE Multi-Add Key Collision (propose_changes / buildOps) : ajout d'un suffixe aléatoire base36 (4 chars) sur les ops 'add' → garantit l'unicité même si l'IA ajoute 3 fois le même label (ex: 'Taxe' → taxe_a1b2, taxe_x9y8, taxe_p3q4).", "Fallback safeTarget enrichi : utilise newLabel si target absent, défaut 'nouvelle_ligne' au lieu de chaîne vide.", "snapshot() vérifié : sum() couvre déjà {valeur} et {base} via Number(v.valeur) || Number(v.base).", "Workflow super_agent_cfo.json régénéré (4433 chars system prompt)."] },
                         { version: "15.12", date: "2026-05-04 — CFO Chat Fullscreen Mode", changes: ["Nouveau bouton '⛶ Plein écran / 🗗 Réduire' dans l'en-tête du chat CFO (à côté de Nouvelle session).", "En plein écran : barres horizontales du haut (sélecteur d'année + KPI badges) masquées via v-show.", "Colonne Audit masquée (v-show), chat passe en lg:col-span-12 pour occuper toute la grille.", "Bouton flottant fixe '🗗 Réduire' (Teleport to body, z-9999, coin haut-droit) pour sortir du plein écran.", "Hauteur du conteneur chat : max-h-[520px] → max-h-[calc(100vh-200px)] en plein écran.", "Basculement fluide sans rechargement — variable réactive chatFullScreen exposée dans le setup."] },
@@ -3067,6 +3073,37 @@
                         return patrimoineNet.value - patrimoineLiquide.value;
                     });
 
+                    // === PROJECTION INDIVIDUELLE PAR COMPTE (v15.16) ===
+                    const getCompteProjection = (compte) => {
+                        calculationTick.value;
+                        const cible = Number(anneeCibleProjection.value) || 2029;
+                        const anneeDepart = soldesInitiaux.value.anneeActuelle || 2026;
+                        let totalMois = 0;
+                        for (let a = anneeDepart; a <= cible; a++) {
+                            const startM = (a === anneeDepart) ? (soldesInitiaux.value.moisActuel || 1) : 1;
+                            totalMois += (12 - startM + 1);
+                        }
+                        // Compte courant/liquide principal → cashflow global du moteur bilan
+                        if (compte.type === 'liquide' || compte.type === 'courant') {
+                            return soldeFinal.value;
+                        }
+                        // Épargne/investissement → Smart Match sur les lignes d'épargne de l'année affichée
+                        let fluxMensuel = 0;
+                        const d = donneesAnnuelles.value[anneeAffichage.value];
+                        if (d && d.epargne) {
+                            const motsCles = compte.label.toLowerCase().split(/[\s/\-']+/).filter(m => m.length > 3);
+                            for (const key in d.epargne) {
+                                const ep = d.epargne[key];
+                                if (!ep) continue;
+                                const labelEp = (ep.label || key).toLowerCase();
+                                if (motsCles.some(m => labelEp.includes(m)) || (motsCles[0] && labelEp.includes(motsCles[0]))) {
+                                    fluxMensuel += (Number(ep.valeur) || 0);
+                                }
+                            }
+                        }
+                        return (Number(compte.solde) || 0) + (fluxMensuel * totalMois);
+                    };
+
                     // === AUDIT FINANCIER (v12.1) ===
                     const promptIACopied = ref(false);
 
@@ -3361,7 +3398,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
-                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
+                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
