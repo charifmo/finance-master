@@ -345,7 +345,7 @@
                                             </template>
                                         </td>
                                         <td :class="['p-4 text-right font-black text-lg border-l border-gray-100', row.soldeCourant < 0 ? 'text-red-600' : 'text-gray-800']">{{ formatMAD(row.soldeCourant) }}</td>
-                                        <td class="p-4 text-right text-purple-600 font-bold">{{ formatMAD(row.soldeUrgence + row.soldeLT) }}</td>
+                                        <td class="p-4 text-right text-purple-600 font-bold">{{ formatMAD(row.soldeEpargneProjete) }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1426,7 +1426,7 @@
                             </div>
                             <div class="bg-purple-50 rounded-lg p-2">
                                 <p class="text-[8px] font-black text-purple-600 uppercase tracking-widest">Épargne</p>
-                                <p class="text-[11px] font-bold text-purple-700">{{ formatMAD(row.soldeUrgence + row.soldeLT) }}</p>
+                                <p class="text-[11px] font-bold text-purple-700">{{ formatMAD(row.soldeEpargneProjete) }}</p>
                             </div>
                         </div>
                         <!-- Accordion details -->
@@ -2135,8 +2135,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "15.14";
+                    const CURRENT_VERSION = "15.15";
                     const CHANGELOG = [
+                        { version: "15.15", date: "2026-05-04 — Dynamic Savings Projection Engine", changes: ["Fix 'Trou Noir' de l'épargne : soldeUrgence+soldeLT (hardcodés sur epargne.urgence et epargne.lt) remplacés par soldeEpargneProjete dynamique.", "soldeEpargneProjete = (comptes épargne+investissement initiaux) + totalMoisEcoules × totEpBase — couvre TOUTES les clés JSON automatiquement (Bourse, CTO, etc.).", "epargneTotaleFinal mis à jour pour lire soldeEpargneProjete (dashboard KPI + projection).", "UI tableau desktop + mobile : colonne 'Total Épargne' lit row.soldeEpargneProjete.", "sanitizeEpargneKeys() : renomme la clé vide '' en clé technique basée sur le label au chargement des données — résout le bug Bourse sans clé."] },
                         { version: "15.14", date: "2026-05-04 — Master Prompt Excellence & Multi-Add Key Collision Fix", changes: ["Backend n8n : refonte complète du Master System Prompt avec 'Hiérarchie de la Vérité' anti-hallucination en 4 niveaux (Loi utilisateur > RAG > JSON > savoir IA).", "§2 'Politique Anti-Dérive Sémantique' : interdiction explicite de déduire la fréquence d'un flux à partir de son nom (Bonification, Prime, Allocation = mensuel par défaut).", "§3 Outils stricts, §4 Règles Studio/Airbnb consolidées, §5 Workflow Tour 1/Tour 2 réécrit, §6 Format HTML+qualité fusionnés.", "Fix CRITIQUE Multi-Add Key Collision (propose_changes / buildOps) : ajout d'un suffixe aléatoire base36 (4 chars) sur les ops 'add' → garantit l'unicité même si l'IA ajoute 3 fois le même label (ex: 'Taxe' → taxe_a1b2, taxe_x9y8, taxe_p3q4).", "Fallback safeTarget enrichi : utilise newLabel si target absent, défaut 'nouvelle_ligne' au lieu de chaîne vide.", "snapshot() vérifié : sum() couvre déjà {valeur} et {base} via Number(v.valeur) || Number(v.base).", "Workflow super_agent_cfo.json régénéré (4433 chars system prompt)."] },
                         { version: "15.12", date: "2026-05-04 — CFO Chat Fullscreen Mode", changes: ["Nouveau bouton '⛶ Plein écran / 🗗 Réduire' dans l'en-tête du chat CFO (à côté de Nouvelle session).", "En plein écran : barres horizontales du haut (sélecteur d'année + KPI badges) masquées via v-show.", "Colonne Audit masquée (v-show), chat passe en lg:col-span-12 pour occuper toute la grille.", "Bouton flottant fixe '🗗 Réduire' (Teleport to body, z-9999, coin haut-droit) pour sortir du plein écran.", "Hauteur du conteneur chat : max-h-[520px] → max-h-[calc(100vh-200px)] en plein écran.", "Basculement fluide sans rechargement — variable réactive chatFullScreen exposée dans le setup."] },
                         { version: "15.11", date: "2026-05-04 — CFO Chat History Persistence", changes: ["L'historique du chat CFO Agent survit aux rechargements de page (localStorage, clé dynamique par session).", "Restauration automatique au démarrage : les 12 derniers messages sont rechargés depuis 'cfo_history_<session_id>'.", "Watch deep sur cfoMessages : sauvegarde automatique après chaque nouveau message (slice(-12) pour limiter la taille).", "resetCFOSession() nettoie l'ancienne clé localStorage avant de générer le nouvel ID — aucune donnée morte accumulée."] },
@@ -2679,12 +2680,27 @@
                         return data;
                     };
 
+                    // v15.15 — renomme les clés vides "" dans epargne (ex: Bourse sans clé technique)
+                    const sanitizeEpargneKeys = (data) => {
+                        Object.values(data.donneesAnnuelles || {}).forEach(yr => {
+                            const ep = yr.epargne;
+                            if (ep && ep[''] !== undefined) {
+                                const entry = ep[''];
+                                const newKey = String(entry?.label || 'epargne_1').replace(/\s+/g, '_').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') || ('epargne_' + Date.now().toString(36).slice(-4));
+                                ep[newKey] = entry;
+                                delete ep[''];
+                            }
+                        });
+                        return data;
+                    };
+
                     const executerImportFusion = (data) => {
                         try {
-                            const d = getDefaultState(); 
+                            const d = getDefaultState();
                             if (!data || typeof data !== 'object') throw new Error("Le fichier serveur est vide ou corrompu.");
                             migrateToV15(data);
                             patchV151(data);
+                            sanitizeEpargneKeys(data);
 
                             soldesInitiaux.value = safeMerge(d.soldesInitiaux, data.soldesInitiaux); 
                             if (!soldesInitiaux.value.anneeActuelle) soldesInitiaux.value.anneeActuelle = 2026;
@@ -2994,13 +3010,12 @@
                                     curSolde = solde_fin;
                                 }
                                 
-                                return { 
-                                    mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, charges: fRest+vRest+totEpBase, 
-                                    sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg, 
-                                    soldeCourant: solde_fin, 
-                                    soldeUrgence: epargneInitial,
-                                    soldeLT: investInitial,
-                                    isCurrent: true, isException: false 
+                                return {
+                                    mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, charges: fRest+vRest+totEpBase,
+                                    sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
+                                    soldeCourant: solde_fin,
+                                    soldeEpargneProjete: epargneInitial + investInitial,
+                                    isCurrent: true, isException: false
                                 };
                             } 
                             else {
@@ -3025,14 +3040,13 @@
                                 }
                                 
                                 totalMoisEcoules++;
-                                return { 
-                                    mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, 
-                                    charges: fixMois+totVarBase+totEpBase, 
-                                    sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg, 
-                                    soldeCourant: curSolde, 
-                                    soldeUrgence: epargneInitial + totalMoisEcoules*Number((dataAnnee.epargne?.urgence || {}).valeur || 0),
-                                    soldeLT: investInitial + totalMoisEcoules*Number((dataAnnee.epargne?.lt || {}).valeur || 0), 
-                                    isCurrent: false, isException: (revMoisGenere !== totalRevenusBase.value) || (fixMois !== totalFixes.value) 
+                                return {
+                                    mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees,
+                                    charges: fixMois+totVarBase+totEpBase,
+                                    sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
+                                    soldeCourant: curSolde,
+                                    soldeEpargneProjete: (epargneInitial + investInitial) + totalMoisEcoules * totEpBase,
+                                    isCurrent: false, isException: (revMoisGenere !== totalRevenusBase.value) || (fixMois !== totalFixes.value)
                                 };
                             }
                         });
@@ -3049,7 +3063,7 @@
                     const epargneTotaleFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
                         const am = bilan.value.filter(b => Number(b.annee) <= target);
-                        if (am.length > 0) return am[am.length - 1].soldeUrgence + am[am.length - 1].soldeLT;
+                        if (am.length > 0) return am[am.length - 1].soldeEpargneProjete;
                         return patrimoineNet.value - patrimoineLiquide.value;
                     });
 
