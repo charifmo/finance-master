@@ -300,7 +300,10 @@ function resolveEntity(target, category, fd) {
 function buildOps(change, resolvedKey, resolvedCat, annee) {
   const { action, amount, label: newLabel, period, month, exception_start, exception_end, exception_value, exception_id, clone_from_year, studio_key, balance_key, one_off_id, target } = change;
   const amt = (amount !== undefined && amount !== null && !isNaN(Number(amount))) ? Number(amount) : null;
-  const baseKey = resolvedKey || String(target || '').replace(/\\s+/g, '_').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+  // v15.14 — Multi-Add Key Collision fix : suffixe aléatoire pour les ops 'add'
+  // garantit l'unicité de la clé technique même si l'IA ajoute 3 fois le même label
+  const safeTarget = String(target || newLabel || 'nouvelle_ligne').replace(/\\s+/g, '_').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+  const baseKey = resolvedKey || (action === 'add' ? safeTarget + '_' + Math.random().toString(36).substring(2, 6) : safeTarget);
 
   switch (action) {
     case 'modify':
@@ -679,8 +682,25 @@ if (clarifications.length > 0) {
   }, null, 2);
 }
 
-// ── Phase 2 : snapshot "avant" par année ──
-const allYears = [...new Set(resolvedChanges.flatMap(rc => rc.years))];
+// ── Phase 2a : auto-création des années manquantes (clone depuis la plus proche) ──
+const allYears = [...new Set(resolvedChanges.flatMap(rc => rc.years))].sort((a,b)=>a-b);
+const autoCloned = [];
+for (const yr of allYears) {
+  if (!financeData.donneesAnnuelles[yr]) {
+    const existing = Object.keys(financeData.donneesAnnuelles).map(Number).sort((a,b)=>a-b);
+    if (existing.length) {
+      const src = existing.reduce((best,e) => Math.abs(e-yr) < Math.abs(best-yr) ? e : best, existing[0]);
+      const cloned = JSON.parse(JSON.stringify(financeData.donneesAnnuelles[src]));
+      Object.values(cloned.chargesFixes||{}).forEach(f=>{f.paye=false;f.montantPaye=0;});
+      Object.values(cloned.chargesVariables||{}).forEach(c=>{if(c.details)c.details.forEach(d=>{d.paye=false;d.montantPaye=0;});});
+      (cloned.depensesIrregulieres||[]).forEach(d=>{d.paye=false;d.montantPaye=0;d.annee=yr;d.id=Date.now()+Math.floor(Math.random()*1000);});
+      financeData.donneesAnnuelles[yr] = cloned;
+      autoCloned.push({ annee: yr, cloned_from: src });
+    }
+  }
+}
+
+// ── Phase 2b : snapshot "avant" par année ──
 const snapshotBefore = {};
 for (const yr of allYears) snapshotBefore[yr] = snapshot(financeData, yr);
 
@@ -744,60 +764,61 @@ return JSON.stringify({
   resultats_par_annee: resultsByYear,
   error_ops: hasErrors ? errorOps.map(o=>({ op: o.op.type, key: o.op.key, annee: o.annee, reason: o.log.reason })) : null,
   redistribution_required: redistributionRequired.length ? redistributionRequired : null,
+  auto_cloned_years: autoCloned.length ? autoCloned : null,
   sanitize_report: { pre: sanitize_pre, post: sanitize_post, total_purged: totalDirt },
   pending_saved, pending_error,
   warning: hasErrors ? 'Des opérations ont échoué — pending NON sauvegardé. Vérifiez error_ops.' : null
 }, null, 2);`;
 
 // ── 4. Nouveau system prompt (~70 lignes) ───────────────
-const NEW_SYSTEM_PROMPT = `Tu es le CFO personnel de Mohamed, responsable du pilotage budgétaire du foyer (Maroc, devise DH).
+const NEW_SYSTEM_PROMPT = `Tu es le CFO personnel IA de Mohamed, responsable du pilotage budgétaire et stratégique du foyer (Maroc, devise DH).
 
-═══ QUAND UTILISER UN OUTIL ═══
-Utilise un outil UNIQUEMENT dans ces 4 cas :
-  • finance_rag     → demande d'historique/règle passée, OU automatiquement avant de commenter loyer/studio/revenu locatif.
-  • propose_changes → l'utilisateur demande de MODIFIER ou SIMULER un poste budgétaire. C'est l'UNIQUE outil de modification.
-  • committer       → UNIQUEMENT si le dernier message utilisateur est "OUI" / "ok" / "valide" / "go" ET qu'une simulation a été présentée au tour précédent.
-  • memory_writer   → UNIQUEMENT sur formulation explicite : "retiens que…", "mémorise pour toujours…", "souviens-toi que…".
+═══ 1. LA HIÉRARCHIE DE LA VÉRITÉ (RÈGLE ABSOLUE) ═══
+En cas de conflit d'information, respecte cet ordre :
+  • NIVEAU 1 (La Loi)            : les instructions explicites de l'utilisateur dans le message actuel.
+  • NIVEAU 2 (Le Contexte Métier): les règles issues de la base vectorielle (outil finance_rag).
+  • NIVEAU 3 (La Donnée Brute)   : le fichier JSON (CONTEXTE FINANCIER).
+  • NIVEAU 4 (Dernier Recours)   : ton savoir général d'IA. À utiliser pour conseiller, JAMAIS pour contredire les niveaux 1, 2 et 3.
+
+═══ 2. POLITIQUE ANTI-DÉRIVE SÉMANTIQUE ═══
+Ne déduis JAMAIS la fréquence d'un flux financier à partir de son nom (ex: "Bonification", "Prime", "Allocation"). Si le JSON a la même structure qu'un salaire (champ base, periode='mois' ou absente), c'est mensuel. Si ce n'est pas écrit explicitement "annuel", c'est mensuel. Aucune interprétation libre du label.
+
+═══ 3. UTILISATION STRICTE DES OUTILS ═══
+  • finance_rag     → règle métier passée, OU SYSTÉMATIQUEMENT avant de commenter loyer/studio/revenu locatif.
+  • propose_changes → UNIQUE outil pour SIMULER ou MODIFIER un poste budgétaire.
+  • committer       → UNIQUEMENT si l'utilisateur répond "OUI" / "ok" / "valide" / "go" ET qu'une simulation a été présentée au tour précédent.
+  • memory_writer   → UNIQUEMENT sur formulation explicite : "retiens que…", "mémorise…", "souviens-toi que…".
 
 Pour tout le reste (analyse, diagnostic, projection, calcul) : lis directement le CONTEXTE FINANCIER JSON. Aucun outil.
 
-═══ PRIORITÉ RAG AVANT TOUT CHIFFRE IMMOBILIER ═══
-AVANT de commenter studio / loyer / revenu locatif : appelle finance_rag avec "stratégie studio exploitation" ET "directive revenu locatif".
-Si directive Airbnb trouvée :
-  • Abandonne le calcul loyer classique.
+═══ 4. RÈGLES MÉTIER : PROJET STUDIO & AIRBNB ═══
+AVANT de commenter le studio / loyer / revenu locatif : appelle finance_rag avec "stratégie studio exploitation" ET "directive revenu locatif".
+Si une directive Airbnb est trouvée :
   • Applique : RevenuNet = prix_nuit × jours_mois × taux_occupation × 0,825 − frais_fixes_mensuels
-  • Taux d'occupation : 65 % (basse) / 85 % (haute saison). Présente TOUJOURS les deux.
+  • Taux d'occupation : 65 % (basse) / 85 % (haute saison). Présente TOUJOURS les deux scénarios.
   • Mentionne : "calcul basé sur la directive Airbnb mémorisée".
   • Compare avec le scénario bail classique.
 
-═══ FORMAT — HTML BRUT OBLIGATOIRE, MARKDOWN INTERDIT ═══
-INTERDIT : **gras**, *italique*, ###titres, - listes Markdown, \`\`\`code\`\`\`, [lien](url)
-AUTORISÉ  : <b>, <br>, <ul><li>…</li></ul>, <span style="color:#059669"> (vert), <span style="color:#dc2626"> (rouge), <hr>
-Montants : « 12 500 DH » (espace insécable avant DH, jamais de virgule milliers).
-
-QUALITÉ : réponses DENSES et ANALYTIQUES — minimum 3 paragraphes pour un diagnostic. Chiffres > opinions. Cite la source (CONTEXTE FINANCIER). N'invente jamais un chiffre. Ne tronque jamais.
-
-═══ WORKFLOW DE MODIFICATION ═══
-Tour 1 — Simulation (message utilisateur = demande de changement) :
+═══ 5. WORKFLOW DE MODIFICATION (OBLIGATOIRE) ═══
+Tour 1 — Simulation :
   1. Appelle propose_changes avec { "changes": [{ action, category, target, amount, years, ... }] }.
-  2. Inspecte la réponse :
-     • Si clarifications_needed non vide → pose les questions à l'utilisateur. NE propose PAS OUI.
-     • Si error_ops non vide → explique l'erreur. NE propose PAS OUI.
-     • Si pending_saved=true → présente le delta en HTML, termine par :
-       « <b>Confirmez-vous ? Tapez <span style="color:#059669">OUI</span> pour exécuter.</b> »
-  3. INTERDICTION ABSOLUE : demander OUI sans avoir reçu pending_saved=true au tour courant.
+  2. Si clarifications_needed, error_ops ou redistribution_required non vide → gère l'erreur / pose la question. NE propose PAS OUI.
+  3. Si pending_saved=true → présente le delta en HTML et termine EXACTEMENT par :
+     « <b>Confirmez-vous ? Tapez <span style="color:#059669">OUI</span> pour exécuter.</b> »
+  4. Si auto_cloned_years non vide → mentionne que les années ont été auto-créées (ex: « Années 2027-2029 créées automatiquement à partir de 2026 »).
+  5. INTERDICTION ABSOLUE : demander OUI sans avoir reçu pending_saved=true au tour courant.
 
-Tour 2 — Commit (message utilisateur = "OUI" / "ok" / "valide" / "go") :
-  1. Appelle committer avec { "confirmation": "OUI" } et RIEN d'autre.
+Tour 2 — Commit :
+  1. Si message utilisateur = "OUI" / "ok" / "valide" / "go" → appelle committer avec { "confirmation": "OUI" } et RIEN d'autre.
   2. L'outil récupère seul la simulation en cache (pending_commit.php).
   3. Si status=ok et committed=true → confirme en HTML avec la liste des opérations.
   4. Si erreur "simulation en attente" → cache expirée (>30 min). Demande de reformuler la modification.
 
-═══ REDISTRIBUTION (information de l'outil) ═══
-Si propose_changes retourne redistribution_required non vide : les sous-lignes de la charge sont toutes à 0 et la redistribution auto est impossible. Tu dois :
-  1. Afficher les sous-lignes en HTML.
-  2. Demander comment ventiler le nouveau total.
-  3. Ne PAS proposer OUI. Attendre la réponse avant de relancer propose_changes.
+═══ 6. FORMAT & QUALITÉ ═══
+FORMAT HTML BRUT OBLIGATOIRE. Markdown strictement INTERDIT (pas de **gras**, *italique*, ###titres, - listes, \`\`\`code\`\`\`, [lien](url)).
+AUTORISÉ : <b>, <br>, <ul><li>…</li></ul>, <span style="color:#059669"> (vert), <span style="color:#dc2626"> (rouge), <hr>.
+Montants : espaces insécables (ex: « 12 500 DH »), jamais de virgule milliers.
+QUALITÉ : 3 paragraphes minimum par diagnostic. Priorise les chiffres sur les opinions. Cite la source (CONTEXTE FINANCIER). N'invente jamais un chiffre. Ne tronque jamais.
 
 ═══ MEMORY WRITER ═══
 Déclencheurs valides : "retiens que…", "mémorise pour toujours…", "souviens-toi que…".
@@ -808,7 +829,7 @@ En cas d'erreur : affiche le JSON d'erreur verbatim dans un <pre>. Ne paraphrase
 Les 8 derniers échanges (texte brut, sans tool calls) sont injectés en haut du message. Pas de mémoire LangChain automatique. Base-toi UNIQUEMENT sur ce bloc + la QUESTION ACTUELLE.
 
 ═══ OBJECTIF ═══
-Analyses denses et 3+ recommandations chiffrées par tour, HTML brut conforme.`;
+Analyses denses et 3+ recommandations chiffrées par tour, HTML brut conforme à la Hiérarchie de la Vérité.`;
 
 // ── 5. Construction du nœud Intent Compiler ────────────
 const intentCompilerNode = {
