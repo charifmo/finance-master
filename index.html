@@ -2124,8 +2124,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "15.10";
+                    const CURRENT_VERSION = "15.11";
                     const CHANGELOG = [
+                        { version: "15.11", date: "2026-05-04 — CFO Chat History Persistence", changes: ["L'historique du chat CFO Agent survit aux rechargements de page (localStorage, clé dynamique par session).", "Restauration automatique au démarrage : les 12 derniers messages sont rechargés depuis 'cfo_history_<session_id>'.", "Watch deep sur cfoMessages : sauvegarde automatique après chaque nouveau message (slice(-12) pour limiter la taille).", "resetCFOSession() nettoie l'ancienne clé localStorage avant de générer le nouvel ID — aucune donnée morte accumulée."] },
                         { version: "15.10", date: "2026-05-04 — CFO & Audit Unified Control Center", changes: ["Fusion Audit + CFO : l'onglet 'Audit Financier' est supprimé du menu — tout est dans '🧠 CFO & Audit'.", "Desktop : split-screen 5/7 colonnes (audit gauche, chat CFO droite) sans scroll superflu.", "Mobile : accordéon <details> '📊 Audit Financier' au-dessus du chat CFO, collapse par défaut.", "Réécriture complète de auditFinancier computed : 7 KPIs professionnels en 3 catégories (⚡ Court terme · 🛡️ Moyen terme · 📈 Long terme). Score /14 (vert ≥11, orange ≥7).", "KPI 1 Liquidité : solde courant minimum projeté (vert >10k).", "KPI 2 Budget Jour : surplus / 30 (vert >300 DH/j).", "KPI 3 Fonds de Survie : liquidités / dépenses mensuelles en mois (vert ≥6 mois).", "KPI 4 Rigidité : charges fixes / revenus (vert <40%).", "KPI 5 Endettement : crédits / revenus (vert <33%).", "KPI 6 Taux d'Épargne : épargne / revenus (vert ≥15%).", "KPI 7 Cash Drag : liquidités / patrimoine net (vert <40%).", "transfererAuditAuCFO() mis à jour avec prompt 7-KPI structuré par catégorie + scroll auto mobile."] },
                         { version: "15.8", date: "2026-05-04 — Advanced Financial Audit & CFO Integration", changes: ["Audit enrichi : 3 nouvelles jauges (Taux d'endettement, Effort d'épargne, Fonds de Sécurité) — score total passe à /12.", "Seuils endettement : 🟢 ≤30% · 🟠 30-40% · 🔴 >40%. Épargne : 🟢 ≥20% · 🟠 10-20% · 🔴 <10%. Fonds sécurité : 🟢 ≥100% cible · 🟠 50-100% · 🔴 <50%.", "Grille audit desktop : 2×3 (lg:grid-cols-3). Score global : vert ≥10, orange ≥6.", "Bouton ⚡ Soumettre l'Audit au CFO : injecte un prompt d'analyse critique dans le chat CFO et l'envoie automatiquement.", "Parité mobile : 6 jauges + bouton CFO dans l'onglet Audit mobile. Badge score /12 mis à jour partout."] },
                         { version: "15.7", date: "2026-05-03 — Fix déduction charges mois courant", changes: ["Rétablissement de la déduction fRest+vRest+totEpBase dans le bloc isCurrentMonth (revert partiel v15.5).", "Sans cette déduction, le solde de fin d'année était faussé par un excédent fictif.", "Calcul définitif : solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant (les 2 branches)."] },
@@ -2163,11 +2164,13 @@
                     let _resizeHandler = null;
 
                     // === v13.0 : Super-Agent CFO ===
-                    const cfoMessages = ref([]); // { role: 'user'|'agent', content: string, time: 'HH:MM' }
-                    const cfoInput = ref('');
-                    const cfoLoading = ref(false);
                     const cfoSessionId = ref(localStorage.getItem('cfo_session_id') || (crypto && crypto.randomUUID ? crypto.randomUUID() : ('web_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10))));
                     if (!localStorage.getItem('cfo_session_id')) localStorage.setItem('cfo_session_id', cfoSessionId.value);
+                    const _cfoHistoryKey = () => 'cfo_history_' + cfoSessionId.value;
+                    const _loadCFOHistory = () => { try { const s = localStorage.getItem(_cfoHistoryKey()); return s ? JSON.parse(s) : []; } catch (_) { return []; } };
+                    const cfoMessages = ref(_loadCFOHistory()); // { role: 'user'|'agent', content: string, time: 'HH:MM' }
+                    const cfoInput = ref('');
+                    const cfoLoading = ref(false);
                     const cfoWebhookUrl = ref(localStorage.getItem('cfo_webhook_url') || '');
                     const cfoWebhookInput = ref('');
                     const cfoChatContainer = ref(null);
@@ -2181,11 +2184,16 @@
                     };
 
                     const resetCFOSession = () => {
+                        localStorage.removeItem(_cfoHistoryKey());
                         const newId = crypto && crypto.randomUUID ? crypto.randomUUID() : ('web_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10));
                         cfoSessionId.value = newId;
                         localStorage.setItem('cfo_session_id', newId);
                         cfoMessages.value = [];
                     };
+
+                    watch(cfoMessages, (msgs) => {
+                        try { localStorage.setItem(_cfoHistoryKey(), JSON.stringify(msgs.slice(-12))); } catch (_) {}
+                    }, { deep: true });
 
                     const scrollCFOToBottom = () => {
                         setTimeout(() => {
