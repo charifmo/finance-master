@@ -872,19 +872,30 @@ const intentCompilerNode = {
 j.nodes = j.nodes.filter(n => n.id !== 'node-tool-intent' && n.id !== 'node-tool-tavily');
 j.nodes.push(intentCompilerNode);
 
-// ── 5b. Nœud Tavily web_search ──────────────────────────
-// Credential à créer manuellement dans n8n : type "Tavily API", nom "Tavily API"
+// ── 5b. Nœud web_search (Custom Code Tool — pas de credential requis) ──────────────────────────
 const tavilyNode = {
   id: 'node-tool-tavily',
   name: 'web_search',
-  type: '@n8n/n8n-nodes-langchain.toolTavily',
-  typeVersion: 1,
+  type: '@n8n/n8n-nodes-langchain.toolCode',
+  typeVersion: 1.2,
   position: [320, 600],
   parameters: {
-    description: 'Recherche web en temps réel (fallback uniquement). Utilise cet outil si la réponse ne peut pas être fournie par le Contexte Financier JSON ou le RAG.'
-  },
-  credentials: {
-    tavilyApi: { id: 'tavily-api-cred', name: 'Tavily API' }
+    name: 'web_search',
+    description: 'Utilise cet outil UNIQUEMENT en Fallback pour chercher sur Internet (cours de bourse, actualités, prix immobilier). Reçoit la requête en paramètre.',
+    language: 'javaScript',
+    jsCode: `const searchQuery = typeof query !== 'undefined' ? query : (typeof input !== 'undefined' ? input : '');
+const apiKey = "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";
+try {
+  const response = await this.helpers.httpRequest({
+    method: 'POST',
+    url: 'https://api.tavily.com/search',
+    headers: { 'Content-Type': 'application/json' },
+    body: { api_key: apiKey, query: searchQuery, search_depth: "basic", include_answer: true }
+  });
+  return response.answer || JSON.stringify(response.results);
+} catch (e) {
+  return "Erreur lors de la recherche web : " + e.message;
+}`
   }
 };
 j.nodes.push(tavilyNode);
