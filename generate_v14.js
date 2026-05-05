@@ -20,7 +20,7 @@ PARAMÈTRE UNIQUE :
   "changes": [
     {
       "action": "modify | add | remove | rename | add_exception | remove_exception | update_one_off | clone_year | set_balance | set_studio",
-      "category": "revenu | charge_fixe | charge_variable | epargne | depense_ponctuelle | solde | studio | annee",
+      "category": "revenu | charge_fixe | charge_variable | epargne | depense_ponctuelle | solde | studio | annee | compte",
       "target": "libellé humain de la ligne ex: alimentation, loyer, salaire (l outil résout le mapping clé technique via fuzzy match)",
       "amount": 1000,
       "label": "Nouvel intitulé (si création ou renommage)",
@@ -46,7 +46,8 @@ RÈGLES :
 • target : le nom humain tel que l utilisateur l a mentionné. N invente JAMAIS de clé technique.
 • L outil retourne pending_saved=true si la simulation est prête : tu peux proposer OUI à l utilisateur.
 • Si clarifications_needed non vide : pose les questions à l utilisateur, n invente PAS de réponse.
-• Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.`;
+• Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.
+• category "compte" : agit sur les comptes bancaires du bilan. action "add" crée un compte (fournir "label" et "amount" pour le solde initial). action "modify" ajuste le solde d un compte (fournir "target" = label du compte et "amount" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).`;
 
 // ── 3. JS code du Intent Compiler ──────────────────────
 const INTENT_COMPILER_CODE = `// ════════════════════════════════════════════════════════
@@ -317,6 +318,7 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
         case 'epargne':        return [{ type: 'update_epargne',        key: resolvedKey, ...(amt != null && { valeur: amt }), ...(newLabel && { label: newLabel }) }];
         case 'studio':         return [{ type: 'set_projet_studio', annee, key: studio_key || resolvedKey || 'travaux', valeur: amt }];
         case 'solde':          return [{ type: 'set_solde_initial', key: balance_key || resolvedKey || 'courant', valeur: amt }];
+        case 'compte':         return [{ type: 'update_compte', key: change.target_key || target, montant: amt }];
         default: return null;
       }
     case 'add':
@@ -326,6 +328,7 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
         case 'charge_variable': return [{ type: 'add_charge_variable',key: baseKey, label: newLabel || target, valeur: amt || 0, periode: period || 'mois' }];
         case 'epargne':         return [{ type: 'add_epargne',        key: baseKey, label: newLabel || target, valeur: amt || 0 }];
         case 'depense_ponctuelle': return [{ type: 'add_depense_ponctuelle', annee, mois: month || 1, nom: newLabel || target, montant: amt || 0 }];
+        case 'compte':         return [{ type: 'create_compte', label: newLabel || target, montant: amt || 0 }];
         default: return null;
       }
     case 'remove':
@@ -654,6 +657,23 @@ function applyOp(fd, op, anneeTarget) {
         const old=y.projetStudio[op.key];y.projetStudio[op.key]=v;
         log.key=op.key;log.avant=old;log.apres=v;break;
       }
+      // ── COMPTES BANCAIRES (BILAN) ──────────────────────
+      case 'create_compte': {
+        if (!fd.comptes) fd.comptes = [];
+        const newId = String(op.label||'compte').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'_');
+        if (fd.comptes.find(c => c.id === newId)) { log.status='error'; log.reason='Compte avec cet id existe déjà: '+newId; break; }
+        fd.comptes.push({ id: newId, label: String(op.label), solde: Number(op.montant) || 0 });
+        log.status='success'; log.action='Creation compte'; log.compte=op.label; log.solde=op.montant; break;
+      }
+      case 'update_compte': {
+        if (!fd.comptes || !fd.comptes.length) { log.status='error'; log.reason='Aucun compte existant'; break; }
+        const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+        const c = fd.comptes.find(x => x.id === normKey || String(x.label).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));
+        if (!c) { log.status='error'; log.reason='Compte introuvable: '+op.key; break; }
+        const oldVal = c.solde;
+        c.solde += Number(op.montant);
+        log.status='success'; log.action='Mise a jour compte'; log.compte=c.label; log.avant=oldVal; log.apres=c.solde; break;
+      }
       default:
         log.status='error'; log.reason='type inconnu: '+op.type;
     }
@@ -679,7 +699,7 @@ for (const change of changes) {
   const NEEDS_RESOLVE = ['modify', 'remove', 'rename', 'add_exception', 'remove_exception'];
   let resolvedKey = null, resolvedCat = category;
 
-  if (NEEDS_RESOLVE.includes(action) && target && category && !['depense_ponctuelle','annee','solde','studio'].includes(category)) {
+  if (NEEDS_RESOLVE.includes(action) && target && category && !['depense_ponctuelle','annee','solde','studio','compte'].includes(category)) {
     const res = resolveEntity(target, category, financeData);
     if (!res.resolved) {
       clarifications.push({ change_index: changes.indexOf(change), target, category, action, error: res.error, ambiguous: res.ambiguous || false, choices: res.choices || null });
@@ -851,7 +871,16 @@ Les 8 derniers échanges (texte brut, sans tool calls) sont injectés en haut du
 Analyses denses et 3+ recommandations chiffrées par tour, HTML brut conforme à la Hiérarchie de la Vérité.
 
 ═══ 7. TRANSPARENCE DE LA RECHERCHE WEB ═══
-Outil disponible : web_search. Utilise cet outil UNIQUEMENT en Fallback (quand les niveaux 1-3 de la Hiérarchie de la Vérité ne suffisent pas). Si tu utilises le web, déclare-le explicitement : « <b>Source : Recherche Internet.</b> » avant de citer le résultat.`;
+Outil disponible : web_search. Utilise cet outil UNIQUEMENT en Fallback (quand les niveaux 1-3 de la Hiérarchie de la Vérité ne suffisent pas). Si tu utilises le web, déclare-le explicitement : « <b>Source : Recherche Internet.</b> » avant de citer le résultat.
+
+═══ 8. GESTION DES COMPTES BANCAIRES (BILAN) ═══
+Tu peux créer et modifier les comptes bancaires de l utilisateur via propose_changes avec category="compte".
+• Créer un compte : action="add", category="compte", label="Nom du compte", amount=solde_initial.
+• Modifier le solde d un compte : action="modify", category="compte", target="Nom ou label du compte", amount=valeur_à_ajouter (négatif pour retrait).
+• TRANSFERT ENTRE COMPTES : génère DEUX changements distincts dans le même appel propose_changes :
+  1. { action:"modify", category:"compte", target:"Compte Source", amount:-X } — débit du compte source.
+  2. { action:"modify", category:"compte", target:"Compte Cible", amount:+X } — crédit du compte cible.
+  Ne génère JAMAIS un seul changement pour un transfert. Les deux opérations sont atomiques et présentées ensemble dans la simulation.`;
 
 // ── 5. Construction du nœud Intent Compiler ────────────
 const intentCompilerNode = {
