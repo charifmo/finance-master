@@ -848,7 +848,10 @@ En cas d'erreur : affiche le JSON d'erreur verbatim dans un <pre>. Ne paraphrase
 Les 8 derniers échanges (texte brut, sans tool calls) sont injectés en haut du message. Pas de mémoire LangChain automatique. Base-toi UNIQUEMENT sur ce bloc + la QUESTION ACTUELLE.
 
 ═══ OBJECTIF ═══
-Analyses denses et 3+ recommandations chiffrées par tour, HTML brut conforme à la Hiérarchie de la Vérité.`;
+Analyses denses et 3+ recommandations chiffrées par tour, HTML brut conforme à la Hiérarchie de la Vérité.
+
+═══ 7. TRANSPARENCE DE LA RECHERCHE WEB ═══
+Outil disponible : web_search. Utilise cet outil UNIQUEMENT en Fallback (quand les niveaux 1-3 de la Hiérarchie de la Vérité ne suffisent pas). Si tu utilises le web, déclare-le explicitement : « <b>Source : Recherche Internet.</b> » avant de citer le résultat.`;
 
 // ── 5. Construction du nœud Intent Compiler ────────────
 const intentCompilerNode = {
@@ -865,7 +868,26 @@ const intentCompilerNode = {
   }
 };
 
+// Déduplique avant push (idempotent sur re-runs)
+j.nodes = j.nodes.filter(n => n.id !== 'node-tool-intent' && n.id !== 'node-tool-tavily');
 j.nodes.push(intentCompilerNode);
+
+// ── 5b. Nœud Tavily web_search ──────────────────────────
+// Credential à créer manuellement dans n8n : type "Tavily API", nom "Tavily API"
+const tavilyNode = {
+  id: 'node-tool-tavily',
+  name: 'web_search',
+  type: '@n8n/n8n-nodes-langchain.toolTavily',
+  typeVersion: 1,
+  position: [320, 600],
+  parameters: {
+    description: 'Recherche web en temps réel (fallback uniquement). Utilise cet outil si la réponse ne peut pas être fournie par le Contexte Financier JSON ou le RAG.'
+  },
+  credentials: {
+    tavilyApi: { id: 'tavily-api-cred', name: 'Tavily API' }
+  }
+};
+j.nodes.push(tavilyNode);
 
 // ── 6. Mise à jour du system prompt de l'AI Agent ──────
 const agentNode = j.nodes.find(n => n.id === 'node-agent');
@@ -878,6 +900,11 @@ delete j.connections['Tool: Budget Engine'];
 
 // Branche Intent Compiler sur l'AI Agent
 j.connections['Tool: Intent Compiler'] = {
+  ai_tool: [[ { node: 'AI Agent', type: 'ai_tool', index: 0 } ]]
+};
+
+// Branche Tavily sur l'AI Agent
+j.connections['web_search'] = {
   ai_tool: [[ { node: 'AI Agent', type: 'ai_tool', index: 0 } ]]
 };
 
