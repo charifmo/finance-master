@@ -35,6 +35,7 @@ PARAMÈTRE UNIQUE :
       "studio_key": "travaux",
       "balance_key": "courant",
       "one_off_id": 1234567890,
+      "sub_target": "Nom exact de la sous-catégorie ou détail (ex: psy, essence, internet) si la modification cible une ligne précise à l intérieur d une catégorie.",
       "notes": "citation utilisateur (optionnel)"
     }
   ]
@@ -298,7 +299,7 @@ function resolveEntity(target, category, fd) {
 // Gemini ne voit JAMAIS les types techniques — c'est ici qu'ils sont déterminés.
 // ════════════════════════════════════════════════════════
 function buildOps(change, resolvedKey, resolvedCat, annee) {
-  const { action, amount, label: newLabel, period, month, exception_start, exception_end, exception_value, exception_id, clone_from_year, studio_key, balance_key, one_off_id, target } = change;
+  const { action, amount, label: newLabel, period, month, exception_start, exception_end, exception_value, exception_id, clone_from_year, studio_key, balance_key, one_off_id, target, sub_target: subTarget } = change;
   const amt = (amount !== undefined && amount !== null && !isNaN(Number(amount))) ? Number(amount) : null;
   // v15.14 — Multi-Add Key Collision fix : suffixe aléatoire pour les ops 'add'
   // garantit l'unicité de la clé technique même si l'IA ajoute 3 fois le même label
@@ -310,7 +311,9 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
       switch (resolvedCat) {
         case 'revenu':         return [{ type: 'update_revenu',         key: resolvedKey, ...(amt != null && { base: amt }),   ...(newLabel && { label: newLabel }) }];
         case 'charge_fixe':    return [{ type: 'update_charge_fixe',    key: resolvedKey, ...(amt != null && { valeur: amt }), ...(newLabel && { label: newLabel }) }];
-        case 'charge_variable':return [{ type: 'update_charge_variable',key: resolvedKey, ...(amt != null && { valeur: amt }), ...(period && { periode: period }), ...(newLabel && { label: newLabel }) }];
+        case 'charge_variable':
+          if (subTarget) return [{ type: 'update_charge_variable_detail', key: resolvedKey, sub_key: subTarget, montant: amt }];
+          return [{ type: 'update_charge_variable', key: resolvedKey, ...(amt != null && { valeur: amt }), ...(period && { periode: period }), ...(newLabel && { label: newLabel }) }];
         case 'epargne':        return [{ type: 'update_epargne',        key: resolvedKey, ...(amt != null && { valeur: amt }), ...(newLabel && { label: newLabel }) }];
         case 'studio':         return [{ type: 'set_projet_studio', annee, key: studio_key || resolvedKey || 'travaux', valeur: amt }];
         case 'solde':          return [{ type: 'set_solde_initial', key: balance_key || resolvedKey || 'courant', valeur: amt }];
@@ -512,6 +515,22 @@ function applyOp(fd, op, anneeTarget) {
         if (op.periode!=='mois' && op.periode!=='semaine') { log.status='error'; log.reason='periode invalide (mois|semaine)'; break; }
         const old=y.chargesVariables[op.key].periode; y.chargesVariables[op.key].periode=op.periode;
         log.key=op.key; log.avant=old; log.apres=op.periode; break;
+      }
+      case 'update_charge_variable_detail': {
+        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé mère absente'; break; }
+        const t = y.chargesVariables[op.key];
+        if (!t.details || !t.details.length) { log.status='error'; log.reason='aucune sous-ligne existante'; break; }
+        const normStrOp = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();
+        const normSub = normStrOp(op.sub_key);
+        const detail = t.details.find(d => normStrOp(d.nom).includes(normSub) || normSub.includes(normStrOp(d.nom)));
+        if (!detail) { log.status='error'; log.reason='sous-ligne introuvable: '+op.sub_key; break; }
+        const v = pickNum(op, 'montant', 'valeur', 'value', 'amount');
+        if (v === null) { log.status='error'; log.reason='montant manquant'; break; }
+        const old = detail.montant;
+        detail.montant = v;
+        t.valeur = t.details.reduce((s, d) => s + (Number(d.montant) || 0), 0);
+        log.key=op.key; log.sub_key=detail.nom; log.avant=old; log.apres=v; log.nouveau_total=t.valeur;
+        break;
       }
       case 'update_charge_variable': {
         if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé absente'; break; }
