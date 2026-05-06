@@ -2512,8 +2512,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "16.2";
+                    const CURRENT_VERSION = "16.3";
                     const CHANGELOG = [
+                        { version: "16.3", date: "2026-05-06 — Bilan Indestructible (Postgres Persistence)", changes: ["AUDIT — Faille identifiée : save_data.php écrivait dans un fichier plat finance_data.json, écrasable par redéploiements / git pull / containers éphémères → cause racine de l'amnésie chronique des soldes et du reset du tab Wealth.", "FIX — save_data.php réécrit avec Postgres-first + fallback file. Table dédiée finance_state (id=1, data JSONB, updated_at) avec UPSERT atomique et CREATE TABLE IF NOT EXISTS auto-init.", "Credentials externalisés dans db_config.php (gitignored) — template fourni dans db_config.example.php.", "Frontend — wealthGoals + wealthAssets désormais inclus dans getExportData() et hydratés depuis le serveur via executerImportFusion. Schema v16.", "Watchers ajoutés sur wealthGoals/wealthAssets : toute mutation déclenche serverSyncStatus='modified'.", ".gitignore enrichi : db_config.php + pending/ exclus du repo.", "DEPLOY — Le user doit créer /finance/db_config.php sur le VPS avec les vrais creds Postgres charif_finance_db (mêmes que credential n8n id 7cQfM9fXdo0Pso5h)."] },
                         { version: "16.2", date: "2026-05-06 — Debt vs Invest Arbitrage Simulator", changes: ["Onglet Wealth — Section 3 : Simulateur Arbitrage (desktop + mobile).", "4 inputs réactifs : Montant, Taux Crédit, Taux Placement, Durée (intérêts composés temps réel).", "Scénario A (Rembourser) vs Scénario B (Investir) : calcul automatique côte à côte.", "Verdict visuel dynamique : badge vert INVESTIR ou rouge REMBOURSER + écart net en DH.", "Mobile : layout 2x2 compact avec verdict inline.", "4 refs ajoutés au setup : arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears."] },
                         { version: "16.1", date: "2026-05-06 — Smart Goals & ROI Tracker UI", changes: ["Nouveau tab desktop '💎 Patrimoine & Objectifs' (activeTab=wealth) dans la sidebar.", "Nouveau tab mobile '💎 Wealth' dans la bottom nav (6e onglet).", "Section Smart Goals : barre de progression dynamique, % avancement, montant restant, estimation mois au rythme actuel.", "Section ROI Tracker : grille par actif (capital, revenus/an, revenus/mois, badge rendement couleur ≥7%=vert/≥4%=bleu/<4%=orange).", "Synthèse globale pondérée : capital total, revenus annuels, rendement moyen pondéré, revenus passifs mensuels.", "Données initiales : 2 objectifs (Voyage Paris, Etudes Jlilou) + 3 actifs (Local Bouskoura, CTO, Studio Airbnb).", "Fix mobileMoteur : onglets mobile passent de 5 à 6 (overflow-x: auto sur la nav)."] },
                         { version: "15.22", date: "2026-05-05 — Bank Accounts & Balance Sheet Management AI Tooling", changes: ["n8n Intent Compiler : category 'compte' ajouté (action add/modify).", "buildOps : cas 'compte' → ops 'create_compte' (add) et 'update_compte' (modify) sans résolution fuzzy (bypass NEEDS_RESOLVE).", "applyOp : cases 'create_compte' (push dans fd.comptes[]) et 'update_compte' (fuzzy match label/id, solde += montant).", "System prompt §8 : règle de transfert bi-directionnel — l'IA génère 2 changes (débit + crédit) pour tout transfert entre comptes.", "super_agent_cfo.json régénéré."] },
@@ -2904,7 +2905,7 @@
                         }
                     };
 
-                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 15, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 16, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, wealthAssets: wealthAssets.value });
                     const handleDataChange = () => { forceUpdateCalculations(); serverSyncStatus.value = 'modified'; if(syncStatus.value === 'synced') syncStatus.value = 'modified'; };
 
                     const safeMerge = (target, source) => {
@@ -3143,6 +3144,9 @@
                             // v15 : hydratation multi-comptes
                             if (Array.isArray(data.comptes) && data.comptes.length) comptes.value = data.comptes;
                             if (data.parametres && typeof data.parametres === 'object') parametres.value = data.parametres;
+                            // v16.3 : hydratation Wealth (Goals + Assets) depuis Postgres
+                            if (Array.isArray(data.wealthGoals)) wealthGoals.value = data.wealthGoals;
+                            if (Array.isArray(data.wealthAssets)) wealthAssets.value = data.wealthAssets;
 
                             anneeAffichage.value = soldesInitiaux.value.anneeActuelle || 2026;
                             forceUpdateCalculations();
@@ -3155,15 +3159,19 @@
                     const confirmerImport = () => { executerImportFusion(pendingImportData.value); handleDataChange(); showImportWarning.value = false; };
                     const annulerImport = () => { showImportWarning.value = false; };
 
-                    watch(donneesAnnuelles, (newVal) => { 
+                    watch(donneesAnnuelles, (newVal) => {
                         if(newVal[anneeAffichage.value] && newVal[anneeAffichage.value].chargesVariables) {
-                            Object.keys(newVal[anneeAffichage.value].chargesVariables || {}).forEach(key => { 
+                            Object.keys(newVal[anneeAffichage.value].chargesVariables || {}).forEach(key => {
                                 const cv = newVal[anneeAffichage.value].chargesVariables[key];
-                                if (cv?.details?.length > 0) cv.valeur = cv.details.reduce((sum, d) => sum + (Number(d.montant) || 0), 0); 
-                            }); 
+                                if (cv?.details?.length > 0) cv.valeur = cv.details.reduce((sum, d) => sum + (Number(d.montant) || 0), 0);
+                            });
                         }
                         handleDataChange();
                     }, { deep: true });
+
+                    // v16.3 : Wealth tab persistence — track goals & assets mutations
+                    watch(wealthGoals, () => handleDataChange(), { deep: true });
+                    watch(wealthAssets, () => handleDataChange(), { deep: true });
 
                     const nomDuMois = (m) => ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'][m];
                     const formatMAD = (v) => new Intl.NumberFormat('fr-FR').format(Math.round(Number(v) || 0)) + ' DH';
