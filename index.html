@@ -1203,11 +1203,11 @@
                                 <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">📈 Rendement du Patrimoine</h3>
                                 <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Yield & ROI par actif productif</p>
                             </div>
-                            <span class="text-xs font-bold text-violet-600 bg-violet-100 px-3 py-1 rounded-full border border-violet-200">{{ wealthAssets.length }} actif{{ wealthAssets.length > 1 ? 's' : '' }}</span>
+                            <span class="text-xs font-bold text-violet-600 bg-violet-100 px-3 py-1 rounded-full border border-violet-200">{{ roiAssets.length }} actif{{ roiAssets.length > 1 ? 's' : '' }}</span>
                         </div>
                         <div class="p-6">
                             <div class="space-y-3 mb-5">
-                                <div v-for="(asset, idx) in wealthAssets" :key="idx"
+                                <div v-for="asset in roiAssets" :key="asset.id"
                                      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-violet-300 transition-colors">
                                     <div class="flex-1 min-w-0">
                                         <p class="text-sm font-black text-gray-800">{{ asset.name }}</p>
@@ -1216,8 +1216,8 @@
                                                 Capital : <span class="text-gray-800 font-black">{{ formatMAD(asset.value) }}</span>
                                             </p>
                                             <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                                                Revenus : <span class="text-emerald-700 font-black">{{ formatMAD(asset.annual_income) }}/an</span>
-                                                <span class="text-gray-400"> · {{ formatMAD(Math.round(asset.annual_income / 12)) }}/mois</span>
+                                                Revenus : <span class="text-emerald-700 font-black">{{ formatMAD(asset.revenue) }}/an</span>
+                                                <span class="text-gray-400"> · {{ formatMAD(Math.round(asset.revenue / 12)) }}/mois</span>
                                             </p>
                                         </div>
                                         <p v-if="asset.taux_credit > 0" class="text-[10px] text-amber-700 font-bold mt-1.5 flex flex-wrap items-center gap-2">
@@ -1228,20 +1228,20 @@
                                     </div>
                                     <div class="shrink-0 flex items-center gap-2">
                                         <span :class="['text-sm font-black px-3 py-1.5 rounded-xl border',
-                                            (asset.annual_income / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                            (asset.annual_income / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                            (asset.revenue / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                            (asset.revenue / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
                                             'bg-amber-100 text-amber-700 border-amber-200']">
-                                            {{ (asset.annual_income / asset.value * 100).toFixed(2) }}% / an
+                                            {{ (asset.revenue / asset.value * 100).toFixed(2) }}% / an
                                         </span>
-                                        <button @click="editAsset(idx)" class="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-sm" title="Éditer">✏️</button>
-                                        <button @click="deleteAsset(idx)" class="p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-sm" title="Supprimer">🗑️</button>
+                                        <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-sm" title="Éditer">✏️</button>
+                                        <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-sm" title="Supprimer">🗑️</button>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Bouton ajout actif -->
                             <div class="flex justify-end mb-4">
-                                <button @click="openAssetModal" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-violet-900/20 transition-colors">
+                                <button @click="openMasterAssetModal" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-violet-900/20 transition-colors">
                                     <span class="text-base leading-none">＋</span> Nouvel Actif Productif
                                 </button>
                             </div>
@@ -1252,24 +1252,24 @@
                                 <div class="grid grid-cols-3 gap-4 text-center mb-4">
                                     <div>
                                         <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Capital Total</p>
-                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(wealthAssets.reduce((s, a) => s + a.value, 0)) }}</p>
+                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(roiAssets.reduce((s, a) => s + a.value, 0)) }}</p>
                                     </div>
                                     <div>
                                         <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Revenus Annuels</p>
-                                        <p class="text-base lg:text-lg font-black text-emerald-300">{{ formatMAD(wealthAssets.reduce((s, a) => s + a.annual_income, 0)) }}</p>
+                                        <p class="text-base lg:text-lg font-black text-emerald-300">{{ formatMAD(roiAssets.reduce((s, a) => s + a.revenue, 0)) }}</p>
                                     </div>
                                     <div>
                                         <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Rendement Moyen Pondéré</p>
                                         <p class="text-base lg:text-lg font-black text-yellow-300">
-                                            {{ wealthAssets.reduce((s, a) => s + a.value, 0) > 0
-                                                ? (wealthAssets.reduce((s, a) => s + a.annual_income, 0) / wealthAssets.reduce((s, a) => s + a.value, 0) * 100).toFixed(2)
+                                            {{ roiAssets.reduce((s, a) => s + a.value, 0) > 0
+                                                ? (roiAssets.reduce((s, a) => s + a.revenue, 0) / roiAssets.reduce((s, a) => s + a.value, 0) * 100).toFixed(2)
                                                 : '0.00' }}%
                                         </p>
                                     </div>
                                 </div>
                                 <div class="pt-3 border-t border-white/20 text-center">
                                     <p class="text-[11px] opacity-70">Revenus passifs mensuels :
-                                        <span class="font-black text-yellow-200 text-sm"> {{ formatMAD(Math.round(wealthAssets.reduce((s, a) => s + a.annual_income, 0) / 12)) }}/mois</span>
+                                        <span class="font-black text-yellow-200 text-sm"> {{ formatMAD(Math.round(roiAssets.reduce((s, a) => s + a.revenue, 0) / 12)) }}/mois</span>
                                     </p>
                                 </div>
                             </div>
@@ -1384,7 +1384,7 @@
                                 <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">🏗️ Stress Test Foncier & Indivision (Marrakech)</h3>
                                 <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Matrice de risque · 3 scénarios de valorisation</p>
                             </div>
-                            <span class="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">{{ foncierPortfolio.length }} actif{{ foncierPortfolio.length > 1 ? 's' : '' }}</span>
+                            <span class="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">{{ stressAssets.length }} actif{{ stressAssets.length > 1 ? 's' : '' }}</span>
                         </div>
                         <div class="p-6">
                             <div class="overflow-x-auto rounded-xl border border-gray-200">
@@ -1400,21 +1400,21 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="(asset, idx) in foncierPortfolio" :key="idx" class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                        <tr v-for="asset in stressAssets" :key="asset.id" class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                             <td class="px-4 py-3">
-                                                <p class="text-sm font-black text-gray-800">{{ asset.nom }}</p>
+                                                <p class="text-sm font-black text-gray-800">{{ asset.name }}</p>
                                                 <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">{{ asset.type }}</p>
                                             </td>
                                             <td class="px-4 py-3 text-center whitespace-nowrap">
                                                 <span :class="['text-xs font-black px-2 py-1 rounded-lg border', asset.quotePart === '100%' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200']">{{ asset.quotePart }}</span>
                                             </td>
-                                            <td class="px-4 py-3 text-right text-blue-700 font-black bg-blue-50/50 whitespace-nowrap">{{ formatMAD(asset.conservateur) }}</td>
-                                            <td class="px-4 py-3 text-right text-red-700 font-black bg-red-50/50 whitespace-nowrap">{{ formatMAD(asset.pessimiste) }}</td>
-                                            <td class="px-4 py-3 text-right text-emerald-700 font-black bg-emerald-50/50 whitespace-nowrap">{{ formatMAD(asset.optimiste) }}</td>
+                                            <td class="px-4 py-3 text-right text-blue-700 font-black bg-blue-50/50 whitespace-nowrap">{{ formatMAD(asset.value) }}</td>
+                                            <td class="px-4 py-3 text-right text-red-700 font-black bg-red-50/50 whitespace-nowrap">{{ formatMAD(asset.val_pessimiste) }}</td>
+                                            <td class="px-4 py-3 text-right text-emerald-700 font-black bg-emerald-50/50 whitespace-nowrap">{{ formatMAD(asset.val_optimiste) }}</td>
                                             <td class="px-4 py-3 text-center whitespace-nowrap">
                                                 <div class="flex items-center justify-center gap-1.5">
-                                                    <button @click="editFoncier(idx)" class="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="Éditer">✏️</button>
-                                                    <button @click="deleteFoncier(idx)" class="p-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors" title="Supprimer">🗑️</button>
+                                                    <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="Éditer">✏️</button>
+                                                    <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors" title="Supprimer">🗑️</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1431,7 +1431,7 @@
                                 </table>
                             </div>
 
-                            <button @click="openFoncierModal" class="mt-4 w-full py-3 rounded-xl border-2 border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-50 text-amber-700 font-black uppercase text-xs tracking-widest transition-colors">
+                            <button @click="openMasterAssetModal" class="mt-4 w-full py-3 rounded-xl border-2 border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-50 text-amber-700 font-black uppercase text-xs tracking-widest transition-colors">
                                 ➕ Nouvel Actif Foncier
                             </button>
 
@@ -2109,26 +2109,26 @@
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
                         <div class="px-4 py-3 bg-violet-50 border-b border-violet-100 flex items-center justify-between">
                             <span class="text-xs font-black uppercase tracking-widest text-violet-800">📈 Rendement Patrimoine</span>
-                            <span class="text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full border border-violet-200">{{ wealthAssets.length }} actif{{ wealthAssets.length > 1 ? 's' : '' }}</span>
+                            <span class="text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full border border-violet-200">{{ roiAssets.length }} actif{{ roiAssets.length > 1 ? 's' : '' }}</span>
                         </div>
                         <div class="p-4 space-y-3">
-                            <div v-for="(asset, idx) in wealthAssets" :key="idx" class="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                            <div v-for="asset in roiAssets" :key="asset.id" class="p-3 bg-gray-50 rounded-xl border border-gray-200">
                                 <div class="flex items-start justify-between mb-1.5">
                                     <p class="text-[11px] font-black text-gray-800 flex-1 min-w-0 pr-2 leading-tight">{{ asset.name }}</p>
                                     <div class="flex items-center gap-1 shrink-0">
                                         <span :class="['text-xs font-black px-2 py-0.5 rounded-lg border',
-                                            (asset.annual_income / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                            (asset.annual_income / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                            (asset.revenue / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                            (asset.revenue / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
                                             'bg-amber-100 text-amber-700 border-amber-200']">
-                                            {{ (asset.annual_income / asset.value * 100).toFixed(2) }}%
+                                            {{ (asset.revenue / asset.value * 100).toFixed(2) }}%
                                         </span>
-                                        <button @click="editAsset(idx)" class="p-1 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-xs" title="Éditer">✏️</button>
-                                        <button @click="deleteAsset(idx)" class="p-1 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-xs" title="Supprimer">🗑️</button>
+                                        <button @click="editMasterAsset(asset.id)" class="p-1 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-xs" title="Éditer">✏️</button>
+                                        <button @click="deleteMasterAsset(asset.id)" class="p-1 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-xs" title="Supprimer">🗑️</button>
                                     </div>
                                 </div>
                                 <div class="flex gap-4">
                                     <p class="text-[9px] text-gray-500 font-bold">Capital : <span class="text-gray-700 font-black">{{ formatMAD(asset.value) }}</span></p>
-                                    <p class="text-[9px] text-gray-500 font-bold">Rev. : <span class="text-emerald-700 font-black">{{ formatMAD(Math.round(asset.annual_income / 12)) }}/m</span></p>
+                                    <p class="text-[9px] text-gray-500 font-bold">Rev. : <span class="text-emerald-700 font-black">{{ formatMAD(Math.round(asset.revenue / 12)) }}/m</span></p>
                                 </div>
                                 <p v-if="asset.taux_credit > 0" class="text-[9px] text-amber-700 font-bold mt-1.5 flex flex-wrap items-center gap-1.5">
                                     <span class="bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">🏦 {{ asset.taux_credit }}%</span>
@@ -2137,7 +2137,7 @@
                                 </p>
                             </div>
                             <!-- Bouton ajout actif mobile -->
-                            <button @click="openAssetModal" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-sm transition-colors">
+                            <button @click="openMasterAssetModal" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-sm transition-colors">
                                 <span class="text-sm leading-none">＋</span> Nouvel Actif Productif
                             </button>
 
@@ -2145,9 +2145,9 @@
                             <div class="bg-gradient-to-r from-violet-600 to-purple-700 rounded-xl p-4 text-white text-center">
                                 <p class="text-[9px] uppercase tracking-widest opacity-70 mb-2">Synthèse globale</p>
                                 <div class="grid grid-cols-3 gap-2">
-                                    <div><p class="text-[8px] opacity-60">Capital</p><p class="text-[11px] font-black">{{ formatMAD(wealthAssets.reduce((s,a)=>s+a.value,0)) }}</p></div>
-                                    <div><p class="text-[8px] opacity-60">Revenus/an</p><p class="text-[11px] font-black text-emerald-300">{{ formatMAD(wealthAssets.reduce((s,a)=>s+a.annual_income,0)) }}</p></div>
-                                    <div><p class="text-[8px] opacity-60">Rendement</p><p class="text-[11px] font-black text-yellow-300">{{ wealthAssets.reduce((s,a)=>s+a.value,0)>0?(wealthAssets.reduce((s,a)=>s+a.annual_income,0)/wealthAssets.reduce((s,a)=>s+a.value,0)*100).toFixed(2):'0.00' }}%</p></div>
+                                    <div><p class="text-[8px] opacity-60">Capital</p><p class="text-[11px] font-black">{{ formatMAD(roiAssets.reduce((s,a)=>s+a.value,0)) }}</p></div>
+                                    <div><p class="text-[8px] opacity-60">Revenus/an</p><p class="text-[11px] font-black text-emerald-300">{{ formatMAD(roiAssets.reduce((s,a)=>s+a.revenue,0)) }}</p></div>
+                                    <div><p class="text-[8px] opacity-60">Rendement</p><p class="text-[11px] font-black text-yellow-300">{{ roiAssets.reduce((s,a)=>s+a.value,0)>0?(roiAssets.reduce((s,a)=>s+a.revenue,0)/roiAssets.reduce((s,a)=>s+a.value,0)*100).toFixed(2):'0.00' }}%</p></div>
                                 </div>
                             </div>
                         </div>
@@ -2215,7 +2215,7 @@
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm mb-6 overflow-hidden">
                         <div class="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
                             <span class="text-xs font-black uppercase tracking-widest text-amber-800">🏗️ Stress Test Foncier</span>
-                            <span class="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">{{ foncierPortfolio.length }} actif{{ foncierPortfolio.length > 1 ? 's' : '' }}</span>
+                            <span class="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">{{ stressAssets.length }} actif{{ stressAssets.length > 1 ? 's' : '' }}</span>
                         </div>
                         <div class="p-3">
                             <div class="overflow-x-auto rounded-lg border border-gray-200">
@@ -2231,21 +2231,21 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="(asset, idx) in foncierPortfolio" :key="idx" class="border-b border-gray-100">
+                                        <tr v-for="asset in stressAssets" :key="asset.id" class="border-b border-gray-100">
                                             <td class="px-2 py-2">
-                                                <p class="font-black text-gray-800 leading-tight">{{ asset.nom }}</p>
+                                                <p class="font-black text-gray-800 leading-tight">{{ asset.name }}</p>
                                                 <p class="text-[8px] text-gray-500 font-bold uppercase">{{ asset.type }}</p>
                                             </td>
                                             <td class="px-2 py-2 text-center whitespace-nowrap">
                                                 <span :class="['text-[9px] font-black px-1.5 py-0.5 rounded border', asset.quotePart === '100%' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200']">{{ asset.quotePart }}</span>
                                             </td>
-                                            <td class="px-2 py-2 text-right text-blue-700 font-black bg-blue-50/50 whitespace-nowrap">{{ formatMAD(asset.conservateur) }}</td>
-                                            <td class="px-2 py-2 text-right text-red-700 font-black bg-red-50/50 whitespace-nowrap">{{ formatMAD(asset.pessimiste) }}</td>
-                                            <td class="px-2 py-2 text-right text-emerald-700 font-black bg-emerald-50/50 whitespace-nowrap">{{ formatMAD(asset.optimiste) }}</td>
+                                            <td class="px-2 py-2 text-right text-blue-700 font-black bg-blue-50/50 whitespace-nowrap">{{ formatMAD(asset.value) }}</td>
+                                            <td class="px-2 py-2 text-right text-red-700 font-black bg-red-50/50 whitespace-nowrap">{{ formatMAD(asset.val_pessimiste) }}</td>
+                                            <td class="px-2 py-2 text-right text-emerald-700 font-black bg-emerald-50/50 whitespace-nowrap">{{ formatMAD(asset.val_optimiste) }}</td>
                                             <td class="px-2 py-2 text-center whitespace-nowrap">
                                                 <div class="flex flex-col items-center gap-0.5">
-                                                    <button @click="editFoncier(idx)" class="text-[12px]" title="Éditer">✏️</button>
-                                                    <button @click="deleteFoncier(idx)" class="text-[12px]" title="Supprimer">🗑️</button>
+                                                    <button @click="editMasterAsset(asset.id)" class="text-[12px]" title="Éditer">✏️</button>
+                                                    <button @click="deleteMasterAsset(asset.id)" class="text-[12px]" title="Supprimer">🗑️</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -2262,7 +2262,7 @@
                                 </table>
                             </div>
 
-                            <button @click="openFoncierModal" class="mt-3 w-full py-2.5 rounded-xl border-2 border-dashed border-amber-300 hover:border-amber-500 text-amber-700 font-black uppercase text-[10px] tracking-widest">
+                            <button @click="openMasterAssetModal" class="mt-3 w-full py-2.5 rounded-xl border-2 border-dashed border-amber-300 hover:border-amber-500 text-amber-700 font-black uppercase text-[10px] tracking-widest">
                                 ➕ Nouvel Actif Foncier
                             </button>
                             <!-- Synthèse mobile -->
@@ -2665,27 +2665,40 @@
             </nav>
         </div>
 
-        <!-- ━━ MODALES CRUD — racine #app, visibles desktop + mobile ━━ -->
-        <div v-if="showFoncierModal" @click.self="closeFoncierModal"
+        <!-- ━━ MODALE CRUD UNIFIÉE — Master Asset Engine v17.0 ━━ -->
+        <div v-if="showMasterAssetModal" @click.self="closeMasterAssetModal"
              class="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden">
-                <div class="px-5 py-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-gray-100 flex items-center justify-between">
+                <div :class="['px-5 py-4 border-b border-gray-100 flex items-center justify-between', masterAssetForm.isProductive ? 'bg-gradient-to-r from-violet-50 to-purple-50' : 'bg-gradient-to-r from-amber-50 to-orange-50']">
                     <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">
-                        {{ editingFoncierIndex !== null ? '✏️ Éditer l\'actif foncier' : '➕ Nouvel actif foncier' }}
+                        {{ editingMasterAssetId !== null ? '✏️ Éditer l\'actif' : '➕ Nouvel actif patrimoine' }}
                     </h3>
-                    <button @click="closeFoncierModal" class="text-gray-400 hover:text-gray-700 text-xl font-black">✕</button>
+                    <button @click="closeMasterAssetModal" class="text-gray-400 hover:text-gray-700 text-xl font-black">✕</button>
                 </div>
-                <div class="p-5 space-y-4">
-                    <div>
-                        <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Nom de l'actif</label>
-                        <input v-model="foncierForm.nom" type="text" placeholder="Ex: Foncier Sud (Rte Agadir)"
-                               class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-amber-500"/>
-                    </div>
+                <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                    <!-- Nom + Type -->
                     <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Nom de l'actif</label>
+                            <input v-model="masterAssetForm.name" type="text" placeholder="Ex: Immeuble Casablanca"
+                                   class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-violet-500"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Type d'actif</label>
+                            <select v-model="masterAssetForm.type" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-violet-500">
+                                <option>Commercial</option>
+                                <option>Résidentiel</option>
+                                <option>Investissement</option>
+                                <option>Terrain Nu</option>
+                                <option>Industriel</option>
+                                <option>Agricole</option>
+                                <option>Hôtelier</option>
+                            </select>
+                        </div>
                         <div>
                             <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Quote-part</label>
-                            <select v-model="foncierForm.quotePart" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-amber-500">
-                                <option value="100%">100% (pleine propriété)</option>
+                            <select v-model="masterAssetForm.quotePart" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-violet-500">
+                                <option value="100%">100%</option>
                                 <option value="50%">50%</option>
                                 <option value="35%">35% (indivision)</option>
                                 <option value="25%">25%</option>
@@ -2693,96 +2706,68 @@
                                 <option value="10%">10%</option>
                             </select>
                         </div>
+                    </div>
+                    <!-- Catégorie -->
+                    <div class="flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer" :class="masterAssetForm.isProductive ? 'border-violet-300 bg-violet-50' : 'border-amber-300 bg-amber-50'" @click="masterAssetForm.isProductive = !masterAssetForm.isProductive">
+                        <div :class="['w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0', masterAssetForm.isProductive ? 'bg-violet-600 border-violet-600' : 'border-gray-300 bg-white']">
+                            <span v-if="masterAssetForm.isProductive" class="text-white text-xs font-black">✓</span>
+                        </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Type d'actif</label>
-                            <select v-model="foncierForm.type" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-amber-500">
-                                <option>Terrain Nu</option>
-                                <option>Résidentiel</option>
-                                <option>Commercial</option>
-                                <option>Industriel</option>
-                                <option>Agricole</option>
-                                <option>Hôtelier</option>
-                            </select>
+                            <p class="text-xs font-black" :class="masterAssetForm.isProductive ? 'text-violet-800' : 'text-amber-800'">
+                                {{ masterAssetForm.isProductive ? '📈 Actif productif (ROI Tracker)' : '🏗️ Actif foncier (Stress Test)' }}
+                            </p>
+                            <p class="text-[9px] font-bold" :class="masterAssetForm.isProductive ? 'text-violet-500' : 'text-amber-500'">Cliquer pour basculer</p>
                         </div>
                     </div>
-                    <div class="grid grid-cols-3 gap-3">
+                    <!-- Valeur + Revenus (productifs) -->
+                    <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-blue-600 block mb-1.5">Conservateur</label>
-                            <input v-model.number="foncierForm.conservateur" type="number" min="0" step="10000"
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">{{ masterAssetForm.isProductive ? 'Capital investi (DH)' : 'Valeur conservatrice (DH)' }}</label>
+                            <input v-model.number="masterAssetForm.value" type="number" min="0" step="10000"
                                    class="w-full bg-blue-50 border-2 border-blue-200 rounded-lg px-3 py-2 text-sm font-black text-blue-800 outline-none focus:border-blue-500 text-right"/>
                         </div>
+                        <div v-if="masterAssetForm.isProductive">
+                            <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">Revenus annuels (DH)</label>
+                            <input v-model.number="masterAssetForm.revenue" type="number" min="0" step="1000"
+                                   class="w-full bg-emerald-50 border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-black text-emerald-800 outline-none focus:border-emerald-500 text-right"/>
+                        </div>
+                    </div>
+                    <!-- Scénarios pessimiste/optimiste (non-productifs) -->
+                    <div v-if="!masterAssetForm.isProductive" class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-red-600 block mb-1.5">Pessimiste</label>
-                            <input v-model.number="foncierForm.pessimiste" type="number" min="0" step="10000"
+                            <label class="text-[10px] font-black uppercase tracking-widest text-red-600 block mb-1.5">Pire scénario (DH)</label>
+                            <input v-model.number="masterAssetForm.val_pessimiste" type="number" min="0" step="10000"
                                    class="w-full bg-red-50 border-2 border-red-200 rounded-lg px-3 py-2 text-sm font-black text-red-800 outline-none focus:border-red-500 text-right"/>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">Optimiste</label>
-                            <input v-model.number="foncierForm.optimiste" type="number" min="0" step="10000"
+                            <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">Meilleur scénario (DH)</label>
+                            <input v-model.number="masterAssetForm.val_optimiste" type="number" min="0" step="10000"
                                    class="w-full bg-emerald-50 border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-black text-emerald-800 outline-none focus:border-emerald-500 text-right"/>
                         </div>
                     </div>
-                    <p class="text-[10px] text-gray-400 font-bold">Valorisations en MAD. La sauvegarde déclenchera la sync Postgres globale.</p>
-                </div>
-                <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
-                    <button @click="closeFoncierModal" class="px-4 py-2 rounded-lg border-2 border-gray-200 text-gray-700 font-black text-xs uppercase tracking-widest hover:bg-gray-100">Annuler</button>
-                    <button @click="saveFoncier" class="px-5 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-amber-900/20 hover:shadow-lg">
-                        {{ editingFoncierIndex !== null ? '💾 Mettre à jour' : '➕ Ajouter' }}
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <div v-if="showAssetModal" @click.self="closeAssetModal"
-             class="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden">
-                <div class="px-5 py-4 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-gray-100 flex items-center justify-between">
-                    <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">
-                        {{ editingAssetIndex !== null ? '✏️ Éditer l\'actif productif' : '➕ Nouvel actif productif' }}
-                    </h3>
-                    <button @click="closeAssetModal" class="text-gray-400 hover:text-gray-700 text-xl font-black">✕</button>
-                </div>
-                <div class="p-5 space-y-4">
-                    <div>
-                        <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Nom de l'actif</label>
-                        <input v-model="assetForm.name" type="text" placeholder="Ex: Immeuble Casablanca"
-                               class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-violet-500"/>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Capital investi (DH)</label>
-                            <input v-model.number="assetForm.value" type="number" min="0" step="10000"
-                                   class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-violet-500 text-right"/>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">Revenus annuels (DH)</label>
-                            <input v-model.number="assetForm.revenue" type="number" min="0" step="1000"
-                                   class="w-full bg-emerald-50 border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-black text-emerald-800 outline-none focus:border-emerald-500 text-right"/>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-3 gap-3">
+                    <!-- Crédit (productifs seulement) -->
+                    <div v-if="masterAssetForm.isProductive" class="grid grid-cols-3 gap-3">
                         <div>
                             <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">Taux crédit (%)</label>
-                            <input v-model.number="assetForm.taux_credit" type="number" min="0" max="30" step="0.1"
+                            <input v-model.number="masterAssetForm.taux_credit" type="number" min="0" max="30" step="0.1"
                                    class="w-full bg-amber-50 border-2 border-amber-200 rounded-lg px-3 py-2 text-sm font-black text-amber-800 outline-none focus:border-amber-500 text-right"/>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5">Durée totale (ans)</label>
-                            <input v-model.number="assetForm.annees_total" type="number" min="0" max="30" step="1"
+                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5">Durée (ans)</label>
+                            <input v-model.number="masterAssetForm.annees_total" type="number" min="0" max="30" step="1"
                                    class="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-violet-600 block mb-1.5">Années restantes</label>
-                            <input v-model.number="assetForm.annees_restantes" type="number" min="0" max="30" step="1"
+                            <label class="text-[10px] font-black uppercase tracking-widest text-violet-600 block mb-1.5">Restantes</label>
+                            <input v-model.number="masterAssetForm.annees_restantes" type="number" min="0" max="30" step="1"
                                    class="w-full bg-violet-50 border-2 border-violet-200 rounded-lg px-3 py-2 text-sm font-black text-violet-800 outline-none focus:border-violet-500 text-right"/>
                         </div>
                     </div>
-                    <p class="text-[10px] text-gray-400 font-bold">Laisser Taux crédit à 0 si l'actif est libre de tout crédit. La sauvegarde déclenchera la sync Postgres.</p>
                 </div>
                 <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
-                    <button @click="closeAssetModal" class="px-4 py-2 rounded-lg border-2 border-gray-200 text-gray-700 font-black text-xs uppercase tracking-widest hover:bg-gray-100">Annuler</button>
-                    <button @click="saveAsset" class="px-5 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-violet-900/20 hover:shadow-lg">
-                        {{ editingAssetIndex !== null ? '💾 Mettre à jour' : '➕ Ajouter' }}
+                    <button @click="closeMasterAssetModal" class="px-4 py-2 rounded-lg border-2 border-gray-200 text-gray-700 font-black text-xs uppercase tracking-widest hover:bg-gray-100">Annuler</button>
+                    <button @click="saveMasterAsset" :class="['px-5 py-2 rounded-lg text-white font-black text-xs uppercase tracking-widest shadow-md hover:shadow-lg', masterAssetForm.isProductive ? 'bg-gradient-to-r from-violet-500 to-purple-600 shadow-violet-900/20' : 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-900/20']">
+                        {{ editingMasterAssetId !== null ? '💾 Mettre à jour' : '➕ Ajouter' }}
                     </button>
                 </div>
             </div>
@@ -2814,8 +2799,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "16.8";
+                    const CURRENT_VERSION = "17.0";
                     const CHANGELOG = [
+                        { version: "17.0", date: "2026-05-07 — Unified Master Asset Engine", changes: ["Architecture — Fusion totale wealthAssets + foncierPortfolio en un seul ref masterAssets (source unique de vérité). Schema unifié : id, name, type, isProductive, value, revenue, taux_credit, annees_total, annees_restantes, val_pessimiste, val_optimiste, quotePart.", "Vues calculées : roiAssets (isProductive=true) → ROI Tracker ; stressAssets (isProductive=false) → Stress Test. totalConservateur/Pessimiste/Optimiste calculés sur stressAssets.", "CRUD unifié : openMasterAssetModal, editMasterAsset(id), deleteMasterAsset(id), saveMasterAsset — remplace les 10 fonctions CRUD précédentes.", "Modale unique adaptative : bascule dynamiquement entre mode Productif (violet, champs revenus+crédit) et mode Foncier (amber, champs pessimiste/optimiste) via checkbox isProductive.", "Migration v16→v17 : executerImportFusion reconstruit masterAssets depuis wealthAssets (annual_income→revenue) + foncierPortfolio (conservateur→value, nom→name) si données legacy détectées.", "Persistance : _schemaVersion bump 16→17, export masterAssets (suppression wealthAssets/foncierPortfolio), watcher unique.", "Templates desktop + mobile mis à jour : asset.revenue, asset.val_pessimiste, asset.val_optimiste, asset.name, editMasterAsset(asset.id), deleteMasterAsset(asset.id).", "n8n — applyOp update_master_asset remplace update_actif + update_foncier sur fd.masterAssets avec fuzzy match unifié."] },
                         { version: "16.9", date: "2026-05-06 — Asset Productif CRUD & Fix Foncier Default", changes: ["Frontend — ROI Tracker 100% dynamique : boutons ✏️ (editAsset) et 🗑️ (deleteAsset) sur chaque carte actif desktop ET mobile.", "Bouton '+ Nouvel Actif Productif' sous la liste desktop (flex justify-end) et pleine largeur mobile.", "Modale partagée (z-60, backdrop-blur, violet) : 4 inputs — Nom, Capital, Revenus annuels + grille 3 colonnes taux_credit/annees_total/annees_restantes avec couleurs sémantiques (amber/slate/violet).", "5 fonctions CRUD : openAssetModal, editAsset(idx), deleteAsset(idx) (confirm), saveAsset (map assetForm.revenue → annual_income), closeAssetModal.", "Fix default foncierPortfolio : 'Magasin Marrakech' renommé 'Local Bouskoura (Commercial)'.", "Toute mutation déclenche handleDataChange → sync Postgres globale."] },
                         { version: "16.8", date: "2026-05-07 — Asset Debt Metrics & AI Communication Fix", changes: ["Backend — RÈGLE ABSOLUE DE COMMUNICATION ajoutée en fin de system prompt (MAJUSCULES) : interdit la réponse vide après tool call ; oblige un résumé HTML détaillé.", "Schema Intent Compiler — target_type 'actif' enrichi : 3 champs optionnels taux_credit, annees_total, annees_restantes (ne s'écrasent pas si non fournis).", "buildOps : actif → spread conditionnel des nouveaux champs (préservation des valeurs existantes).", "applyOp update_actif réécrit : patch granulaire par champ (montant + 3 dette), log.changes structuré avec avant/apres par clé, error si aucun champ fourni.", "Frontend — wealthAssets initialisé avec dette : Bouskoura (4.5% / 15 / 12), CTO (0/0/0), Studio (4.75% / 20 / 18).", "ROI Tracker desktop : ligne de badges 🏦 Crédit % | Durée ans | Reste ans (affichée si taux_credit > 0).", "ROI Tracker mobile : 3 mini-badges compacts (text-[9px], couleurs amber/slate/violet) sous capital/revenus.", "super_agent_cfo.json régénéré (system prompt 8795 chars)."] },
                         { version: "16.6", date: "2026-05-07 — UI Foncier CRUD & AI Market Intelligence", changes: ["Frontend — Stress Test Foncier 100% dynamique : colonne Actions (✏️ éditer / 🗑️ supprimer) sur tableau desktop ET mobile.", "Bouton '+ Nouvel Actif Foncier' sous chaque tableau (desktop + mobile).", "Modale partagée (z-60, backdrop-blur) : 6 inputs (nom, quotePart select, type select, conservateur/pessimiste/optimiste avec couleurs sémantiques).", "5 fonctions CRUD : openFoncierModal, editFoncier(idx), deleteFoncier(idx) (avec confirm), saveFoncier (validation nom obligatoire), closeFoncierModal.", "Toute mutation déclenche handleDataChange → sauvegarde Postgres globale.", "Backend n8n — nouvelle category 'foncier' dans Intent Compiler (modify only).", "buildOps : 'foncier' → op update_foncier (key, scenario, montant) ; sub_target hérité de change.sous_categorie ou subTarget.", "applyOp : update_foncier scoped sur fd.foncierPortfolio[] avec fuzzy match nom + validation enum scenario (conservateur|pessimiste|optimiste).", "System prompt §10 'Stress Test & Market Intelligence' : RÈGLE OBLIGATOIRE — toute réévaluation contextuelle exige web_search en amont, citation source, sinon refus avec fourchettes raisonnées.", "super_agent_cfo.json régénéré (system prompt 8371 chars, +1527)."] },
@@ -3057,125 +3043,82 @@
                     const arbitrageInvestRate = ref(7.0);
                     const arbitrageYears = ref(5);
 
-                    // ── v16.5 : Stress Test Foncier (Indivision Marrakech) ──
-                    const foncierPortfolio = ref([
-                        { nom: 'Foncier Nord (Rte Casa)', quotePart: '35%', type: 'Terrain Nu', conservateur: 16450000, pessimiste: 8750000, optimiste: 80500000 },
-                        { nom: 'Foncier Est (Rte Ouarzazate)', quotePart: '35%', type: 'Terrain Nu', conservateur: 3675000, pessimiste: 3675000, optimiste: 10500000 },
-                        { nom: 'Villa Riad Salam', quotePart: '35%', type: 'Résidentiel', conservateur: 1400000, pessimiste: 1260000, optimiste: 1680000 },
-                        { nom: 'Local Bouskoura (Commercial)', quotePart: '100%', type: 'Commercial', conservateur: 900000, pessimiste: 800000, optimiste: 1000000 }
+                    // ── v17.0 : Master Asset Engine (source unique de vérité) ──
+                    const masterAssets = ref([
+                        { id: 'ma_1', name: 'Local Bouskoura (Hadri Parfums)', type: 'Commercial', isProductive: true,  value: 1200000, revenue: 84000,  taux_credit: 4.5,  annees_total: 15, annees_restantes: 12, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%' },
+                        { id: 'ma_2', name: 'CTO Wafabourse',                  type: 'Investissement', isProductive: true,  value: 150000,  revenue: 9000,   taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%' },
+                        { id: 'ma_3', name: 'Studio Airbnb',                   type: 'Résidentiel',   isProductive: true,  value: 450000,  revenue: 36000,  taux_credit: 4.75, annees_total: 20, annees_restantes: 18, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%' },
+                        { id: 'ma_4', name: 'Foncier Nord (Rte Casa)',          type: 'Terrain Nu',    isProductive: false, value: 16450000, revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 8750000, val_optimiste: 80500000, quotePart: '35%'  },
+                        { id: 'ma_5', name: 'Foncier Est (Rte Ouarzazate)',     type: 'Terrain Nu',    isProductive: false, value: 3675000,  revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 3675000, val_optimiste: 10500000, quotePart: '35%'  },
+                        { id: 'ma_6', name: 'Villa Riad Salam',                 type: 'Résidentiel',   isProductive: false, value: 1400000,  revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 1260000, val_optimiste: 1680000,  quotePart: '35%'  },
+                        { id: 'ma_7', name: 'Local Bouskoura (Commercial)',     type: 'Commercial',    isProductive: false, value: 900000,   revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 800000,  val_optimiste: 1000000,  quotePart: '100%' },
                     ]);
-                    const totalConservateur = computed(() => foncierPortfolio.value.reduce((s, a) => s + (Number(a.conservateur) || 0), 0));
-                    const totalPessimiste = computed(() => foncierPortfolio.value.reduce((s, a) => s + (Number(a.pessimiste) || 0), 0));
-                    const totalOptimiste = computed(() => foncierPortfolio.value.reduce((s, a) => s + (Number(a.optimiste) || 0), 0));
+                    const roiAssets    = computed(() => masterAssets.value.filter(a => a.isProductive));
+                    const stressAssets = computed(() => masterAssets.value.filter(a => !a.isProductive));
+                    const totalConservateur = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.value) || 0), 0));
+                    const totalPessimiste   = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.val_pessimiste) || 0), 0));
+                    const totalOptimiste    = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.val_optimiste) || 0), 0));
 
-                    // ── v16.6 : CRUD Foncier (modale + handlers) ────────
-                    const showFoncierModal = ref(false);
-                    const editingFoncierIndex = ref(null);
-                    const _emptyFoncierForm = () => ({ nom: '', quotePart: '35%', type: 'Terrain Nu', conservateur: 0, pessimiste: 0, optimiste: 0 });
-                    const foncierForm = ref(_emptyFoncierForm());
+                    // ── v17.0 : CRUD unifié Master Asset ─────────────────
+                    const showMasterAssetModal = ref(false);
+                    const editingMasterAssetId = ref(null);
+                    const _emptyMasterAssetForm = () => ({ name: '', type: 'Commercial', isProductive: true, value: 0, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0, val_pessimiste: 0, val_optimiste: 0, quotePart: '100%' });
+                    const masterAssetForm = ref(_emptyMasterAssetForm());
 
-                    const openFoncierModal = () => {
-                        editingFoncierIndex.value = null;
-                        foncierForm.value = _emptyFoncierForm();
-                        showFoncierModal.value = true;
+                    const openMasterAssetModal = () => {
+                        editingMasterAssetId.value = null;
+                        masterAssetForm.value = _emptyMasterAssetForm();
+                        showMasterAssetModal.value = true;
                     };
-                    const editFoncier = (idx) => {
-                        const asset = foncierPortfolio.value[idx];
+                    const editMasterAsset = (id) => {
+                        const asset = masterAssets.value.find(a => a.id === id);
                         if (!asset) return;
-                        editingFoncierIndex.value = idx;
-                        foncierForm.value = { ...asset };
-                        showFoncierModal.value = true;
+                        editingMasterAssetId.value = id;
+                        masterAssetForm.value = { ...asset };
+                        showMasterAssetModal.value = true;
                     };
-                    const deleteFoncier = (idx) => {
-                        const asset = foncierPortfolio.value[idx];
+                    const deleteMasterAsset = (id) => {
+                        const asset = masterAssets.value.find(a => a.id === id);
                         if (!asset) return;
-                        if (!confirm(`Supprimer "${asset.nom}" de la matrice ?`)) return;
-                        foncierPortfolio.value.splice(idx, 1);
+                        if (!confirm(`Supprimer "${asset.name}" du patrimoine ?`)) return;
+                        masterAssets.value = masterAssets.value.filter(a => a.id !== id);
                         handleDataChange();
                     };
-                    const closeFoncierModal = () => {
-                        showFoncierModal.value = false;
-                        editingFoncierIndex.value = null;
+                    const closeMasterAssetModal = () => {
+                        showMasterAssetModal.value = false;
+                        editingMasterAssetId.value = null;
                     };
-                    const saveFoncier = () => {
-                        const f = foncierForm.value;
-                        if (!f.nom || !f.nom.trim()) { alert('Nom obligatoire'); return; }
+                    const saveMasterAsset = () => {
+                        const f = masterAssetForm.value;
+                        if (!f.name || !f.name.trim()) { alert('Nom obligatoire'); return; }
                         const cleaned = {
-                            nom: String(f.nom).trim(),
+                            id: editingMasterAssetId.value || ('ma_' + Date.now()),
+                            name: String(f.name).trim(),
+                            type: String(f.type || 'Commercial').trim(),
+                            isProductive: !!f.isProductive,
+                            value: Number(f.value) || 0,
+                            revenue: Number(f.revenue) || 0,
+                            taux_credit: Number(f.taux_credit) || 0,
+                            annees_total: Number(f.annees_total) || 0,
+                            annees_restantes: Number(f.annees_restantes) || 0,
+                            val_pessimiste: Number(f.val_pessimiste) || 0,
+                            val_optimiste: Number(f.val_optimiste) || 0,
                             quotePart: String(f.quotePart || '100%').trim(),
-                            type: String(f.type || '').trim(),
-                            conservateur: Number(f.conservateur) || 0,
-                            pessimiste: Number(f.pessimiste) || 0,
-                            optimiste: Number(f.optimiste) || 0,
                         };
-                        if (editingFoncierIndex.value !== null) {
-                            foncierPortfolio.value.splice(editingFoncierIndex.value, 1, cleaned);
+                        if (editingMasterAssetId.value !== null) {
+                            masterAssets.value = masterAssets.value.map(a => a.id === editingMasterAssetId.value ? cleaned : a);
                         } else {
-                            foncierPortfolio.value = [...foncierPortfolio.value, cleaned];
+                            masterAssets.value = [...masterAssets.value, cleaned];
                         }
                         handleDataChange();
-                        closeFoncierModal();
+                        closeMasterAssetModal();
                     };
 
-                    // ── v16.1 : Smart Goals & Wealth Tracker ─────────────
+                    // ── v16.1 : Smart Goals ───────────────────────────────
                     const wealthGoals = ref([
                         { name: 'Voyage Paris/Amsterdam', target: 40000, current: 15000 },
                         { name: 'Etudes Jlilou', target: 200000, current: 45000 }
                     ]);
-                    const wealthAssets = ref([
-                        { name: 'Local Bouskoura (Hadri Parfums)', value: 1200000, annual_income: 84000, taux_credit: 4.5, annees_total: 15, annees_restantes: 12 },
-                        { name: 'CTO Wafabourse', value: 150000, annual_income: 9000, taux_credit: 0, annees_total: 0, annees_restantes: 0 },
-                        { name: 'Studio Airbnb', value: 450000, annual_income: 36000, taux_credit: 4.75, annees_total: 20, annees_restantes: 18 }
-                    ]);
-
-                    // ── v16.9 : wealthAssets CRUD ─────────────────────────
-                    const showAssetModal = ref(false);
-                    const editingAssetIndex = ref(null);
-                    const _emptyAssetForm = () => ({ name: '', revenue: 0, value: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0 });
-                    const assetForm = ref(_emptyAssetForm());
-
-                    const openAssetModal = () => {
-                        editingAssetIndex.value = null;
-                        assetForm.value = _emptyAssetForm();
-                        showAssetModal.value = true;
-                    };
-                    const editAsset = (idx) => {
-                        const asset = wealthAssets.value[idx];
-                        if (!asset) return;
-                        editingAssetIndex.value = idx;
-                        assetForm.value = { name: asset.name, revenue: asset.annual_income, value: asset.value, taux_credit: asset.taux_credit || 0, annees_total: asset.annees_total || 0, annees_restantes: asset.annees_restantes || 0 };
-                        showAssetModal.value = true;
-                    };
-                    const deleteAsset = (idx) => {
-                        const asset = wealthAssets.value[idx];
-                        if (!asset) return;
-                        if (!confirm(`Supprimer "${asset.name}" du ROI Tracker ?`)) return;
-                        wealthAssets.value.splice(idx, 1);
-                        handleDataChange();
-                    };
-                    const closeAssetModal = () => {
-                        showAssetModal.value = false;
-                        editingAssetIndex.value = null;
-                    };
-                    const saveAsset = () => {
-                        const f = assetForm.value;
-                        if (!f.name || !f.name.trim()) { alert('Nom obligatoire'); return; }
-                        const cleaned = {
-                            name: String(f.name).trim(),
-                            value: Number(f.value) || 0,
-                            annual_income: Number(f.revenue) || 0,
-                            taux_credit: Number(f.taux_credit) || 0,
-                            annees_total: Number(f.annees_total) || 0,
-                            annees_restantes: Number(f.annees_restantes) || 0,
-                        };
-                        if (editingAssetIndex.value !== null) {
-                            wealthAssets.value.splice(editingAssetIndex.value, 1, cleaned);
-                        } else {
-                            wealthAssets.value = [...wealthAssets.value, cleaned];
-                        }
-                        handleDataChange();
-                        closeAssetModal();
-                    };
 
                     // ── v15.0 : Multi-comptes dynamique ──────────────────
                     const comptes = ref([]);
@@ -3321,7 +3264,7 @@
                         }
                     };
 
-                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 16, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, wealthAssets: wealthAssets.value, foncierPortfolio: foncierPortfolio.value });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 17, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value });
                     const handleDataChange = () => { forceUpdateCalculations(); serverSyncStatus.value = 'modified'; if(syncStatus.value === 'synced') syncStatus.value = 'modified'; };
 
                     const safeMerge = (target, source) => {
@@ -3560,11 +3503,31 @@
                             // v15 : hydratation multi-comptes
                             if (Array.isArray(data.comptes) && data.comptes.length) comptes.value = data.comptes;
                             if (data.parametres && typeof data.parametres === 'object') parametres.value = data.parametres;
-                            // v16.3 : hydratation Wealth (Goals + Assets) depuis Postgres
+                            // v16.3 : hydratation Wealth Goals
                             if (Array.isArray(data.wealthGoals)) wealthGoals.value = data.wealthGoals;
-                            if (Array.isArray(data.wealthAssets)) wealthAssets.value = data.wealthAssets;
-                            // v16.5 : hydratation Stress Test Foncier (graceful : on garde les défauts si vide/absent)
-                            if (Array.isArray(data.foncierPortfolio) && data.foncierPortfolio.length) foncierPortfolio.value = data.foncierPortfolio;
+                            // v17.0 : hydratation Master Assets (avec migration v16→v17)
+                            if (Array.isArray(data.masterAssets) && data.masterAssets.length) {
+                                masterAssets.value = data.masterAssets;
+                            } else if (Array.isArray(data.wealthAssets) || Array.isArray(data.foncierPortfolio)) {
+                                // Migration v16 → v17 : reconstruit masterAssets depuis les deux sources legacy
+                                const migrated = [];
+                                (data.wealthAssets || []).forEach((a, i) => migrated.push({
+                                    id: 'ma_' + (Date.now() + i),
+                                    name: a.name || '', type: a.type || 'Commercial', isProductive: true,
+                                    value: a.value || 0, revenue: a.annual_income || 0,
+                                    taux_credit: a.taux_credit || 0, annees_total: a.annees_total || 0, annees_restantes: a.annees_restantes || 0,
+                                    val_pessimiste: 0, val_optimiste: 0, quotePart: '100%'
+                                }));
+                                (data.foncierPortfolio || []).forEach((a, i) => migrated.push({
+                                    id: 'mf_' + (Date.now() + i),
+                                    name: a.nom || '', type: a.type || 'Terrain Nu', isProductive: false,
+                                    value: a.conservateur || 0, revenue: 0,
+                                    taux_credit: 0, annees_total: 0, annees_restantes: 0,
+                                    val_pessimiste: a.pessimiste || 0, val_optimiste: a.optimiste || 0,
+                                    quotePart: a.quotePart || '100%'
+                                }));
+                                if (migrated.length) { masterAssets.value = migrated; addLog('✅ Migration v16→v17 : masterAssets reconstruit.', 'success'); }
+                            }
 
                             anneeAffichage.value = soldesInitiaux.value.anneeActuelle || 2026;
                             forceUpdateCalculations();
@@ -3587,11 +3550,9 @@
                         handleDataChange();
                     }, { deep: true });
 
-                    // v16.3 : Wealth tab persistence — track goals & assets mutations
-                    watch(wealthGoals, () => handleDataChange(), { deep: true });
-                    watch(wealthAssets, () => handleDataChange(), { deep: true });
-                    // v16.5 : Stress Test Foncier persistence
-                    watch(foncierPortfolio, () => handleDataChange(), { deep: true });
+                    // v17.0 : Wealth tab persistence — single source of truth
+                    watch(wealthGoals,   () => handleDataChange(), { deep: true });
+                    watch(masterAssets,  () => handleDataChange(), { deep: true });
 
                     const nomDuMois = (m) => ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'][m];
                     const formatMAD = (v) => new Intl.NumberFormat('fr-FR').format(Math.round(Number(v) || 0)) + ' DH';
@@ -4232,13 +4193,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         getDueFixe, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
                         anneeCibleProjection, anneesProjectionOptions,
-                        wealthGoals, wealthAssets,
-                        showAssetModal, editingAssetIndex, assetForm,
-                        openAssetModal, editAsset, deleteAsset, saveAsset, closeAssetModal,
+                        wealthGoals, masterAssets, roiAssets, stressAssets,
+                        totalConservateur, totalPessimiste, totalOptimiste,
+                        showMasterAssetModal, editingMasterAssetId, masterAssetForm,
+                        openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal,
                         arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
-                        foncierPortfolio, totalConservateur, totalPessimiste, totalOptimiste,
-                        showFoncierModal, editingFoncierIndex, foncierForm,
-                        openFoncierModal, editFoncier, deleteFoncier, saveFoncier, closeFoncierModal,
                         comptes, parametres,
                         patrimoineLiquide, patrimoineNet,
                         newCompte, editingCompteId, editingCompte,
