@@ -1226,15 +1226,24 @@
                                             <span class="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-md text-violet-600">Reste : <span class="text-violet-800 font-black">{{ asset.annees_restantes }} ans</span></span>
                                         </p>
                                     </div>
-                                    <div class="shrink-0">
+                                    <div class="shrink-0 flex items-center gap-2">
                                         <span :class="['text-sm font-black px-3 py-1.5 rounded-xl border',
                                             (asset.annual_income / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
                                             (asset.annual_income / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
                                             'bg-amber-100 text-amber-700 border-amber-200']">
                                             {{ (asset.annual_income / asset.value * 100).toFixed(2) }}% / an
                                         </span>
+                                        <button @click="editAsset(idx)" class="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-sm" title="Éditer">✏️</button>
+                                        <button @click="deleteAsset(idx)" class="p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-sm" title="Supprimer">🗑️</button>
                                     </div>
                                 </div>
+                            </div>
+
+                            <!-- Bouton ajout actif -->
+                            <div class="flex justify-end mb-4">
+                                <button @click="openAssetModal" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-violet-900/20 transition-colors">
+                                    <span class="text-base leading-none">＋</span> Nouvel Actif Productif
+                                </button>
                             </div>
 
                             <!-- Synthèse globale pondérée -->
@@ -2106,12 +2115,16 @@
                             <div v-for="(asset, idx) in wealthAssets" :key="idx" class="p-3 bg-gray-50 rounded-xl border border-gray-200">
                                 <div class="flex items-start justify-between mb-1.5">
                                     <p class="text-[11px] font-black text-gray-800 flex-1 min-w-0 pr-2 leading-tight">{{ asset.name }}</p>
-                                    <span :class="['text-xs font-black px-2 py-0.5 rounded-lg shrink-0 border',
-                                        (asset.annual_income / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                        (asset.annual_income / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                        'bg-amber-100 text-amber-700 border-amber-200']">
-                                        {{ (asset.annual_income / asset.value * 100).toFixed(2) }}%
-                                    </span>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <span :class="['text-xs font-black px-2 py-0.5 rounded-lg border',
+                                            (asset.annual_income / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                            (asset.annual_income / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                            'bg-amber-100 text-amber-700 border-amber-200']">
+                                            {{ (asset.annual_income / asset.value * 100).toFixed(2) }}%
+                                        </span>
+                                        <button @click="editAsset(idx)" class="p-1 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-xs" title="Éditer">✏️</button>
+                                        <button @click="deleteAsset(idx)" class="p-1 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-xs" title="Supprimer">🗑️</button>
+                                    </div>
                                 </div>
                                 <div class="flex gap-4">
                                     <p class="text-[9px] text-gray-500 font-bold">Capital : <span class="text-gray-700 font-black">{{ formatMAD(asset.value) }}</span></p>
@@ -2123,6 +2136,11 @@
                                     <span class="bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded text-violet-700">Reste {{ asset.annees_restantes }}a</span>
                                 </p>
                             </div>
+                            <!-- Bouton ajout actif mobile -->
+                            <button @click="openAssetModal" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-sm transition-colors">
+                                <span class="text-sm leading-none">＋</span> Nouvel Actif Productif
+                            </button>
+
                             <!-- Synthèse -->
                             <div class="bg-gradient-to-r from-violet-600 to-purple-700 rounded-xl p-4 text-white text-center">
                                 <p class="text-[9px] uppercase tracking-widest opacity-70 mb-2">Synthèse globale</p>
@@ -2680,6 +2698,62 @@
                 </div>
             </div>
 
+            <!-- ── v16.9 : Asset Productif Modal ── -->
+            <div v-if="showAssetModal" @click.self="closeAssetModal"
+                 class="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden">
+                    <div class="px-5 py-4 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-gray-100 flex items-center justify-between">
+                        <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">
+                            {{ editingAssetIndex !== null ? '✏️ Éditer l\'actif productif' : '➕ Nouvel actif productif' }}
+                        </h3>
+                        <button @click="closeAssetModal" class="text-gray-400 hover:text-gray-700 text-xl font-black">✕</button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Nom de l'actif</label>
+                            <input v-model="assetForm.name" type="text" placeholder="Ex: Immeuble Casablanca"
+                                   class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 outline-none focus:border-violet-500"/>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Capital investi (DH)</label>
+                                <input v-model.number="assetForm.value" type="number" min="0" step="10000"
+                                       class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-violet-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">Revenus annuels (DH)</label>
+                                <input v-model.number="assetForm.revenue" type="number" min="0" step="1000"
+                                       class="w-full bg-emerald-50 border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-black text-emerald-800 outline-none focus:border-emerald-500 text-right"/>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">Taux crédit (%)</label>
+                                <input v-model.number="assetForm.taux_credit" type="number" min="0" max="30" step="0.1"
+                                       class="w-full bg-amber-50 border-2 border-amber-200 rounded-lg px-3 py-2 text-sm font-black text-amber-800 outline-none focus:border-amber-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5">Durée totale (ans)</label>
+                                <input v-model.number="assetForm.annees_total" type="number" min="0" max="30" step="1"
+                                       class="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-violet-600 block mb-1.5">Années restantes</label>
+                                <input v-model.number="assetForm.annees_restantes" type="number" min="0" max="30" step="1"
+                                       class="w-full bg-violet-50 border-2 border-violet-200 rounded-lg px-3 py-2 text-sm font-black text-violet-800 outline-none focus:border-violet-500 text-right"/>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-400 font-bold">Laisser Taux crédit à 0 si l'actif est libre de tout crédit. La sauvegarde déclenchera la sync Postgres.</p>
+                    </div>
+                    <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+                        <button @click="closeAssetModal" class="px-4 py-2 rounded-lg border-2 border-gray-200 text-gray-700 font-black text-xs uppercase tracking-widest hover:bg-gray-100">Annuler</button>
+                        <button @click="saveAsset" class="px-5 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-violet-900/20 hover:shadow-lg">
+                            {{ editingAssetIndex !== null ? '💾 Mettre à jour' : '➕ Ajouter' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- BOTTOM NAV (v16.1 : 6 onglets + wealth) -->
             <nav class="fixed bottom-0 left-0 right-0 w-full z-50 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] flex justify-around items-stretch h-16 overflow-x-auto">
                 <button @click="activeMobileTab = 'bilan'"
@@ -2743,6 +2817,7 @@
                 setup() {
                     const CURRENT_VERSION = "16.8";
                     const CHANGELOG = [
+                        { version: "16.9", date: "2026-05-06 — Asset Productif CRUD & Fix Foncier Default", changes: ["Frontend — ROI Tracker 100% dynamique : boutons ✏️ (editAsset) et 🗑️ (deleteAsset) sur chaque carte actif desktop ET mobile.", "Bouton '+ Nouvel Actif Productif' sous la liste desktop (flex justify-end) et pleine largeur mobile.", "Modale partagée (z-60, backdrop-blur, violet) : 4 inputs — Nom, Capital, Revenus annuels + grille 3 colonnes taux_credit/annees_total/annees_restantes avec couleurs sémantiques (amber/slate/violet).", "5 fonctions CRUD : openAssetModal, editAsset(idx), deleteAsset(idx) (confirm), saveAsset (map assetForm.revenue → annual_income), closeAssetModal.", "Fix default foncierPortfolio : 'Magasin Marrakech' renommé 'Local Bouskoura (Commercial)'.", "Toute mutation déclenche handleDataChange → sync Postgres globale."] },
                         { version: "16.8", date: "2026-05-07 — Asset Debt Metrics & AI Communication Fix", changes: ["Backend — RÈGLE ABSOLUE DE COMMUNICATION ajoutée en fin de system prompt (MAJUSCULES) : interdit la réponse vide après tool call ; oblige un résumé HTML détaillé.", "Schema Intent Compiler — target_type 'actif' enrichi : 3 champs optionnels taux_credit, annees_total, annees_restantes (ne s'écrasent pas si non fournis).", "buildOps : actif → spread conditionnel des nouveaux champs (préservation des valeurs existantes).", "applyOp update_actif réécrit : patch granulaire par champ (montant + 3 dette), log.changes structuré avec avant/apres par clé, error si aucun champ fourni.", "Frontend — wealthAssets initialisé avec dette : Bouskoura (4.5% / 15 / 12), CTO (0/0/0), Studio (4.75% / 20 / 18).", "ROI Tracker desktop : ligne de badges 🏦 Crédit % | Durée ans | Reste ans (affichée si taux_credit > 0).", "ROI Tracker mobile : 3 mini-badges compacts (text-[9px], couleurs amber/slate/violet) sous capital/revenus.", "super_agent_cfo.json régénéré (system prompt 8795 chars)."] },
                         { version: "16.6", date: "2026-05-07 — UI Foncier CRUD & AI Market Intelligence", changes: ["Frontend — Stress Test Foncier 100% dynamique : colonne Actions (✏️ éditer / 🗑️ supprimer) sur tableau desktop ET mobile.", "Bouton '+ Nouvel Actif Foncier' sous chaque tableau (desktop + mobile).", "Modale partagée (z-60, backdrop-blur) : 6 inputs (nom, quotePart select, type select, conservateur/pessimiste/optimiste avec couleurs sémantiques).", "5 fonctions CRUD : openFoncierModal, editFoncier(idx), deleteFoncier(idx) (avec confirm), saveFoncier (validation nom obligatoire), closeFoncierModal.", "Toute mutation déclenche handleDataChange → sauvegarde Postgres globale.", "Backend n8n — nouvelle category 'foncier' dans Intent Compiler (modify only).", "buildOps : 'foncier' → op update_foncier (key, scenario, montant) ; sub_target hérité de change.sous_categorie ou subTarget.", "applyOp : update_foncier scoped sur fd.foncierPortfolio[] avec fuzzy match nom + validation enum scenario (conservateur|pessimiste|optimiste).", "System prompt §10 'Stress Test & Market Intelligence' : RÈGLE OBLIGATOIRE — toute réévaluation contextuelle exige web_search en amont, citation source, sinon refus avec fourchettes raisonnées.", "super_agent_cfo.json régénéré (system prompt 8371 chars, +1527)."] },
                         { version: "16.5", date: "2026-05-07 — Stress Test Foncier Matrix", changes: ["Onglet Wealth — Section 4 : Matrice de Risque Foncier (Indivision Marrakech) desktop + mobile.", "4 actifs initialisés : Foncier Nord (35%), Foncier Est (35%), Villa Riad Salam (35%), Magasin Marrakech (100%).", "Tableau 3 scénarios : Conservateur (bleu, référence), Pessimiste (rouge, stagnation), Optimiste (vert, SDAU 2030).", "3 computed : totalConservateur, totalPessimiste, totalOptimiste (somme automatique par colonne).", "Footer (tfoot) : ligne Total Valeur Brute en gradient slate→violet, totaux par scénario.", "Synthèse risque : 3 cards Δ% — référence, risque max (delta), upside SDAU (delta+).", "Persistance Postgres : foncierPortfolio inclus dans getExportData() + hydratation graceful (défauts conservés si DB vide).", "Watcher deep sur foncierPortfolio → serverSyncStatus='modified' à toute mutation.", "Mobile : table compacte text-[10px] avec colonnes raccourcies (Conserv./Pire/SDAU)."] },
@@ -2988,7 +3063,7 @@
                         { nom: 'Foncier Nord (Rte Casa)', quotePart: '35%', type: 'Terrain Nu', conservateur: 16450000, pessimiste: 8750000, optimiste: 80500000 },
                         { nom: 'Foncier Est (Rte Ouarzazate)', quotePart: '35%', type: 'Terrain Nu', conservateur: 3675000, pessimiste: 3675000, optimiste: 10500000 },
                         { nom: 'Villa Riad Salam', quotePart: '35%', type: 'Résidentiel', conservateur: 1400000, pessimiste: 1260000, optimiste: 1680000 },
-                        { nom: 'Magasin Marrakech', quotePart: '100%', type: 'Commercial', conservateur: 900000, pessimiste: 800000, optimiste: 1000000 }
+                        { nom: 'Local Bouskoura (Commercial)', quotePart: '100%', type: 'Commercial', conservateur: 900000, pessimiste: 800000, optimiste: 1000000 }
                     ]);
                     const totalConservateur = computed(() => foncierPortfolio.value.reduce((s, a) => s + (Number(a.conservateur) || 0), 0));
                     const totalPessimiste = computed(() => foncierPortfolio.value.reduce((s, a) => s + (Number(a.pessimiste) || 0), 0));
@@ -3053,6 +3128,55 @@
                         { name: 'CTO Wafabourse', value: 150000, annual_income: 9000, taux_credit: 0, annees_total: 0, annees_restantes: 0 },
                         { name: 'Studio Airbnb', value: 450000, annual_income: 36000, taux_credit: 4.75, annees_total: 20, annees_restantes: 18 }
                     ]);
+
+                    // ── v16.9 : wealthAssets CRUD ─────────────────────────
+                    const showAssetModal = ref(false);
+                    const editingAssetIndex = ref(null);
+                    const _emptyAssetForm = () => ({ name: '', revenue: 0, value: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0 });
+                    const assetForm = ref(_emptyAssetForm());
+
+                    const openAssetModal = () => {
+                        editingAssetIndex.value = null;
+                        assetForm.value = _emptyAssetForm();
+                        showAssetModal.value = true;
+                    };
+                    const editAsset = (idx) => {
+                        const asset = wealthAssets.value[idx];
+                        if (!asset) return;
+                        editingAssetIndex.value = idx;
+                        assetForm.value = { name: asset.name, revenue: asset.annual_income, value: asset.value, taux_credit: asset.taux_credit || 0, annees_total: asset.annees_total || 0, annees_restantes: asset.annees_restantes || 0 };
+                        showAssetModal.value = true;
+                    };
+                    const deleteAsset = (idx) => {
+                        const asset = wealthAssets.value[idx];
+                        if (!asset) return;
+                        if (!confirm(`Supprimer "${asset.name}" du ROI Tracker ?`)) return;
+                        wealthAssets.value.splice(idx, 1);
+                        handleDataChange();
+                    };
+                    const closeAssetModal = () => {
+                        showAssetModal.value = false;
+                        editingAssetIndex.value = null;
+                    };
+                    const saveAsset = () => {
+                        const f = assetForm.value;
+                        if (!f.name || !f.name.trim()) { alert('Nom obligatoire'); return; }
+                        const cleaned = {
+                            name: String(f.name).trim(),
+                            value: Number(f.value) || 0,
+                            annual_income: Number(f.revenue) || 0,
+                            taux_credit: Number(f.taux_credit) || 0,
+                            annees_total: Number(f.annees_total) || 0,
+                            annees_restantes: Number(f.annees_restantes) || 0,
+                        };
+                        if (editingAssetIndex.value !== null) {
+                            wealthAssets.value.splice(editingAssetIndex.value, 1, cleaned);
+                        } else {
+                            wealthAssets.value = [...wealthAssets.value, cleaned];
+                        }
+                        handleDataChange();
+                        closeAssetModal();
+                    };
 
                     // ── v15.0 : Multi-comptes dynamique ──────────────────
                     const comptes = ref([]);
@@ -4110,6 +4234,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
                         anneeCibleProjection, anneesProjectionOptions,
                         wealthGoals, wealthAssets,
+                        showAssetModal, editingAssetIndex, assetForm,
+                        openAssetModal, editAsset, deleteAsset, saveAsset, closeAssetModal,
                         arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
                         foncierPortfolio, totalConservateur, totalPessimiste, totalOptimiste,
                         showFoncierModal, editingFoncierIndex, foncierForm,
