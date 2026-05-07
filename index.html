@@ -2732,9 +2732,10 @@
                     <!-- Valeur + Revenus (productifs) -->
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">{{ masterAssetForm.isProductive ? 'Capital investi (DH)' : 'Valeur conservatrice (DH)' }}</label>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">{{ masterAssetForm.isProductive ? 'Capital investi (DH) 🔒' : 'Valeur conservatrice (DH)' }}</label>
                             <input v-model.number="masterAssetForm.value" type="number" min="0" step="10000"
-                                   class="w-full bg-blue-50 border-2 border-blue-200 rounded-lg px-3 py-2 text-sm font-black text-blue-800 outline-none focus:border-blue-500 text-right"/>
+                                   :readonly="masterAssetForm.isProductive"
+                                   :class="masterAssetForm.isProductive ? 'w-full bg-gray-100 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-500 outline-none cursor-not-allowed opacity-80 text-right' : 'w-full bg-blue-50 border-2 border-blue-200 rounded-lg px-3 py-2 text-sm font-black text-blue-800 outline-none focus:border-blue-500 text-right'"/>
                         </div>
                         <div v-if="masterAssetForm.isProductive">
                             <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">Revenus annuels (DH)</label>
@@ -2760,11 +2761,13 @@
                         <div>
                             <label class="text-[10px] font-black uppercase tracking-widest text-indigo-600 block mb-1.5">Apport personnel (DH)</label>
                             <input v-model.number="masterAssetForm.apport_personnel" type="number" min="0" step="5000"
+                                   @input="calculerCapital"
                                    class="w-full bg-indigo-50 border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-black text-indigo-800 outline-none focus:border-indigo-500 text-right"/>
                         </div>
                         <div>
                             <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">Montant crédit (DH)</label>
                             <input v-model.number="masterAssetForm.montant_credit" type="number" min="0" step="5000"
+                                   @input="calculerCapital"
                                    class="w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right"/>
                         </div>
                     </div>
@@ -2822,8 +2825,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.1";
+                    const CURRENT_VERSION = "17.2";
                     const CHANGELOG = [
+                        { version: "17.2", date: "2026-05-07 — Auto-calculate Capital Investi", changes: ["Modale — Capital Investi (DH) devient readonly pour les actifs productifs : calculé automatiquement comme Apport + Montant Crédit.", "Nouvelle fonction calculerCapital() déclenchée sur @input des champs Apport Personnel et Montant Crédit.", "UI : champ Capital verrouillé visuellement (bg-gray-100, cursor-not-allowed, opacity-80, label 🔒) quand isProductive=true.", "Sécurité : calculerCapital ne se déclenche qu'à la saisie manuelle — l'ouverture d'un actif existant préserve la valeur stockée."] },
                         { version: "17.1", date: "2026-05-07 — Equity & Loan Amount Tracking (ROE)", changes: ["Schema masterAssets enrichi : 2 nouveaux champs apport_personnel (DH) et montant_credit (DH) sur tous les actifs productifs.", "Modale unifiée — nouvelle section Financement (grille 2 col, indigo/rose) au-dessus des champs crédit : Apport Personnel + Montant Crédit.", "ROI Tracker desktop + mobile : 3 badges supplémentaires conditionnels (si montant_credit > 0) — 💼 Apport, 🏛️ Banque, 📊 ROE. Le ROE = revenus / apport_personnel × 100, distinguant le rendement sur fonds propres du ROI sur valeur totale.", "n8n — applyOp update_master_asset : sauvegarde conditionnelle apport_personnel et montant_credit. System prompt actif enrichi : apport_personnel (mise de fonds initiale), montant_credit (capital emprunté).", "super_agent_cfo.json régénéré."] },
                         { version: "17.0", date: "2026-05-07 — Unified Master Asset Engine", changes: ["Architecture — Fusion totale wealthAssets + foncierPortfolio en un seul ref masterAssets (source unique de vérité). Schema unifié : id, name, type, isProductive, value, revenue, taux_credit, annees_total, annees_restantes, val_pessimiste, val_optimiste, quotePart.", "Vues calculées : roiAssets (isProductive=true) → ROI Tracker ; stressAssets (isProductive=false) → Stress Test. totalConservateur/Pessimiste/Optimiste calculés sur stressAssets.", "CRUD unifié : openMasterAssetModal, editMasterAsset(id), deleteMasterAsset(id), saveMasterAsset — remplace les 10 fonctions CRUD précédentes.", "Modale unique adaptative : bascule dynamiquement entre mode Productif (violet, champs revenus+crédit) et mode Foncier (amber, champs pessimiste/optimiste) via checkbox isProductive.", "Migration v16→v17 : executerImportFusion reconstruit masterAssets depuis wealthAssets (annual_income→revenue) + foncierPortfolio (conservateur→value, nom→name) si données legacy détectées.", "Persistance : _schemaVersion bump 16→17, export masterAssets (suppression wealthAssets/foncierPortfolio), watcher unique.", "Templates desktop + mobile mis à jour : asset.revenue, asset.val_pessimiste, asset.val_optimiste, asset.name, editMasterAsset(asset.id), deleteMasterAsset(asset.id).", "n8n — applyOp update_master_asset remplace update_actif + update_foncier sur fd.masterAssets avec fuzzy match unifié."] },
                         { version: "16.9", date: "2026-05-06 — Asset Productif CRUD & Fix Foncier Default", changes: ["Frontend — ROI Tracker 100% dynamique : boutons ✏️ (editAsset) et 🗑️ (deleteAsset) sur chaque carte actif desktop ET mobile.", "Bouton '+ Nouvel Actif Productif' sous la liste desktop (flex justify-end) et pleine largeur mobile.", "Modale partagée (z-60, backdrop-blur, violet) : 4 inputs — Nom, Capital, Revenus annuels + grille 3 colonnes taux_credit/annees_total/annees_restantes avec couleurs sémantiques (amber/slate/violet).", "5 fonctions CRUD : openAssetModal, editAsset(idx), deleteAsset(idx) (confirm), saveAsset (map assetForm.revenue → annual_income), closeAssetModal.", "Fix default foncierPortfolio : 'Magasin Marrakech' renommé 'Local Bouskoura (Commercial)'.", "Toute mutation déclenche handleDataChange → sync Postgres globale."] },
@@ -3088,6 +3092,10 @@
                     const editingMasterAssetId = ref(null);
                     const _emptyMasterAssetForm = () => ({ name: '', type: 'Commercial', isProductive: true, value: 0, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0, val_pessimiste: 0, val_optimiste: 0, quotePart: '100%', apport_personnel: 0, montant_credit: 0 });
                     const masterAssetForm = ref(_emptyMasterAssetForm());
+
+                    const calculerCapital = () => {
+                        assetForm.value.value = (Number(assetForm.value.apport_personnel) || 0) + (Number(assetForm.value.montant_credit) || 0);
+                    };
 
                     const openMasterAssetModal = () => {
                         editingMasterAssetId.value = null;
@@ -4222,7 +4230,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         wealthGoals, masterAssets, roiAssets, stressAssets,
                         totalConservateur, totalPessimiste, totalOptimiste,
                         showMasterAssetModal, editingMasterAssetId, masterAssetForm,
-                        openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal,
+                        openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
                         comptes, parametres,
                         patrimoineLiquide, patrimoineNet,
