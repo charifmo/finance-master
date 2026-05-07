@@ -1225,6 +1225,11 @@
                                             <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">Durée : <span class="text-slate-800 font-black">{{ asset.annees_total }} ans</span></span>
                                             <span class="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-md text-violet-600">Reste : <span class="text-violet-800 font-black">{{ asset.annees_restantes }} ans</span></span>
                                         </p>
+                                        <p v-if="asset.montant_credit > 0" class="text-[10px] font-bold mt-1.5 flex flex-wrap items-center gap-2">
+                                            <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md text-indigo-700">💼 Apport : <span class="font-black">{{ formatMAD(asset.apport_personnel) }}</span></span>
+                                            <span class="inline-flex items-center gap-1 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md text-rose-700">🏛️ Banque : <span class="font-black">{{ formatMAD(asset.montant_credit) }}</span></span>
+                                            <span class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-emerald-700">📊 ROE : <span class="font-black">{{ asset.apport_personnel > 0 ? (asset.revenue / asset.apport_personnel * 100).toFixed(1) : '—' }}%</span></span>
+                                        </p>
                                     </div>
                                     <div class="shrink-0 flex items-center gap-2">
                                         <span :class="['text-sm font-black px-3 py-1.5 rounded-xl border',
@@ -2135,6 +2140,11 @@
                                     <span class="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">{{ asset.annees_total }}a</span>
                                     <span class="bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded text-violet-700">Reste {{ asset.annees_restantes }}a</span>
                                 </p>
+                                <p v-if="asset.montant_credit > 0" class="text-[9px] font-bold mt-1.5 flex flex-wrap items-center gap-1.5">
+                                    <span class="bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded text-indigo-700">💼 {{ formatMAD(asset.apport_personnel) }}</span>
+                                    <span class="bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded text-rose-700">🏛️ {{ formatMAD(asset.montant_credit) }}</span>
+                                    <span class="bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-emerald-700">ROE {{ asset.apport_personnel > 0 ? (asset.revenue / asset.apport_personnel * 100).toFixed(1) : '—' }}%</span>
+                                </p>
                             </div>
                             <!-- Bouton ajout actif mobile -->
                             <button @click="openMasterAssetModal" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-sm transition-colors">
@@ -2745,6 +2755,19 @@
                                    class="w-full bg-emerald-50 border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-black text-emerald-800 outline-none focus:border-emerald-500 text-right"/>
                         </div>
                     </div>
+                    <!-- Apport + Montant crédit (productifs seulement) -->
+                    <div v-if="masterAssetForm.isProductive" class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-indigo-600 block mb-1.5">Apport personnel (DH)</label>
+                            <input v-model.number="masterAssetForm.apport_personnel" type="number" min="0" step="5000"
+                                   class="w-full bg-indigo-50 border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-black text-indigo-800 outline-none focus:border-indigo-500 text-right"/>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">Montant crédit (DH)</label>
+                            <input v-model.number="masterAssetForm.montant_credit" type="number" min="0" step="5000"
+                                   class="w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right"/>
+                        </div>
+                    </div>
                     <!-- Crédit (productifs seulement) -->
                     <div v-if="masterAssetForm.isProductive" class="grid grid-cols-3 gap-3">
                         <div>
@@ -2799,8 +2822,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.0";
+                    const CURRENT_VERSION = "17.1";
                     const CHANGELOG = [
+                        { version: "17.1", date: "2026-05-07 — Equity & Loan Amount Tracking (ROE)", changes: ["Schema masterAssets enrichi : 2 nouveaux champs apport_personnel (DH) et montant_credit (DH) sur tous les actifs productifs.", "Modale unifiée — nouvelle section Financement (grille 2 col, indigo/rose) au-dessus des champs crédit : Apport Personnel + Montant Crédit.", "ROI Tracker desktop + mobile : 3 badges supplémentaires conditionnels (si montant_credit > 0) — 💼 Apport, 🏛️ Banque, 📊 ROE. Le ROE = revenus / apport_personnel × 100, distinguant le rendement sur fonds propres du ROI sur valeur totale.", "n8n — applyOp update_master_asset : sauvegarde conditionnelle apport_personnel et montant_credit. System prompt actif enrichi : apport_personnel (mise de fonds initiale), montant_credit (capital emprunté).", "super_agent_cfo.json régénéré."] },
                         { version: "17.0", date: "2026-05-07 — Unified Master Asset Engine", changes: ["Architecture — Fusion totale wealthAssets + foncierPortfolio en un seul ref masterAssets (source unique de vérité). Schema unifié : id, name, type, isProductive, value, revenue, taux_credit, annees_total, annees_restantes, val_pessimiste, val_optimiste, quotePart.", "Vues calculées : roiAssets (isProductive=true) → ROI Tracker ; stressAssets (isProductive=false) → Stress Test. totalConservateur/Pessimiste/Optimiste calculés sur stressAssets.", "CRUD unifié : openMasterAssetModal, editMasterAsset(id), deleteMasterAsset(id), saveMasterAsset — remplace les 10 fonctions CRUD précédentes.", "Modale unique adaptative : bascule dynamiquement entre mode Productif (violet, champs revenus+crédit) et mode Foncier (amber, champs pessimiste/optimiste) via checkbox isProductive.", "Migration v16→v17 : executerImportFusion reconstruit masterAssets depuis wealthAssets (annual_income→revenue) + foncierPortfolio (conservateur→value, nom→name) si données legacy détectées.", "Persistance : _schemaVersion bump 16→17, export masterAssets (suppression wealthAssets/foncierPortfolio), watcher unique.", "Templates desktop + mobile mis à jour : asset.revenue, asset.val_pessimiste, asset.val_optimiste, asset.name, editMasterAsset(asset.id), deleteMasterAsset(asset.id).", "n8n — applyOp update_master_asset remplace update_actif + update_foncier sur fd.masterAssets avec fuzzy match unifié."] },
                         { version: "16.9", date: "2026-05-06 — Asset Productif CRUD & Fix Foncier Default", changes: ["Frontend — ROI Tracker 100% dynamique : boutons ✏️ (editAsset) et 🗑️ (deleteAsset) sur chaque carte actif desktop ET mobile.", "Bouton '+ Nouvel Actif Productif' sous la liste desktop (flex justify-end) et pleine largeur mobile.", "Modale partagée (z-60, backdrop-blur, violet) : 4 inputs — Nom, Capital, Revenus annuels + grille 3 colonnes taux_credit/annees_total/annees_restantes avec couleurs sémantiques (amber/slate/violet).", "5 fonctions CRUD : openAssetModal, editAsset(idx), deleteAsset(idx) (confirm), saveAsset (map assetForm.revenue → annual_income), closeAssetModal.", "Fix default foncierPortfolio : 'Magasin Marrakech' renommé 'Local Bouskoura (Commercial)'.", "Toute mutation déclenche handleDataChange → sync Postgres globale."] },
                         { version: "16.8", date: "2026-05-07 — Asset Debt Metrics & AI Communication Fix", changes: ["Backend — RÈGLE ABSOLUE DE COMMUNICATION ajoutée en fin de system prompt (MAJUSCULES) : interdit la réponse vide après tool call ; oblige un résumé HTML détaillé.", "Schema Intent Compiler — target_type 'actif' enrichi : 3 champs optionnels taux_credit, annees_total, annees_restantes (ne s'écrasent pas si non fournis).", "buildOps : actif → spread conditionnel des nouveaux champs (préservation des valeurs existantes).", "applyOp update_actif réécrit : patch granulaire par champ (montant + 3 dette), log.changes structuré avec avant/apres par clé, error si aucun champ fourni.", "Frontend — wealthAssets initialisé avec dette : Bouskoura (4.5% / 15 / 12), CTO (0/0/0), Studio (4.75% / 20 / 18).", "ROI Tracker desktop : ligne de badges 🏦 Crédit % | Durée ans | Reste ans (affichée si taux_credit > 0).", "ROI Tracker mobile : 3 mini-badges compacts (text-[9px], couleurs amber/slate/violet) sous capital/revenus.", "super_agent_cfo.json régénéré (system prompt 8795 chars)."] },
@@ -3045,13 +3069,13 @@
 
                     // ── v17.0 : Master Asset Engine (source unique de vérité) ──
                     const masterAssets = ref([
-                        { id: 'ma_1', name: 'Local Bouskoura (Hadri Parfums)', type: 'Commercial', isProductive: true,  value: 1200000, revenue: 84000,  taux_credit: 4.5,  annees_total: 15, annees_restantes: 12, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%' },
-                        { id: 'ma_2', name: 'CTO Wafabourse',                  type: 'Investissement', isProductive: true,  value: 150000,  revenue: 9000,   taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%' },
-                        { id: 'ma_3', name: 'Studio Airbnb',                   type: 'Résidentiel',   isProductive: true,  value: 450000,  revenue: 36000,  taux_credit: 4.75, annees_total: 20, annees_restantes: 18, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%' },
-                        { id: 'ma_4', name: 'Foncier Nord (Rte Casa)',          type: 'Terrain Nu',    isProductive: false, value: 16450000, revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 8750000, val_optimiste: 80500000, quotePart: '35%'  },
-                        { id: 'ma_5', name: 'Foncier Est (Rte Ouarzazate)',     type: 'Terrain Nu',    isProductive: false, value: 3675000,  revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 3675000, val_optimiste: 10500000, quotePart: '35%'  },
-                        { id: 'ma_6', name: 'Villa Riad Salam',                 type: 'Résidentiel',   isProductive: false, value: 1400000,  revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 1260000, val_optimiste: 1680000,  quotePart: '35%'  },
-                        { id: 'ma_7', name: 'Local Bouskoura (Commercial)',     type: 'Commercial',    isProductive: false, value: 900000,   revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 800000,  val_optimiste: 1000000,  quotePart: '100%' },
+                        { id: 'ma_1', name: 'Local Bouskoura (Hadri Parfums)', type: 'Commercial', isProductive: true,  value: 1200000, revenue: 84000,  taux_credit: 4.5,  annees_total: 15, annees_restantes: 12, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%', apport_personnel: 0, montant_credit: 0 },
+                        { id: 'ma_2', name: 'CTO Wafabourse',                  type: 'Investissement', isProductive: true,  value: 150000,  revenue: 9000,   taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%', apport_personnel: 0, montant_credit: 0 },
+                        { id: 'ma_3', name: 'Studio Airbnb',                   type: 'Résidentiel',   isProductive: true,  value: 450000,  revenue: 36000,  taux_credit: 4.75, annees_total: 20, annees_restantes: 18, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%', apport_personnel: 0, montant_credit: 0 },
+                        { id: 'ma_4', name: 'Foncier Nord (Rte Casa)',          type: 'Terrain Nu',    isProductive: false, value: 16450000, revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 8750000, val_optimiste: 80500000, quotePart: '35%',  apport_personnel: 0, montant_credit: 0 },
+                        { id: 'ma_5', name: 'Foncier Est (Rte Ouarzazate)',     type: 'Terrain Nu',    isProductive: false, value: 3675000,  revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 3675000, val_optimiste: 10500000, quotePart: '35%',  apport_personnel: 0, montant_credit: 0 },
+                        { id: 'ma_6', name: 'Villa Riad Salam',                 type: 'Résidentiel',   isProductive: false, value: 1400000,  revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 1260000, val_optimiste: 1680000,  quotePart: '35%',  apport_personnel: 0, montant_credit: 0 },
+                        { id: 'ma_7', name: 'Local Bouskoura (Commercial)',     type: 'Commercial',    isProductive: false, value: 900000,   revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 800000,  val_optimiste: 1000000,  quotePart: '100%', apport_personnel: 0, montant_credit: 0 },
                     ]);
                     const roiAssets    = computed(() => masterAssets.value.filter(a => a.isProductive));
                     const stressAssets = computed(() => masterAssets.value.filter(a => !a.isProductive));
@@ -3062,7 +3086,7 @@
                     // ── v17.0 : CRUD unifié Master Asset ─────────────────
                     const showMasterAssetModal = ref(false);
                     const editingMasterAssetId = ref(null);
-                    const _emptyMasterAssetForm = () => ({ name: '', type: 'Commercial', isProductive: true, value: 0, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0, val_pessimiste: 0, val_optimiste: 0, quotePart: '100%' });
+                    const _emptyMasterAssetForm = () => ({ name: '', type: 'Commercial', isProductive: true, value: 0, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0, val_pessimiste: 0, val_optimiste: 0, quotePart: '100%', apport_personnel: 0, montant_credit: 0 });
                     const masterAssetForm = ref(_emptyMasterAssetForm());
 
                     const openMasterAssetModal = () => {
@@ -3104,6 +3128,8 @@
                             val_pessimiste: Number(f.val_pessimiste) || 0,
                             val_optimiste: Number(f.val_optimiste) || 0,
                             quotePart: String(f.quotePart || '100%').trim(),
+                            apport_personnel: Number(f.apport_personnel) || 0,
+                            montant_credit: Number(f.montant_credit) || 0,
                         };
                         if (editingMasterAssetId.value !== null) {
                             masterAssets.value = masterAssets.value.map(a => a.id === editingMasterAssetId.value ? cleaned : a);
