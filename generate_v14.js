@@ -20,7 +20,7 @@ PARAMÈTRE UNIQUE :
   "changes": [
     {
       "action": "modify | add | remove | rename | add_exception | remove_exception | update_one_off | clone_year | set_balance | set_studio",
-      "category": "revenu | charge_fixe | charge_variable | epargne | depense_ponctuelle | solde | studio | annee | compte",
+      "category": "revenu | charge_fixe | charge_variable | epargne | depense_ponctuelle | solde | studio | annee | compte | objectif | actif",
       "target": "libellé humain de la ligne ex: alimentation, loyer, salaire (l outil résout le mapping clé technique via fuzzy match)",
       "amount": 1000,
       "label": "Nouvel intitulé (si création ou renommage)",
@@ -47,7 +47,9 @@ RÈGLES :
 • L outil retourne pending_saved=true si la simulation est prête : tu peux proposer OUI à l utilisateur.
 • Si clarifications_needed non vide : pose les questions à l utilisateur, n invente PAS de réponse.
 • Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.
-• category "compte" : agit sur les comptes bancaires du bilan. action "add" crée un compte (fournir "label" et "amount" pour le solde initial). action "modify" ajuste le solde d un compte (fournir "target" = label du compte et "amount" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).`;
+• category "compte" : agit sur les comptes bancaires du bilan. action "add" crée un compte (fournir "label" et "amount" pour le solde initial). action "modify" ajuste le solde d un compte (fournir "target" = label du compte et "amount" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).
+• category "objectif" : action "modify" pour AJOUTER des fonds à un objectif financier (fournir "target" = nom du projet, ex: "Paris", "Jlilou" ; "amount" = montant à AJOUTER à la valeur actuelle, donc INCREMENTAL).
+• category "actif" : action "modify" pour réévaluer la valorisation d un actif (immobilier, bourse). Fournir "target" = nom de l actif et "amount" = NOUVELLE VALEUR TOTALE (remplace, ne s ajoute pas).`;
 
 // ── 3. JS code du Intent Compiler ──────────────────────
 const INTENT_COMPILER_CODE = `// ════════════════════════════════════════════════════════
@@ -319,6 +321,8 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
         case 'studio':         return [{ type: 'set_projet_studio', annee, key: studio_key || resolvedKey || 'travaux', valeur: amt }];
         case 'solde':          return [{ type: 'set_solde_initial', key: balance_key || resolvedKey || 'courant', valeur: amt }];
         case 'compte':         return [{ type: 'update_compte', key: change.target_key || target, montant: amt }];
+        case 'objectif':       return [{ type: 'update_objectif', key: change.target_key || target, montant: amt }];
+        case 'actif':          return [{ type: 'update_actif', key: change.target_key || target, montant: amt }];
         default: return null;
       }
     case 'add':
@@ -674,6 +678,25 @@ function applyOp(fd, op, anneeTarget) {
         c.solde += Number(op.montant);
         log.status='success'; log.action='Mise a jour compte'; log.compte=c.label; log.avant=oldVal; log.apres=c.solde; break;
       }
+      // ── WEALTH : OBJECTIFS & ACTIFS (top-level fd.*) ───
+      case 'update_objectif': {
+        if (!Array.isArray(fd.wealthGoals) || !fd.wealthGoals.length) { log.status='error'; log.reason='Aucun objectif existant'; break; }
+        const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+        const goal = fd.wealthGoals.find(x => String(x.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));
+        if (!goal) { log.status='error'; log.reason='Objectif introuvable: '+op.key; break; }
+        const oldVal = Number(goal.current) || 0;
+        goal.current = oldVal + (Number(op.montant) || 0);
+        log.status='success'; log.action='Mise a jour objectif (incremental)'; log.cible=goal.name; log.avant=oldVal; log.apres=goal.current; break;
+      }
+      case 'update_actif': {
+        if (!Array.isArray(fd.wealthAssets) || !fd.wealthAssets.length) { log.status='error'; log.reason='Aucun actif existant'; break; }
+        const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+        const asset = fd.wealthAssets.find(x => String(x.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));
+        if (!asset) { log.status='error'; log.reason='Actif introuvable: '+op.key; break; }
+        const oldVal = Number(asset.value) || 0;
+        asset.value = Number(op.montant) || 0;
+        log.status='success'; log.action='Reevaluation actif (replacement)'; log.cible=asset.name; log.avant=oldVal; log.apres=asset.value; break;
+      }
       default:
         log.status='error'; log.reason='type inconnu: '+op.type;
     }
@@ -699,7 +722,7 @@ for (const change of changes) {
   const NEEDS_RESOLVE = ['modify', 'remove', 'rename', 'add_exception', 'remove_exception'];
   let resolvedKey = null, resolvedCat = category;
 
-  if (NEEDS_RESOLVE.includes(action) && target && category && !['depense_ponctuelle','annee','solde','studio','compte'].includes(category)) {
+  if (NEEDS_RESOLVE.includes(action) && target && category && !['depense_ponctuelle','annee','solde','studio','compte','objectif','actif'].includes(category)) {
     const res = resolveEntity(target, category, financeData);
     if (!res.resolved) {
       clarifications.push({ change_index: changes.indexOf(change), target, category, action, error: res.error, ambiguous: res.ambiguous || false, choices: res.choices || null });
@@ -880,7 +903,22 @@ Tu peux créer et modifier les comptes bancaires de l utilisateur via propose_ch
 • TRANSFERT ENTRE COMPTES : génère DEUX changements distincts dans le même appel propose_changes :
   1. { action:"modify", category:"compte", target:"Compte Source", amount:-X } — débit du compte source.
   2. { action:"modify", category:"compte", target:"Compte Cible", amount:+X } — crédit du compte cible.
-  Ne génère JAMAIS un seul changement pour un transfert. Les deux opérations sont atomiques et présentées ensemble dans la simulation.`;
+  Ne génère JAMAIS un seul changement pour un transfert. Les deux opérations sont atomiques et présentées ensemble dans la simulation.
+
+═══ 9. GESTION DU PATRIMOINE (WEALTH GOALS & ASSETS) ═══
+Tu peux mettre à jour les jauges des objectifs financiers (Smart Goals) et réévaluer la valeur des actifs productifs (immobilier, bourse) du tab Wealth.
+
+• OBJECTIF (category="objectif") — opération INCRÉMENTALE (ajoute des fonds à la cagnotte) :
+  Format : { action:"modify", category:"objectif", target:"Nom du projet", amount:+X }
+  Exemple : "j ai mis 5000 DH de plus sur le voyage Paris" → { action:"modify", category:"objectif", target:"Paris", amount:5000 }
+  Le moteur exécute : goal.current += amount (pas de remplacement).
+
+• ACTIF (category="actif") — opération de RÉÉVALUATION (remplace la valeur totale) :
+  Format : { action:"modify", category:"actif", target:"Nom de l actif", amount:NOUVELLE_VALEUR_TOTALE }
+  Exemple : "le local de Bouskoura est maintenant estimé à 1.3M" → { action:"modify", category:"actif", target:"Bouskoura", amount:1300000 }
+  Le moteur exécute : asset.value = amount (remplacement complet, pas d ajout).
+
+DISTINCTION CRITIQUE : Si l utilisateur dit "ajoute X" / "j ai épargné X de plus" → OBJECTIF (incrémental). Si il dit "vaut maintenant X" / "réévalué à X" / "estimation actuelle X" → ACTIF (remplacement). En cas de doute, demande une clarification.`;
 
 // ── 5. Construction du nœud Intent Compiler ────────────
 const intentCompilerNode = {
