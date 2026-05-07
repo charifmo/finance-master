@@ -49,7 +49,7 @@ RÈGLES :
 • Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.
 • category "compte" : agit sur les comptes bancaires du bilan. action "add" crée un compte (fournir "label" et "amount" pour le solde initial). action "modify" ajuste le solde d un compte (fournir "target" = label du compte et "amount" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).
 • category "objectif" : action "modify" pour AJOUTER des fonds à un objectif financier (fournir "target" = nom du projet, ex: "Paris", "Jlilou" ; "amount" = montant à AJOUTER à la valeur actuelle, donc INCREMENTAL).
-• category "actif" : action "modify" pour réévaluer la valorisation d un actif (immobilier, bourse). Fournir "target" = nom de l actif et "amount" = NOUVELLE VALEUR TOTALE (remplace, ne s ajoute pas).
+• category "actif" : action "modify" pour réévaluer la valorisation d un actif (immobilier, bourse). Fournir "target" = nom de l actif et "amount" = NOUVELLE VALEUR TOTALE (remplace, ne s ajoute pas). Champs optionnels de dette/levier : "taux_credit" (Number, taux d emprunt en %), "annees_total" (Number, durée totale du crédit), "annees_restantes" (Number, années restantes à rembourser). Ces 3 champs ne sont mis à jour que si fournis explicitement (sinon préservés).
 • category "foncier" : action "modify" pour mettre à jour la matrice Stress Test Foncier (3 scénarios). Fournir "target" = nom du terrain (ex: "Foncier Nord", "Villa Riad Salam"), "sub_target" = scénario EXACT parmi 'conservateur' | 'pessimiste' | 'optimiste', et "amount" = NOUVELLE VALORISATION TOTALE en MAD (remplacement). Exemple : { action:"modify", category:"foncier", target:"Foncier Nord", sub_target:"optimiste", amount:85000000 }.`;
 
 // ── 3. JS code du Intent Compiler ──────────────────────
@@ -323,7 +323,7 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
         case 'solde':          return [{ type: 'set_solde_initial', key: balance_key || resolvedKey || 'courant', valeur: amt }];
         case 'compte':         return [{ type: 'update_compte', key: change.target_key || target, montant: amt }];
         case 'objectif':       return [{ type: 'update_objectif', key: change.target_key || target, montant: amt }];
-        case 'actif':          return [{ type: 'update_actif', key: change.target_key || target, montant: amt }];
+        case 'actif':          return [{ type: 'update_actif', key: change.target_key || target, montant: amt, ...(change.taux_credit !== undefined && { taux_credit: change.taux_credit }), ...(change.annees_total !== undefined && { annees_total: change.annees_total }), ...(change.annees_restantes !== undefined && { annees_restantes: change.annees_restantes }) }];
         case 'foncier':        return [{ type: 'update_foncier', key: change.target_key || target, scenario: change.sous_categorie || subTarget, montant: amt }];
         default: return null;
       }
@@ -695,9 +695,17 @@ function applyOp(fd, op, anneeTarget) {
         const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
         const asset = fd.wealthAssets.find(x => String(x.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));
         if (!asset) { log.status='error'; log.reason='Actif introuvable: '+op.key; break; }
-        const oldVal = Number(asset.value) || 0;
-        asset.value = Number(op.montant) || 0;
-        log.status='success'; log.action='Reevaluation actif (replacement)'; log.cible=asset.name; log.avant=oldVal; log.apres=asset.value; break;
+        const changes = {};
+        if (op.montant !== undefined && op.montant !== null) {
+          const oldVal = Number(asset.value) || 0;
+          asset.value = Number(op.montant) || 0;
+          changes.value = { avant: oldVal, apres: asset.value };
+        }
+        if (op.taux_credit !== undefined) { const old = asset.taux_credit; asset.taux_credit = Number(op.taux_credit) || 0; changes.taux_credit = { avant: old, apres: asset.taux_credit }; }
+        if (op.annees_total !== undefined) { const old = asset.annees_total; asset.annees_total = Number(op.annees_total) || 0; changes.annees_total = { avant: old, apres: asset.annees_total }; }
+        if (op.annees_restantes !== undefined) { const old = asset.annees_restantes; asset.annees_restantes = Number(op.annees_restantes) || 0; changes.annees_restantes = { avant: old, apres: asset.annees_restantes }; }
+        if (!Object.keys(changes).length) { log.status='error'; log.reason='Aucun champ fourni'; break; }
+        log.status='success'; log.action='Update actif (avec levier)'; log.cible=asset.name; log.changes=changes; break;
       }
       // ── STRESS TEST FONCIER (matrice 3 scénarios) ──────
       case 'update_foncier': {
@@ -947,7 +955,10 @@ Si l utilisateur te demande de réévaluer un actif foncier en fonction de l act
   2. Citer la source explicitement : « <b>Source : Recherche Internet.</b> » dans ta réponse.
   3. SEULEMENT APRÈS, calculer la nouvelle valorisation et appeler propose_changes avec le scénario approprié.
 
-INTERDICTION : Ne JAMAIS générer un update_foncier basé sur de l intuition, du savoir interne périmé, ou une extrapolation linéaire. Toute réévaluation contextuelle exige web_search en amont. Si web_search échoue ou ne ramène rien d exploitable, dis-le à l utilisateur et propose des fourchettes raisonnées plutôt qu un chiffre fictif.`;
+INTERDICTION : Ne JAMAIS générer un update_foncier basé sur de l intuition, du savoir interne périmé, ou une extrapolation linéaire. Toute réévaluation contextuelle exige web_search en amont. Si web_search échoue ou ne ramène rien d exploitable, dis-le à l utilisateur et propose des fourchettes raisonnées plutôt qu un chiffre fictif.
+
+═══ RÈGLE ABSOLUE DE COMMUNICATION ═══
+APRÈS AVOIR INVOQUÉ UN OUTIL (web_search, propose_changes, finance_rag, committer, memory_writer), TU DOIS OBLIGATOIREMENT RÉDIGER UNE RÉPONSE TEXTUELLE DÉTAILLÉE POUR L UTILISATEUR. RÉSUME CE QUE TU AS TROUVÉ OU MODIFIÉ EN HTML BRUT. NE RENVOIE JAMAIS UNE RÉPONSE VIDE NI UN SIMPLE TOOL CALL SANS EXPLICATION. SI L OUTIL A ÉCHOUÉ, EXPLIQUE L ÉCHEC ET PROPOSE UNE ACTION ALTERNATIVE.`;
 
 // ── 5. Construction du nœud Intent Compiler ────────────
 const intentCompilerNode = {

@@ -1220,6 +1220,11 @@
                                                 <span class="text-gray-400"> · {{ formatMAD(Math.round(asset.annual_income / 12)) }}/mois</span>
                                             </p>
                                         </div>
+                                        <p v-if="asset.taux_credit > 0" class="text-[10px] text-amber-700 font-bold mt-1.5 flex flex-wrap items-center gap-2">
+                                            <span class="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">🏦 Crédit : <span class="text-amber-900 font-black">{{ asset.taux_credit }}%</span></span>
+                                            <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">Durée : <span class="text-slate-800 font-black">{{ asset.annees_total }} ans</span></span>
+                                            <span class="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-md text-violet-600">Reste : <span class="text-violet-800 font-black">{{ asset.annees_restantes }} ans</span></span>
+                                        </p>
                                     </div>
                                     <div class="shrink-0">
                                         <span :class="['text-sm font-black px-3 py-1.5 rounded-xl border',
@@ -2112,6 +2117,11 @@
                                     <p class="text-[9px] text-gray-500 font-bold">Capital : <span class="text-gray-700 font-black">{{ formatMAD(asset.value) }}</span></p>
                                     <p class="text-[9px] text-gray-500 font-bold">Rev. : <span class="text-emerald-700 font-black">{{ formatMAD(Math.round(asset.annual_income / 12)) }}/m</span></p>
                                 </div>
+                                <p v-if="asset.taux_credit > 0" class="text-[9px] text-amber-700 font-bold mt-1.5 flex flex-wrap items-center gap-1.5">
+                                    <span class="bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">🏦 {{ asset.taux_credit }}%</span>
+                                    <span class="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">{{ asset.annees_total }}a</span>
+                                    <span class="bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded text-violet-700">Reste {{ asset.annees_restantes }}a</span>
+                                </p>
                             </div>
                             <!-- Synthèse -->
                             <div class="bg-gradient-to-r from-violet-600 to-purple-700 rounded-xl p-4 text-white text-center">
@@ -2731,8 +2741,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "16.6";
+                    const CURRENT_VERSION = "16.8";
                     const CHANGELOG = [
+                        { version: "16.8", date: "2026-05-07 — Asset Debt Metrics & AI Communication Fix", changes: ["Backend — RÈGLE ABSOLUE DE COMMUNICATION ajoutée en fin de system prompt (MAJUSCULES) : interdit la réponse vide après tool call ; oblige un résumé HTML détaillé.", "Schema Intent Compiler — target_type 'actif' enrichi : 3 champs optionnels taux_credit, annees_total, annees_restantes (ne s'écrasent pas si non fournis).", "buildOps : actif → spread conditionnel des nouveaux champs (préservation des valeurs existantes).", "applyOp update_actif réécrit : patch granulaire par champ (montant + 3 dette), log.changes structuré avec avant/apres par clé, error si aucun champ fourni.", "Frontend — wealthAssets initialisé avec dette : Bouskoura (4.5% / 15 / 12), CTO (0/0/0), Studio (4.75% / 20 / 18).", "ROI Tracker desktop : ligne de badges 🏦 Crédit % | Durée ans | Reste ans (affichée si taux_credit > 0).", "ROI Tracker mobile : 3 mini-badges compacts (text-[9px], couleurs amber/slate/violet) sous capital/revenus.", "super_agent_cfo.json régénéré (system prompt 8795 chars)."] },
                         { version: "16.6", date: "2026-05-07 — UI Foncier CRUD & AI Market Intelligence", changes: ["Frontend — Stress Test Foncier 100% dynamique : colonne Actions (✏️ éditer / 🗑️ supprimer) sur tableau desktop ET mobile.", "Bouton '+ Nouvel Actif Foncier' sous chaque tableau (desktop + mobile).", "Modale partagée (z-60, backdrop-blur) : 6 inputs (nom, quotePart select, type select, conservateur/pessimiste/optimiste avec couleurs sémantiques).", "5 fonctions CRUD : openFoncierModal, editFoncier(idx), deleteFoncier(idx) (avec confirm), saveFoncier (validation nom obligatoire), closeFoncierModal.", "Toute mutation déclenche handleDataChange → sauvegarde Postgres globale.", "Backend n8n — nouvelle category 'foncier' dans Intent Compiler (modify only).", "buildOps : 'foncier' → op update_foncier (key, scenario, montant) ; sub_target hérité de change.sous_categorie ou subTarget.", "applyOp : update_foncier scoped sur fd.foncierPortfolio[] avec fuzzy match nom + validation enum scenario (conservateur|pessimiste|optimiste).", "System prompt §10 'Stress Test & Market Intelligence' : RÈGLE OBLIGATOIRE — toute réévaluation contextuelle exige web_search en amont, citation source, sinon refus avec fourchettes raisonnées.", "super_agent_cfo.json régénéré (system prompt 8371 chars, +1527)."] },
                         { version: "16.5", date: "2026-05-07 — Stress Test Foncier Matrix", changes: ["Onglet Wealth — Section 4 : Matrice de Risque Foncier (Indivision Marrakech) desktop + mobile.", "4 actifs initialisés : Foncier Nord (35%), Foncier Est (35%), Villa Riad Salam (35%), Magasin Marrakech (100%).", "Tableau 3 scénarios : Conservateur (bleu, référence), Pessimiste (rouge, stagnation), Optimiste (vert, SDAU 2030).", "3 computed : totalConservateur, totalPessimiste, totalOptimiste (somme automatique par colonne).", "Footer (tfoot) : ligne Total Valeur Brute en gradient slate→violet, totaux par scénario.", "Synthèse risque : 3 cards Δ% — référence, risque max (delta), upside SDAU (delta+).", "Persistance Postgres : foncierPortfolio inclus dans getExportData() + hydratation graceful (défauts conservés si DB vide).", "Watcher deep sur foncierPortfolio → serverSyncStatus='modified' à toute mutation.", "Mobile : table compacte text-[10px] avec colonnes raccourcies (Conserv./Pire/SDAU)."] },
                         { version: "16.4", date: "2026-05-07 — Wealth Data IA Integration", changes: ["n8n Intent Compiler : 2 nouvelles categories — 'objectif' (modify, incremental) et 'actif' (modify, replacement).", "buildOps : 'objectif' → op update_objectif (goal.current += amount) ; 'actif' → op update_actif (asset.value = amount).", "applyOp : nouveaux cases scoped au top-level fd.wealthGoals[] / fd.wealthAssets[] (pas year-scoped) avec fuzzy match name + ASCII normalization.", "NEEDS_RESOLVE bypass étendu : objectif + actif rejoignent compte/solde/studio (pas de fuzzy match annuel).", "System prompt §9 : règle de distinction critique INCRÉMENTAL (objectif) vs REMPLACEMENT (actif) avec exemples.", "super_agent_cfo.json régénéré (system prompt 6844 chars, +1253 vs v15.22)."] },
@@ -3038,9 +3049,9 @@
                         { name: 'Etudes Jlilou', target: 200000, current: 45000 }
                     ]);
                     const wealthAssets = ref([
-                        { name: 'Local Bouskoura (Hadri Parfums)', value: 1200000, annual_income: 84000 },
-                        { name: 'CTO Wafabourse', value: 150000, annual_income: 9000 },
-                        { name: 'Studio Airbnb', value: 450000, annual_income: 36000 }
+                        { name: 'Local Bouskoura (Hadri Parfums)', value: 1200000, annual_income: 84000, taux_credit: 4.5, annees_total: 15, annees_restantes: 12 },
+                        { name: 'CTO Wafabourse', value: 150000, annual_income: 9000, taux_credit: 0, annees_total: 0, annees_restantes: 0 },
+                        { name: 'Studio Airbnb', value: 450000, annual_income: 36000, taux_credit: 4.75, annees_total: 20, annees_restantes: 18 }
                     ]);
 
                     // ── v15.0 : Multi-comptes dynamique ──────────────────
