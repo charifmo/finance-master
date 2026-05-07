@@ -20,7 +20,7 @@ PARAMÈTRE UNIQUE :
   "changes": [
     {
       "action": "modify | add | remove | rename | add_exception | remove_exception | update_one_off | clone_year | set_balance | set_studio",
-      "category": "revenu | charge_fixe | charge_variable | epargne | depense_ponctuelle | solde | studio | annee | compte | objectif | actif",
+      "category": "revenu | charge_fixe | charge_variable | epargne | depense_ponctuelle | solde | studio | annee | compte | objectif | actif | foncier",
       "target": "libellé humain de la ligne ex: alimentation, loyer, salaire (l outil résout le mapping clé technique via fuzzy match)",
       "amount": 1000,
       "label": "Nouvel intitulé (si création ou renommage)",
@@ -49,7 +49,8 @@ RÈGLES :
 • Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.
 • category "compte" : agit sur les comptes bancaires du bilan. action "add" crée un compte (fournir "label" et "amount" pour le solde initial). action "modify" ajuste le solde d un compte (fournir "target" = label du compte et "amount" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).
 • category "objectif" : action "modify" pour AJOUTER des fonds à un objectif financier (fournir "target" = nom du projet, ex: "Paris", "Jlilou" ; "amount" = montant à AJOUTER à la valeur actuelle, donc INCREMENTAL).
-• category "actif" : action "modify" pour réévaluer la valorisation d un actif (immobilier, bourse). Fournir "target" = nom de l actif et "amount" = NOUVELLE VALEUR TOTALE (remplace, ne s ajoute pas).`;
+• category "actif" : action "modify" pour réévaluer la valorisation d un actif (immobilier, bourse). Fournir "target" = nom de l actif et "amount" = NOUVELLE VALEUR TOTALE (remplace, ne s ajoute pas).
+• category "foncier" : action "modify" pour mettre à jour la matrice Stress Test Foncier (3 scénarios). Fournir "target" = nom du terrain (ex: "Foncier Nord", "Villa Riad Salam"), "sub_target" = scénario EXACT parmi 'conservateur' | 'pessimiste' | 'optimiste', et "amount" = NOUVELLE VALORISATION TOTALE en MAD (remplacement). Exemple : { action:"modify", category:"foncier", target:"Foncier Nord", sub_target:"optimiste", amount:85000000 }.`;
 
 // ── 3. JS code du Intent Compiler ──────────────────────
 const INTENT_COMPILER_CODE = `// ════════════════════════════════════════════════════════
@@ -323,6 +324,7 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
         case 'compte':         return [{ type: 'update_compte', key: change.target_key || target, montant: amt }];
         case 'objectif':       return [{ type: 'update_objectif', key: change.target_key || target, montant: amt }];
         case 'actif':          return [{ type: 'update_actif', key: change.target_key || target, montant: amt }];
+        case 'foncier':        return [{ type: 'update_foncier', key: change.target_key || target, scenario: change.sous_categorie || subTarget, montant: amt }];
         default: return null;
       }
     case 'add':
@@ -697,6 +699,19 @@ function applyOp(fd, op, anneeTarget) {
         asset.value = Number(op.montant) || 0;
         log.status='success'; log.action='Reevaluation actif (replacement)'; log.cible=asset.name; log.avant=oldVal; log.apres=asset.value; break;
       }
+      // ── STRESS TEST FONCIER (matrice 3 scénarios) ──────
+      case 'update_foncier': {
+        if (!Array.isArray(fd.foncierPortfolio) || !fd.foncierPortfolio.length) { log.status='error'; log.reason='Matrice fonciere introuvable ou vide'; break; }
+        const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+        const asset = fd.foncierPortfolio.find(x => String(x.nom).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));
+        if (!asset) { log.status='error'; log.reason='Actif foncier introuvable: '+op.key; break; }
+        const validScenarios = ['conservateur', 'pessimiste', 'optimiste'];
+        const scenarioTarget = String(op.scenario||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+        if (!validScenarios.includes(scenarioTarget)) { log.status='error'; log.reason='Scenario invalide (attendu: conservateur|pessimiste|optimiste): '+op.scenario; break; }
+        const oldVal = Number(asset[scenarioTarget]) || 0;
+        asset[scenarioTarget] = Number(op.montant) || 0;
+        log.status='success'; log.action='Mise a jour Stress Test ('+scenarioTarget+')'; log.cible=asset.nom; log.scenario=scenarioTarget; log.avant=oldVal; log.apres=asset[scenarioTarget]; break;
+      }
       default:
         log.status='error'; log.reason='type inconnu: '+op.type;
     }
@@ -722,7 +737,7 @@ for (const change of changes) {
   const NEEDS_RESOLVE = ['modify', 'remove', 'rename', 'add_exception', 'remove_exception'];
   let resolvedKey = null, resolvedCat = category;
 
-  if (NEEDS_RESOLVE.includes(action) && target && category && !['depense_ponctuelle','annee','solde','studio','compte','objectif','actif'].includes(category)) {
+  if (NEEDS_RESOLVE.includes(action) && target && category && !['depense_ponctuelle','annee','solde','studio','compte','objectif','actif','foncier'].includes(category)) {
     const res = resolveEntity(target, category, financeData);
     if (!res.resolved) {
       clarifications.push({ change_index: changes.indexOf(change), target, category, action, error: res.error, ambiguous: res.ambiguous || false, choices: res.choices || null });
@@ -918,7 +933,21 @@ Tu peux mettre à jour les jauges des objectifs financiers (Smart Goals) et ré�
   Exemple : "le local de Bouskoura est maintenant estimé à 1.3M" → { action:"modify", category:"actif", target:"Bouskoura", amount:1300000 }
   Le moteur exécute : asset.value = amount (remplacement complet, pas d ajout).
 
-DISTINCTION CRITIQUE : Si l utilisateur dit "ajoute X" / "j ai épargné X de plus" → OBJECTIF (incrémental). Si il dit "vaut maintenant X" / "réévalué à X" / "estimation actuelle X" → ACTIF (remplacement). En cas de doute, demande une clarification.`;
+DISTINCTION CRITIQUE : Si l utilisateur dit "ajoute X" / "j ai épargné X de plus" → OBJECTIF (incrémental). Si il dit "vaut maintenant X" / "réévalué à X" / "estimation actuelle X" → ACTIF (remplacement). En cas de doute, demande une clarification.
+
+═══ 10. STRESS TEST FONCIER & MARKET INTELLIGENCE ═══
+L utilisateur possède une matrice de risques immobiliers (foncierPortfolio) avec 3 scénarios par actif : conservateur, pessimiste, optimiste. Chaque actif a un nom (ex: "Foncier Nord", "Villa Riad Salam", "Magasin Marrakech") et 3 valorisations en MAD.
+
+Format de mise à jour (target_type "foncier") :
+{ action:"modify", category:"foncier", target:"<nom de l actif>", sub_target:"<conservateur|pessimiste|optimiste>", amount:<NOUVELLE VALORISATION TOTALE en MAD> }
+
+RÈGLE MARKET INTELLIGENCE — OBLIGATOIRE :
+Si l utilisateur te demande de réévaluer un actif foncier en fonction de l actualité, du marché, ou de nouveaux critères externes (ex: "réévalue selon le SDAU Marrakech 2030", "ajuste avec la LGV", "vu la nouvelle zone urbanisable", "selon les prix du marché actuel"), tu DOIS :
+  1. Appeler web_search AVEC une requête précise (ex: "SDAU Marrakech 2030 zonage Route de Casablanca prix terrain") AVANT toute autre action.
+  2. Citer la source explicitement : « <b>Source : Recherche Internet.</b> » dans ta réponse.
+  3. SEULEMENT APRÈS, calculer la nouvelle valorisation et appeler propose_changes avec le scénario approprié.
+
+INTERDICTION : Ne JAMAIS générer un update_foncier basé sur de l intuition, du savoir interne périmé, ou une extrapolation linéaire. Toute réévaluation contextuelle exige web_search en amont. Si web_search échoue ou ne ramène rien d exploitable, dis-le à l utilisateur et propose des fourchettes raisonnées plutôt qu un chiffre fictif.`;
 
 // ── 5. Construction du nœud Intent Compiler ────────────
 const intentCompilerNode = {
