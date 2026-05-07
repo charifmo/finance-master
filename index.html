@@ -2825,8 +2825,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.2";
+                    const CURRENT_VERSION = "17.3";
                     const CHANGELOG = [
+                        { version: "17.3", date: "2026-05-07 — Legacy Data Math Fix for Equity", changes: ["editMasterAsset : détection automatique des actifs legacy (apport=0, crédit=0, value>0) à l'ouverture de la modale.", "Migration à la volée : injecte la valeur du capital dans apport_personnel et force montant_credit=0, garantissant que Apport + Crédit = Capital dès l'affichage.", "Les actifs déjà renseignés (apport ou crédit > 0) ne sont pas touchés.", "Aucune mutation persistée : la correction n'est appliquée qu'au formulaire, pas au store masterAssets — elle devient permanente seulement si l'utilisateur valide."] },
                         { version: "17.2", date: "2026-05-07 — Auto-calculate Capital Investi", changes: ["Modale — Capital Investi (DH) devient readonly pour les actifs productifs : calculé automatiquement comme Apport + Montant Crédit.", "Nouvelle fonction calculerCapital() déclenchée sur @input des champs Apport Personnel et Montant Crédit.", "UI : champ Capital verrouillé visuellement (bg-gray-100, cursor-not-allowed, opacity-80, label 🔒) quand isProductive=true.", "Sécurité : calculerCapital ne se déclenche qu'à la saisie manuelle — l'ouverture d'un actif existant préserve la valeur stockée."] },
                         { version: "17.1", date: "2026-05-07 — Equity & Loan Amount Tracking (ROE)", changes: ["Schema masterAssets enrichi : 2 nouveaux champs apport_personnel (DH) et montant_credit (DH) sur tous les actifs productifs.", "Modale unifiée — nouvelle section Financement (grille 2 col, indigo/rose) au-dessus des champs crédit : Apport Personnel + Montant Crédit.", "ROI Tracker desktop + mobile : 3 badges supplémentaires conditionnels (si montant_credit > 0) — 💼 Apport, 🏛️ Banque, 📊 ROE. Le ROE = revenus / apport_personnel × 100, distinguant le rendement sur fonds propres du ROI sur valeur totale.", "n8n — applyOp update_master_asset : sauvegarde conditionnelle apport_personnel et montant_credit. System prompt actif enrichi : apport_personnel (mise de fonds initiale), montant_credit (capital emprunté).", "super_agent_cfo.json régénéré."] },
                         { version: "17.0", date: "2026-05-07 — Unified Master Asset Engine", changes: ["Architecture — Fusion totale wealthAssets + foncierPortfolio en un seul ref masterAssets (source unique de vérité). Schema unifié : id, name, type, isProductive, value, revenue, taux_credit, annees_total, annees_restantes, val_pessimiste, val_optimiste, quotePart.", "Vues calculées : roiAssets (isProductive=true) → ROI Tracker ; stressAssets (isProductive=false) → Stress Test. totalConservateur/Pessimiste/Optimiste calculés sur stressAssets.", "CRUD unifié : openMasterAssetModal, editMasterAsset(id), deleteMasterAsset(id), saveMasterAsset — remplace les 10 fonctions CRUD précédentes.", "Modale unique adaptative : bascule dynamiquement entre mode Productif (violet, champs revenus+crédit) et mode Foncier (amber, champs pessimiste/optimiste) via checkbox isProductive.", "Migration v16→v17 : executerImportFusion reconstruit masterAssets depuis wealthAssets (annual_income→revenue) + foncierPortfolio (conservateur→value, nom→name) si données legacy détectées.", "Persistance : _schemaVersion bump 16→17, export masterAssets (suppression wealthAssets/foncierPortfolio), watcher unique.", "Templates desktop + mobile mis à jour : asset.revenue, asset.val_pessimiste, asset.val_optimiste, asset.name, editMasterAsset(asset.id), deleteMasterAsset(asset.id).", "n8n — applyOp update_master_asset remplace update_actif + update_foncier sur fd.masterAssets avec fuzzy match unifié."] },
@@ -3106,7 +3107,16 @@
                         const asset = masterAssets.value.find(a => a.id === id);
                         if (!asset) return;
                         editingMasterAssetId.value = id;
-                        masterAssetForm.value = { ...asset };
+                        // Migration legacy : si pas d'apport/crédit renseignés mais value > 0,
+                        // injecte la valeur dans l'apport pour que Apport + Crédit = Capital
+                        const apport = Number(asset.apport_personnel) || 0;
+                        const credit = Number(asset.montant_credit) || 0;
+                        const isLegacy = asset.isProductive && apport === 0 && credit === 0 && (Number(asset.value) || 0) > 0;
+                        masterAssetForm.value = {
+                            ...asset,
+                            apport_personnel: isLegacy ? (Number(asset.value) || 0) : apport,
+                            montant_credit:   isLegacy ? 0 : credit,
+                        };
                         showMasterAssetModal.value = true;
                     };
                     const deleteMasterAsset = (id) => {
