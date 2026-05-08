@@ -2825,8 +2825,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.3";
+                    const CURRENT_VERSION = "17.4";
                     const CHANGELOG = [
+                        { version: "17.4", date: "2026-05-08 — Fix Pilotage Month Persistence & Auto-detect", changes: ["getDefaultState() : moisActuel hardcodé (4) → new Date().getMonth()+1 ; anneeActuelle (2026) → new Date().getFullYear().", "parametres ref : même correction (new Date()) pour les deux champs.", "Ajout watch(soldesInitiaux, handleDataChange, deep:true) : tout changement de mois/année déclenche désormais serverSyncStatus='modified' et active le bouton Sauver VPS.", "getExportData() et executerImportFusion() inchangés (soldesInitiaux déjà exporté/hydraté correctement depuis v15)."] },
                         { version: "17.3", date: "2026-05-07 — Legacy Data Math Fix for Equity", changes: ["editMasterAsset : détection automatique des actifs legacy (apport=0, crédit=0, value>0) à l'ouverture de la modale.", "Migration à la volée : injecte la valeur du capital dans apport_personnel et force montant_credit=0, garantissant que Apport + Crédit = Capital dès l'affichage.", "Les actifs déjà renseignés (apport ou crédit > 0) ne sont pas touchés.", "Aucune mutation persistée : la correction n'est appliquée qu'au formulaire, pas au store masterAssets — elle devient permanente seulement si l'utilisateur valide."] },
                         { version: "17.2", date: "2026-05-07 — Auto-calculate Capital Investi", changes: ["Modale — Capital Investi (DH) devient readonly pour les actifs productifs : calculé automatiquement comme Apport + Montant Crédit.", "Nouvelle fonction calculerCapital() déclenchée sur @input des champs Apport Personnel et Montant Crédit.", "UI : champ Capital verrouillé visuellement (bg-gray-100, cursor-not-allowed, opacity-80, label 🔒) quand isProductive=true.", "Sécurité : calculerCapital ne se déclenche qu'à la saisie manuelle — l'ouverture d'un actif existant préserve la valeur stockée."] },
                         { version: "17.1", date: "2026-05-07 — Equity & Loan Amount Tracking (ROE)", changes: ["Schema masterAssets enrichi : 2 nouveaux champs apport_personnel (DH) et montant_credit (DH) sur tous les actifs productifs.", "Modale unifiée — nouvelle section Financement (grille 2 col, indigo/rose) au-dessus des champs crédit : Apport Personnel + Montant Crédit.", "ROI Tracker desktop + mobile : 3 badges supplémentaires conditionnels (si montant_credit > 0) — 💼 Apport, 🏛️ Banque, 📊 ROE. Le ROE = revenus / apport_personnel × 100, distinguant le rendement sur fonds propres du ROI sur valeur totale.", "n8n — applyOp update_master_asset : sauvegarde conditionnelle apport_personnel et montant_credit. System prompt actif enrichi : apport_personnel (mise de fonds initiale), montant_credit (capital emprunté).", "super_agent_cfo.json régénéré."] },
@@ -3029,7 +3030,7 @@
                         };
 
                         return {
-                            soldesInitiaux: { courant: 125000, urgence: 0, lt: 0, bourse: 0, moisActuel: 4, anneeActuelle: 2026, salaireRecu: false, semainesRestantes: 3, decalagePaie: true },
+                            soldesInitiaux: { courant: 125000, urgence: 0, lt: 0, bourse: 0, moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), salaireRecu: false, semainesRestantes: 3, decalagePaie: true },
                             donneesAnnuelles: {
                                 2026: {
                                     revenus: { 
@@ -3167,7 +3168,7 @@
                     // ── v15.0 : Multi-comptes dynamique ──────────────────
                     const comptes = ref([]);
                     const parametres = ref({
-                        moisActuel: 4, anneeActuelle: 2026, semainesRestantes: 3,
+                        moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), semainesRestantes: 3,
                         objectifFondsSecuriteMois: 6, hypotheseInflation: 2.5,
                         ribbon: { soldeMois: true, cumulatif: true, statsAnnuelles: true, projection: true },
                         branding: { logoUrl: null, faviconUrl: null, appName: 'Finance Master' }
@@ -3597,6 +3598,8 @@
                     // v17.0 : Wealth tab persistence — single source of truth
                     watch(wealthGoals,   () => handleDataChange(), { deep: true });
                     watch(masterAssets,  () => handleDataChange(), { deep: true });
+                    // v17.4 : Pilotage — persiste le mois/année sélectionnés
+                    watch(soldesInitiaux, () => handleDataChange(), { deep: true });
 
                     const nomDuMois = (m) => ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'][m];
                     const formatMAD = (v) => new Intl.NumberFormat('fr-FR').format(Math.round(Number(v) || 0)) + ' DH';
