@@ -215,7 +215,7 @@
                             <h3 :class="['text-2xl lg:text-3xl font-black mt-2', soldeFinal >= 0 ? 'text-blue-600' : 'text-red-600']">{{ formatMAD(soldeFinal) }}</h3>
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Épargne Cumulée Finale</p>
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Épargne Générée ({{ anneeCibleProjection }})</p><!-- v17.14 -->
                             <h3 class="text-2xl lg:text-3xl font-black mt-2 text-purple-600">{{ formatMAD(epargneTotaleFinal) }}</h3>
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-emerald-200 flex flex-col justify-center cursor-pointer hover:border-emerald-400 transition-colors" @click="activeTab = 'settings'" title="Configurer dans Paramètres">
@@ -310,7 +310,7 @@
                                         <td class="p-4 text-right">-</td>
                                         <td class="p-4">-</td>
                                         <td class="p-4 text-right font-black text-lg text-blue-900">{{ formatMAD(patrimoineLiquide) }}</td>
-                                        <td class="p-4 text-right text-purple-600">{{ formatMAD(patrimoineSavingsInvest) }}</td><!-- v17.12 : solde initial des comptes épargne+invest = cumulEpargne de départ, cohérent avec accumulation pure -->
+                                        <td class="p-4 text-right text-purple-600">{{ formatMAD(0) }}</td><!-- v17.14 : cumulEpargne part de 0 — aucune épargne générée avant la projection -->
                                     </tr>
                                     <tr v-for="(row, idx) in bilan" :key="idx" :class="['transition-colors', row.numMois === 1 && !row.isCurrent ? 'border-t-4 border-slate-300 bg-slate-50' : 'hover:bg-gray-50']">
                                         <td class="p-4 font-bold whitespace-nowrap">
@@ -1703,7 +1703,7 @@
                             <p :class="['text-lg font-black mt-1', soldeFinal >= 0 ? 'text-blue-600' : 'text-red-600']">{{ formatMAD(soldeFinal) }}</p>
                         </div>
                         <div class="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm">
-                            <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Épargne Cumulée Finale</p>
+                            <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Épargne Générée ({{ anneeCibleProjection }})</p><!-- v17.14 -->
                             <p class="text-lg font-black mt-1 text-purple-600">{{ formatMAD(epargneTotaleFinal) }}</p>
                         </div>
                     </div>
@@ -2838,8 +2838,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.13";
+                    const CURRENT_VERSION = "17.14";
                     const CHANGELOG = [
+                        { version: "17.14", date: "2026-05-08 — Change Savings to Net Effort mode - starts at 0", changes: ["MODE 'ÉPARGNE GÉNÉRÉE' : cumulEpargne part désormais de 0 (au lieu de epargneInitial+investInitial). La colonne 'Total Épargne' et la jauge ne montrent que l'effort d'épargne PRODUIT depuis le mois actuel, pas le solde déjà présent en banque.", "Label KPI mis à jour : 'Épargne Cumulée Finale' → 'Épargne Générée (XXXX)' avec année cible dynamique (anneeCibleProjection) — desktop et mobile.", "Ligne 'Aujourd'hui' : Total Épargne = 0 DH (cohérent — aucune épargne générée avant la projection).", "Logique v17.13 conservée : epargneMensuellePrevue = objectifs §4 + chargesFixes labellisées épargne/urgence/virement."] },
                         { version: "17.13", date: "2026-05-08 — Fix Scope Bug for Savings Accumulation", changes: ["ROOT CAUSE : totEpBase = Object.values(dataAnnee.epargne).reduce(...valeur) lisait uniquement la section 'OBJECTIFS ÉPARGNE' (Paramètres §4). Si l'utilisateur n'avait pas renseigné ces valeurs (valeur:0 par défaut pour 'urgence' et 'lt'), totEpBase=0 et cumulEpargne restait plat.", "FIX — Variable sécurisée epargneMensuellePrevue avec double source : Source 1 = section donneesAnnuelles[year].epargne (objectifs explicites). Source 2 = fallback : lignes de chargesFixes dont le label contient un mot-clé épargne (epargne|urgence|long terme|investissement|virement) — capte les virements codés comme charges plutôt que comme objectifs.", "totEpBase conservé pour la déduction dans solde_fin (balance liquide). cumulEpargne utilise désormais epargneMensuellePrevue (= totEpBase + épargnes implicites détectées dans chargesFixes).", "console.log temporaire '[v17.13 debug]' ajouté pour valider l'incrément réel à chaque mois.", "Condition mois courant conservée : cumulEpargne += epargneMensuellePrevue inclus."] },
                         { version: "17.12", date: "2026-05-08 — Fix True Savings Accumulation Logic", changes: ["ROOT CAUSE v17.11 : soldeEpargneProjete = curSolde + cumulEpargne liait l'épargne au solde courant — quand curSolde fluctue (flux irréguliers, dépenses), la colonne 'Total Épargne' fluctuait aussi au lieu de se cumuler strictement à la hausse.", "FIX : soldeEpargneProjete = cumulEpargne UNIQUEMENT. Plus aucun lien avec curSolde/solde_fin.", "cumulEpargne part de epargneInitial+investInitial (solde initial réel des comptes épargne+invest).", "cumulEpargne += totEpBase chaque mois (mois courant + mois futurs) — accumulation structurelle des virements épargne planifiés.", "Ligne 'Aujourd'hui' : revient à patrimoineSavingsInvest (solde actuel des comptes épargne+invest, sans les liquidités).", "Jauge 'Épargne Cumulée Finale' : pointe sur le dernier row de bilan via epargneTotaleFinal — affiche désormais une valeur croissante et stable."] },
                         { version: "17.11", date: "2026-05-08 — Fix Épargne Cumulée Finale", changes: ["ROOT CAUSE : 'soldeEpargneProjete' ne représentait que le solde des comptes épargne/investissement (cumulEpargne partait de 0 et n'accumulait que totEpBase). Si totEpBase=0, la colonne restait figée au solde initial (99 400 DH) quelle que soit la projection.", "FIX — Nouvelle formule : cumulEpargne part de epargneInitial+investInitial (solde de départ réel), et soldeEpargneProjete = curSolde + cumulEpargne. La colonne 'Total Épargne' reflète désormais le PATRIMOINE TOTAL PROJETÉ (liquidités + épargne), qui croît naturellement avec le surplus mensuel même si aucun virement épargne n'est planifié.", "Mois courant : ajout de cumulEpargne += totEpBase avant le return pour cohérence avec les mois futurs.", "Ligne 'Aujourd'hui' : Total Épargne mis à jour vers patrimoineNet (liquidités initiales + épargne initiale) pour rester aligné avec la nouvelle sémantique.", "Jauge 'Épargne Cumulée Finale' : pointe déjà sur le dernier soldeEpargneProjete via epargneTotaleFinal — bénéficie automatiquement de la correction."] },
@@ -3861,7 +3862,7 @@
                         
                         let revMoisPrecedent = 0;
                         let totalMoisEcoules = 0;
-                        let cumulEpargne = epargneInitial + investInitial; // v17.11 : part du solde initial réel (épargne+invest), so soldeEpargneProjete = curSolde + cumulEpargne = patrimoine total
+                        let cumulEpargne = 0; // v17.14 : mode "Épargne Générée" — part de 0, accumule uniquement l'effort d'épargne produit depuis le mois actuel
                         const maxAnnee = Math.max(...anneesDisponibles.value);
                         
                         let periods = [];
