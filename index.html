@@ -310,7 +310,7 @@
                                         <td class="p-4 text-right">-</td>
                                         <td class="p-4">-</td>
                                         <td class="p-4 text-right font-black text-lg text-blue-900">{{ formatMAD(patrimoineLiquide) }}</td>
-                                        <td class="p-4 text-right text-purple-600">{{ formatMAD(patrimoineNet) }}</td><!-- v17.11 : patrimoine total initial = liquidités + épargne+invest, cohérent avec soldeEpargneProjete = curSolde + cumulEpargne -->
+                                        <td class="p-4 text-right text-purple-600">{{ formatMAD(patrimoineSavingsInvest) }}</td><!-- v17.12 : solde initial des comptes épargne+invest = cumulEpargne de départ, cohérent avec accumulation pure -->
                                     </tr>
                                     <tr v-for="(row, idx) in bilan" :key="idx" :class="['transition-colors', row.numMois === 1 && !row.isCurrent ? 'border-t-4 border-slate-300 bg-slate-50' : 'hover:bg-gray-50']">
                                         <td class="p-4 font-bold whitespace-nowrap">
@@ -2838,8 +2838,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.11";
+                    const CURRENT_VERSION = "17.12";
                     const CHANGELOG = [
+                        { version: "17.12", date: "2026-05-08 — Fix True Savings Accumulation Logic", changes: ["ROOT CAUSE v17.11 : soldeEpargneProjete = curSolde + cumulEpargne liait l'épargne au solde courant — quand curSolde fluctue (flux irréguliers, dépenses), la colonne 'Total Épargne' fluctuait aussi au lieu de se cumuler strictement à la hausse.", "FIX : soldeEpargneProjete = cumulEpargne UNIQUEMENT. Plus aucun lien avec curSolde/solde_fin.", "cumulEpargne part de epargneInitial+investInitial (solde initial réel des comptes épargne+invest).", "cumulEpargne += totEpBase chaque mois (mois courant + mois futurs) — accumulation structurelle des virements épargne planifiés.", "Ligne 'Aujourd'hui' : revient à patrimoineSavingsInvest (solde actuel des comptes épargne+invest, sans les liquidités).", "Jauge 'Épargne Cumulée Finale' : pointe sur le dernier row de bilan via epargneTotaleFinal — affiche désormais une valeur croissante et stable."] },
                         { version: "17.11", date: "2026-05-08 — Fix Épargne Cumulée Finale", changes: ["ROOT CAUSE : 'soldeEpargneProjete' ne représentait que le solde des comptes épargne/investissement (cumulEpargne partait de 0 et n'accumulait que totEpBase). Si totEpBase=0, la colonne restait figée au solde initial (99 400 DH) quelle que soit la projection.", "FIX — Nouvelle formule : cumulEpargne part de epargneInitial+investInitial (solde de départ réel), et soldeEpargneProjete = curSolde + cumulEpargne. La colonne 'Total Épargne' reflète désormais le PATRIMOINE TOTAL PROJETÉ (liquidités + épargne), qui croît naturellement avec le surplus mensuel même si aucun virement épargne n'est planifié.", "Mois courant : ajout de cumulEpargne += totEpBase avant le return pour cohérence avec les mois futurs.", "Ligne 'Aujourd'hui' : Total Épargne mis à jour vers patrimoineNet (liquidités initiales + épargne initiale) pour rester aligné avec la nouvelle sémantique.", "Jauge 'Épargne Cumulée Finale' : pointe déjà sur le dernier soldeEpargneProjete via epargneTotaleFinal — bénéficie automatiquement de la correction."] },
                         { version: "17.9", date: "2026-05-08 — Fix Épargne Cumulée Pluriannuelle", changes: ["BUG MULTI-ANNÉE : 'totalMoisEcoules * totEpBase' utilisait le taux d'épargne du DERNIER mois pour multiplier TOUS les mois écoulés — résultat faux dès que totEpBase change d'une année à l'autre.", "FIX : remplacement par une somme cumulative courante 'cumulEpargne += totEpBase' calculée mois par mois dans le moteur bilan. Chaque mois accumule son propre taux d'épargne.", "BUG ROW 'Aujourd'hui' : la colonne 'Total Épargne' affichait patrimoineNet - patrimoineLiquide (actifs illiquides = 0), alors que les mois futurs affichent epargneInitial + investInitial (99 400 DH) — saut incohérent.", "FIX : ajout du computed 'patrimoineSavingsInvest' = somme des comptes de type epargne + investissement. La ligne 'Aujourd'hui' utilise désormais cette valeur, rendant la colonne cohérente avec les mois projetés."] },
                         { version: "17.8", date: "2026-05-08 — Calendrier Pluriannuel Persistence Fix", changes: ["ROOT CAUSE 1 — executerImportFusion écrasait depensesIrregulieres avec les entrées par défaut (depensesV10) dès que le tableau sauvegardé était vide (length===0). Un utilisateur qui supprimait toutes ses entrées voyait les défauts restaurés au rechargement.", "FIX 1 — Condition d'initialisation corrigée : passage de '!Array.isArray || length===0' à '!Array.isArray' uniquement. Un tableau vide intentionnel est désormais respecté et jamais remplacé par les défauts.", "ROOT CAUSE 2 — watch(donneesAnnuelles, deep:true) se déclenchait de façon asynchrone APRÈS executerImportFusion, overridant le serverSyncStatus='synced' posé juste après l'import. Résultat : indicateur 'Modifié' affiché sur chaque chargement de page même sans modification utilisateur.", "FIX 2 — Flag _importInProgress : mis à true au début d'executerImportFusion, réinitialisé via setTimeout(200ms) après forceUpdateCalculations(). Le watcher donneesAnnuelles retourne immédiatement si _importInProgress est actif, éliminant le 'Modifié' fantôme au démarrage.", "Résultat : les données Calendrier Pluriannuel (depensesIrregulieres) survivent correctement au rechargement, y compris lorsque toutes les entrées ont été supprimées."] },
@@ -3927,12 +3928,12 @@
                                     curSolde = solde_fin;
                                 }
                                 
-                                cumulEpargne += totEpBase; // v17.11 : inclure le virement épargne du mois courant
+                                cumulEpargne += totEpBase; // v17.12 : accumulation structurelle du mois courant
                                 return {
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, charges: fRest+vRest+totEpBase,
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
                                     soldeCourant: solde_fin,
-                                    soldeEpargneProjete: curSolde + cumulEpargne, // v17.11 : patrimoine total = liquidités + épargne (croît avec le surplus)
+                                    soldeEpargneProjete: cumulEpargne, // v17.12 : accumulation pure (sans curSolde) — ne fluctue jamais
                                     isCurrent: true, isException: false
                                 };
                             } 
@@ -3958,13 +3959,13 @@
                                 }
                                 
                                 totalMoisEcoules++;
-                                cumulEpargne += totEpBase; // v17.9/v17.11 : accumulation réelle mois par mois
+                                cumulEpargne += totEpBase; // v17.12 : accumulation structurelle mois par mois (aucun lien avec curSolde)
                                 return {
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees,
                                     charges: fixMois+totVarBase+totEpBase,
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
                                     soldeCourant: curSolde,
-                                    soldeEpargneProjete: curSolde + cumulEpargne, // v17.11 : patrimoine total = liquidités projetées + épargne accumulée
+                                    soldeEpargneProjete: cumulEpargne, // v17.12 : accumulation pure — croît de totEpBase chaque mois, ne fluctue jamais
                                     isCurrent: false, isException: (revMoisGenere !== totalRevenusBase.value) || (fixMois !== totalFixes.value)
                                 };
                             }
