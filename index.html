@@ -2838,8 +2838,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.6";
+                    const CURRENT_VERSION = "17.7";
                     const CHANGELOG = [
+                        { version: "17.7", date: "2026-05-08 — Hotfix Account Balances Zeroing Bug", changes: ["ROOT CAUSE : executerImportFusion forçait moisActuel/anneeActuelle AVANT de charger comptes.value, déclenchant watch(soldesInitiaux, deep:true) (v17.4) → forceUpdateCalculations() avec comptes encore vides → rendu avec solde=0.", "FIX 1 — Ordre des hydratations : les forçages mois/année déplacés en UN SEUL BLOC à la toute fin de executerImportFusion, APRÈS toutes les hydratations (comptes, parametres, masterAssets, wealthGoals).", "FIX 2 — Normalisation défensive : comptes.value = data.comptes.map() garantit que solde est toujours Number (null/undefined/string → 0). Patch patchV151 ne peut plus laisser solde=undefined.", "FIX 3 — Carry-over automatique : si totalSoldes=0 après hydratation mais soldesInitiaux a des valeurs legacy (courant/urgence/lt/bourse non nulles), les soldes sont restaurés automatiquement par type de compte.", "FIX 4 — Watch ciblé : watch(soldesInitiaux, deep:true) remplacé par watch sur 7 champs spécifiques (salaireRecu, semainesRestantes, decalagePaie, courant, urgence, lt, bourse) — exclut moisActuel/anneeActuelle qui changent à chaque chargement, éliminant l'état 'Modifié' spurieux au démarrage."] },
                         { version: "17.6", date: "2026-05-08 — Real-time Calendar Fix", changes: ["executerImportFusion : après safeMerge de soldesInitiaux, forçage immédiat de moisActuel = new Date().getMonth()+1 et anneeActuelle = new Date().getFullYear() — les valeurs JSON sont écrasées.", "Même forçage appliqué au bloc parametres.value = data.parametres (si présent).", "anneeAffichage.value : n'utilise plus soldesInitiaux.anneeActuelle||2026, utilise directement new Date().getFullYear().", "Migration V10→V11 : anneeBase utilise new Date().getFullYear() au lieu de 2026.", "Résultat : peu importe le mois sauvegardé dans le JSON Postgres, le tableau de bord s'ouvre toujours sur le mois courant de l'ordinateur."] },
                         { version: "17.5", date: "2026-05-08 — Market Value Split & Audit Mobile Alignment", changes: ["Schema masterAssets enrichi : nouveau champ valeur_actuelle (Number, défaut 0) sur les 7 actifs par défaut, dans _emptyMasterAssetForm et saveMasterAsset.", "editMasterAsset : migration à la volée — valeur_actuelle hérite de asset.valeur_actuelle || asset.value à l'ouverture de la modale (fallback automatique pour actifs legacy).", "Modale unifiée : section Capital/Valeur Actuelle en grille 2 colonnes (Capital Investi readonly à gauche, Valeur Actuelle Estimée 📊 éditable en teal à droite) pour actifs productifs ET fonciers. Revenus déplacés en row séparé.", "ROI Tracker (desktop + mobile) : badge Capital remplacé par 2 lignes — Achat (prix d'achat) + Estimé (valeur_actuelle || value). Badge plus-value dynamique ▲/▼ avec % gain/perte en vert/rouge (affiché si valeur_actuelle renseignée et différente du capital).", "Stress Test Foncier : colonne 'Valeur Actuelle (Conservateur)' utilise asset.valeur_actuelle || asset.value. Computed totalConservateur suit la même logique.", "CFO & Audit mobile : ordre inversé sur mobile — Chat CFO en premier (order-1), Audit 7-KPI en second (order-2). Responsive sur lg+: ordre restauré (lg:order-1/2). Hauteur chat adaptative max-h-[60vh] mobile / lg:max-h-[520px] desktop. Header CFO flex-wrap + titres responsive xl→lg.", "n8n — buildOps actif/foncier : propagation conditionnelle des champs apport_personnel, montant_credit et valeur_actuelle. applyOp update_master_asset : support op.valeur_actuelle avec log avant/après. System prompt : description actif enrichie (valeur_actuelle = valeur marchande estimée, plus-value latente)."] },
                         { version: "17.4", date: "2026-05-08 — Fix Pilotage Month Persistence & Auto-detect", changes: ["getDefaultState() : moisActuel hardcodé (4) → new Date().getMonth()+1 ; anneeActuelle (2026) → new Date().getFullYear().", "parametres ref : même correction (new Date()) pour les deux champs.", "Ajout watch(soldesInitiaux, handleDataChange, deep:true) : tout changement de mois/année déclenche désormais serverSyncStatus='modified' et active le bouton Sauver VPS.", "getExportData() et executerImportFusion() inchangés (soldesInitiaux déjà exporté/hydraté correctement depuis v15)."] },
@@ -3527,9 +3528,7 @@
                             sanitizeEpargneKeys(data);
 
                             soldesInitiaux.value = safeMerge(d.soldesInitiaux, data.soldesInitiaux);
-                            // v17.6 : FORCER le mois/année réels — jamais restaurer depuis JSON
-                            soldesInitiaux.value.moisActuel   = new Date().getMonth() + 1;
-                            soldesInitiaux.value.anneeActuelle = new Date().getFullYear();
+                            // ⚠️ v17.7 : NE PAS forcer mois/année ici — sera appliqué après toutes les hydratations
 
                             // Migration automatique V10 -> V11
                             if (data.revenus && !data.donneesAnnuelles) {
@@ -3564,13 +3563,36 @@
                                 });
                             }
                             if(data.gConfig) gConfig.value = data.gConfig;
-                            // v15 : hydratation multi-comptes
-                            if (Array.isArray(data.comptes) && data.comptes.length) comptes.value = data.comptes;
+                            // v15 : hydratation multi-comptes — v17.7 : normalisation + carry-over
+                            if (Array.isArray(data.comptes) && data.comptes.length) {
+                                // Normalisation défensive : garantir que solde est toujours un Number
+                                comptes.value = data.comptes.map(c => ({
+                                    ...c,
+                                    solde: (c.solde !== null && c.solde !== undefined)
+                                        ? (Number(c.solde) || 0)
+                                        : (Number(c.soldeInitial) || 0)
+                                }));
+                                // Carry-over : si tous les soldes sont 0 mais soldesInitiaux contient
+                                // des valeurs legacy (courant/urgence/lt/bourse), les restaurer automatiquement
+                                const _totalSoldes = comptes.value.reduce((s, c) => s + (Number(c.solde) || 0), 0);
+                                if (_totalSoldes === 0 && data.soldesInitiaux) {
+                                    const _si = data.soldesInitiaux;
+                                    const _legacyTotal = (Number(_si.courant)||0) + (Number(_si.urgence)||0) + (Number(_si.lt)||0) + (Number(_si.bourse)||0);
+                                    if (_legacyTotal > 0) {
+                                        comptes.value = comptes.value.map(c => {
+                                            if ((Number(c.solde)||0) !== 0) return c;
+                                            if (c.type === 'courant')                                             return { ...c, solde: Number(_si.courant) || 0 };
+                                            if (c.type === 'epargne' && /urgence/i.test(c.label || ''))          return { ...c, solde: Number(_si.urgence) || 0 };
+                                            if (c.type === 'epargne' && /long/i.test(c.label || ''))             return { ...c, solde: Number(_si.lt)      || 0 };
+                                            if (c.type === 'investissement' || c.type === 'bourse')              return { ...c, solde: Number(_si.bourse)  || 0 };
+                                            return c;
+                                        });
+                                        addLog('⚠️ Carry-over activé : soldes restaurés depuis soldesInitiaux.', 'warn');
+                                    }
+                                }
+                            }
                             if (data.parametres && typeof data.parametres === 'object') {
                                 parametres.value = data.parametres;
-                                // v17.6 : FORCER le mois/année réels dans parametres aussi
-                                parametres.value.moisActuel    = new Date().getMonth() + 1;
-                                parametres.value.anneeActuelle = new Date().getFullYear();
                             }
                             // v16.3 : hydratation Wealth Goals
                             if (Array.isArray(data.wealthGoals)) wealthGoals.value = data.wealthGoals;
@@ -3598,7 +3620,15 @@
                                 if (migrated.length) { masterAssets.value = migrated; addLog('✅ Migration v16→v17 : masterAssets reconstruit.', 'success'); }
                             }
 
-                            anneeAffichage.value = new Date().getFullYear();
+                            // v17.7 : forcer mois/année réels UNE SEULE FOIS, après toutes les hydratations
+                            const _now = new Date();
+                            soldesInitiaux.value.moisActuel    = _now.getMonth() + 1;
+                            soldesInitiaux.value.anneeActuelle = _now.getFullYear();
+                            if (parametres.value && typeof parametres.value === 'object') {
+                                parametres.value.moisActuel    = _now.getMonth() + 1;
+                                parametres.value.anneeActuelle = _now.getFullYear();
+                            }
+                            anneeAffichage.value = _now.getFullYear();
                             forceUpdateCalculations();
                         } catch(err) {
                             addLog("Erreur de fusion: " + err.message, "error");
@@ -3622,8 +3652,17 @@
                     // v17.0 : Wealth tab persistence — single source of truth
                     watch(wealthGoals,   () => handleDataChange(), { deep: true });
                     watch(masterAssets,  () => handleDataChange(), { deep: true });
-                    // v17.4 : Pilotage — persiste le mois/année sélectionnés
-                    watch(soldesInitiaux, () => handleDataChange(), { deep: true });
+                    // v17.7 : watcher ciblé — exclut moisActuel/anneeActuelle (forcés au chargement)
+                    // pour éviter que chaque page load déclenche un état "Modifié" non désiré
+                    watch([
+                        () => soldesInitiaux.value.salaireRecu,
+                        () => soldesInitiaux.value.semainesRestantes,
+                        () => soldesInitiaux.value.decalagePaie,
+                        () => soldesInitiaux.value.courant,
+                        () => soldesInitiaux.value.urgence,
+                        () => soldesInitiaux.value.lt,
+                        () => soldesInitiaux.value.bourse,
+                    ], () => handleDataChange());
 
                     const nomDuMois = (m) => ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'][m];
                     const formatMAD = (v) => new Intl.NumberFormat('fr-FR').format(Math.round(Number(v) || 0)) + ' DH';
