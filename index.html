@@ -2838,8 +2838,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.5";
+                    const CURRENT_VERSION = "17.6";
                     const CHANGELOG = [
+                        { version: "17.6", date: "2026-05-08 — Real-time Calendar Fix", changes: ["executerImportFusion : après safeMerge de soldesInitiaux, forçage immédiat de moisActuel = new Date().getMonth()+1 et anneeActuelle = new Date().getFullYear() — les valeurs JSON sont écrasées.", "Même forçage appliqué au bloc parametres.value = data.parametres (si présent).", "anneeAffichage.value : n'utilise plus soldesInitiaux.anneeActuelle||2026, utilise directement new Date().getFullYear().", "Migration V10→V11 : anneeBase utilise new Date().getFullYear() au lieu de 2026.", "Résultat : peu importe le mois sauvegardé dans le JSON Postgres, le tableau de bord s'ouvre toujours sur le mois courant de l'ordinateur."] },
                         { version: "17.5", date: "2026-05-08 — Market Value Split & Audit Mobile Alignment", changes: ["Schema masterAssets enrichi : nouveau champ valeur_actuelle (Number, défaut 0) sur les 7 actifs par défaut, dans _emptyMasterAssetForm et saveMasterAsset.", "editMasterAsset : migration à la volée — valeur_actuelle hérite de asset.valeur_actuelle || asset.value à l'ouverture de la modale (fallback automatique pour actifs legacy).", "Modale unifiée : section Capital/Valeur Actuelle en grille 2 colonnes (Capital Investi readonly à gauche, Valeur Actuelle Estimée 📊 éditable en teal à droite) pour actifs productifs ET fonciers. Revenus déplacés en row séparé.", "ROI Tracker (desktop + mobile) : badge Capital remplacé par 2 lignes — Achat (prix d'achat) + Estimé (valeur_actuelle || value). Badge plus-value dynamique ▲/▼ avec % gain/perte en vert/rouge (affiché si valeur_actuelle renseignée et différente du capital).", "Stress Test Foncier : colonne 'Valeur Actuelle (Conservateur)' utilise asset.valeur_actuelle || asset.value. Computed totalConservateur suit la même logique.", "CFO & Audit mobile : ordre inversé sur mobile — Chat CFO en premier (order-1), Audit 7-KPI en second (order-2). Responsive sur lg+: ordre restauré (lg:order-1/2). Hauteur chat adaptative max-h-[60vh] mobile / lg:max-h-[520px] desktop. Header CFO flex-wrap + titres responsive xl→lg.", "n8n — buildOps actif/foncier : propagation conditionnelle des champs apport_personnel, montant_credit et valeur_actuelle. applyOp update_master_asset : support op.valeur_actuelle avec log avant/après. System prompt : description actif enrichie (valeur_actuelle = valeur marchande estimée, plus-value latente)."] },
                         { version: "17.4", date: "2026-05-08 — Fix Pilotage Month Persistence & Auto-detect", changes: ["getDefaultState() : moisActuel hardcodé (4) → new Date().getMonth()+1 ; anneeActuelle (2026) → new Date().getFullYear().", "parametres ref : même correction (new Date()) pour les deux champs.", "Ajout watch(soldesInitiaux, handleDataChange, deep:true) : tout changement de mois/année déclenche désormais serverSyncStatus='modified' et active le bouton Sauver VPS.", "getExportData() et executerImportFusion() inchangés (soldesInitiaux déjà exporté/hydraté correctement depuis v15)."] },
                         { version: "17.3", date: "2026-05-07 — Legacy Data Math Fix for Equity", changes: ["editMasterAsset : détection automatique des actifs legacy (apport=0, crédit=0, value>0) à l'ouverture de la modale.", "Migration à la volée : injecte la valeur du capital dans apport_personnel et force montant_credit=0, garantissant que Apport + Crédit = Capital dès l'affichage.", "Les actifs déjà renseignés (apport ou crédit > 0) ne sont pas touchés.", "Aucune mutation persistée : la correction n'est appliquée qu'au formulaire, pas au store masterAssets — elle devient permanente seulement si l'utilisateur valide."] },
@@ -3525,12 +3526,14 @@
                             patchV151(data);
                             sanitizeEpargneKeys(data);
 
-                            soldesInitiaux.value = safeMerge(d.soldesInitiaux, data.soldesInitiaux); 
-                            if (!soldesInitiaux.value.anneeActuelle) soldesInitiaux.value.anneeActuelle = 2026;
+                            soldesInitiaux.value = safeMerge(d.soldesInitiaux, data.soldesInitiaux);
+                            // v17.6 : FORCER le mois/année réels — jamais restaurer depuis JSON
+                            soldesInitiaux.value.moisActuel   = new Date().getMonth() + 1;
+                            soldesInitiaux.value.anneeActuelle = new Date().getFullYear();
 
                             // Migration automatique V10 -> V11
                             if (data.revenus && !data.donneesAnnuelles) {
-                                let anneeBase = soldesInitiaux.value.anneeActuelle || 2026;
+                                let anneeBase = new Date().getFullYear();
                                 const chocsDistants = Array.isArray(data.depensesIrregulieres) && data.depensesIrregulieres.length > 0
                                     ? data.depensesIrregulieres.map(dep => ({ ...dep, annee: dep.annee || anneeBase }))
                                     : d.donneesAnnuelles[2026].depensesIrregulieres;
@@ -3563,7 +3566,12 @@
                             if(data.gConfig) gConfig.value = data.gConfig;
                             // v15 : hydratation multi-comptes
                             if (Array.isArray(data.comptes) && data.comptes.length) comptes.value = data.comptes;
-                            if (data.parametres && typeof data.parametres === 'object') parametres.value = data.parametres;
+                            if (data.parametres && typeof data.parametres === 'object') {
+                                parametres.value = data.parametres;
+                                // v17.6 : FORCER le mois/année réels dans parametres aussi
+                                parametres.value.moisActuel    = new Date().getMonth() + 1;
+                                parametres.value.anneeActuelle = new Date().getFullYear();
+                            }
                             // v16.3 : hydratation Wealth Goals
                             if (Array.isArray(data.wealthGoals)) wealthGoals.value = data.wealthGoals;
                             // v17.0 : hydratation Master Assets (avec migration v16→v17)
@@ -3590,7 +3598,7 @@
                                 if (migrated.length) { masterAssets.value = migrated; addLog('✅ Migration v16→v17 : masterAssets reconstruit.', 'success'); }
                             }
 
-                            anneeAffichage.value = soldesInitiaux.value.anneeActuelle || 2026;
+                            anneeAffichage.value = new Date().getFullYear();
                             forceUpdateCalculations();
                         } catch(err) {
                             addLog("Erreur de fusion: " + err.message, "error");
