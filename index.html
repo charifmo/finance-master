@@ -1160,7 +1160,7 @@
                 <div v-if="activeTab === 'wealth'" class="max-w-5xl mx-auto space-y-6">
                     <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">💎 Patrimoine & Objectifs</h2>
 
-                    <!-- ── Section 1 : Smart Goals ── -->
+                    <!-- ── Section 1 : Smart Goals CRUD (v17.16) ── -->
                     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                         <div class="px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-100 flex items-center justify-between">
                             <div>
@@ -1171,24 +1171,30 @@
                         </div>
                         <div class="p-6 space-y-4">
                             <div v-for="(goal, idx) in wealthGoals" :key="idx" class="p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors">
-                                <div class="flex items-start justify-between mb-3">
-                                    <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-black text-gray-800 truncate">{{ goal.name }}</p>
-                                        <p class="text-[10px] text-gray-500 mt-0.5 font-bold uppercase tracking-widest">
-                                            {{ formatMAD(goal.current) }} / {{ formatMAD(goal.target) }}
-                                        </p>
-                                    </div>
-                                    <span :class="['text-sm font-black px-2.5 py-1 rounded-lg ml-3 shrink-0', goal.current >= goal.target ? 'bg-emerald-100 text-emerald-700' : (goal.current / goal.target >= 0.5 ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700')]">
-                                        {{ Math.min(100, Math.round((goal.current / goal.target) * 100)) }}%
-                                    </span>
+                                <!-- Ligne d'édition inline -->
+                                <div class="flex items-center gap-2 mb-3">
+                                    <input type="text" v-model="goal.name" @input="handleDataChange" placeholder="Nom de l'objectif" class="flex-1 text-sm font-black text-gray-800 bg-white border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-emerald-400 min-w-0"/>
+                                    <button @click="wealthGoals.splice(idx,1); handleDataChange()" class="text-red-400 hover:text-red-600 text-lg px-1 shrink-0 transition-colors" title="Supprimer">🗑️</button>
                                 </div>
+                                <div class="grid grid-cols-2 gap-2 mb-3">
+                                    <div>
+                                        <p class="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">Déjà épargné (DH)</p>
+                                        <input type="number" v-model.number="goal.current" @input="handleDataChange" min="0" class="w-full p-2 border border-gray-200 bg-white rounded-lg text-right font-black text-emerald-700 text-sm outline-none focus:ring-2 focus:ring-emerald-400"/>
+                                    </div>
+                                    <div>
+                                        <p class="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">Objectif total (DH)</p>
+                                        <input type="number" v-model.number="goal.target" @input="handleDataChange" min="1" class="w-full p-2 border border-gray-200 bg-white rounded-lg text-right font-black text-gray-700 text-sm outline-none focus:ring-2 focus:ring-emerald-400"/>
+                                    </div>
+                                </div>
+                                <!-- Barre de progression -->
                                 <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden mb-2">
                                     <div :class="['h-full rounded-full transition-all duration-500', goal.current >= goal.target ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : (goal.current / goal.target >= 0.5 ? 'bg-gradient-to-r from-blue-400 to-blue-600' : 'bg-gradient-to-r from-amber-400 to-amber-500')]"
-                                         :style="{ width: Math.min(100, Math.round((goal.current / goal.target) * 100)) + '%' }"></div>
+                                         :style="{ width: Math.min(100, Math.round((goal.current / (goal.target||1)) * 100)) + '%' }"></div>
                                 </div>
                                 <div class="flex items-center justify-between">
                                     <p v-if="goal.current < goal.target" class="text-[10px] text-gray-500 font-bold">
-                                        Reste : <span class="text-gray-700 font-black">{{ formatMAD(goal.target - goal.current) }}</span> à épargner
+                                        Reste : <span class="text-gray-700 font-black">{{ formatMAD(goal.target - goal.current) }}</span>
+                                        <span :class="['ml-2 px-1.5 py-0.5 rounded font-black text-[9px]', goal.current >= goal.target ? 'bg-emerald-100 text-emerald-700' : (goal.current / (goal.target||1) >= 0.5 ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700')]">{{ Math.min(100, Math.round((goal.current / (goal.target||1)) * 100)) }}%</span>
                                     </p>
                                     <p v-else class="text-[10px] text-emerald-600 font-black">✅ Objectif atteint !</p>
                                     <p v-if="goal.current < goal.target && surplusMensuelBase > 0" class="text-[10px] text-gray-400 font-bold">
@@ -1196,6 +1202,10 @@
                                     </p>
                                 </div>
                             </div>
+                            <div v-if="wealthGoals.length === 0" class="text-center text-gray-400 text-sm py-6 italic">Aucun objectif. Ajoutez-en un ci-dessous.</div>
+                            <button @click="wealthGoals.push({ name: 'Nouvel objectif', target: 10000, current: 0 }); handleDataChange()" class="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm uppercase tracking-widest shadow-sm transition-colors">
+                                <span class="text-lg leading-none">＋</span> Ajouter un objectif
+                            </button>
                         </div>
                     </div>
 
@@ -2116,30 +2126,41 @@
                 <div v-if="activeMobileTab === 'wealth'">
                     <h2 class="text-lg font-black text-gray-800 mb-3 uppercase tracking-tighter px-1">💎 Patrimoine & Objectifs</h2>
 
-                    <!-- Smart Goals mobile -->
+                    <!-- Smart Goals CRUD mobile (v17.16) -->
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
                         <div class="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between">
                             <span class="text-xs font-black uppercase tracking-widest text-emerald-800">🎯 Smart Goals</span>
                             <span class="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">{{ wealthGoals.length }} objectif{{ wealthGoals.length > 1 ? 's' : '' }}</span>
                         </div>
-                        <div class="p-4 space-y-4">
+                        <div class="p-4 space-y-3">
                             <div v-for="(goal, idx) in wealthGoals" :key="idx" class="p-3 bg-gray-50 rounded-xl border border-gray-200">
-                                <div class="flex items-start justify-between mb-2">
-                                    <p class="text-xs font-black text-gray-800 flex-1 min-w-0 pr-2 leading-tight">{{ goal.name }}</p>
-                                    <span :class="['text-[10px] font-black px-2 py-0.5 rounded-lg shrink-0', goal.current >= goal.target ? 'bg-emerald-100 text-emerald-700' : (goal.current / goal.target >= 0.5 ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700')]">
-                                        {{ Math.min(100, Math.round((goal.current / goal.target) * 100)) }}%
-                                    </span>
+                                <div class="flex items-center gap-2 mb-2">
+                                    <input type="text" v-model="goal.name" @input="handleDataChange" class="flex-1 text-xs font-black text-gray-800 bg-white border border-gray-300 rounded-lg px-2 py-1.5 outline-none min-w-0"/>
+                                    <button @click="wealthGoals.splice(idx,1); handleDataChange()" class="text-red-400 hover:text-red-600 text-base px-1 shrink-0">🗑️</button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mb-2">
+                                    <div>
+                                        <p class="text-[8px] text-gray-400 font-black uppercase mb-0.5">Épargné</p>
+                                        <input type="number" v-model.number="goal.current" @input="handleDataChange" min="0" class="w-full p-1.5 border border-gray-200 bg-white rounded-lg text-right font-black text-emerald-700 text-xs outline-none"/>
+                                    </div>
+                                    <div>
+                                        <p class="text-[8px] text-gray-400 font-black uppercase mb-0.5">Objectif</p>
+                                        <input type="number" v-model.number="goal.target" @input="handleDataChange" min="1" class="w-full p-1.5 border border-gray-200 bg-white rounded-lg text-right font-black text-gray-700 text-xs outline-none"/>
+                                    </div>
                                 </div>
                                 <div class="h-2 bg-gray-200 rounded-full overflow-hidden mb-1.5">
-                                    <div :class="['h-full rounded-full', goal.current >= goal.target ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : (goal.current / goal.target >= 0.5 ? 'bg-gradient-to-r from-blue-400 to-blue-600' : 'bg-gradient-to-r from-amber-400 to-amber-500')]"
-                                         :style="{ width: Math.min(100, Math.round((goal.current / goal.target) * 100)) + '%' }"></div>
+                                    <div :class="['h-full rounded-full', goal.current >= goal.target ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : (goal.current / (goal.target||1) >= 0.5 ? 'bg-gradient-to-r from-blue-400 to-blue-600' : 'bg-gradient-to-r from-amber-400 to-amber-500')]"
+                                         :style="{ width: Math.min(100, Math.round((goal.current / (goal.target||1)) * 100)) + '%' }"></div>
                                 </div>
                                 <div class="flex justify-between">
-                                    <p class="text-[9px] text-gray-500 font-bold">{{ formatMAD(goal.current) }} / {{ formatMAD(goal.target) }}</p>
-                                    <p v-if="goal.current < goal.target" class="text-[9px] text-gray-400 font-bold">Reste : {{ formatMAD(goal.target - goal.current) }}</p>
-                                    <p v-else class="text-[9px] text-emerald-600 font-black">✅ Atteint !</p>
+                                    <p class="text-[9px] text-gray-500 font-bold">{{ Math.min(100, Math.round((goal.current/(goal.target||1))*100)) }}% — Reste {{ formatMAD(Math.max(0, goal.target-goal.current)) }}</p>
+                                    <p v-if="goal.current >= goal.target" class="text-[9px] text-emerald-600 font-black">✅</p>
                                 </div>
                             </div>
+                            <div v-if="wealthGoals.length === 0" class="text-center text-gray-400 text-xs py-3 italic">Aucun objectif.</div>
+                            <button @click="wealthGoals.push({ name: 'Nouvel objectif', target: 10000, current: 0 }); handleDataChange()" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest transition-colors">
+                                <span>＋</span> Ajouter
+                            </button>
                         </div>
                     </div>
 
