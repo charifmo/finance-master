@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [17.18] — 2026-05-13 — Patrimoine Global Projeté & Tooltip
+
+### Refonte UX
+- **Nouveau computed `patrimoineProjeteGlobal`** : additionne `soldeFinal` (cash) + `epargneTotaleFinal` (épargne générée) + `soldesInitiaux.bourse` pour une vision complète du patrimoine projeté.
+- **Header "PROJ. FIN" → "Patrimoine Global Projeté"** : la valeur principale affiche désormais le patrimoine total, pas seulement le cash. Tooltip au survol avec répartition détaillée (Compte Courant / Total Épargne / Bourse).
+- **KPI Dashboard** : carte "Projection Fin" remplacée par "Patrimoine Global" en vert emerald, avec sous-détail Cash + Épargne en texte compact.
+- **Correction** : suppression de la fausse impression de déficit quand l'épargne accumulée n'était pas visible dans l'indicateur principal.
+
+---
+
 ## [17.16] — 2026-05-13 — Time Machine Comptes (Projection par Date)
 
 ### Nouvelle fonctionnalité

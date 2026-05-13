@@ -138,18 +138,28 @@
                             </button>
                         </div>
                     </div>
-                    <div class="text-right">
+                    <div class="text-right relative group">
                         <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest italic flex items-center justify-end gap-1">
-                            <span>Proj. Fin</span>
+                            <span>Patrimoine Global Projeté</span>
                             <select v-model.number="anneeCibleProjection" class="bg-transparent border-none outline-none text-gray-500 font-black uppercase tracking-widest cursor-pointer hover:text-blue-600 focus:text-blue-600 text-[10px] px-0 py-0">
                                 <option v-for="a in anneesProjectionOptions" :key="a" :value="a">{{ a }}</option>
                             </select>
                             <span v-if="(soldesInitiaux.decalagePaie !== false)">(Avant Paie)</span>
                         </p>
-                        <p :class="['text-xl font-black flex items-center justify-end gap-2', soldeFinal >= 0 ? 'text-green-600' : 'text-red-600']">
-                            {{ formatMAD(soldeFinal) }}
-                            <span :class="['p-1.5 rounded-lg shadow-sm text-sm', soldeFinal >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']">{{ soldeFinal >= 0 ? '🎉' : '⚠️' }}</span>
+                        <p :class="['text-xl font-black flex items-center justify-end gap-2', patrimoineProjeteGlobal >= 0 ? 'text-green-600' : 'text-red-600']">
+                            {{ formatMAD(patrimoineProjeteGlobal) }}
+                            <span :class="['p-1.5 rounded-lg shadow-sm text-sm', patrimoineProjeteGlobal >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']">{{ patrimoineProjeteGlobal >= 0 ? '🎉' : '⚠️' }}</span>
                         </p>
+                        <!-- v17.18 Tooltip répartition -->
+                        <div class="hidden group-hover:block absolute right-0 top-full mt-1 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 min-w-[260px] text-left border border-slate-700">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Répartition du Patrimoine Projeté</p>
+                            <div class="space-y-1.5 text-sm">
+                                <div class="flex justify-between"><span class="text-blue-300 font-bold">💰 Compte Courant</span><span class="font-black">{{ formatMAD(soldeFinal) }}</span></div>
+                                <div class="flex justify-between"><span class="text-purple-300 font-bold">🏦 Total Épargne</span><span class="font-black">{{ formatMAD(epargneTotaleFinal) }}</span></div>
+                                <div class="flex justify-between"><span class="text-amber-300 font-bold">📈 Bourse</span><span class="font-black">{{ formatMAD(soldesInitiaux.bourse || 0) }}</span></div>
+                                <div class="border-t border-slate-700 pt-1.5 mt-1.5 flex justify-between"><span class="text-emerald-300 font-black">🏛️ Total</span><span class="font-black text-emerald-400">{{ formatMAD(patrimoineProjeteGlobal) }}</span></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -205,14 +215,15 @@
                             <h3 class="text-2xl lg:text-3xl font-black mt-2 text-gray-800">{{ formatMAD(totalCreditsMensuels) }}</h3>
                             <p :class="['text-[10px] mt-1 font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-500')]">Endettement : {{ tauxEndettement.toFixed(1) }} %</p>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-emerald-200 flex flex-col justify-center relative group">
                             <p class="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                                <span>Projection Fin</span>
+                                <span>Patrimoine Global</span>
                                 <select v-model.number="anneeCibleProjection" class="bg-transparent border-none outline-none text-gray-500 font-bold uppercase tracking-widest cursor-pointer hover:text-blue-600 focus:text-blue-600 text-xs px-0 py-0">
                                     <option v-for="a in anneesProjectionOptions" :key="a" :value="a">{{ a }}</option>
                                 </select>
                             </p>
-                            <h3 :class="['text-2xl lg:text-3xl font-black mt-2', soldeFinal >= 0 ? 'text-blue-600' : 'text-red-600']">{{ formatMAD(soldeFinal) }}</h3>
+                            <h3 :class="['text-2xl lg:text-3xl font-black mt-2', patrimoineProjeteGlobal >= 0 ? 'text-emerald-600' : 'text-red-600']">{{ formatMAD(patrimoineProjeteGlobal) }}</h3>
+                            <p class="text-[10px] mt-1 font-bold uppercase text-gray-400">Cash : {{ formatMAD(soldeFinal) }} · Épargne : {{ formatMAD(epargneTotaleFinal) }}</p>
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
                             <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Épargne Générée ({{ anneeCibleProjection }})</p><!-- v17.14 -->
@@ -2927,8 +2938,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.16";
+                    const CURRENT_VERSION = "17.18";
                     const CHANGELOG = [
+                        { version: "17.18", date: "2026-05-13 — Patrimoine Global Projeté & Tooltip", changes: ["Nouveau computed patrimoineProjeteGlobal = soldeFinal + epargneTotaleFinal + bourse — vision complète du patrimoine projeté.", "Header 'PROJ. FIN' remplacé par 'Patrimoine Global Projeté' avec tooltip au survol montrant la répartition (Cash / Épargne / Bourse).", "KPI Dashboard : carte 'Projection Fin' remplacée par 'Patrimoine Global' en vert emerald avec sous-détail Cash + Épargne.", "Correction de la fausse impression de déficit quand l'épargne accumulée n'était pas visible dans l'indicateur principal."] },
                         { version: "17.16", date: "2026-05-13 — Time Machine Comptes (Projection par Date)", changes: ["FEATURE : Projection individuelle de chaque compte à une date cible (mois + année) choisie par l'utilisateur.", "2 nouveaux refs : moisCibleProjection (défaut 12) et anneeCibleProjectionComptes (défaut année en cours).", "Computed comptesProjetes : recherche la ligne bilan correspondante, calcule les deltas Cash/Épargne/Investissement et les répartit sur le premier compte de chaque type.", "UI : nouveau bloc '🕰️ Voyage dans le temps' avec 2 selects (Mois + Année) dans la section Architecture des Comptes.", "Affichage enrichi : chaque compte montre 'Solde actuel ➔ Solde projeté' avec indicateur ▲/▼ coloré (vert hausse, rouge baisse)."] },
                         { version: "17.15", date: "2026-05-08 — Dynamic CRUD for Savings Goals", changes: ["MIGRATION DATA : donneesAnnuelles[year].epargne passe d'un objet statique {urgence:{label,valeur}, lt:{label,valeur}} à un tableau dynamique [{id, nom, valeur}]. Rétrocompatibilité totale via migrateEpargneToArray() appelée avant safeMerge dans executerImportFusion.", "UI DESKTOP §4 : suppression des champs hardcodés. Boucle v-for sur le tableau, champ texte 'nom' + champ numérique 'valeur' + bouton 🗑️ Supprimer par ligne. Bouton '+ Ajouter un objectif' en bas.", "UI MOBILE : même refonte pour l'accordéon épargne mobile.", "CRUD : addObjectifEpargne(annee) pousse un objet vide. deleteObjectifEpargne(annee, idx) splice la ligne.", "MOTEUR : totEpBase et totalEpargne mis à jour pour .reduce() sur tableau (+ fallback objet legacy). getCompteProjection et drilldown chart adaptés.", "sanitizeEpargneKeys : court-circuité pour les tableaux (logique objet conservée pour rétrocompat legacy)."] },
                         { version: "17.14", date: "2026-05-08 — Change Savings to Net Effort mode - starts at 0", changes: ["MODE 'ÉPARGNE GÉNÉRÉE' : cumulEpargne part désormais de 0 (au lieu de epargneInitial+investInitial). La colonne 'Total Épargne' et la jauge ne montrent que l'effort d'épargne PRODUIT depuis le mois actuel, pas le solde déjà présent en banque.", "Label KPI mis à jour : 'Épargne Cumulée Finale' → 'Épargne Générée (XXXX)' avec année cible dynamique (anneeCibleProjection) — desktop et mobile.", "Ligne 'Aujourd'hui' : Total Épargne = 0 DH (cohérent — aucune épargne générée avant la projection).", "Logique v17.13 conservée : epargneMensuellePrevue = objectifs §4 + chargesFixes labellisées épargne/urgence/virement."] },
@@ -4139,6 +4151,11 @@
                         return patrimoineNet.value - patrimoineLiquide.value;
                     });
 
+                    // v17.18 : Patrimoine Global Projeté = Cash final + Épargne générée + Bourse
+                    const patrimoineProjeteGlobal = computed(() => {
+                        return (soldeFinal.value || 0) + (epargneTotaleFinal.value || 0) + (Number(soldesInitiaux.value.bourse) || 0);
+                    });
+
                     // === PROJECTION INDIVIDUELLE PAR COMPTE (v15.16) ===
                     const getCompteProjection = (compte) => {
                         calculationTick.value;
@@ -4528,7 +4545,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
-                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
+                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
