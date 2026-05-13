@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.16] — 2026-05-13 — Time Machine Comptes (Projection par Date)
+
+### Nouvelle fonctionnalité
+- **Projection individuelle par compte à une date cible** : l'utilisateur peut sélectionner un mois et une année précis pour voir l'état prévisionnel de chaque compte à cette date.
+- **2 nouveaux refs** : `moisCibleProjection` (défaut Décembre) et `anneeCibleProjectionComptes` (défaut année en cours).
+- **Computed `comptesProjetes`** : recherche la ligne correspondante dans le `bilan` computed, calcule les deltas (Cash, Épargne, Investissement) et les répartit sur le premier compte de chaque type.
+- **UI "Voyage dans le temps"** : bloc gradient indigo/violet avec 2 sélecteurs (Mois + Année) inséré au-dessus de la liste des comptes dans la section Architecture des Comptes.
+- **Affichage enrichi** : chaque compte affiche `Solde actuel ➔ Solde projeté` avec indicateur delta coloré (▲ vert pour hausse, ▼ rouge pour baisse).
+
+---
+
 ## [15.7] — 2026-05-03 — Fix déduction charges mois courant
 
 ### Correction critique

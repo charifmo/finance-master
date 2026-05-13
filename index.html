@@ -383,13 +383,25 @@
                             </div>
                             <button @click="activeTab = 'pilotage'" class="text-[9px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100">🎯 Aller au Pilotage →</button>
                         </div>
+                        <!-- v17.16 : Time Machine Comptes -->
+                        <div class="px-6 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100 flex items-center gap-3 flex-wrap">
+                            <span class="text-sm font-black text-indigo-700">🕰️ Voyage dans le temps</span>
+                            <select v-model.number="moisCibleProjection" class="px-2 py-1.5 bg-white border-2 border-indigo-200 rounded-lg text-sm font-bold text-indigo-800 outline-none focus:border-indigo-500 cursor-pointer">
+                                <option v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m" :value="m">{{ nomDuMois(m) }}</option>
+                            </select>
+                            <select v-model.number="anneeCibleProjectionComptes" class="px-2 py-1.5 bg-white border-2 border-indigo-200 rounded-lg text-sm font-bold text-indigo-800 outline-none focus:border-indigo-500 cursor-pointer">
+                                <option v-for="a in anneesProjectionOptions" :key="a" :value="a">{{ a }}</option>
+                            </select>
+                            <span class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest ml-auto">Projection au {{ nomDuMois(moisCibleProjection) }} {{ anneeCibleProjectionComptes }}</span>
+                        </div>
+
                         <div v-if="comptes.length === 0" class="p-8 text-center text-gray-400">
                             <p class="text-3xl mb-2">🏦</p>
                             <p class="text-sm font-bold">Aucun compte configuré.</p>
                             <p class="text-xs mt-1">Utilisez le formulaire ci-dessous pour ajouter votre compte courant, épargne, etc.</p>
                         </div>
                         <div class="divide-y divide-gray-100">
-                            <template v-for="(compte, idx) in comptes" :key="compte.id">
+                            <template v-for="(compte, idx) in comptesProjetes" :key="compte.id">
                                 <div v-if="editingCompteId !== compte.id" class="px-6 py-3 flex items-center gap-4 hover:bg-gray-50 transition-colors group">
                                     <div class="flex flex-col gap-0.5">
                                         <button @click="moveCompte(idx, -1)" :disabled="idx === 0" class="text-[10px] text-gray-300 hover:text-blue-600 disabled:opacity-20 leading-tight font-black">↑</button>
@@ -406,7 +418,13 @@
                                         <input type="number" v-model.number="compte.solde" @change="handleDataChange"
                                             :class="['w-32 text-base font-black text-right tabular-nums bg-transparent border-b-2 outline-none transition-colors', compte.solde >= 0 ? 'text-gray-800 border-transparent hover:border-gray-300 focus:border-blue-500' : 'text-red-600 border-red-200 hover:border-red-400 focus:border-red-500']"
                                             step="100" />
-                                        <p class="text-[10px] font-bold text-purple-500 mt-0.5 tabular-nums">→ {{ formatMAD(getCompteProjection(compte)) }}</p>
+                                        <p class="text-[10px] font-bold mt-0.5 tabular-nums flex items-center justify-end gap-1">
+                                            <span class="text-gray-400">➔</span>
+                                            <span :class="[compte.delta > 0 ? 'text-emerald-600' : compte.delta < 0 ? 'text-red-500' : 'text-gray-500']">{{ formatMAD(compte.soldeProjecte) }}</span>
+                                            <span v-if="compte.delta !== 0" :class="['text-[9px] font-black', compte.delta > 0 ? 'text-emerald-500' : 'text-red-400']">
+                                                {{ compte.delta > 0 ? '▲' : '▼' }} {{ formatMAD(Math.abs(compte.delta)) }}
+                                            </span>
+                                        </p>
                                     </div>
                                     <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button @click="startEditCompte(compte)" class="text-xs text-blue-600 font-bold px-2 py-1 bg-blue-50 rounded hover:bg-blue-100">Modifier</button>
@@ -2909,8 +2927,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.15";
+                    const CURRENT_VERSION = "17.16";
                     const CHANGELOG = [
+                        { version: "17.16", date: "2026-05-13 — Time Machine Comptes (Projection par Date)", changes: ["FEATURE : Projection individuelle de chaque compte à une date cible (mois + année) choisie par l'utilisateur.", "2 nouveaux refs : moisCibleProjection (défaut 12) et anneeCibleProjectionComptes (défaut année en cours).", "Computed comptesProjetes : recherche la ligne bilan correspondante, calcule les deltas Cash/Épargne/Investissement et les répartit sur le premier compte de chaque type.", "UI : nouveau bloc '🕰️ Voyage dans le temps' avec 2 selects (Mois + Année) dans la section Architecture des Comptes.", "Affichage enrichi : chaque compte montre 'Solde actuel ➔ Solde projeté' avec indicateur ▲/▼ coloré (vert hausse, rouge baisse)."] },
                         { version: "17.15", date: "2026-05-08 — Dynamic CRUD for Savings Goals", changes: ["MIGRATION DATA : donneesAnnuelles[year].epargne passe d'un objet statique {urgence:{label,valeur}, lt:{label,valeur}} à un tableau dynamique [{id, nom, valeur}]. Rétrocompatibilité totale via migrateEpargneToArray() appelée avant safeMerge dans executerImportFusion.", "UI DESKTOP §4 : suppression des champs hardcodés. Boucle v-for sur le tableau, champ texte 'nom' + champ numérique 'valeur' + bouton 🗑️ Supprimer par ligne. Bouton '+ Ajouter un objectif' en bas.", "UI MOBILE : même refonte pour l'accordéon épargne mobile.", "CRUD : addObjectifEpargne(annee) pousse un objet vide. deleteObjectifEpargne(annee, idx) splice la ligne.", "MOTEUR : totEpBase et totalEpargne mis à jour pour .reduce() sur tableau (+ fallback objet legacy). getCompteProjection et drilldown chart adaptés.", "sanitizeEpargneKeys : court-circuité pour les tableaux (logique objet conservée pour rétrocompat legacy)."] },
                         { version: "17.14", date: "2026-05-08 — Change Savings to Net Effort mode - starts at 0", changes: ["MODE 'ÉPARGNE GÉNÉRÉE' : cumulEpargne part désormais de 0 (au lieu de epargneInitial+investInitial). La colonne 'Total Épargne' et la jauge ne montrent que l'effort d'épargne PRODUIT depuis le mois actuel, pas le solde déjà présent en banque.", "Label KPI mis à jour : 'Épargne Cumulée Finale' → 'Épargne Générée (XXXX)' avec année cible dynamique (anneeCibleProjection) — desktop et mobile.", "Ligne 'Aujourd'hui' : Total Épargne = 0 DH (cohérent — aucune épargne générée avant la projection).", "Logique v17.13 conservée : epargneMensuellePrevue = objectifs §4 + chargesFixes labellisées épargne/urgence/virement."] },
                         { version: "17.13", date: "2026-05-08 — Fix Scope Bug for Savings Accumulation", changes: ["ROOT CAUSE : totEpBase = Object.values(dataAnnee.epargne).reduce(...valeur) lisait uniquement la section 'OBJECTIFS ÉPARGNE' (Paramètres §4). Si l'utilisateur n'avait pas renseigné ces valeurs (valeur:0 par défaut pour 'urgence' et 'lt'), totEpBase=0 et cumulEpargne restait plat.", "FIX — Variable sécurisée epargneMensuellePrevue avec double source : Source 1 = section donneesAnnuelles[year].epargne (objectifs explicites). Source 2 = fallback : lignes de chargesFixes dont le label contient un mot-clé épargne (epargne|urgence|long terme|investissement|virement) — capte les virements codés comme charges plutôt que comme objectifs.", "totEpBase conservé pour la déduction dans solde_fin (balance liquide). cumulEpargne utilise désormais epargneMensuellePrevue (= totEpBase + épargnes implicites détectées dans chargesFixes).", "console.log temporaire '[v17.13 debug]' ajouté pour valider l'incrément réel à chaque mois.", "Condition mois courant conservée : cumulEpargne += epargneMensuellePrevue inclus."] },
@@ -3285,6 +3304,10 @@
                     }, { immediate: true });
                     const editingCompteId = ref(null);
                     const editingCompte = ref(null);
+
+                    // ── v17.16 : Time Machine Comptes ──────────────────
+                    const moisCibleProjection = ref(12);
+                    const anneeCibleProjectionComptes = ref(new Date().getFullYear());
 
                     const patrimoineLiquide = computed(() =>
                         comptes.value.filter(c => c.inclureLiquidite !== false)
@@ -4147,6 +4170,67 @@
                         return (Number(compte.solde) || 0) + (fluxMensuel * totalMois);
                     };
 
+                    // === v17.16 : COMPTES PROJETÉS À UNE DATE CIBLE (Time Machine) ===
+                    const comptesProjetes = computed(() => {
+                        calculationTick.value;
+                        const mCible = Number(moisCibleProjection.value);
+                        const aCible = Number(anneeCibleProjectionComptes.value);
+                        const b = bilan.value || [];
+
+                        // Cherche la ligne bilan correspondant au mois/année cible
+                        const ligneCible = b.find(r => r.numMois === mCible && Number(r.annee) === aCible);
+
+                        if (!ligneCible) {
+                            // Date passée ou hors périmètre → solde projeté = solde actuel
+                            return comptes.value.map(c => ({
+                                ...c,
+                                soldeProjecte: Number(c.solde) || 0,
+                                delta: 0
+                            }));
+                        }
+
+                        // Deltas globaux
+                        const deltaCash = ligneCible.soldeCourant - patrimoineLiquide.value;
+                        const totalEpargneActuel = comptes.value.filter(c => c.type === 'epargne').reduce((s, c) => s + (Number(c.solde) || 0), 0);
+                        const totalInvestActuel = comptes.value.filter(c => c.type === 'investissement').reduce((s, c) => s + (Number(c.solde) || 0), 0);
+
+                        // Épargne projetée : cumul d'épargne générée répartie
+                        const epargneGeneree = ligneCible.soldeEpargneProjete || 0;
+                        // Le delta épargne = épargne générée répartie proportionnellement entre epargne et investissement
+                        const totalEpInvActuel = totalEpargneActuel + totalInvestActuel;
+
+                        let deltaCashApplied = false;
+                        let deltaEpApplied = false;
+                        let deltaInvApplied = false;
+
+                        return comptes.value.map(c => {
+                            const soldeActuel = Number(c.solde) || 0;
+                            let soldeProjecte = soldeActuel;
+
+                            if ((c.type === 'liquide' || c.type === 'courant') && !deltaCashApplied) {
+                                // Applique le delta cash sur le premier compte liquide
+                                soldeProjecte = soldeActuel + deltaCash;
+                                deltaCashApplied = true;
+                            } else if (c.type === 'epargne' && !deltaEpApplied) {
+                                // Applique l'épargne générée proportionnellement, ou tout sur le premier
+                                const ratio = totalEpInvActuel > 0 ? soldeActuel / totalEpInvActuel : 1;
+                                soldeProjecte = soldeActuel + (epargneGeneree * ratio);
+                                deltaEpApplied = true;
+                            } else if (c.type === 'investissement' && !deltaInvApplied) {
+                                const ratio = totalEpInvActuel > 0 ? soldeActuel / totalEpInvActuel : 0;
+                                soldeProjecte = soldeActuel + (epargneGeneree * ratio);
+                                deltaInvApplied = true;
+                            }
+                            // Crédit : pas de delta appliqué
+
+                            return {
+                                ...c,
+                                soldeProjecte: Math.round(soldeProjecte),
+                                delta: Math.round(soldeProjecte - soldeActuel)
+                            };
+                        });
+                    });
+
                     // === AUDIT FINANCIER (v12.1) ===
                     const promptIACopied = ref(false);
 
@@ -4459,7 +4543,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         showMasterAssetModal, editingMasterAssetId, masterAssetForm,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
-                        comptes, parametres,
+                        comptes, parametres, comptesProjetes,
+                        moisCibleProjection, anneeCibleProjectionComptes,
                         patrimoineLiquide, patrimoineNet, patrimoineSavingsInvest,
                         newCompte, editingCompteId, editingCompte,
                         addCompte, deleteCompte, startEditCompte, saveEditCompte, cancelEditCompte, moveCompte, uploadMedia,
