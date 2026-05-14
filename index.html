@@ -506,21 +506,38 @@
                             <div class="flex justify-between items-center mb-2">
                                 <div>
                                     <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-green-400 w-48" />
-                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}</label>
+                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
                                     <div class="flex items-center gap-2 mt-1.5">
                                         <button @click="item.showExceptions = !item.showExceptions" class="text-[10px] text-blue-500 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
                                             {{ item.showExceptions ? '➖ Masquer options' : '➕ Suspendre / Modifier Période' }}
                                         </button>
-                                        <button @click="scinderLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en 2 lignes">✂️ Scinder</button>
+                                        <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3">
-                                    <input type="number" v-model.number="item.base" @input="handleDataChange" class="w-32 p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-green-700 text-lg focus:ring-2 focus:ring-green-400 outline-none transition-all"/>
+                                    <input type="number" v-model.number="item.base" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-32 p-3 border rounded-xl text-right font-black text-lg outline-none transition-all', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed' : 'border-gray-200 bg-gray-50 text-green-700 focus:ring-2 focus:ring-green-400']"/>
                                     <span class="text-gray-400 text-xs font-bold">DH</span>
                                 </div>
                             </div>
-                            <!-- v17.26 : Destination compte pour ce revenu -->
-                            <div class="flex items-center gap-2 mt-2 mb-1">
+                            <!-- v17.29 : Sous-parties imbriquées -->
+                            <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-4 pl-3 border-l-2 border-green-300 space-y-2 mb-2">
+                                <div v-for="(part, pi) in item.parts" :key="part.id" class="flex items-center gap-2 bg-green-50/60 rounded-lg p-2 border border-green-100">
+                                    <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5 outline-none min-w-0"/>
+                                    <input type="number" v-model.number="part.base" @input="handleDataChange" class="w-24 p-1.5 text-sm font-black text-green-700 text-right border border-gray-200 rounded bg-white outline-none"/>
+                                    <select v-model="part.destinationCompte" @change="handleDataChange" class="text-[10px] font-bold border border-green-200 rounded bg-green-50 p-1.5 outline-none max-w-[120px]">
+                                        <option value="courant">💳 Courant</option>
+                                        <option v-for="c in comptesSelectOptions" :key="'prc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'pre_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
+                                    </select>
+                                    <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold text-sm">✕</button>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button @click="ajouterPart(item)" class="text-[9px] text-green-600 hover:text-green-800 font-bold uppercase tracking-widest bg-green-50 px-2 py-1 rounded border border-green-200 hover:bg-green-100 transition-colors">+ Ajouter une partie</button>
+                                    <span class="text-[9px] text-gray-400 font-bold ml-auto">Total : {{ formatMAD(partsTotal(item)) }}</span>
+                                </div>
+                            </div>
+                            <!-- v17.26 : Destination (masqué si parts) -->
+                            <div v-if="!item.parts || !item.parts.length" class="flex items-center gap-2 mt-2 mb-1">
                                 <label class="text-[9px] font-black text-green-700 uppercase tracking-widest whitespace-nowrap">→ Verser sur :</label>
                                 <select v-model="item.destinationCompte" @change="handleDataChange" class="flex-1 p-1.5 text-xs font-bold border border-green-200 rounded-lg bg-green-50 outline-none focus:ring-2 focus:ring-green-400">
                                     <option value="courant">💳 Compte Courant</option>
@@ -560,21 +577,38 @@
                             <div class="flex justify-between items-center mb-2">
                                 <div>
                                     <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-orange-400 w-48" />
-                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}</label>
+                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
                                     <div class="flex items-center gap-2 mt-1.5">
                                         <button @click="item.showExceptions = !item.showExceptions" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-orange-50 px-2 py-0.5 rounded">
                                             {{ item.showExceptions ? '➖ Masquer options' : '➕ Gérer Périodes' }}
                                         </button>
-                                        <button @click="scinderLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en 2 lignes">✂️ Scinder</button>
+                                        <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3">
-                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" class="w-32 p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-orange-700 text-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"/>
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-32 p-3 border rounded-xl text-right font-black text-lg outline-none transition-all', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed' : 'border-gray-200 bg-gray-50 text-orange-700 focus:ring-2 focus:ring-orange-400']"/>
                                     <span class="text-gray-400 text-xs font-bold">DH</span>
                                 </div>
                             </div>
-                            <!-- v17.27 : Source compte pour cette charge fixe -->
-                            <div class="flex items-center gap-2 mt-2 mb-1">
+                            <!-- v17.29 : Sous-parties charges fixes -->
+                            <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-4 pl-3 border-l-2 border-orange-300 space-y-2 mb-2">
+                                <div v-for="(part, pi) in item.parts" :key="part.id" class="flex items-center gap-2 bg-orange-50/60 rounded-lg p-2 border border-orange-100">
+                                    <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5 outline-none min-w-0"/>
+                                    <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="w-24 p-1.5 text-sm font-black text-orange-700 text-right border border-gray-200 rounded bg-white outline-none"/>
+                                    <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-orange-200 rounded bg-orange-50 p-1.5 outline-none max-w-[120px]">
+                                        <option value="courant">💳 Courant</option>
+                                        <option v-for="c in comptesSelectOptions" :key="'pcf_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'pcfe_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
+                                    </select>
+                                    <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold text-sm">✕</button>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button @click="ajouterPart(item)" class="text-[9px] text-orange-600 hover:text-orange-800 font-bold uppercase tracking-widest bg-orange-50 px-2 py-1 rounded border border-orange-200 hover:bg-orange-100 transition-colors">+ Ajouter une partie</button>
+                                    <span class="text-[9px] text-gray-400 font-bold ml-auto">Total : {{ formatMAD(partsTotal(item)) }}</span>
+                                </div>
+                            </div>
+                            <!-- v17.27 : Source (masqué si parts) -->
+                            <div v-if="!item.parts || !item.parts.length" class="flex items-center gap-2 mt-2 mb-1">
                                 <label class="text-[9px] font-black text-orange-700 uppercase tracking-widest whitespace-nowrap">← Prélever sur :</label>
                                 <select v-model="item.sourceCompte" @change="handleDataChange" class="flex-1 p-1.5 text-xs font-bold border border-orange-200 rounded-lg bg-orange-50 outline-none focus:ring-2 focus:ring-orange-400">
                                     <option value="courant">💳 Compte Courant</option>
@@ -612,16 +646,16 @@
                             <div class="flex justify-between items-start md:items-center mb-2 flex-col md:flex-row gap-3">
                                 <div>
                                     <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-red-400 w-48" />
-                                    <label v-else class="block text-sm font-black text-gray-800 uppercase tracking-wide">{{ item.label }}</label>
+                                    <label v-else class="block text-sm font-black text-gray-800 uppercase tracking-wide">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
                                     <div class="flex items-center gap-2 mt-1.5">
                                         <button @click="item.showDetails = !item.showDetails" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
                                             {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
                                         </button>
-                                        <button @click="scinderLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en 2 lignes">✂️ Scinder</button>
+                                        <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.details && item.details.length > 0" :class="['w-28 p-3 border rounded-xl text-right font-black text-lg focus:ring-2 focus:ring-red-400 outline-none transition-all', item.details && item.details.length > 0 ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="(item.details && item.details.length > 0) || (item.parts && item.parts.length > 0)" :class="['w-28 p-3 border rounded-xl text-right font-black text-lg focus:ring-2 focus:ring-red-400 outline-none transition-all', (item.details && item.details.length > 0) || (item.parts && item.parts.length > 0) ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
                                     <select v-model="item.periode" @change="handleDataChange" class="p-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-gray-100 outline-none cursor-pointer">
                                         <option value="semaine">/ sem</option>
                                         <option value="mois">/ mois</option>
@@ -631,8 +665,25 @@
                             <div v-if="item.periode === 'semaine'" class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mb-2">
                                 Impact mensuel calculé (x4.3) : {{ formatMAD((item.valeur || 0) * 4.3) }}
                             </div>
-                            <!-- v17.27 : Source compte pour cette charge variable -->
-                            <div class="flex items-center gap-2 mt-2 mb-1">
+                            <!-- v17.29 : Sous-parties charges variables -->
+                            <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-4 pl-3 border-l-2 border-red-300 space-y-2 mb-2">
+                                <div v-for="(part, pi) in item.parts" :key="part.id" class="flex items-center gap-2 bg-red-50/60 rounded-lg p-2 border border-red-100">
+                                    <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5 outline-none min-w-0"/>
+                                    <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="w-24 p-1.5 text-sm font-black text-red-700 text-right border border-gray-200 rounded bg-white outline-none"/>
+                                    <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-red-200 rounded bg-red-50 p-1.5 outline-none max-w-[120px]">
+                                        <option value="courant">💳 Courant</option>
+                                        <option v-for="c in comptesSelectOptions" :key="'pcv_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'pcve_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
+                                    </select>
+                                    <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold text-sm">✕</button>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button @click="ajouterPart(item)" class="text-[9px] text-red-600 hover:text-red-800 font-bold uppercase tracking-widest bg-red-50 px-2 py-1 rounded border border-red-200 hover:bg-red-100 transition-colors">+ Ajouter une partie</button>
+                                    <span class="text-[9px] text-gray-400 font-bold ml-auto">Total : {{ formatMAD(partsTotal(item)) }}</span>
+                                </div>
+                            </div>
+                            <!-- v17.27 : Source (masqué si parts) -->
+                            <div v-if="!item.parts || !item.parts.length" class="flex items-center gap-2 mt-2 mb-1">
                                 <label class="text-[9px] font-black text-red-700 uppercase tracking-widest whitespace-nowrap">← Prélever sur :</label>
                                 <select v-model="item.sourceCompte" @change="handleDataChange" class="flex-1 p-1.5 text-xs font-bold border border-red-200 rounded-lg bg-red-50 outline-none focus:ring-2 focus:ring-red-400">
                                     <option value="courant">💳 Compte Courant</option>
@@ -851,24 +902,42 @@
                                 <span v-if="totalMoisAffichage(moisNum) > 0" class="text-sm font-black text-red-600 bg-red-100 px-4 py-1.5 rounded-full shadow-inner">{{ formatMAD(totalMoisAffichage(moisNum)) }}</span>
                             </div>
                             <div v-show="moisOuverts.includes(moisNum)" class="p-6 bg-white space-y-3">
-                                <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
-                                    <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
-                                    <input type="number" v-model.number="depense.montant" @input="handleDataChange" :class="['w-24 text-right font-black bg-transparent outline-none', depense.montant < 0 ? 'text-green-600' : 'text-red-600']"/>
-                                    <span v-if="depense.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase">Injection Banque</span>
-                                    <!-- v17.21 : Source Compte dynamique -->
-                                    <select v-model="depense.sourceCompte" @change="handleDataChange" class="bg-gray-100 text-gray-700 px-2 py-1.5 rounded-lg font-bold text-[10px] outline-none cursor-pointer border border-gray-200" title="Compte source">
-                                        <option value="courant">💳 Courant</option>
-                                        <option v-for="c in comptesSelectOptions" :key="'scpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                        <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'src_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
-                                    </select>
-
-                                    <select v-model.number="depense.mois" @change="deplacerDepense(depense)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-2 rounded-lg font-black transition-colors text-xs uppercase tracking-widest shadow-sm outline-none cursor-pointer" title="Déplacer vers un autre mois de cette année">
-                                        <option disabled :value="moisNum">Vers... ⏭️</option>
-                                        <option v-for="m in 12" :key="m" :value="m" v-show="m !== moisNum" class="text-gray-800 bg-white">{{ nomDuMois(m) }}</option>
-                                    </select>
-                                    
-                                    <button @click="scinderLigneArr(donneesAnnuelles[anneeAffichage].depensesIrregulieres, donneesAnnuelles[anneeAffichage].depensesIrregulieres.indexOf(depense))" class="text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg transition-colors border border-blue-200 text-xs font-bold" title="Scinder en 2 lignes">✂️</button>
-                                    <button @click="supprimerDepense(depense.id); handleDataChange()" class="text-red-400 hover:text-red-600 px-2 font-bold md:opacity-50 md:group-hover:opacity-100 transition-opacity text-lg">✕</button>
+                                <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" class="bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
+                                    <div class="flex items-center gap-3 p-3">
+                                        <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
+                                        <input type="number" v-model.number="depense.montant" @input="handleDataChange" :disabled="depense.parts && depense.parts.length > 0" :class="['w-24 text-right font-black bg-transparent outline-none', depense.parts && depense.parts.length ? 'text-gray-400' : (depense.montant < 0 ? 'text-green-600' : 'text-red-600')]"/>
+                                        <span v-if="depense.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase">Injection Banque</span>
+                                        <span v-if="depense.parts && depense.parts.length" class="text-[8px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-black uppercase">✂️ {{depense.parts.length}} parties</span>
+                                        <!-- Source (masqué si parts) -->
+                                        <select v-if="!depense.parts || !depense.parts.length" v-model="depense.sourceCompte" @change="handleDataChange" class="bg-gray-100 text-gray-700 px-2 py-1.5 rounded-lg font-bold text-[10px] outline-none cursor-pointer border border-gray-200" title="Compte source">
+                                            <option value="courant">💳 Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'scpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'src_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        </select>
+                                        <select v-model.number="depense.mois" @change="deplacerDepense(depense)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-2 rounded-lg font-black transition-colors text-xs uppercase tracking-widest shadow-sm outline-none cursor-pointer" title="Déplacer vers un autre mois de cette année">
+                                            <option disabled :value="moisNum">Vers... ⏭️</option>
+                                            <option v-for="m in 12" :key="m" :value="m" v-show="m !== moisNum" class="text-gray-800 bg-white">{{ nomDuMois(m) }}</option>
+                                        </select>
+                                        <button v-if="!depense.parts || !depense.parts.length" @click="scinderLigneArr(depense)" class="text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg transition-colors border border-blue-200 text-xs font-bold" title="Scinder en sous-parties">✂️</button>
+                                        <button @click="supprimerDepense(depense.id); handleDataChange()" class="text-red-400 hover:text-red-600 px-2 font-bold md:opacity-50 md:group-hover:opacity-100 transition-opacity text-lg">✕</button>
+                                    </div>
+                                    <!-- v17.29 : Sous-parties chocs -->
+                                    <div v-if="depense.parts && depense.parts.length > 0" class="mx-3 mb-3 ml-6 pl-3 border-l-2 border-slate-300 space-y-2">
+                                        <div v-for="(part, pi) in depense.parts" :key="part.id" class="flex items-center gap-2 bg-white rounded-lg p-2 border border-slate-200">
+                                            <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 outline-none min-w-0"/>
+                                            <input type="number" v-model.number="part.montant" @input="handleDataChange" :class="['w-20 p-1.5 text-sm font-black text-right border border-gray-200 rounded bg-gray-50 outline-none', part.montant < 0 ? 'text-green-600' : 'text-red-600']"/>
+                                            <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-gray-200 rounded bg-gray-50 p-1.5 outline-none max-w-[120px]">
+                                                <option value="courant">💳 Courant</option>
+                                                <option v-for="c in comptesSelectOptions" :key="'psc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                                <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'pse_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                            </select>
+                                            <button @click="supprimerPart(depense, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold text-sm">✕</button>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <button @click="ajouterPart(depense)" class="text-[9px] text-slate-600 hover:text-slate-800 font-bold uppercase tracking-widest bg-slate-50 px-2 py-1 rounded border border-slate-200 hover:bg-slate-100 transition-colors">+ Ajouter une partie</button>
+                                            <span class="text-[9px] text-gray-400 font-bold ml-auto">Total : {{ formatMAD(partsTotal(depense)) }}</span>
+                                        </div>
+                                    </div>
                                 </div>
                                 <button @click="ajouterDepense(moisNum, anneeAffichage); handleDataChange()" class="w-full py-3.5 mt-2 rounded-xl border-2 border-dashed border-gray-200 text-[10px] font-black text-gray-500 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 uppercase transition-all tracking-[0.2em]">+ Ajouter un choc en {{ nomDuMois(moisNum) }} {{ anneeAffichage }}</button>
                             </div>
@@ -1981,8 +2050,8 @@
                                 </div>
                                 <div>
                                     <label :class="['text-[9px] font-black uppercase tracking-widest mb-1 block', choc.montant < 0 ? 'text-green-700' : 'text-gray-500']">Montant (DH)</label>
-                                    <input type="number" v-model.number="choc.montant" @input="handleDataChange"
-                                        :class="['w-full p-3 border rounded-lg font-black outline-none text-sm', choc.montant < 0 ? 'bg-green-100 text-green-800 border-green-300' : 'bg-white']"/>
+                                    <input type="number" v-model.number="choc.montant" @input="handleDataChange" :disabled="choc.parts && choc.parts.length > 0"
+                                        :class="['w-full p-3 border rounded-lg font-black outline-none text-sm', choc.parts && choc.parts.length ? 'text-gray-400 bg-gray-100' : (choc.montant < 0 ? 'bg-green-100 text-green-800 border-green-300' : 'bg-white')]"/>
                                 </div>
                             </div>
                             <div v-if="choc.montant < 0" class="mt-2">
@@ -1998,7 +2067,26 @@
                                 </select>
                             </div>
                             <!-- v17.27 : Scinder le choc -->
-                            <button @click="scinderLigneArr(donneesAnnuelles[anneeAffichage].depensesIrregulieres, i)" class="w-full py-2 mt-2 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder en 2 lignes</button>
+                            <button v-if="!choc.parts || !choc.parts.length" @click="scinderLigneArr(choc)" class="w-full py-2 mt-2 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                            <!-- v17.29 : Sous-parties chocs mobile -->
+                            <div v-if="choc.parts && choc.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-slate-300 space-y-2">
+                                <div v-for="(part, pi) in choc.parts" :key="part.id" class="bg-white rounded-lg p-2 border border-slate-200">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 outline-none"/>
+                                        <button @click="supprimerPart(choc, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold">✕</button>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <input type="number" v-model.number="part.montant" @input="handleDataChange" :class="['flex-1 p-2 text-sm font-black text-right border border-gray-200 rounded bg-gray-50 outline-none', part.montant < 0 ? 'text-green-600' : 'text-red-600']"/>
+                                        <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-gray-200 rounded bg-gray-50 p-1.5 outline-none flex-1">
+                                            <option value="courant">💳 Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'mpsc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'mpse_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button @click="ajouterPart(choc)" class="w-full py-1.5 text-[9px] text-slate-600 font-bold uppercase tracking-widest bg-slate-50 rounded border border-slate-200">+ Ajouter une partie</button>
+                                <p class="text-[9px] text-gray-400 font-bold text-right">Total : {{ formatMAD(partsTotal(choc)) }}</p>
+                            </div>
                         </div>
                         <p v-if="donneesAnnuelles[anneeAffichage].depensesIrregulieres.length === 0" class="text-center text-sm text-gray-400 italic py-4">Aucun flux exceptionnel enregistré.</p>
                     </template>
@@ -2709,11 +2797,30 @@
                             <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].revenus" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
-                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}</label>
+                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-1">✂️</span></label>
                                 </div>
-                                <input type="number" v-model.number="item.base" @input="handleDataChange" class="w-full p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-green-700 text-xl outline-none"/>
-                                <!-- v17.26 : Destination compte pour ce revenu (mobile) -->
-                                <div class="mt-2">
+                                <input type="number" v-model.number="item.base" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-full p-3 border rounded-xl text-right font-black text-xl outline-none', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed' : 'border-gray-200 bg-gray-50 text-green-700']"/>
+                                <!-- v17.29 : Sous-parties revenus mobile -->
+                                <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-green-300 space-y-2">
+                                    <div v-for="(part, pi) in item.parts" :key="part.id" class="bg-green-50/60 rounded-lg p-2 border border-green-100">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5 outline-none"/>
+                                            <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold">✕</button>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <input type="number" v-model.number="part.base" @input="handleDataChange" class="flex-1 p-2 text-sm font-black text-green-700 text-right border border-gray-200 rounded bg-white outline-none"/>
+                                            <select v-model="part.destinationCompte" @change="handleDataChange" class="text-[10px] font-bold border border-green-200 rounded bg-green-50 p-1.5 outline-none flex-1">
+                                                <option value="courant">💳 Courant</option>
+                                                <option v-for="c in comptesSelectOptions" :key="'mprc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                                <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'mpre_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button @click="ajouterPart(item)" class="w-full py-1.5 text-[9px] text-green-600 font-bold uppercase tracking-widest bg-green-50 rounded border border-green-200">+ Ajouter une partie</button>
+                                    <p class="text-[9px] text-gray-400 font-bold text-right">Total : {{ formatMAD(partsTotal(item)) }}</p>
+                                </div>
+                                <!-- Destination (masqué si parts) -->
+                                <div v-if="!item.parts || !item.parts.length" class="mt-2">
                                     <label class="text-[9px] font-black text-green-700 uppercase tracking-widest block mb-1">→ Verser sur :</label>
                                     <select v-model="item.destinationCompte" @change="handleDataChange" class="w-full p-2 text-sm font-bold border border-green-200 rounded-lg bg-green-50 outline-none">
                                         <option value="courant">💳 Compte Courant</option>
@@ -2729,7 +2836,7 @@
                                     <button @click="item.showExceptions = !item.showExceptions" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
                                         {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Suspendre / Modifier Période' }}
                                     </button>
-                                    <button @click="scinderLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
                                 </div>
                                 <div v-if="item.showExceptions" class="mt-3 bg-blue-50 rounded-xl p-3 border border-blue-100">
                                     <p class="text-[9px] font-black text-blue-800 uppercase tracking-widest mb-2">Règles d'exception</p>
@@ -2773,11 +2880,30 @@
                             <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesFixes" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
-                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}</label>
+                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-1">✂️</span></label>
                                 </div>
-                                <input type="number" v-model.number="item.valeur" @input="handleDataChange" class="w-full p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-orange-700 text-xl outline-none"/>
-                                <!-- v17.27 : Source compte pour cette charge fixe (mobile) -->
-                                <div class="mt-2">
+                                <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-full p-3 border rounded-xl text-right font-black text-xl outline-none', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed' : 'border-gray-200 bg-gray-50 text-orange-700']"/>
+                                <!-- v17.29 : Sous-parties charges fixes mobile -->
+                                <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-orange-300 space-y-2">
+                                    <div v-for="(part, pi) in item.parts" :key="part.id" class="bg-orange-50/60 rounded-lg p-2 border border-orange-100">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5 outline-none"/>
+                                            <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold">✕</button>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="flex-1 p-2 text-sm font-black text-orange-700 text-right border border-gray-200 rounded bg-white outline-none"/>
+                                            <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-orange-200 rounded bg-orange-50 p-1.5 outline-none flex-1">
+                                                <option value="courant">💳 Courant</option>
+                                                <option v-for="c in comptesSelectOptions" :key="'mpcf_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                                <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'mpcfe_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button @click="ajouterPart(item)" class="w-full py-1.5 text-[9px] text-orange-600 font-bold uppercase tracking-widest bg-orange-50 rounded border border-orange-200">+ Ajouter une partie</button>
+                                    <p class="text-[9px] text-gray-400 font-bold text-right">Total : {{ formatMAD(partsTotal(item)) }}</p>
+                                </div>
+                                <!-- Source (masqué si parts) -->
+                                <div v-if="!item.parts || !item.parts.length" class="mt-2">
                                     <label class="text-[9px] font-black text-orange-700 uppercase tracking-widest block mb-1">← Prélever sur :</label>
                                     <select v-model="item.sourceCompte" @change="handleDataChange" class="w-full p-2 text-sm font-bold border border-orange-200 rounded-lg bg-orange-50 outline-none">
                                         <option value="courant">💳 Compte Courant</option>
@@ -2793,7 +2919,7 @@
                                     <button @click="item.showExceptions = !item.showExceptions" class="flex-1 py-2 text-[10px] text-orange-600 font-bold uppercase tracking-widest bg-orange-50 rounded-lg">
                                         {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Gérer Périodes' }}
                                     </button>
-                                    <button @click="scinderLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
                                 </div>
                                 <div v-if="item.showExceptions" class="mt-3 bg-orange-50 rounded-xl p-3 border border-orange-100">
                                     <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-orange-100 mb-2">
@@ -2847,8 +2973,27 @@
                                 <p v-if="item.periode === 'semaine'" class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mt-1">
                                     Mensuel (x4.3) : {{ formatMAD((item.valeur || 0) * 4.3) }}
                                 </p>
-                                <!-- v17.27 : Source compte pour cette charge variable (mobile) -->
-                                <div class="mt-2">
+                                <!-- v17.29 : Sous-parties charges variables mobile -->
+                                <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-red-300 space-y-2">
+                                    <div v-for="(part, pi) in item.parts" :key="part.id" class="bg-red-50/60 rounded-lg p-2 border border-red-100">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <input type="text" v-model="part.label" @input="handleDataChange" class="flex-1 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5 outline-none"/>
+                                            <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold">✕</button>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="flex-1 p-2 text-sm font-black text-red-700 text-right border border-gray-200 rounded bg-white outline-none"/>
+                                            <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-red-200 rounded bg-red-50 p-1.5 outline-none flex-1">
+                                                <option value="courant">💳 Courant</option>
+                                                <option v-for="c in comptesSelectOptions" :key="'mpcv_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                                <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'mpcve_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button @click="ajouterPart(item)" class="w-full py-1.5 text-[9px] text-red-600 font-bold uppercase tracking-widest bg-red-50 rounded border border-red-200">+ Ajouter une partie</button>
+                                    <p class="text-[9px] text-gray-400 font-bold text-right">Total : {{ formatMAD(partsTotal(item)) }}</p>
+                                </div>
+                                <!-- Source (masqué si parts) -->
+                                <div v-if="!item.parts || !item.parts.length" class="mt-2">
                                     <label class="text-[9px] font-black text-red-700 uppercase tracking-widest block mb-1">← Prélever sur :</label>
                                     <select v-model="item.sourceCompte" @change="handleDataChange" class="w-full p-2 text-sm font-bold border border-red-200 rounded-lg bg-red-50 outline-none">
                                         <option value="courant">💳 Compte Courant</option>
@@ -2864,7 +3009,7 @@
                                     <button @click="item.showDetails = !item.showDetails" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
                                     {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
                                 </button>
-                                    <button @click="scinderLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
                                 </div>
                                 <div v-if="item.showDetails" class="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
                                     <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3 text-center border-b border-gray-200 pb-1">Détail (total remplace la valeur)</p>
@@ -3134,8 +3279,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.28";
+                    const CURRENT_VERSION = "17.29";
                     const CHANGELOG = [
+                        { version: "17.29", date: "2026-05-14 — Scission en Sous-Catégories", changes: ["SCINDER REFACTORISÉ : la scission crée désormais des sous-catégories (parts[]) imbriquées sous l'élément parent au lieu de lignes indépendantes en bas. Chaque part a son propre label, montant et routage.", "GESTION DES PARTS : bouton ✂️ Scinder pour initialiser 2 parts, bouton + Ajouter une partie, bouton ✕ pour supprimer chaque part individuellement. Le montant parent est désactivé quand des parts existent.", "MOTEUR BILAN PARTS-AWARE : revenus, charges fixes, charges variables et chocs détectent item.parts et routent chaque sous-catégorie indépendamment. Les exceptions parent sont distribuées proportionnellement sur les parts.", "UI 8 SECTIONS : affichage imbriqué (border-l-2 coloré) pour Desktop et Mobile — Revenus (vert), Charges Fixes (orange), Charges Variables (rouge), Chocs (gris). Badge '✂️ N parties' sur le label parent."] },
                         { version: "17.28", date: "2026-05-14 — Debug Scission & Alerte Liquidité", changes: ["BOUTON SCINDER TOUJOURS VISIBLE : suppression du v-if='modeEdition', style bleu uniforme (border border-blue-200, hover:bg-blue-50) sur Desktop et Mobile pour Revenus, Charges Fixes, Variables et Chocs.", "ALERTE DÉFICIT : si le Solde Courant passe en négatif dans le Bilan, affichage en rouge vif + fond rouge clair + animation pulse + badge '⚠️ Déficit' (Desktop) / '⚠️' (Mobile).", "VÉRIFICATION ROUTAGE CHARGES : confirmation que les selects 'Prélever sur' sont fonctionnels sur toutes les charges et que le moteur déduit bien les charges routées de soldesComptes/soldesEpargne."] },
                         { version: "17.27", date: "2026-05-14 — Routage des Charges & Dispatch par Scission", changes: ["ROUTAGE CHARGES FIXES : chaque charge fixe dispose d'un champ sourceCompte avec select 'Prélever sur' (desktop + mobile). Les charges routées vers cpt_*/ep_* sont déduites du compte cible au lieu du Compte Courant.", "ROUTAGE CHARGES VARIABLES : idem pour les charges variables — select 'Prélever sur' avec 3 groupes (Courant, Comptes bancaires, Objectifs épargne).", "MOTEUR BILAN — VENTILATION : fixCourant/varCourant alimentent curSolde. Les charges routées sont déduites physiquement de soldesComptes{}/soldesEpargne{} via _deduireChargesComptes().", "FONCTION SCINDER (✂️) : bouton disponible en mode édition sur Revenus, Charges Fixes, Charges Variables (scinderLigneObj) et Flux Exceptionnels (scinderLigneArr). Divise le montant en 2 et crée un clone '(Partie 2)' avec nouvel ID.", "DISPATCH MULTI-COMPTES : combiné avec le routage, permet de scinder un revenu de 20 000 DH en 12 000 sur Courant + 8 000 sur Épargne."] },
                         { version: "17.26", date: "2026-05-14 — Routage des Revenus vers comptes spécifiques", changes: ["VENTILATION REVENUS : chaque source de revenu dispose d'un champ destinationCompte (défaut: 'courant'). Select 'Verser sur' en desktop et mobile avec 3 groupes : Compte Courant, Comptes bancaires (cpt_*), Objectifs épargne (ep_*).", "MOTEUR BILAN — ROUTAGE : les revenus sont ventilés par destination. revCourant alimente curSolde, les autres destinations créditent directement soldesComptes{} ou soldesEpargne{}.", "DÉCALAGE PAIE : en mode décalage, seul revCourant est reporté au mois suivant (revMoisPrecedent). Les revenus routés vers d'autres comptes sont crédités immédiatement.", "MOIS COURANT : seul revCourant est ajouté au solde_fin (au lieu de revMoisGenere total). Les revenus routés sont crédités sur leurs comptes cibles dès le mois courant."] },
@@ -4075,38 +4221,49 @@
                     const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant' }); handleDataChange(); };
                     const supprimerDepense = (id) => { if(donneesAnnuelles.value[anneeAffichage.value]) donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres = donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres.filter(d => d.id !== id); handleDataChange(); };
 
-                    // v17.27 : Scinder une ligne (revenus, chargesFixes, chargesVariables = objet ; depensesIrregulieres = tableau)
-                    const scinderLigneObj = (obj, key) => {
-                        const item = obj[key];
+                    // v17.29 : Scinder = sous-catégories imbriquées sous le parent
+                    const scinderLigneObj = (item) => {
                         if (!item) return;
+                        if (item.parts && item.parts.length > 0) return; // déjà scindé
                         const valField = 'base' in item ? 'base' : 'valeur';
+                        const destField = 'base' in item ? 'destinationCompte' : 'sourceCompte';
                         const total = Number(item[valField] || 0);
                         const half = Math.floor(total / 2);
-                        item[valField] = half;
-                        const newKey = key + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-                        const clone = JSON.parse(JSON.stringify(item));
-                        clone[valField] = total - half;
-                        clone.label = (clone.label || clone.nom || '') + ' (Partie 2)';
-                        clone.id = Date.now() + Math.floor(Math.random() * 10000);
-                        obj[newKey] = clone;
+                        item.parts = [
+                            { id: Date.now(), label: (item.label || '') + ' (1)', [valField]: half, [destField]: item[destField] || 'courant' },
+                            { id: Date.now() + 1, label: (item.label || '') + ' (2)', [valField]: total - half, [destField]: 'courant' }
+                        ];
                         handleDataChange();
                     };
-                    const scinderLigneArr = (arr, index) => {
-                        const item = arr[index];
+                    const scinderLigneArr = (item) => {
                         if (!item) return;
-                        const valField = 'montant' in item ? 'montant' : ('base' in item ? 'base' : 'valeur');
-                        const total = Number(item[valField] || 0);
+                        if (item.parts && item.parts.length > 0) return;
+                        const total = Number(item.montant || 0);
                         const half = Math.floor(total / 2);
-                        item[valField] = half;
-                        const clone = JSON.parse(JSON.stringify(item));
-                        clone[valField] = total - half;
-                        clone.id = Date.now() + Math.floor(Math.random() * 10000);
-                        if (clone.nom) clone.nom += ' (Partie 2)';
-                        else if (clone.label) clone.label += ' (Partie 2)';
-                        clone.paye = false;
-                        clone.montantPaye = 0;
-                        arr.splice(index + 1, 0, clone);
+                        item.parts = [
+                            { id: Date.now(), label: (item.nom || '') + ' (1)', montant: half, sourceCompte: item.sourceCompte || 'courant' },
+                            { id: Date.now() + 1, label: (item.nom || '') + ' (2)', montant: total - half, sourceCompte: item.sourceCompte || 'courant' }
+                        ];
                         handleDataChange();
+                    };
+                    const ajouterPart = (item) => {
+                        if (!item.parts) item.parts = [];
+                        const valField = 'base' in item ? 'base' : ('montant' in item ? 'montant' : 'valeur');
+                        const destField = 'base' in item ? 'destinationCompte' : 'sourceCompte';
+                        item.parts.push({ id: Date.now() + Math.floor(Math.random() * 10000), label: 'Nouvelle partie', [valField]: 0, [destField]: 'courant' });
+                        handleDataChange();
+                    };
+                    const supprimerPart = (item, index) => {
+                        if (!item.parts) return;
+                        item.parts.splice(index, 1);
+                        if (item.parts.length === 0) delete item.parts;
+                        handleDataChange();
+                    };
+                    // Helper : somme des parts
+                    const partsTotal = (item) => {
+                        if (!item.parts || item.parts.length === 0) return null;
+                        const valField = 'base' in item ? 'base' : ('montant' in item ? 'montant' : 'valeur');
+                        return item.parts.reduce((s, p) => s + Number(p[valField] || 0), 0);
                     };
 
                     const deplacerDepense = (dep) => {
@@ -4348,32 +4505,70 @@
                             let revCourant = 0;
                             const revParCompte = {}; // { 'cpt_xxx': amount, 'ep_xxx': amount }
                             Object.values(dataAnnee.revenus || {}).forEach(r => {
-                                let v = Number((r || {}).base || 0);
-                                (r?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                const dest = (r || {}).destinationCompte || 'courant';
-                                if (dest === 'courant') { revCourant += v; }
-                                else { revParCompte[dest] = (revParCompte[dest] || 0) + v; }
+                                let baseVal = Number((r || {}).base || 0);
+                                let effVal = baseVal;
+                                (r?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) effVal = Number(e.nouvelleValeur || 0); });
+                                // v17.29 : parts-aware routing
+                                if (r.parts && r.parts.length > 0) {
+                                    const partsSum = r.parts.reduce((s, p) => s + Number(p.base || 0), 0);
+                                    const ratio = partsSum > 0 ? effVal / partsSum : 0;
+                                    r.parts.forEach(p => {
+                                        const pv = Number(p.base || 0) * ratio;
+                                        const dest = p.destinationCompte || 'courant';
+                                        if (dest === 'courant') { revCourant += pv; }
+                                        else { revParCompte[dest] = (revParCompte[dest] || 0) + pv; }
+                                    });
+                                } else {
+                                    const dest = (r || {}).destinationCompte || 'courant';
+                                    if (dest === 'courant') { revCourant += effVal; }
+                                    else { revParCompte[dest] = (revParCompte[dest] || 0) + effVal; }
+                                }
                             });
                             const revMoisGenere = revCourant + Object.values(revParCompte).reduce((s, v) => s + v, 0);
                             // v17.27 : Ventilation des charges fixes par sourceCompte
                             let fixCourant = 0;
                             const fixParCompte = {};
                             Object.values(dataAnnee.chargesFixes || {}).forEach(f => {
-                                let v = Number((f || {}).valeur || 0);
-                                (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                const src = (f || {}).sourceCompte || 'courant';
-                                if (src === 'courant') { fixCourant += v; }
-                                else { fixParCompte[src] = (fixParCompte[src] || 0) + v; }
+                                let baseVal = Number((f || {}).valeur || 0);
+                                let effVal = baseVal;
+                                (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) effVal = Number(e.nouvelleValeur || 0); });
+                                // v17.29 : parts-aware routing
+                                if (f.parts && f.parts.length > 0) {
+                                    const partsSum = f.parts.reduce((s, p) => s + Number(p.valeur || 0), 0);
+                                    const ratio = partsSum > 0 ? effVal / partsSum : 0;
+                                    f.parts.forEach(p => {
+                                        const pv = Number(p.valeur || 0) * ratio;
+                                        const src = p.sourceCompte || 'courant';
+                                        if (src === 'courant') { fixCourant += pv; }
+                                        else { fixParCompte[src] = (fixParCompte[src] || 0) + pv; }
+                                    });
+                                } else {
+                                    const src = (f || {}).sourceCompte || 'courant';
+                                    if (src === 'courant') { fixCourant += effVal; }
+                                    else { fixParCompte[src] = (fixParCompte[src] || 0) + effVal; }
+                                }
                             });
                             const fixMois = fixCourant + Object.values(fixParCompte).reduce((s, v) => s + v, 0);
                             // v17.27 : Ventilation des charges variables par sourceCompte
                             let varCourant = 0;
                             const varParCompte = {};
                             Object.values(dataAnnee.chargesVariables || {}).forEach(curr => {
-                                const v = getMonthlyVariableValue(curr || {});
-                                const src = (curr || {}).sourceCompte || 'courant';
-                                if (src === 'courant') { varCourant += v; }
-                                else { varParCompte[src] = (varParCompte[src] || 0) + v; }
+                                const effVal = getMonthlyVariableValue(curr || {});
+                                // v17.29 : parts-aware routing
+                                if (curr.parts && curr.parts.length > 0) {
+                                    const partsSum = curr.parts.reduce((s, p) => s + Number(p.valeur || 0), 0);
+                                    const ratio = partsSum > 0 ? effVal / partsSum : 0;
+                                    curr.parts.forEach(p => {
+                                        const pv = Number(p.valeur || 0) * ratio;
+                                        const src = p.sourceCompte || 'courant';
+                                        if (src === 'courant') { varCourant += pv; }
+                                        else { varParCompte[src] = (varParCompte[src] || 0) + pv; }
+                                    });
+                                } else {
+                                    const src = (curr || {}).sourceCompte || 'courant';
+                                    if (src === 'courant') { varCourant += effVal; }
+                                    else { varParCompte[src] = (varParCompte[src] || 0) + effVal; }
+                                }
                             });
                             const totVarBase = varCourant + Object.values(varParCompte).reduce((s, v) => s + v, 0);
                             const _ep = dataAnnee.epargne;
@@ -4386,8 +4581,23 @@
 
                             // v17.21 : Imputation analytique des chocs par sourceCompte (dynamique)
                             const depMois = depTriees.filter(d => d.mois === mNum);
-                            const calcIrregBySource = (src) => depMois.filter(d => (d.sourceCompte || 'courant') === src).reduce((s, d) => {
+                            // v17.29 : Expand chocs with parts into virtual entries for routing
+                            const depMoisExpanded = [];
+                            depMois.forEach(d => {
+                                if (d.parts && d.parts.length > 0) {
+                                    const total = Number(d.montant || 0);
+                                    const partsSum = d.parts.reduce((s, p) => s + Number(p.montant || 0), 0);
+                                    const ratio = partsSum > 0 ? total / partsSum : 0;
+                                    d.parts.forEach(p => {
+                                        depMoisExpanded.push({ ...d, montant: Number(p.montant || 0) * ratio, sourceCompte: p.sourceCompte || 'courant', _virtual: true });
+                                    });
+                                } else {
+                                    depMoisExpanded.push(d);
+                                }
+                            });
+                            const calcIrregBySource = (src) => depMoisExpanded.filter(d => (d.sourceCompte || 'courant') === src).reduce((s, d) => {
                                 let due = Number(d.montant || 0);
+                                if (d._virtual) return s + due;
                                 if (due < 0) return isItemPaid(d, due) ? s : s + due;
                                 return s + Math.max(0, due - getPaidAmount(d, due));
                             }, 0);
@@ -4403,8 +4613,9 @@
 
                             let entreesAppliquees = 0; let solde_fin = 0;
                             // v17.24 : irregCourant capture TOUS les chocs non-épargne (courant + cpt_* + inconnus)
-                            const irregCourant = depMois.filter(d => !(d.sourceCompte || 'courant').startsWith('ep_')).reduce((s, d) => {
+                            const irregCourant = depMoisExpanded.filter(d => !(d.sourceCompte || 'courant').startsWith('ep_')).reduce((s, d) => {
                                 let due = Number(d.montant || 0);
+                                if (d._virtual) return s + due;
                                 if (due < 0) return isItemPaid(d, due) ? s : s + due;
                                 return s + Math.max(0, due - getPaidAmount(d, due));
                             }, 0);
@@ -4471,11 +4682,11 @@
                                         }
                                     }
                                 });
-                                // Chocs physiques sur comptes
-                                depMois.forEach(d => {
+                                // Chocs physiques sur comptes (v17.29 : parts-aware)
+                                depMoisExpanded.forEach(d => {
                                     const src = d.sourceCompte || 'courant';
                                     let due = Number(d.montant || 0);
-                                    const montantEffectif = due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due));
+                                    const montantEffectif = d._virtual ? due : (due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due)));
                                     if (montantEffectif === 0) return;
                                     if (src.startsWith('cpt_') && src in soldesComptes) {
                                         soldesComptes[src] -= montantEffectif;
@@ -4565,11 +4776,11 @@
                                         }
                                     }
                                 });
-                                // Chocs physiques sur comptes
-                                depMois.forEach(d => {
+                                // Chocs physiques sur comptes (v17.29 : parts-aware)
+                                depMoisExpanded.forEach(d => {
                                     const src = d.sourceCompte || 'courant';
                                     let due = Number(d.montant || 0);
-                                    const montantEffectif = due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due));
+                                    const montantEffectif = d._virtual ? due : (due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due)));
                                     if (montantEffectif === 0) return;
                                     if (src.startsWith('cpt_') && src in soldesComptes) {
                                         soldesComptes[src] -= montantEffectif;
@@ -5030,7 +5241,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, scinderLigneObj, scinderLigneArr, 
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,

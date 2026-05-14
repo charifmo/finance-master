@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [17.29] — 2026-05-14 — Scission en Sous-Catégories
+
+### Refactoring majeur
+- **Scinder refactorisé** : la scission crée désormais des **sous-catégories** (`parts[]`) imbriquées sous l'élément parent, au lieu de lignes indépendantes en bas de liste. Chaque part dispose de son propre label, montant et routage (destination/source compte).
+- **Gestion des parts** : bouton ✂️ Scinder pour initialiser 2 parts (50/50), bouton `+ Ajouter une partie` pour en ajouter, bouton ✕ pour supprimer individuellement. Le montant parent est désactivé quand des parts existent.
+- **Moteur bilan parts-aware** : les 4 blocs de calcul (revenus, charges fixes, charges variables, chocs) détectent `item.parts` et routent chaque sous-catégorie indépendamment vers son compte cible. Les exceptions parent sont distribuées proportionnellement.
+- **UI imbriquée (8 sections)** : affichage avec `border-l-2` coloré (vert/orange/rouge/gris) pour Desktop et Mobile. Badge `✂️ N parties` sur le label parent. Total affiché sous les parts.
+
+---
+
 ## [17.28] — 2026-05-14 — Debug Scission & Alerte Liquidité
 
 ### Corrections
