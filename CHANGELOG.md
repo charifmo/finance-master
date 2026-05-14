@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.27] — 2026-05-14 — Routage des Charges & Dispatch par Scission
+
+### Nouveautés
+- **Routage Charges Fixes** : chaque charge fixe dispose d'un champ `sourceCompte` avec select "← Prélever sur" (desktop + mobile). Les charges routées vers `cpt_*`/`ep_*` sont déduites du compte cible au lieu du Compte Courant.
+- **Routage Charges Variables** : idem pour les charges variables — select "← Prélever sur" avec 3 groupes (Courant, Comptes bancaires, Objectifs épargne).
+- **Moteur Bilan — Ventilation** : `fixCourant`/`varCourant` alimentent `curSolde`. Les charges routées sont déduites physiquement de `soldesComptes{}`/`soldesEpargne{}` via `_deduireChargesComptes()`.
+- **Fonction Scinder (✂️)** : bouton disponible en mode édition sur Revenus, Charges Fixes, Charges Variables (`scinderLigneObj`) et Flux Exceptionnels (`scinderLigneArr`). Divise le montant en 2 et crée un clone "(Partie 2)" avec nouvel ID.
+- **Dispatch multi-comptes** : combiné avec le routage, permet de scinder un revenu de 20 000 DH en 12 000 sur Courant + 8 000 sur Épargne.
+
+---
+
 ## [17.26] — 2026-05-14 — Routage des Revenus vers comptes spécifiques
 
 ### Nouveautés
