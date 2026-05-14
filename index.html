@@ -2996,8 +2996,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.22";
+                    const CURRENT_VERSION = "17.23";
                     const CHANGELOG = [
+                        { version: "17.23", date: "2026-05-14 — Hard-Reactive Accounts Fix", changes: ["addObjectifEpargne : initialise soldesInitiaux['ep_<id>'] = 0 à la création → plus de NaN dans le moteur bilan.", "MOTEUR BILAN : epargneParCompte calculé AVANT irregParCompte. Chaque clé ep_* trouvée dans l'année est auto-enregistrée dans soldesEpargne si absente → les nouveaux objectifs sont immédiatement pris en compte par l'imputation et l'auto-sweep.", "irregParCompte : itère sur l'union Set(soldesEpargne ∪ epargneParCompte) → les chocs assignés à un nouveau compte sont correctement imputés dès la création.", "Debug log [v17.23] ajouté dans handleDataChange et addObjectifEpargne pour tracer les comptes épargne visibles dans la console."] },
                         { version: "17.22", date: "2026-05-14 — Correction Menus Dynamiques Mobile", changes: ["MOBILE — sourceCompte : ajout du select dynamique (v-for epargne) sur chaque choc irrégulier mobile. L'utilisateur peut désormais choisir le compte source (courant ou épargne) sur mobile comme sur desktop.", "MOBILE — destinationSurplus : ajout du select dynamique dans la section Pilotage mobile. Le surplus mensuel peut être redirigé vers n'importe quel objectif d'épargne depuis mobile.", "MOBILE — compteSourceCash Studio : ajout du select dynamique dans la carte Mensualité Studio mobile. La source du cash requis est configurable sur mobile.", "Tous les selects itèrent dynamiquement sur donneesAnnuelles[anneeAffichage].epargne — les nouveaux objectifs (vacances, etc.) apparaissent instantanément partout."] },
                         { version: "17.21", date: "2026-05-14 — Comptes Épargne Dynamiques & Cash Studio", changes: ["COMPTES DYNAMIQUES : les selects destinationSurplus et sourceCompte itèrent sur donneesAnnuelles[].epargne (v-for). Plus aucun compte figé en dur.", "SOLDES INITIAUX DYNAMIQUES : chaque objectif d'épargne a un champ de saisie 'Solde actuel' dans §4 Objectifs Épargne, stocké en soldesInitiaux['ep_<id>'].", "MOTEUR BILAN : curUrgence/curLT remplacés par un dictionnaire soldesEpargne{} initialisé dynamiquement. Imputation et Auto-Sweep fonctionnent sur n'importe quelle clé ep_*.", "Chaque ligne bilan retourne detailsEpargne:{} au lieu de soldeUrgence/soldeLT.", "epargneTotaleFinal : somme Object.values(detailsEpargne). Nouveau computed detailsEpargneFinal pour le tooltip.", "TOOLTIP PATRIMOINE : itère dynamiquement sur detailsEpargneFinal avec getEpargneLabel() pour afficher chaque poche nommée.", "CASH STUDIO : appliquerMensualiteStudio injecte le cashRequis comme choc irrégulier avec sourceCompte configurable. Select 'Source du Cash' ajouté dans l'onglet Studio.", "getDefaultProjetStudio enrichi : compteSourceCash:'courant'."] },
                         { version: "17.19", date: "2026-05-14 — Moteur Patrimonial, Auto-Save, Auto-Sweep & Imputation Chocs", changes: ["AUTO-SAVE : handleDataChange inclut un debounce de 2s avant appel saveToServer() — plus de perte de saisie.", "SOURCE COMPTES CHOCS : chaque dépense irrégulière a un champ sourceCompte (courant/urgence/lt). Select visible dans l'UI des Flux Exceptionnels.", "AUTO-SWEEP : nouveau champ destinationSurplus dans soldesInitiaux (courant/urgence/lt). Si le cashflow mensuel est positif et que la destination n'est pas 'courant', le surplus est redirigé vers le fonds urgence ou l'épargne LT.", "IMPUTATION ANALYTIQUE : le moteur bilan sépare les chocs par sourceCompte (irregCourant, irregUrgence, irregLT). Chaque poche absorbe ses propres chocs. curUrgence et curLT évoluent cumulativement mois par mois.", "Chaque ligne du bilan retourne désormais soldeUrgence et soldeLT en plus de soldeCourant.", "UI Pilotage : sélecteur 'Destination du Surplus' (💳 Courant / 🛡️ Urgence / 🎯 LT) ajouté sous le toggle Décalage Paie."] },
@@ -3413,7 +3414,11 @@
                     const addObjectifEpargne = (annee) => {
                         if (!donneesAnnuelles.value[annee]) return;
                         if (!Array.isArray(donneesAnnuelles.value[annee].epargne)) donneesAnnuelles.value[annee].epargne = [];
-                        donneesAnnuelles.value[annee].epargne.push({ id: Date.now(), nom: 'Nouvel objectif', valeur: 0 });
+                        const newId = Date.now();
+                        donneesAnnuelles.value[annee].epargne.push({ id: newId, nom: 'Nouvel objectif', valeur: 0 });
+                        // v17.23 : init solde pour le nouveau compte (évite NaN dans le moteur)
+                        soldesInitiaux.value['ep_' + newId] = 0;
+                        console.log('[v17.23] Objectif épargne créé:', { annee, id: newId, epargneKeys: donneesAnnuelles.value[annee].epargne.map(e => 'ep_'+e.id) });
                         handleDataChange();
                     };
                     const deleteObjectifEpargne = (annee, idx) => {
@@ -3526,6 +3531,9 @@
                     // v17.19 : Auto-Save debounce 2s
                     let _autoSaveTimer = null;
                     const handleDataChange = () => {
+                        // v17.23 debug : tracer les comptes épargne disponibles
+                        const _dbgEp = (donneesAnnuelles.value[anneeAffichage.value] || {}).epargne;
+                        console.log('[v17.23] handleDataChange — epargne[' + anneeAffichage.value + ']:', Array.isArray(_dbgEp) ? _dbgEp.map(e => ({id: e.id, nom: e.nom})) : _dbgEp);
                         forceUpdateCalculations();
                         serverSyncStatus.value = 'modified';
                         if (syncStatus.value === 'synced') syncStatus.value = 'modified';
@@ -4163,20 +4171,24 @@
                                 return s + Math.max(0, due - getPaidAmount(d, due));
                             }, 0);
 
+                            // v17.23 : Répartition épargne par objectif AVANT le calcul des chocs (pour enregistrer les nouvelles clés)
+                            const epargneParCompte = {};
+                            epArrMois.forEach(ep => {
+                                const k = 'ep_' + ep.id;
+                                epargneParCompte[k] = Number(ep.valeur || 0);
+                                // v17.23 : enregistrer dynamiquement les nouvelles clés épargne dans le dictionnaire
+                                if (!(k in soldesEpargne)) soldesEpargne[k] = Number((soldesInitiaux.value || {})[k] || 0);
+                            });
+
                             let entreesAppliquees = 0; let solde_fin = 0;
                             const irregCourant = calcIrregBySource('courant');
-                            // Calcul des chocs par compte épargne dynamique
+                            // v17.23 : Calcul des chocs — union des clés soldesEpargne + epargneParCompte
                             const irregParCompte = {};
-                            Object.keys(soldesEpargne).forEach(k => { irregParCompte[k] = calcIrregBySource(k); });
+                            const allEpKeys = new Set([...Object.keys(soldesEpargne), ...Object.keys(epargneParCompte)]);
+                            allEpKeys.forEach(k => { irregParCompte[k] = calcIrregBySource(k); });
                             const totalIrregEpargne = Object.values(irregParCompte).reduce((s,v) => s+v, 0);
                             const totalIrregRestant = irregCourant + totalIrregEpargne;
                             const detailsIrreg = depMois.filter(d => (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
-
-                            // Répartition épargne par objectif (proportionnelle si plusieurs)
-                            const epargneParCompte = {};
-                            epArrMois.forEach(ep => {
-                                epargneParCompte['ep_' + ep.id] = Number(ep.valeur || 0);
-                            });
 
                             if (isCurrentMonth) {
                                 let fRest = 0;

@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.23] — 2026-05-14 — Hard-Reactive Accounts Fix
+
+### Correction critique
+- **`addObjectifEpargne` — init solde** : à la création d'un nouvel objectif, `soldesInitiaux['ep_<id>']` est immédiatement initialisé à 0. Élimine tout risque de `NaN` dans le moteur bilan.
+- **Moteur bilan — enregistrement dynamique** : `epargneParCompte` est désormais calculé AVANT `irregParCompte`. Chaque clé `ep_*` découverte dans une année est auto-enregistrée dans `soldesEpargne` si absente. Les nouveaux objectifs (ex: "Vacances") sont pris en compte par l'imputation et l'auto-sweep dès leur création — même dans les années futures.
+- **`irregParCompte` — union des clés** : itère sur `Set(soldesEpargne ∪ epargneParCompte)` au lieu de `Object.keys(soldesEpargne)` seul. Les chocs assignés à un compte nouvellement créé sont correctement imputés.
+- **Debug log** : `console.log('[v17.23]')` ajouté dans `handleDataChange` et `addObjectifEpargne` pour tracer les comptes épargne visibles.
+- **Root cause** : `soldesEpargne` n'était initialisé que depuis l'année de base (`anneeActuelle`). Les objectifs créés pour d'autres années, ou créés après le chargement initial, n'étaient jamais enregistrés dans le dictionnaire du moteur.
+
+---
+
 ## [17.22] — 2026-05-14 — Correction Menus Dynamiques Mobile
 
 ### Correction critique
