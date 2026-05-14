@@ -5,6 +5,15 @@ Format : [version] — date — description
 
 ---
 
+## [17.28] — 2026-05-14 — Debug Scission & Alerte Liquidité
+
+### Corrections
+- **Bouton ✂️ Scinder toujours visible** : suppression du `v-if="modeEdition"` — le bouton est maintenant affiché en permanence avec un style bleu uniforme (`border border-blue-200`, `hover:bg-blue-50`) sur Desktop et Mobile pour les 4 types de lignes (Revenus, Charges Fixes, Variables, Chocs).
+- **Alerte Déficit** : si le Solde Courant passe en négatif dans le tableau Bilan, affichage en **rouge vif** + **fond rouge clair** + animation `pulse` + badge "⚠️ Déficit" (Desktop) / "⚠️" (Mobile).
+- **Vérification routage** : confirmation que les selects "← Prélever sur" sont bien présents et fonctionnels sur toutes les charges fixes et variables — le moteur déduit les charges routées de `soldesComptes{}`/`soldesEpargne{}` via `_deduireChargesComptes()`.
+
+---
+
 ## [17.27] — 2026-05-14 — Routage des Charges & Dispatch par Scission
 
 ### Nouveautés
