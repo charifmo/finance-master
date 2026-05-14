@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.24] — 2026-05-14 — Comptes Bancaires dans les Sélecteurs
+
+### Nouvelle fonctionnalité
+- **Computed `comptesSelectOptions`** : expose tous les comptes bancaires (non-courant) de `comptes[]` pour les menus déroulants. Les comptes de type liquide, épargne, investissement et crédit apparaissent tous.
+- **6 selects mis à jour** (3 desktop + 3 mobile) : `sourceCompte` (chocs), `destinationSurplus` (pilotage), `compteSourceCash` (Studio) affichent désormais les comptes bancaires (`cpt_<id>`) EN PLUS des objectifs épargne (`ep_<id>`).
+- **Moteur bilan — `irregCourant`** : capture désormais TOUS les chocs non-épargne (`courant`, `cpt_*`, valeurs inconnues) au lieu du seul `'courant'`.
+- **Auto-Sweep** : vérifie `destSurplus.startsWith('ep_')` au lieu de `!== 'courant'` — les comptes `cpt_*` restent dans le pool cash.
+- **Root cause** : les selects n'itéraient que sur `donneesAnnuelles[].epargne` (objectifs §4). Les comptes bancaires créés dans "Architecture des Comptes" (comme "depenses annuels") n'apparaissaient nulle part dans les menus.
+
+---
+
 ## [17.23] — 2026-05-14 — Hard-Reactive Accounts Fix
 
 ### Correction critique
