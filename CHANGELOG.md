@@ -5,6 +5,14 @@ Format : [version] — date — description
 
 ---
 
+## [17.30] — 2026-05-14 — Bouton Supprimer Lignes
+
+### Nouveautés
+- **Bouton 🗑️ Supprimer** sur chaque ligne de Revenus, Charges Fixes et Charges Variables (Desktop + Mobile). Permet de nettoyer les anciennes entrées dupliquées créées par l'ancien Scinder v17.27.
+- **`supprimerLigneObj()`** : supprime une clé d'un objet réactif et déclenche la sauvegarde automatique.
+
+---
+
 ## [17.29] — 2026-05-14 — Scission en Sous-Catégories
 
 ### Refactoring majeur
