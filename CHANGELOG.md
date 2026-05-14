@@ -5,6 +5,18 @@ Format : [version] — date — description
 
 ---
 
+## [17.21] — 2026-05-14 — Comptes Épargne Dynamiques & Cash Studio
+
+### Refonte majeure
+- **Comptes 100% dynamiques** : les selects `destinationSurplus` et `sourceCompte` itèrent sur `donneesAnnuelles[].epargne` via `v-for`. Plus aucun compte figé en dur (urgence/LT).
+- **Soldes initiaux dynamiques** : chaque objectif d'épargne a un champ "Solde actuel" dans §4, stocké en `soldesInitiaux['ep_<id>']`.
+- **Moteur bilan refondé** : `curUrgence`/`curLT` remplacés par dictionnaire `soldesEpargne{}` initialisé dynamiquement. Imputation et Auto-Sweep fonctionnent sur n'importe quelle clé `ep_*`.
+- **detailsEpargne** : chaque ligne bilan retourne `detailsEpargne: {...}` au lieu de `soldeUrgence`/`soldeLT`.
+- **Tooltip patrimoine dynamique** : itère sur `detailsEpargneFinal` avec `getEpargneLabel()` pour afficher chaque poche nommée.
+- **Cash Studio** : `appliquerMensualiteStudio` injecte le `cashRequis` comme choc irrégulier avec `sourceCompte` configurable. Select "Source du Cash" ajouté dans l'onglet Studio.
+
+---
+
 ## [17.19] — 2026-05-14 — Moteur Patrimonial, Auto-Save, Auto-Sweep & Imputation Chocs
 
 ### Refonte majeure
