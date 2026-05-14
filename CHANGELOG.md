@@ -5,6 +5,18 @@ Format : [version] — date — description
 
 ---
 
+## [17.19] — 2026-05-14 — Moteur Patrimonial, Auto-Save, Auto-Sweep & Imputation Chocs
+
+### Refonte majeure
+- **Auto-Save (debounce 2s)** : `handleDataChange` déclenche un `saveToServer()` automatique après 2 secondes d'inactivité — plus de perte de saisie.
+- **Source Compte pour les Chocs** : chaque dépense irrégulière a un champ `sourceCompte` (`courant`/`urgence`/`lt`). Sélecteur visible dans l'UI des Flux Exceptionnels.
+- **Auto-Sweep** : nouveau champ `destinationSurplus` dans `soldesInitiaux`. Si le cashflow mensuel est positif, le surplus est redirigé vers le fonds urgence ou l'épargne LT selon le choix de l'utilisateur.
+- **Imputation Analytique** : le moteur `bilan` sépare les chocs par `sourceCompte` (irregCourant, irregUrgence, irregLT). Chaque poche absorbe ses propres chocs.
+- **Soldes cumulatifs** : `curUrgence` et `curLT` évoluent mois par mois dans le moteur. Chaque ligne retourne `soldeUrgence` et `soldeLT`.
+- **UI Pilotage** : sélecteur "Destination du Surplus" ajouté sous le toggle Décalage Paie.
+
+---
+
 ## [17.18] — 2026-05-13 — Patrimoine Global Projeté & Tooltip
 
 ### Refonte UX

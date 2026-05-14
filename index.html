@@ -671,6 +671,19 @@
                             </label>
                         </div>
 
+                        <!-- v17.19 : Destination du Surplus -->
+                        <div class="p-4 bg-slate-800 rounded-2xl border border-slate-700 flex items-center justify-between shadow-sm">
+                            <div>
+                                <p class="text-sm font-bold text-white">🔄 Destination du Surplus</p>
+                                <p class="text-[10px] text-slate-400 mt-1">Où va le cashflow positif de chaque mois ?</p>
+                            </div>
+                            <select v-model="soldesInitiaux.destinationSurplus" @change="handleDataChange" class="bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold outline-none border border-slate-600 cursor-pointer focus:border-blue-500">
+                                <option value="courant">💳 Compte Courant</option>
+                                <option value="urgence">🛡️ Fonds Urgence</option>
+                                <option value="lt">🎯 Épargne Long Terme</option>
+                            </select>
+                        </div>
+
                         <!-- Bouton paie + checklist (onglet dédié : tout visible directement) -->
                         <div class="space-y-4">
                             <button @click="soldesInitiaux.salaireRecu = !soldesInitiaux.salaireRecu; handleDataChange()" :class="['w-full p-3 rounded-xl border-2 transition-all font-black text-sm uppercase tracking-widest shadow-sm', soldesInitiaux.salaireRecu ? 'bg-green-600/20 border-green-500 text-green-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500']">
@@ -767,7 +780,13 @@
                                     <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
                                     <input type="number" v-model.number="depense.montant" @input="handleDataChange" :class="['w-24 text-right font-black bg-transparent outline-none', depense.montant < 0 ? 'text-green-600' : 'text-red-600']"/>
                                     <span v-if="depense.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase">Injection Banque</span>
-                                    
+                                    <!-- v17.19 : Source Compte -->
+                                    <select v-model="depense.sourceCompte" @change="handleDataChange" class="bg-gray-100 text-gray-700 px-2 py-1.5 rounded-lg font-bold text-[10px] outline-none cursor-pointer border border-gray-200" title="Compte source">
+                                        <option value="courant">💳 Courant</option>
+                                        <option value="urgence">🛡️ Urgence</option>
+                                        <option value="lt">🎯 Épargne LT</option>
+                                    </select>
+
                                     <select v-model.number="depense.mois" @change="deplacerDepense(depense)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-2 rounded-lg font-black transition-colors text-xs uppercase tracking-widest shadow-sm outline-none cursor-pointer" title="Déplacer vers un autre mois de cette année">
                                         <option disabled :value="moisNum">Vers... ⏭️</option>
                                         <option v-for="m in 12" :key="m" :value="m" v-show="m !== moisNum" class="text-gray-800 bg-white">{{ nomDuMois(m) }}</option>
@@ -2938,8 +2957,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.18";
+                    const CURRENT_VERSION = "17.19";
                     const CHANGELOG = [
+                        { version: "17.19", date: "2026-05-14 — Moteur Patrimonial, Auto-Save, Auto-Sweep & Imputation Chocs", changes: ["AUTO-SAVE : handleDataChange inclut un debounce de 2s avant appel saveToServer() — plus de perte de saisie.", "SOURCE COMPTES CHOCS : chaque dépense irrégulière a un champ sourceCompte (courant/urgence/lt). Select visible dans l'UI des Flux Exceptionnels.", "AUTO-SWEEP : nouveau champ destinationSurplus dans soldesInitiaux (courant/urgence/lt). Si le cashflow mensuel est positif et que la destination n'est pas 'courant', le surplus est redirigé vers le fonds urgence ou l'épargne LT.", "IMPUTATION ANALYTIQUE : le moteur bilan sépare les chocs par sourceCompte (irregCourant, irregUrgence, irregLT). Chaque poche absorbe ses propres chocs. curUrgence et curLT évoluent cumulativement mois par mois.", "Chaque ligne du bilan retourne désormais soldeUrgence et soldeLT en plus de soldeCourant.", "UI Pilotage : sélecteur 'Destination du Surplus' (💳 Courant / 🛡️ Urgence / 🎯 LT) ajouté sous le toggle Décalage Paie."] },
                         { version: "17.18", date: "2026-05-13 — Patrimoine Global Projeté & Tooltip", changes: ["Nouveau computed patrimoineProjeteGlobal = soldeFinal + epargneTotaleFinal + bourse — vision complète du patrimoine projeté.", "Header 'PROJ. FIN' remplacé par 'Patrimoine Global Projeté' avec tooltip au survol montrant la répartition (Cash / Épargne / Bourse).", "KPI Dashboard : carte 'Projection Fin' remplacée par 'Patrimoine Global' en vert emerald avec sous-détail Cash + Épargne.", "Correction de la fausse impression de déficit quand l'épargne accumulée n'était pas visible dans l'indicateur principal."] },
                         { version: "17.16", date: "2026-05-13 — Time Machine Comptes (Projection par Date)", changes: ["FEATURE : Projection individuelle de chaque compte à une date cible (mois + année) choisie par l'utilisateur.", "2 nouveaux refs : moisCibleProjection (défaut 12) et anneeCibleProjectionComptes (défaut année en cours).", "Computed comptesProjetes : recherche la ligne bilan correspondante, calcule les deltas Cash/Épargne/Investissement et les répartit sur le premier compte de chaque type.", "UI : nouveau bloc '🕰️ Voyage dans le temps' avec 2 selects (Mois + Année) dans la section Architecture des Comptes.", "Affichage enrichi : chaque compte montre 'Solde actuel ➔ Solde projeté' avec indicateur ▲/▼ coloré (vert hausse, rouge baisse)."] },
                         { version: "17.15", date: "2026-05-08 — Dynamic CRUD for Savings Goals", changes: ["MIGRATION DATA : donneesAnnuelles[year].epargne passe d'un objet statique {urgence:{label,valeur}, lt:{label,valeur}} à un tableau dynamique [{id, nom, valeur}]. Rétrocompatibilité totale via migrateEpargneToArray() appelée avant safeMerge dans executerImportFusion.", "UI DESKTOP §4 : suppression des champs hardcodés. Boucle v-for sur le tableau, champ texte 'nom' + champ numérique 'valeur' + bouton 🗑️ Supprimer par ligne. Bouton '+ Ajouter un objectif' en bas.", "UI MOBILE : même refonte pour l'accordéon épargne mobile.", "CRUD : addObjectifEpargne(annee) pousse un objet vide. deleteObjectifEpargne(annee, idx) splice la ligne.", "MOTEUR : totEpBase et totalEpargne mis à jour pour .reduce() sur tableau (+ fallback objet legacy). getCompteProjection et drilldown chart adaptés.", "sanitizeEpargneKeys : court-circuité pour les tableaux (logique objet conservée pour rétrocompat legacy)."] },
@@ -3156,7 +3176,7 @@
                         };
 
                         return {
-                            soldesInitiaux: { courant: 125000, urgence: 0, lt: 0, bourse: 0, moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), salaireRecu: false, semainesRestantes: 3, decalagePaie: true },
+                            soldesInitiaux: { courant: 125000, urgence: 0, lt: 0, bourse: 0, moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), salaireRecu: false, semainesRestantes: 3, decalagePaie: true, destinationSurplus: 'courant' },
                             donneesAnnuelles: {
                                 2026: {
                                     revenus: { 
@@ -3462,7 +3482,16 @@
                     };
 
                     const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 18, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value });
-                    const handleDataChange = () => { forceUpdateCalculations(); serverSyncStatus.value = 'modified'; if(syncStatus.value === 'synced') syncStatus.value = 'modified'; };
+                    // v17.19 : Auto-Save debounce 2s
+                    let _autoSaveTimer = null;
+                    const handleDataChange = () => {
+                        forceUpdateCalculations();
+                        serverSyncStatus.value = 'modified';
+                        if (syncStatus.value === 'synced') syncStatus.value = 'modified';
+                        // Auto-save debounce
+                        clearTimeout(_autoSaveTimer);
+                        _autoSaveTimer = setTimeout(() => { saveToServer(); }, 2000);
+                    };
 
                     const safeMerge = (target, source) => {
                         if (source === undefined || source === null) return target;
@@ -3836,7 +3865,7 @@
                     };
                     const totalMoisAffichage = (m) => getDepensesMois(m, anneeAffichage.value).reduce((sum, d) => sum + (Number(d.montant) || 0), 0);
                     
-                    const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0 }); handleDataChange(); };
+                    const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant' }); handleDataChange(); };
                     const supprimerDepense = (id) => { if(donneesAnnuelles.value[anneeAffichage.value]) donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres = donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres.filter(d => d.id !== id); handleDataChange(); };
                     
                     const deplacerDepense = (dep) => {
@@ -4000,7 +4029,7 @@
                         alert(`✅ 2 lignes ajoutées aux Flux Exceptionnels de ${aNum} (mois ${mois}).`);
                     };
 
-                    // MOTEUR MULTI-ANNEES (V11.0)
+                    // MOTEUR MULTI-ANNEES (V11.0) — v17.19 : Auto-Sweep + Imputation Analytique
                     const bilan = computed(() => {
                         calculationTick.value;
                         let curSolde = patrimoineLiquide.value;
@@ -4009,12 +4038,16 @@
                         const moisActuel = Number((soldesInitiaux.value || {}).moisActuel || 4);
                         const anneeActuelle = Number((soldesInitiaux.value || {}).anneeActuelle || 2026);
                         const decalagePaie = (soldesInitiaux.value || {}).decalagePaie !== false;
-                        
+                        const destSurplus = (soldesInitiaux.value || {}).destinationSurplus || 'courant';
+
                         let revMoisPrecedent = 0;
                         let totalMoisEcoules = 0;
-                        let cumulEpargne = 0; // v17.14 : mode "Épargne Générée" — part de 0, accumule uniquement l'effort d'épargne produit depuis le mois actuel
+                        let cumulEpargne = 0;
+                        // v17.19 : soldes cumulatifs urgence et LT
+                        let curUrgence = Number((soldesInitiaux.value || {}).urgence || 0);
+                        let curLT = Number((soldesInitiaux.value || {}).lt || 0);
                         const maxAnnee = Math.max(...anneesDisponibles.value);
-                        
+
                         let periods = [];
                         for(let a = anneeActuelle; a <= maxAnnee; a++) {
                             if (!donneesAnnuelles.value[a]) continue;
@@ -4035,101 +4068,118 @@
                             const revMoisGenere = Object.values(dataAnnee.revenus || {}).reduce((s,r)=>{ let v=Number((r || {}).base||0); (r?.exceptions || []).forEach(e=>{ if(mNum>=e.moisDebut && mNum<=e.moisFin) v=Number(e.nouvelleValeur||0); }); return s+v; },0);
                             const fixMois = Object.values(dataAnnee.chargesFixes || {}).reduce((s,f)=>{ let v=Number((f || {}).valeur||0); (f?.exceptions || []).forEach(e=>{ if(mNum>=e.moisDebut && mNum<=e.moisFin) v=Number(e.nouvelleValeur||0); }); return s+v; },0);
                             const totVarBase = Object.values(dataAnnee.chargesVariables || {}).reduce((acc, curr) => acc + getMonthlyVariableValue(curr || {}), 0);
-                            // v17.15 : array dynamique + fallback objet legacy
                             const _ep = dataAnnee.epargne;
                             const totEpBase = Array.isArray(_ep)
                                 ? _ep.reduce((sum, obj) => sum + Number(obj.valeur || 0), 0)
                                 : Object.values(_ep || {}).reduce((sum, item) => sum + Number((item || {}).valeur || 0), 0);
 
-                            // v17.13 : sécurisation — epargneMensuellePrevue = source 1 (section §4 Objectifs Épargne) + source 2 (chargesFixes à étiquette épargne)
-                            // Source 1 : déjà dans totEpBase
-                            // Source 2 : fallback → fixes dont le label évoque un virement/épargne (capte les cas où l'user a saisi ses virements comme charges, pas comme objectifs)
                             const _EPKW = /epargne|épargne|urgence|long.?terme|investissement|virement/i;
                             const _epFixes = Object.values(dataAnnee.chargesFixes || {}).reduce((sum, f) => _EPKW.test(f?.label || '') ? sum + Number((f || {}).valeur || 0) : sum, 0);
-                            const epargneMensuellePrevue = totEpBase + _epFixes; // total : objectifs explicites + épargnes implicites dans chargesFixes
-                            if (isCurrentMonth || mNum === 1) console.log(`[v17.13 debug] ${mNum}/${aNum} — Épargne prévue: objectifs=${totEpBase} + chargesFixes_ep=${_epFixes} = ${epargneMensuellePrevue} DH`);
+                            const epargneMensuellePrevue = totEpBase + _epFixes;
 
-                            let entreesAppliquees = 0; let solde_fin = 0; let totalIrregRestant = 0; let detailsIrreg = [];
-                            
+                            // v17.19 : Imputation analytique des chocs par sourceCompte
+                            const depMois = depTriees.filter(d => d.mois === mNum);
+                            const calcIrregBySource = (src) => depMois.filter(d => (d.sourceCompte || 'courant') === src).reduce((s, d) => {
+                                let due = Number(d.montant || 0);
+                                if (due < 0) return isItemPaid(d, due) ? s : s + due;
+                                return s + Math.max(0, due - getPaidAmount(d, due));
+                            }, 0);
+
+                            let entreesAppliquees = 0; let solde_fin = 0;
+                            const irregCourant = calcIrregBySource('courant');
+                            const irregUrgence = calcIrregBySource('urgence');
+                            const irregLT = calcIrregBySource('lt');
+                            const totalIrregRestant = irregCourant + irregUrgence + irregLT;
+                            const detailsIrreg = depMois.filter(d => (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
+
+                            // Épargne ciblée par objectif (répartie moitié/moitié urgence/lt par défaut)
+                            const epargneMoisUrgence = totEpBase / 2;
+                            const epargneMoisLT = totEpBase - epargneMoisUrgence;
+
                             if (isCurrentMonth) {
-                                // 1. Chocs (un montant négatif = injection de cash, conservé tel quel)
-                                totalIrregRestant = depTriees.filter(d=>d.mois===mNum).reduce((s,d)=> {
-                                    let due = Number(d.montant || 0);
-                                    if (due < 0) return isItemPaid(d, due) ? s : s + due; // Entrée: exclure si déjà pointée
-                                    return s + Math.max(0, due - getPaidAmount(d, due));
-                                }, 0);
-                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
-
-                                // 2. Fixes
                                 let fRest = 0;
                                 Object.values(dataAnnee.chargesFixes || {}).forEach(f => {
                                     let due = getDueFixe(f, aNum);
                                     fRest += Math.max(0, due - getPaidAmount(f, due));
                                 });
-                                
+
                                 const semRest = Number((soldesInitiaux.value || {}).semainesRestantes || 0);
                                 const rConso = semRest / 4.3;
-                                
-                                // 3. Variables
-                                let vRest = Object.values(dataAnnee.chargesVariables || {}).reduce((acc, curr) => { 
-                                    if (curr?.periode === 'semaine') return acc + (Number(curr?.valeur||0) * semRest); 
+
+                                let vRest = Object.values(dataAnnee.chargesVariables || {}).reduce((acc, curr) => {
+                                    if (curr?.periode === 'semaine') return acc + (Number(curr?.valeur||0) * semRest);
                                     else {
                                         if (curr?.details && curr.details.length > 0) return acc + curr.details.reduce((sum, d) => sum + Math.max(0, Number(d.montant||0) - getPaidAmount(d, Number(d.montant||0))), 0);
                                         return acc + Number(curr?.valeur||0) * rConso;
                                     }
                                 }, 0);
-                                
+
                                 if (decalagePaie) {
                                     entreesAppliquees = 0;
-                                    solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant;
+                                    solde_fin = curSolde - fRest - vRest - totEpBase - irregCourant;
                                     if ((soldesInitiaux.value || {}).salaireRecu) revMoisPrecedent = 0;
                                     else revMoisPrecedent = revMoisGenere;
                                     curSolde = solde_fin;
                                 } else {
                                     entreesAppliquees = revMoisGenere;
-                                    solde_fin = curSolde - fRest - vRest - totEpBase - totalIrregRestant;
+                                    solde_fin = curSolde - fRest - vRest - totEpBase - irregCourant;
                                     if (!(soldesInitiaux.value || {}).salaireRecu) solde_fin += revMoisGenere;
                                     curSolde = solde_fin;
                                 }
-                                
-                                cumulEpargne += epargneMensuellePrevue; // v17.13 : objectifs épargne + fixes labellisés épargne
+
+                                // v17.19 : Imputation épargne/chocs sur urgence et LT
+                                curUrgence += (epargneMoisUrgence - irregUrgence);
+                                curLT += (epargneMoisLT - irregLT);
+
+                                cumulEpargne += epargneMensuellePrevue;
                                 return {
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, charges: fRest+vRest+totEpBase,
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
-                                    soldeCourant: solde_fin,
-                                    soldeEpargneProjete: cumulEpargne, // v17.12 : accumulation pure (sans curSolde) — ne fluctue jamais
+                                    soldeCourant: solde_fin, soldeUrgence: curUrgence, soldeLT: curLT,
+                                    soldeEpargneProjete: cumulEpargne,
                                     isCurrent: true, isException: false
                                 };
-                            } 
+                            }
                             else {
-                                totalIrregRestant = depTriees.filter(d=>d.mois===mNum).reduce((s,d)=> {
-                                    let due = Number(d.montant||0);
-                                    if (due < 0) return isItemPaid(d, due) ? s : s + due; // Entrée: exclure si déjà pointée
-                                    return s + Math.max(0, due - getPaidAmount(d, due));
-                                }, 0);
-                                detailsIrreg = depTriees.filter(d=>d.mois===mNum && (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
-
                                 if (decalagePaie) {
                                     entreesAppliquees = revMoisPrecedent;
                                     const surplusMois = entreesAppliquees - fixMois - totVarBase - totEpBase;
-                                    solde_fin = curSolde + surplusMois - totalIrregRestant;
-                                    curSolde = solde_fin;
+                                    const cashflowMois = surplusMois - irregCourant;
+                                    // v17.19 : Auto-Sweep
+                                    if (cashflowMois > 0 && destSurplus !== 'courant') {
+                                        if (destSurplus === 'urgence') curUrgence += cashflowMois;
+                                        else if (destSurplus === 'lt') curLT += cashflowMois;
+                                        // curSolde reste inchangé (le surplus est balayé)
+                                    } else {
+                                        curSolde += cashflowMois;
+                                    }
+                                    solde_fin = curSolde;
                                     revMoisPrecedent = revMoisGenere;
                                 } else {
                                     entreesAppliquees = revMoisGenere;
                                     const surplusMois = entreesAppliquees - fixMois - totVarBase - totEpBase;
-                                    solde_fin = curSolde + surplusMois - totalIrregRestant;
-                                    curSolde = solde_fin;
+                                    const cashflowMois = surplusMois - irregCourant;
+                                    if (cashflowMois > 0 && destSurplus !== 'courant') {
+                                        if (destSurplus === 'urgence') curUrgence += cashflowMois;
+                                        else if (destSurplus === 'lt') curLT += cashflowMois;
+                                    } else {
+                                        curSolde += cashflowMois;
+                                    }
+                                    solde_fin = curSolde;
                                 }
-                                
+
+                                // v17.19 : Imputation épargne/chocs sur urgence et LT
+                                curUrgence += (epargneMoisUrgence - irregUrgence);
+                                curLT += (epargneMoisLT - irregLT);
+
                                 totalMoisEcoules++;
-                                cumulEpargne += epargneMensuellePrevue; // v17.13 : objectifs épargne + fixes labellisés épargne (aucun lien avec curSolde)
+                                cumulEpargne += epargneMensuellePrevue;
                                 return {
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees,
                                     charges: fixMois+totVarBase+totEpBase,
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
-                                    soldeCourant: curSolde,
-                                    soldeEpargneProjete: cumulEpargne, // v17.12 : accumulation pure — croît de totEpBase chaque mois, ne fluctue jamais
+                                    soldeCourant: curSolde, soldeUrgence: curUrgence, soldeLT: curLT,
+                                    soldeEpargneProjete: cumulEpargne,
                                     isCurrent: false, isException: (revMoisGenere !== totalRevenusBase.value) || (fixMois !== totalFixes.value)
                                 };
                             }
