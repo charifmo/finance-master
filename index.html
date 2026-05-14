@@ -516,6 +516,19 @@
                                     <span class="text-gray-400 text-xs font-bold">DH</span>
                                 </div>
                             </div>
+                            <!-- v17.26 : Destination compte pour ce revenu -->
+                            <div class="flex items-center gap-2 mt-2 mb-1">
+                                <label class="text-[9px] font-black text-green-700 uppercase tracking-widest whitespace-nowrap">→ Verser sur :</label>
+                                <select v-model="item.destinationCompte" @change="handleDataChange" class="flex-1 p-1.5 text-xs font-bold border border-green-200 rounded-lg bg-green-50 outline-none focus:ring-2 focus:ring-green-400">
+                                    <option value="courant">💳 Compte Courant</option>
+                                    <optgroup label="── Comptes bancaires ──">
+                                        <option v-for="c in comptesSelectOptions" :key="c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                    </optgroup>
+                                    <optgroup label="── Objectifs épargne ──">
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label }}</option>
+                                    </optgroup>
+                                </select>
+                            </div>
                             <div v-if="item.showExceptions" class="mt-4 bg-blue-50/50 rounded-xl p-4 border border-blue-100 shadow-inner">
                                 <p class="text-[9px] font-black text-blue-800 uppercase tracking-widest mb-3">Règles d'exception (Mois 1 à 12)</p>
                                 <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-blue-100 shadow-sm flex-wrap sm:flex-nowrap">
@@ -2661,6 +2674,19 @@
                                     <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}</label>
                                 </div>
                                 <input type="number" v-model.number="item.base" @input="handleDataChange" class="w-full p-3 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-green-700 text-xl outline-none"/>
+                                <!-- v17.26 : Destination compte pour ce revenu (mobile) -->
+                                <div class="mt-2">
+                                    <label class="text-[9px] font-black text-green-700 uppercase tracking-widest block mb-1">→ Verser sur :</label>
+                                    <select v-model="item.destinationCompte" @change="handleDataChange" class="w-full p-2 text-sm font-bold border border-green-200 rounded-lg bg-green-50 outline-none">
+                                        <option value="courant">💳 Compte Courant</option>
+                                        <optgroup label="── Comptes bancaires ──">
+                                            <option v-for="c in comptesSelectOptions" :key="c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                        </optgroup>
+                                        <optgroup label="── Objectifs épargne ──">
+                                            <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label }}</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
                                 <button @click="item.showExceptions = !item.showExceptions" class="w-full py-2 mt-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
                                     {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Suspendre / Modifier Période' }}
                                 </button>
@@ -3035,8 +3061,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.25";
+                    const CURRENT_VERSION = "17.26";
                     const CHANGELOG = [
+                        { version: "17.26", date: "2026-05-14 — Routage des Revenus vers comptes spécifiques", changes: ["VENTILATION REVENUS : chaque source de revenu dispose d'un champ destinationCompte (défaut: 'courant'). Select 'Verser sur' en desktop et mobile avec 3 groupes : Compte Courant, Comptes bancaires (cpt_*), Objectifs épargne (ep_*).", "MOTEUR BILAN — ROUTAGE : les revenus sont ventilés par destination. revCourant alimente curSolde, les autres destinations créditent directement soldesComptes{} ou soldesEpargne{}.", "DÉCALAGE PAIE : en mode décalage, seul revCourant est reporté au mois suivant (revMoisPrecedent). Les revenus routés vers d'autres comptes sont crédités immédiatement.", "MOIS COURANT : seul revCourant est ajouté au solde_fin (au lieu de revMoisGenere total). Les revenus routés sont crédités sur leurs comptes cibles dès le mois courant."] },
                         { version: "17.25", date: "2026-05-14 — Liaison Physique Objectifs/Comptes", changes: ["LIAISON OBJECTIFS→COMPTES : chaque objectif d'épargne a un nouveau champ linkedAccountId. Menu déroulant 'Compte de rattachement' dans §4 (desktop + mobile) et dans le CRUD Patrimoine & Objectifs.", "MOTEUR BILAN — TRANSLOCATION PHYSIQUE : nouveau dictionnaire soldesComptes{} initialisé depuis comptes[].solde. Chaque mois, l'épargne d'un objectif lié est physiquement déduite du Compte Courant et ajoutée au compte lié.", "CHOCS PHYSIQUES : les dépenses imputées sur un objectif lié (ep_*→cpt_*) déduisent du compte bancaire physique correspondant.", "COMPTES PROJETÉS (Time Machine) : utilise detailsComptes du bilan pour les projections par compte — chaque compte affiche son solde réel projeté.", "TOOLTIP PATRIMOINE : affiche les soldes projetés par compte bancaire physique (cpt_*) au lieu des enveloppes virtuelles.", "addObjectifEpargne : inclut linkedAccountId:null par défaut."] },
                         { version: "17.24", date: "2026-05-14 — Comptes Bancaires dans les Sélecteurs", changes: ["COMPUTED comptesSelectOptions : liste tous les comptes non-courant (liquide, épargne, investissement, crédit) pour les selects.", "6 SELECTS MIS À JOUR : desktop+mobile pour sourceCompte, destinationSurplus et compteSourceCash affichent désormais tous les comptes bancaires (cpt_<id>) + les objectifs épargne (ep_<id>).", "MOTEUR BILAN : irregCourant capture tous les chocs non-épargne (courant + cpt_* + inconnus). Auto-Sweep vérifie startsWith('ep_') au lieu de !== 'courant'.", "Root cause : les selects n'itéraient que sur donneesAnnuelles[].epargne (objectifs §4) — les comptes bancaires créés dans Architecture des Comptes n'apparaissaient pas."] },
                         { version: "17.23", date: "2026-05-14 — Hard-Reactive Accounts Fix", changes: ["addObjectifEpargne : initialise soldesInitiaux['ep_<id>'] = 0 à la création → plus de NaN dans le moteur bilan.", "MOTEUR BILAN : epargneParCompte calculé AVANT irregParCompte. Chaque clé ep_* trouvée dans l'année est auto-enregistrée dans soldesEpargne si absente → les nouveaux objectifs sont immédiatement pris en compte par l'imputation et l'auto-sweep.", "irregParCompte : itère sur l'union Set(soldesEpargne ∪ epargneParCompte) → les chocs assignés à un nouveau compte sont correctement imputés dès la création.", "Debug log [v17.23] ajouté dans handleDataChange et addObjectifEpargne pour tracer les comptes épargne visibles dans la console."] },
@@ -4208,7 +4235,17 @@
 
                             const depTriees = [...(dataAnnee.depensesIrregulieres || [])].sort((a,b) => a.mois - b.mois);
 
-                            const revMoisGenere = Object.values(dataAnnee.revenus || {}).reduce((s,r)=>{ let v=Number((r || {}).base||0); (r?.exceptions || []).forEach(e=>{ if(mNum>=e.moisDebut && mNum<=e.moisFin) v=Number(e.nouvelleValeur||0); }); return s+v; },0);
+                            // v17.26 : Ventilation des revenus par destination
+                            let revCourant = 0;
+                            const revParCompte = {}; // { 'cpt_xxx': amount, 'ep_xxx': amount }
+                            Object.values(dataAnnee.revenus || {}).forEach(r => {
+                                let v = Number((r || {}).base || 0);
+                                (r?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                const dest = (r || {}).destinationCompte || 'courant';
+                                if (dest === 'courant') { revCourant += v; }
+                                else { revParCompte[dest] = (revParCompte[dest] || 0) + v; }
+                            });
+                            const revMoisGenere = revCourant + Object.values(revParCompte).reduce((s, v) => s + v, 0);
                             const fixMois = Object.values(dataAnnee.chargesFixes || {}).reduce((s,f)=>{ let v=Number((f || {}).valeur||0); (f?.exceptions || []).forEach(e=>{ if(mNum>=e.moisDebut && mNum<=e.moisFin) v=Number(e.nouvelleValeur||0); }); return s+v; },0);
                             const totVarBase = Object.values(dataAnnee.chargesVariables || {}).reduce((acc, curr) => acc + getMonthlyVariableValue(curr || {}), 0);
                             const _ep = dataAnnee.epargne;
@@ -4269,6 +4306,14 @@
                                     }
                                 }, 0);
 
+                                // v17.26 : Routage des revenus vers comptes spécifiques
+                                const revCourantApplique = decalagePaie ? 0 : revCourant;
+                                Object.entries(revParCompte).forEach(([dest, amt]) => {
+                                    if (amt <= 0) return;
+                                    if (dest.startsWith('cpt_') && dest in soldesComptes) { soldesComptes[dest] += amt; }
+                                    else if (dest.startsWith('ep_') && dest in soldesEpargne) { soldesEpargne[dest] += amt; }
+                                });
+
                                 if (decalagePaie) {
                                     entreesAppliquees = 0;
                                     solde_fin = curSolde - fRest - vRest - totEpBase - irregCourant;
@@ -4278,7 +4323,7 @@
                                 } else {
                                     entreesAppliquees = revMoisGenere;
                                     solde_fin = curSolde - fRest - vRest - totEpBase - irregCourant;
-                                    if (!(soldesInitiaux.value || {}).salaireRecu) solde_fin += revMoisGenere;
+                                    if (!(soldesInitiaux.value || {}).salaireRecu) solde_fin += revCourant;
                                     curSolde = solde_fin;
                                 }
 
@@ -4329,6 +4374,13 @@
                                 };
                             }
                             else {
+                                // v17.26 : Routage des revenus vers comptes spécifiques (mois futurs)
+                                Object.entries(revParCompte).forEach(([dest, amt]) => {
+                                    if (amt <= 0) return;
+                                    if (dest.startsWith('cpt_') && dest in soldesComptes) { soldesComptes[dest] += amt; }
+                                    else if (dest.startsWith('ep_') && dest in soldesEpargne) { soldesEpargne[dest] += amt; }
+                                });
+
                                 if (decalagePaie) {
                                     entreesAppliquees = revMoisPrecedent;
                                     const surplusMois = entreesAppliquees - fixMois - totVarBase - totEpBase;
@@ -4340,9 +4392,9 @@
                                         curSolde += cashflowMois;
                                     }
                                     solde_fin = curSolde;
-                                    revMoisPrecedent = revMoisGenere;
+                                    revMoisPrecedent = revCourant;
                                 } else {
-                                    entreesAppliquees = revMoisGenere;
+                                    entreesAppliquees = revCourant;
                                     const surplusMois = entreesAppliquees - fixMois - totVarBase - totEpBase;
                                     const cashflowMois = surplusMois - irregCourant;
                                     if (cashflowMois > 0 && destSurplus.startsWith('ep_')) {

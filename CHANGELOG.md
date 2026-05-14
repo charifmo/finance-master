@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [17.26] — 2026-05-14 — Routage des Revenus vers comptes spécifiques
+
+### Nouveautés
+- **Ventilation revenus** : chaque source de revenu dispose d'un champ `destinationCompte` (défaut: `'courant'`). Un select "→ Verser sur" apparaît sous chaque revenu (desktop + mobile) avec 3 groupes : Compte Courant, Comptes bancaires (`cpt_*`), Objectifs épargne (`ep_*`).
+- **Moteur Bilan — Routage** : les revenus sont ventilés par destination. `revCourant` alimente `curSolde`, les autres destinations créditent directement `soldesComptes{}` ou `soldesEpargne{}`.
+- **Décalage paie** : en mode décalage, seul `revCourant` est reporté au mois suivant (`revMoisPrecedent`). Les revenus routés vers d'autres comptes sont crédités immédiatement.
+- **Mois courant** : seul `revCourant` est ajouté à `solde_fin` (au lieu de `revMoisGenere` total). Les revenus routés sont crédités sur leurs comptes cibles dès le mois courant.
+
+---
+
 ## [17.25] — 2026-05-14 — Liaison Physique Objectifs/Comptes
 
 ### Refonte majeure
