@@ -1908,6 +1908,14 @@
                             <div v-if="choc.montant < 0" class="mt-2">
                                 <span class="text-[9px] bg-green-200 text-green-800 px-2 py-1 rounded font-black uppercase tracking-widest">✅ Injection Banque</span>
                             </div>
+                            <!-- v17.22 : Source Compte dynamique (mobile) -->
+                            <div class="mt-2">
+                                <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1 block">Source Compte</label>
+                                <select v-model="choc.sourceCompte" @change="handleDataChange" class="w-full p-2 border rounded-lg font-bold bg-gray-50 outline-none text-sm">
+                                    <option value="courant">💳 Courant</option>
+                                    <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'msrc_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                </select>
+                            </div>
                         </div>
                         <p v-if="donneesAnnuelles[anneeAffichage].depensesIrregulieres.length === 0" class="text-center text-sm text-gray-400 italic py-4">Aucun flux exceptionnel enregistré.</p>
                     </template>
@@ -1923,6 +1931,14 @@
                         <div class="flex justify-between text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-3 pt-3 border-t border-white/10">
                             <span>Capital: {{ formatMAD(studioCalc.capitalEmprunte) }}</span>
                             <span class="text-emerald-400">Reliquat: {{ formatMAD(projetStudio.surplusCredit) }}</span>
+                        </div>
+                        <!-- v17.22 : Source du Cash Studio (mobile) -->
+                        <div class="mt-3 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Source Cash :</span>
+                            <select v-model="projetStudio.compteSourceCash" @change="handleDataChange" class="bg-slate-700 text-white px-2 py-1.5 rounded-lg text-xs font-bold outline-none border border-slate-600 cursor-pointer">
+                                <option value="courant">💳 Courant</option>
+                                <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'mstudio_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                            </select>
                         </div>
                     </div>
 
@@ -2499,6 +2515,14 @@
                                         <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
                                     </label>
                                 </div>
+                                <!-- v17.22 : Destination du Surplus (mobile) -->
+                                <div class="bg-slate-800 p-3 rounded-2xl border border-slate-700">
+                                    <label class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2 block">🔄 Destination du Surplus</label>
+                                    <select v-model="soldesInitiaux.destinationSurplus" @change="handleDataChange" class="w-full bg-slate-900 text-white font-bold text-sm p-3 rounded-xl outline-none border border-slate-600">
+                                        <option value="courant">💳 Compte Courant</option>
+                                        <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'mdest_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                    </select>
+                                </div>
                                 <!-- Paie reçue -->
                                 <button @click="soldesInitiaux.salaireRecu = !soldesInitiaux.salaireRecu; handleDataChange()" :class="['w-full p-4 rounded-2xl border-2 font-black text-sm uppercase tracking-widest shadow-md', soldesInitiaux.salaireRecu ? 'bg-green-600/20 border-green-500 text-green-700' : 'bg-slate-100 border-slate-300 text-slate-600']">
                                     💰 Paie Globale reçue ? {{ soldesInitiaux.salaireRecu ? 'OUI ✅' : 'NON' }}
@@ -2972,8 +2996,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.21";
+                    const CURRENT_VERSION = "17.22";
                     const CHANGELOG = [
+                        { version: "17.22", date: "2026-05-14 — Correction Menus Dynamiques Mobile", changes: ["MOBILE — sourceCompte : ajout du select dynamique (v-for epargne) sur chaque choc irrégulier mobile. L'utilisateur peut désormais choisir le compte source (courant ou épargne) sur mobile comme sur desktop.", "MOBILE — destinationSurplus : ajout du select dynamique dans la section Pilotage mobile. Le surplus mensuel peut être redirigé vers n'importe quel objectif d'épargne depuis mobile.", "MOBILE — compteSourceCash Studio : ajout du select dynamique dans la carte Mensualité Studio mobile. La source du cash requis est configurable sur mobile.", "Tous les selects itèrent dynamiquement sur donneesAnnuelles[anneeAffichage].epargne — les nouveaux objectifs (vacances, etc.) apparaissent instantanément partout."] },
                         { version: "17.21", date: "2026-05-14 — Comptes Épargne Dynamiques & Cash Studio", changes: ["COMPTES DYNAMIQUES : les selects destinationSurplus et sourceCompte itèrent sur donneesAnnuelles[].epargne (v-for). Plus aucun compte figé en dur.", "SOLDES INITIAUX DYNAMIQUES : chaque objectif d'épargne a un champ de saisie 'Solde actuel' dans §4 Objectifs Épargne, stocké en soldesInitiaux['ep_<id>'].", "MOTEUR BILAN : curUrgence/curLT remplacés par un dictionnaire soldesEpargne{} initialisé dynamiquement. Imputation et Auto-Sweep fonctionnent sur n'importe quelle clé ep_*.", "Chaque ligne bilan retourne detailsEpargne:{} au lieu de soldeUrgence/soldeLT.", "epargneTotaleFinal : somme Object.values(detailsEpargne). Nouveau computed detailsEpargneFinal pour le tooltip.", "TOOLTIP PATRIMOINE : itère dynamiquement sur detailsEpargneFinal avec getEpargneLabel() pour afficher chaque poche nommée.", "CASH STUDIO : appliquerMensualiteStudio injecte le cashRequis comme choc irrégulier avec sourceCompte configurable. Select 'Source du Cash' ajouté dans l'onglet Studio.", "getDefaultProjetStudio enrichi : compteSourceCash:'courant'."] },
                         { version: "17.19", date: "2026-05-14 — Moteur Patrimonial, Auto-Save, Auto-Sweep & Imputation Chocs", changes: ["AUTO-SAVE : handleDataChange inclut un debounce de 2s avant appel saveToServer() — plus de perte de saisie.", "SOURCE COMPTES CHOCS : chaque dépense irrégulière a un champ sourceCompte (courant/urgence/lt). Select visible dans l'UI des Flux Exceptionnels.", "AUTO-SWEEP : nouveau champ destinationSurplus dans soldesInitiaux (courant/urgence/lt). Si le cashflow mensuel est positif et que la destination n'est pas 'courant', le surplus est redirigé vers le fonds urgence ou l'épargne LT.", "IMPUTATION ANALYTIQUE : le moteur bilan sépare les chocs par sourceCompte (irregCourant, irregUrgence, irregLT). Chaque poche absorbe ses propres chocs. curUrgence et curLT évoluent cumulativement mois par mois.", "Chaque ligne du bilan retourne désormais soldeUrgence et soldeLT en plus de soldeCourant.", "UI Pilotage : sélecteur 'Destination du Surplus' (💳 Courant / 🛡️ Urgence / 🎯 LT) ajouté sous le toggle Décalage Paie."] },
                         { version: "17.18", date: "2026-05-13 — Patrimoine Global Projeté & Tooltip", changes: ["Nouveau computed patrimoineProjeteGlobal = soldeFinal + epargneTotaleFinal + bourse — vision complète du patrimoine projeté.", "Header 'PROJ. FIN' remplacé par 'Patrimoine Global Projeté' avec tooltip au survol montrant la répartition (Cash / Épargne / Bourse).", "KPI Dashboard : carte 'Projection Fin' remplacée par 'Patrimoine Global' en vert emerald avec sous-détail Cash + Épargne.", "Correction de la fausse impression de déficit quand l'épargne accumulée n'était pas visible dans l'indicateur principal."] },

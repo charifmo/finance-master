@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [17.22] — 2026-05-14 — Correction Menus Dynamiques Mobile
+
+### Correction critique
+- **Mobile — sourceCompte chocs** : ajout du select dynamique (`v-for` sur `epargne[]`) sur chaque flux irrégulier mobile. L'utilisateur peut désormais choisir le compte source (courant ou épargne) depuis la vue mobile.
+- **Mobile — destinationSurplus** : ajout du select dynamique dans la section Pilotage mobile. Le surplus mensuel peut être redirigé vers n'importe quel objectif d'épargne.
+- **Mobile — compteSourceCash Studio** : ajout du select dynamique dans la carte Mensualité Studio mobile. La source du cash requis est configurable sur mobile.
+- **Root cause** : les 3 selects desktop étaient déjà dynamiques (v17.21), mais les 3 équivalents mobiles étaient absents → les nouveaux objectifs d'épargne (ex: "vacances") n'apparaissaient nulle part sur mobile.
+
+---
+
 ## [17.21] — 2026-05-14 — Comptes Épargne Dynamiques & Cash Studio
 
 ### Refonte majeure
