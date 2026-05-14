@@ -151,15 +151,23 @@
                             <span :class="['p-1.5 rounded-lg shadow-sm text-sm', patrimoineProjeteGlobal >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']">{{ patrimoineProjeteGlobal >= 0 ? '🎉' : '⚠️' }}</span>
                         </p>
                         <!-- v17.21 Tooltip répartition dynamique -->
-                        <div class="hidden group-hover:block absolute right-0 top-full mt-1 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 min-w-[280px] text-left border border-slate-700">
+                        <div class="hidden group-hover:block absolute right-0 top-full mt-1 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 min-w-[300px] text-left border border-slate-700">
                             <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Répartition du Patrimoine Projeté</p>
                             <div class="space-y-1.5 text-sm">
-                                <div class="flex justify-between"><span class="text-blue-300 font-bold">💰 Compte Courant</span><span class="font-black">{{ formatMAD(soldeFinal) }}</span></div>
-                                <template v-for="(val, key) in detailsEpargneFinal" :key="'tt_'+key">
-                                    <div class="flex justify-between"><span class="text-purple-300 font-bold">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                <!-- v17.25 : Affichage per-compte physique -->
+                                <template v-if="Object.keys(detailsComptesFinal).length > 0">
+                                    <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
+                                        <div class="flex justify-between"><span class="text-blue-300 font-bold">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                    </template>
                                 </template>
-                                <div v-if="Object.keys(detailsEpargneFinal).length === 0" class="flex justify-between"><span class="text-purple-300 font-bold">🏦 Épargne</span><span class="font-black">{{ formatMAD(epargneTotaleFinal) }}</span></div>
-                                <div class="flex justify-between"><span class="text-amber-300 font-bold">📈 Bourse</span><span class="font-black">{{ formatMAD(soldesInitiaux.bourse || 0) }}</span></div>
+                                <template v-else>
+                                    <div class="flex justify-between"><span class="text-blue-300 font-bold">💰 Compte Courant</span><span class="font-black">{{ formatMAD(soldeFinal) }}</span></div>
+                                    <template v-for="(val, key) in detailsEpargneFinal" :key="'tt_'+key">
+                                        <div class="flex justify-between"><span class="text-purple-300 font-bold">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                    </template>
+                                    <div v-if="Object.keys(detailsEpargneFinal).length === 0" class="flex justify-between"><span class="text-purple-300 font-bold">🏦 Épargne</span><span class="font-black">{{ formatMAD(epargneTotaleFinal) }}</span></div>
+                                    <div class="flex justify-between"><span class="text-amber-300 font-bold">📈 Bourse</span><span class="font-black">{{ formatMAD(soldesInitiaux.bourse || 0) }}</span></div>
+                                </template>
                                 <div class="border-t border-slate-700 pt-1.5 mt-1.5 flex justify-between"><span class="text-emerald-300 font-black">🏛️ Total</span><span class="font-black text-emerald-400">{{ formatMAD(patrimoineProjeteGlobal) }}</span></div>
                             </div>
                         </div>
@@ -615,8 +623,18 @@
                         <!-- v17.21 : objectifs épargne + solde initial dynamique -->
                         <div v-if="donneesAnnuelles[anneeAffichage].epargne && donneesAnnuelles[anneeAffichage].epargne.length > 0">
                             <div v-for="obj in donneesAnnuelles[anneeAffichage].epargne" :key="obj.id" class="flex items-center justify-between border-b border-gray-100 pb-3 mb-3 last:border-0 last:mb-0 gap-3">
-                                <span class="text-sm font-black text-gray-700 uppercase tracking-wide flex-1">{{ obj.nom }}</span>
-                                <div class="text-right">
+                                <div class="flex-1 min-w-0">
+                                    <span class="text-sm font-black text-gray-700 uppercase tracking-wide block">{{ obj.nom }}</span>
+                                    <!-- v17.25 : Compte de rattachement -->
+                                    <div class="flex items-center gap-1 mt-1">
+                                        <span class="text-[9px] text-gray-400 font-bold uppercase">🔗 Lié à :</span>
+                                        <select v-model="obj.linkedAccountId" @change="handleDataChange" class="text-[10px] font-bold bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-purple-400 text-gray-600 cursor-pointer">
+                                            <option :value="null">— Aucun —</option>
+                                            <option v-for="c in comptes" :key="'link4_'+c.id" :value="c.id">{{ c.icone || '💰' }} {{ c.label }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="text-right shrink-0">
                                     <span class="text-lg font-black text-purple-700">{{ formatMAD(obj.valeur) }}<span class="text-xs text-gray-400 font-bold ml-1">/mois</span></span>
                                     <div class="flex items-center gap-1 mt-1 justify-end">
                                         <span class="text-[9px] text-gray-400 font-bold uppercase">Solde actuel :</span>
@@ -1285,11 +1303,21 @@
                             <span class="text-xs font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded-full border border-purple-200">{{ formatMAD(totalEpargne) }}/mois</span>
                         </div>
                         <div class="p-6 space-y-3">
-                            <div v-for="(obj, idx) in donneesAnnuelles[anneeAffichage].epargne" :key="obj.id" class="flex items-center gap-3">
-                                <input type="text" v-model="obj.nom" @input="handleDataChange" placeholder="Nom de l'objectif" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-purple-400 min-w-0"/>
-                                <input type="number" v-model.number="obj.valeur" @input="handleDataChange" min="0" class="w-36 p-2.5 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-purple-700 text-base focus:ring-2 focus:ring-purple-400 outline-none transition-all shrink-0"/>
-                                <span class="text-gray-400 text-xs font-bold shrink-0">DH/mois</span>
-                                <button @click="deleteObjectifEpargne(anneeAffichage, idx)" class="text-red-400 hover:text-red-600 text-xl px-1 transition-colors shrink-0" title="Supprimer">🗑️</button>
+                            <div v-for="(obj, idx) in donneesAnnuelles[anneeAffichage].epargne" :key="obj.id" class="space-y-1.5">
+                                <div class="flex items-center gap-3">
+                                    <input type="text" v-model="obj.nom" @input="handleDataChange" placeholder="Nom de l'objectif" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-purple-400 min-w-0"/>
+                                    <input type="number" v-model.number="obj.valeur" @input="handleDataChange" min="0" class="w-36 p-2.5 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-purple-700 text-base focus:ring-2 focus:ring-purple-400 outline-none transition-all shrink-0"/>
+                                    <span class="text-gray-400 text-xs font-bold shrink-0">DH/mois</span>
+                                    <button @click="deleteObjectifEpargne(anneeAffichage, idx)" class="text-red-400 hover:text-red-600 text-xl px-1 transition-colors shrink-0" title="Supprimer">🗑️</button>
+                                </div>
+                                <!-- v17.25 : Compte de rattachement -->
+                                <div class="flex items-center gap-2 pl-1">
+                                    <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">🔗 Compte lié :</span>
+                                    <select v-model="obj.linkedAccountId" @change="handleDataChange" class="text-xs font-bold bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 outline-none focus:border-purple-400 text-purple-700 cursor-pointer">
+                                        <option :value="null">— Aucun (enveloppe virtuelle) —</option>
+                                        <option v-for="c in comptes" :key="'linkw_'+c.id" :value="c.id">{{ c.icone || '💰' }} {{ c.label }}</option>
+                                    </select>
+                                </div>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-sm py-6 italic">Aucun objectif d'épargne configuré.</div>
                             <button @click="addObjectifEpargne(anneeAffichage)" class="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-sm uppercase tracking-widest shadow-sm transition-colors">
@@ -2264,6 +2292,11 @@
                                     <input type="number" v-model.number="obj.valeur" @input="handleDataChange" min="0" class="flex-1 p-2.5 border border-gray-200 bg-gray-50 rounded-xl text-right font-black text-purple-700 text-base outline-none"/>
                                     <span class="text-xs text-gray-400 font-bold shrink-0">DH/mois</span>
                                 </div>
+                                <!-- v17.25 : Compte de rattachement mobile -->
+                                <select v-model="obj.linkedAccountId" @change="handleDataChange" class="w-full text-xs font-bold bg-purple-50 border border-purple-200 rounded-lg px-2 py-1.5 outline-none text-purple-700 cursor-pointer">
+                                    <option :value="null">🔗 Aucun compte lié</option>
+                                    <option v-for="c in comptes" :key="'mlinkw_'+c.id" :value="c.id">{{ c.icone || '💰' }} {{ c.label }}</option>
+                                </select>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-xs py-3 italic">Aucun objectif.</div>
                             <button @click="addObjectifEpargne(anneeAffichage)" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs uppercase tracking-widest transition-colors">
@@ -3002,8 +3035,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.24";
+                    const CURRENT_VERSION = "17.25";
                     const CHANGELOG = [
+                        { version: "17.25", date: "2026-05-14 — Liaison Physique Objectifs/Comptes", changes: ["LIAISON OBJECTIFS→COMPTES : chaque objectif d'épargne a un nouveau champ linkedAccountId. Menu déroulant 'Compte de rattachement' dans §4 (desktop + mobile) et dans le CRUD Patrimoine & Objectifs.", "MOTEUR BILAN — TRANSLOCATION PHYSIQUE : nouveau dictionnaire soldesComptes{} initialisé depuis comptes[].solde. Chaque mois, l'épargne d'un objectif lié est physiquement déduite du Compte Courant et ajoutée au compte lié.", "CHOCS PHYSIQUES : les dépenses imputées sur un objectif lié (ep_*→cpt_*) déduisent du compte bancaire physique correspondant.", "COMPTES PROJETÉS (Time Machine) : utilise detailsComptes du bilan pour les projections par compte — chaque compte affiche son solde réel projeté.", "TOOLTIP PATRIMOINE : affiche les soldes projetés par compte bancaire physique (cpt_*) au lieu des enveloppes virtuelles.", "addObjectifEpargne : inclut linkedAccountId:null par défaut."] },
                         { version: "17.24", date: "2026-05-14 — Comptes Bancaires dans les Sélecteurs", changes: ["COMPUTED comptesSelectOptions : liste tous les comptes non-courant (liquide, épargne, investissement, crédit) pour les selects.", "6 SELECTS MIS À JOUR : desktop+mobile pour sourceCompte, destinationSurplus et compteSourceCash affichent désormais tous les comptes bancaires (cpt_<id>) + les objectifs épargne (ep_<id>).", "MOTEUR BILAN : irregCourant capture tous les chocs non-épargne (courant + cpt_* + inconnus). Auto-Sweep vérifie startsWith('ep_') au lieu de !== 'courant'.", "Root cause : les selects n'itéraient que sur donneesAnnuelles[].epargne (objectifs §4) — les comptes bancaires créés dans Architecture des Comptes n'apparaissaient pas."] },
                         { version: "17.23", date: "2026-05-14 — Hard-Reactive Accounts Fix", changes: ["addObjectifEpargne : initialise soldesInitiaux['ep_<id>'] = 0 à la création → plus de NaN dans le moteur bilan.", "MOTEUR BILAN : epargneParCompte calculé AVANT irregParCompte. Chaque clé ep_* trouvée dans l'année est auto-enregistrée dans soldesEpargne si absente → les nouveaux objectifs sont immédiatement pris en compte par l'imputation et l'auto-sweep.", "irregParCompte : itère sur l'union Set(soldesEpargne ∪ epargneParCompte) → les chocs assignés à un nouveau compte sont correctement imputés dès la création.", "Debug log [v17.23] ajouté dans handleDataChange et addObjectifEpargne pour tracer les comptes épargne visibles dans la console."] },
                         { version: "17.22", date: "2026-05-14 — Correction Menus Dynamiques Mobile", changes: ["MOBILE — sourceCompte : ajout du select dynamique (v-for epargne) sur chaque choc irrégulier mobile. L'utilisateur peut désormais choisir le compte source (courant ou épargne) sur mobile comme sur desktop.", "MOBILE — destinationSurplus : ajout du select dynamique dans la section Pilotage mobile. Le surplus mensuel peut être redirigé vers n'importe quel objectif d'épargne depuis mobile.", "MOBILE — compteSourceCash Studio : ajout du select dynamique dans la carte Mensualité Studio mobile. La source du cash requis est configurable sur mobile.", "Tous les selects itèrent dynamiquement sur donneesAnnuelles[anneeAffichage].epargne — les nouveaux objectifs (vacances, etc.) apparaissent instantanément partout."] },
@@ -3429,7 +3463,7 @@
                         if (!donneesAnnuelles.value[annee]) return;
                         if (!Array.isArray(donneesAnnuelles.value[annee].epargne)) donneesAnnuelles.value[annee].epargne = [];
                         const newId = Date.now();
-                        donneesAnnuelles.value[annee].epargne.push({ id: newId, nom: 'Nouvel objectif', valeur: 0 });
+                        donneesAnnuelles.value[annee].epargne.push({ id: newId, nom: 'Nouvel objectif', valeur: 0, linkedAccountId: null });
                         // v17.23 : init solde pour le nouveau compte (évite NaN dans le moteur)
                         soldesInitiaux.value['ep_' + newId] = 0;
                         console.log('[v17.23] Objectif épargne créé:', { annee, id: newId, epargneKeys: donneesAnnuelles.value[annee].epargne.map(e => 'ep_'+e.id) });
@@ -4147,6 +4181,14 @@
                             soldesEpargne[k] = Number((soldesInitiaux.value || {})[k] || 0);
                         });
 
+                        // v17.25 : Tracking physique des comptes bancaires (parallèle au moteur existant)
+                        let soldesComptes = {};
+                        const courantCompte = comptes.value.find(c => c.type === 'courant');
+                        const courantCptKey = courantCompte ? 'cpt_' + courantCompte.id : null;
+                        comptes.value.forEach(c => {
+                            soldesComptes['cpt_' + c.id] = Number(c.solde) || 0;
+                        });
+
                         const maxAnnee = Math.max(...anneesDisponibles.value);
 
                         let periods = [];
@@ -4245,11 +4287,43 @@
                                     soldesEpargne[k] = (soldesEpargne[k] || 0) + (epargneParCompte[k] || 0) - (irregParCompte[k] || 0);
                                 });
 
+                                // v17.25 : Translocation physique vers les comptes bancaires liés
+                                epArrMois.forEach(ep => {
+                                    if (ep.linkedAccountId) {
+                                        const destKey = 'cpt_' + ep.linkedAccountId;
+                                        const amt = Number(ep.valeur || 0);
+                                        if (amt > 0 && destKey in soldesComptes) {
+                                            soldesComptes[destKey] += amt;
+                                            if (courantCptKey && courantCptKey in soldesComptes) soldesComptes[courantCptKey] -= amt;
+                                        }
+                                    }
+                                });
+                                // Chocs physiques sur comptes
+                                depMois.forEach(d => {
+                                    const src = d.sourceCompte || 'courant';
+                                    let due = Number(d.montant || 0);
+                                    const montantEffectif = due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due));
+                                    if (montantEffectif === 0) return;
+                                    if (src.startsWith('cpt_') && src in soldesComptes) {
+                                        soldesComptes[src] -= montantEffectif;
+                                    } else if (src.startsWith('ep_')) {
+                                        const epObj = epArrMois.find(e => 'ep_' + e.id === src);
+                                        if (epObj && epObj.linkedAccountId) {
+                                            const lk = 'cpt_' + epObj.linkedAccountId;
+                                            if (lk in soldesComptes) soldesComptes[lk] -= montantEffectif;
+                                        } else if (courantCptKey) {
+                                            soldesComptes[courantCptKey] -= montantEffectif;
+                                        }
+                                    } else if (courantCptKey) {
+                                        soldesComptes[courantCptKey] -= montantEffectif;
+                                    }
+                                });
+
                                 cumulEpargne += epargneMensuellePrevue;
                                 return {
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees, charges: fRest+vRest+totEpBase,
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
-                                    soldeCourant: solde_fin, detailsEpargne: { ...soldesEpargne },
+                                    soldeCourant: solde_fin, detailsEpargne: { ...soldesEpargne }, detailsComptes: { ...soldesComptes },
                                     soldeEpargneProjete: cumulEpargne,
                                     isCurrent: true, isException: false
                                 };
@@ -4284,13 +4358,45 @@
                                     soldesEpargne[k] = (soldesEpargne[k] || 0) + (epargneParCompte[k] || 0) - (irregParCompte[k] || 0);
                                 });
 
+                                // v17.25 : Translocation physique vers les comptes bancaires liés
+                                epArrMois.forEach(ep => {
+                                    if (ep.linkedAccountId) {
+                                        const destKey = 'cpt_' + ep.linkedAccountId;
+                                        const amt = Number(ep.valeur || 0);
+                                        if (amt > 0 && destKey in soldesComptes) {
+                                            soldesComptes[destKey] += amt;
+                                            if (courantCptKey && courantCptKey in soldesComptes) soldesComptes[courantCptKey] -= amt;
+                                        }
+                                    }
+                                });
+                                // Chocs physiques sur comptes
+                                depMois.forEach(d => {
+                                    const src = d.sourceCompte || 'courant';
+                                    let due = Number(d.montant || 0);
+                                    const montantEffectif = due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due));
+                                    if (montantEffectif === 0) return;
+                                    if (src.startsWith('cpt_') && src in soldesComptes) {
+                                        soldesComptes[src] -= montantEffectif;
+                                    } else if (src.startsWith('ep_')) {
+                                        const epObj = epArrMois.find(e => 'ep_' + e.id === src);
+                                        if (epObj && epObj.linkedAccountId) {
+                                            const lk = 'cpt_' + epObj.linkedAccountId;
+                                            if (lk in soldesComptes) soldesComptes[lk] -= montantEffectif;
+                                        } else if (courantCptKey) {
+                                            soldesComptes[courantCptKey] -= montantEffectif;
+                                        }
+                                    } else if (courantCptKey) {
+                                        soldesComptes[courantCptKey] -= montantEffectif;
+                                    }
+                                });
+
                                 totalMoisEcoules++;
                                 cumulEpargne += epargneMensuellePrevue;
                                 return {
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees,
                                     charges: fixMois+totVarBase+totEpBase,
                                     sortiesExceptionnelles: totalIrregRestant, detailsIrreg: detailsIrreg,
-                                    soldeCourant: curSolde, detailsEpargne: { ...soldesEpargne },
+                                    soldeCourant: curSolde, detailsEpargne: { ...soldesEpargne }, detailsComptes: { ...soldesComptes },
                                     soldeEpargneProjete: cumulEpargne,
                                     isCurrent: false, isException: (revMoisGenere !== totalRevenusBase.value) || (fixMois !== totalFixes.value)
                                 };
@@ -4324,6 +4430,26 @@
                         if (am.length > 0 && am[am.length - 1].detailsEpargne) return am[am.length - 1].detailsEpargne;
                         return {};
                     });
+
+                    // v17.25 : détails comptes du dernier mois projeté (pour tooltip)
+                    const detailsComptesFinal = computed(() => {
+                        const target = Number(anneeCibleProjection.value);
+                        const am = bilan.value.filter(b => Number(b.annee) <= target);
+                        if (am.length > 0 && am[am.length - 1].detailsComptes) return am[am.length - 1].detailsComptes;
+                        return {};
+                    });
+
+                    // v17.25 : résout le label d'un compte depuis sa clé cpt_<id>
+                    const getCompteLabel = (key) => {
+                        const id = String(key).replace('cpt_', '');
+                        const c = comptes.value.find(c => String(c.id) === id);
+                        return c ? c.label : key;
+                    };
+                    const getCompteIcone = (key) => {
+                        const id = String(key).replace('cpt_', '');
+                        const c = comptes.value.find(c => String(c.id) === id);
+                        return c ? (c.icone || '💰') : '💰';
+                    };
 
                     // v17.18 : Patrimoine Global Projeté = Cash final + Épargne générée + Bourse
                     const patrimoineProjeteGlobal = computed(() => {
@@ -4372,7 +4498,6 @@
                         const ligneCible = b.find(r => r.numMois === mCible && Number(r.annee) === aCible);
 
                         if (!ligneCible) {
-                            // Date passée ou hors périmètre → solde projeté = solde actuel
                             return comptes.value.map(c => ({
                                 ...c,
                                 soldeProjecte: Number(c.solde) || 0,
@@ -4380,44 +4505,18 @@
                             }));
                         }
 
-                        // Deltas globaux
-                        const deltaCash = ligneCible.soldeCourant - patrimoineLiquide.value;
-                        const totalEpargneActuel = comptes.value.filter(c => c.type === 'epargne').reduce((s, c) => s + (Number(c.solde) || 0), 0);
-                        const totalInvestActuel = comptes.value.filter(c => c.type === 'investissement').reduce((s, c) => s + (Number(c.solde) || 0), 0);
-
-                        // Épargne projetée : cumul d'épargne générée répartie
-                        const epargneGeneree = ligneCible.soldeEpargneProjete || 0;
-                        // Le delta épargne = épargne générée répartie proportionnellement entre epargne et investissement
-                        const totalEpInvActuel = totalEpargneActuel + totalInvestActuel;
-
-                        let deltaCashApplied = false;
-                        let deltaEpApplied = false;
-                        let deltaInvApplied = false;
+                        // v17.25 : Utilise detailsComptes du bilan pour les projections physiques
+                        const dc = ligneCible.detailsComptes || {};
 
                         return comptes.value.map(c => {
                             const soldeActuel = Number(c.solde) || 0;
-                            let soldeProjecte = soldeActuel;
-
-                            if ((c.type === 'liquide' || c.type === 'courant') && !deltaCashApplied) {
-                                // Applique le delta cash sur le premier compte liquide
-                                soldeProjecte = soldeActuel + deltaCash;
-                                deltaCashApplied = true;
-                            } else if (c.type === 'epargne' && !deltaEpApplied) {
-                                // Applique l'épargne générée proportionnellement, ou tout sur le premier
-                                const ratio = totalEpInvActuel > 0 ? soldeActuel / totalEpInvActuel : 1;
-                                soldeProjecte = soldeActuel + (epargneGeneree * ratio);
-                                deltaEpApplied = true;
-                            } else if (c.type === 'investissement' && !deltaInvApplied) {
-                                const ratio = totalEpInvActuel > 0 ? soldeActuel / totalEpInvActuel : 0;
-                                soldeProjecte = soldeActuel + (epargneGeneree * ratio);
-                                deltaInvApplied = true;
-                            }
-                            // Crédit : pas de delta appliqué
+                            const cptKey = 'cpt_' + c.id;
+                            const soldeProjecte = (cptKey in dc) ? Math.round(dc[cptKey]) : soldeActuel;
 
                             return {
                                 ...c,
-                                soldeProjecte: Math.round(soldeProjecte),
-                                delta: Math.round(soldeProjecte - soldeActuel)
+                                soldeProjecte,
+                                delta: soldeProjecte - soldeActuel
                             };
                         });
                     });
@@ -4740,7 +4839,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         newCompte, editingCompteId, editingCompte,
                         addCompte, deleteCompte, startEditCompte, saveEditCompte, cancelEditCompte, moveCompte, uploadMedia,
                         addObjectifEpargne, deleteObjectifEpargne,
-                        comptesSelectOptions
+                        comptesSelectOptions,
+                        detailsComptesFinal, getCompteLabel, getCompteIcone
                     };
                 }
             });

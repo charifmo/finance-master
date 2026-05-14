@@ -5,6 +5,19 @@ Format : [version] — date — description
 
 ---
 
+## [17.25] — 2026-05-14 — Liaison Physique Objectifs/Comptes
+
+### Refonte majeure
+- **Liaison Objectifs → Comptes** : chaque objectif d'épargne a un nouveau champ `linkedAccountId`. Un menu "🔗 Compte de rattachement" liste tous les comptes bancaires (desktop §4, CRUD Patrimoine & Objectifs, mobile).
+- **Moteur Bilan — Translocation physique** : nouveau dictionnaire `soldesComptes{}` initialisé depuis `comptes[].solde`, évolue mois par mois en parallèle de `soldesEpargne`. Pour chaque objectif lié :
+  - L'épargne mensuelle est déduite du Compte Courant et ajoutée au compte lié.
+  - Les chocs imputés sur l'objectif (`ep_*`) sont physiquement déduits du compte lié.
+- **Comptes Projetés (Time Machine)** : utilise `detailsComptes` de la ligne bilan cible au lieu de l'ancien système de deltas proportionnels → projections per-compte exactes.
+- **Tooltip Patrimoine** : affiche les soldes projetés par compte bancaire physique (`cpt_*`) avec icône et label. Fallback sur le mode enveloppes virtuelles si aucun `detailsComptes` disponible.
+- **Computed `detailsComptesFinal`** + helpers `getCompteLabel()` / `getCompteIcone()` ajoutés pour la résolution des clés `cpt_*`.
+
+---
+
 ## [17.24] — 2026-05-14 — Comptes Bancaires dans les Sélecteurs
 
 ### Nouvelle fonctionnalité
