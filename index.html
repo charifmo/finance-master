@@ -334,7 +334,7 @@
                                         <td class="p-4 text-right font-black text-lg text-blue-900">{{ formatMAD(patrimoineLiquide) }}</td>
                                         <td class="p-4 text-right text-purple-600">{{ formatMAD(0) }}</td><!-- v17.14 : cumulEpargne part de 0 — aucune épargne générée avant la projection -->
                                     </tr>
-                                    <tr v-for="(row, idx) in bilan" :key="idx" :class="['transition-colors', row.numMois === 1 && !row.isCurrent ? 'border-t-4 border-slate-300 bg-slate-50' : 'hover:bg-gray-50']">
+                                    <tr v-for="(row, idx) in bilanLignes" :key="idx" :class="['transition-colors', row.numMois === 1 && !row.isCurrent ? 'border-t-4 border-slate-300 bg-slate-50' : 'hover:bg-gray-50']">
                                         <td class="p-4 font-bold whitespace-nowrap">
                                             <div class="flex items-center gap-2">
                                                 {{ row.mois }}
@@ -1977,7 +1977,7 @@
                     </div>
 
                     <!-- Month cards -->
-                    <div v-for="(row, idx) in bilan" :key="idx"
+                    <div v-for="(row, idx) in bilanLignes" :key="idx"
                          :class="['rounded-2xl border shadow-sm mb-3 overflow-hidden', row.isCurrent ? 'border-blue-400 border-2 bg-white' : (row.numMois === 1 && !row.isCurrent ? 'border-slate-300 bg-slate-50' : 'border-gray-200 bg-white')]">
                         <!-- Header -->
                         <div class="px-4 pt-3 pb-2 flex justify-between items-center">
@@ -3324,8 +3324,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.31";
+                    const CURRENT_VERSION = "17.32";
                     const CHANGELOG = [
+                        { version: "17.32", date: "2026-05-15 — Fix Grand Livre", changes: ["FIX ANTI-PATTERN VUE : le journal des flux n'est plus muté dans une computed (side-effect). Le bilan retourne { lignes, journal } et deux computed dérivées bilanLignes/bilanJournal servent d'accesseurs.", "FIX CLÉ COURANT : _log() mappe 'courant' → cpt_<id> du compte courant physique. Les entrées du relevé correspondent maintenant à la clé cliquée dans le tooltip Patrimoine.", "RELEVÉ FONCTIONNEL : la modale lit depuis bilanJournal au lieu de historiqueFlux (ref jamais alimentée). Tous les mouvements sont maintenant visibles."] },
                         { version: "17.31", date: "2026-05-15 — Audit & CRUD", changes: ["GRAND LIVRE : traçabilité complète des flux — chaque mouvement (revenu, charge, choc, épargne) est journalisé par compte avec libellé, montant, type et solde après opération.", "RELEVÉ DE COMPTE : modale accessible en cliquant sur un nom de compte dans le tooltip Patrimoine. Affiche un tableau chronologique Débit/Crédit/Solde.", "CRUD COMPLET : boutons + Ajouter une Entrée / Charge Fixe / Charge Variable en mode édition. Boutons Supprimer et Scinder visibles uniquement en mode édition.", "FONCTIONS ajouterEntree(), ajouterChargeFixe(), ajouterChargeVariable() pour insérer des lignes par défaut avec ID unique."] },
                         { version: "17.30", date: "2026-05-14 — Bouton Supprimer Lignes", changes: ["BOUTON 🗑️ SUPPRIMER sur chaque ligne de Revenus, Charges Fixes et Charges Variables (Desktop + Mobile). Permet de nettoyer les anciennes entrées dupliquées créées par l'ancien Scinder.", "FONCTION supprimerLigneObj() : supprime une clé d'un objet (revenus/chargesFixes/chargesVariables) et déclenche la sauvegarde automatique."] },
                         { version: "17.29", date: "2026-05-14 — Scission en Sous-Catégories", changes: ["SCINDER REFACTORISÉ : la scission crée désormais des sous-catégories (parts[]) imbriquées sous l'élément parent au lieu de lignes indépendantes en bas. Chaque part a son propre label, montant et routage.", "GESTION DES PARTS : bouton ✂️ Scinder pour initialiser 2 parts, bouton + Ajouter une partie, bouton ✕ pour supprimer chaque part individuellement. Le montant parent est désactivé quand des parts existent.", "MOTEUR BILAN PARTS-AWARE : revenus, charges fixes, charges variables et chocs détectent item.parts et routent chaque sous-catégorie indépendamment. Les exceptions parent sont distribuées proportionnellement sur les parts.", "UI 8 SECTIONS : affichage imbriqué (border-l-2 coloré) pour Desktop et Mobile — Revenus (vert), Charges Fixes (orange), Charges Variables (rouge), Chocs (gris). Badge '✂️ N parties' sur le label parent."] },
@@ -3399,7 +3400,7 @@
 
                     const activeTab = ref('dashboard');
                     const modeEdition = ref(false);
-                    const historiqueFlux = ref({});
+                    const historiqueFlux = ref({}); // v17.32 : conservé pour compat mais bilanJournal est la source de vérité
                     const compteReleve = ref(null);
                     const showReleveModal = ref(false);
                     const calculationTick = ref(0);
@@ -4357,7 +4358,7 @@
                     };
                     const releveCompte = computed(() => {
                         if (!compteReleve.value) return [];
-                        return historiqueFlux.value[compteReleve.value] || [];
+                        return bilanJournal.value[compteReleve.value] || [];
                     });
                     const releveCompteLabel = computed(() => {
                         if (!compteReleve.value) return '';
@@ -4556,12 +4557,14 @@
                     // MOTEUR MULTI-ANNEES (V11.0) — v17.21 : Comptes épargne 100% dynamiques
                     const bilan = computed(() => {
                         calculationTick.value;
-                        // v17.31 : Grand Livre — journal de tous les flux par compte
+                        // v17.32 : Grand Livre — journal local, retourné avec le bilan (pas de side-effect)
                         const _journal = {};
                         const _log = (compte, mois, annee, libelle, montant, type) => {
-                            if (!_journal[compte]) _journal[compte] = [];
-                            const entries = _journal[compte];
-                            const soldeBefore = entries.length > 0 ? entries[entries.length - 1].soldeApres : (compte.startsWith('cpt_') ? (Number((comptes.value.find(c => 'cpt_'+c.id === compte) || {}).solde) || 0) : Number((soldesInitiaux.value || {})[compte] || 0));
+                            // v17.32 : mapper 'courant' vers la clé physique cpt_<id> du compte courant
+                            const cle = (compte === 'courant' && courantCptKey) ? courantCptKey : compte;
+                            if (!_journal[cle]) _journal[cle] = [];
+                            const entries = _journal[cle];
+                            const soldeBefore = entries.length > 0 ? entries[entries.length - 1].soldeApres : (cle.startsWith('cpt_') ? (Number((comptes.value.find(c => 'cpt_'+c.id === cle) || {}).solde) || 0) : Number((soldesInitiaux.value || {})[cle] || 0));
                             const soldeApres = type === 'credit' ? soldeBefore + Math.abs(montant) : soldeBefore - Math.abs(montant);
                             entries.push({ mois: nomDuMois(mois) + ' ' + annee, libelle, montant: Number(montant), type, soldeApres });
                         };
@@ -4947,21 +4950,23 @@
                                 };
                             }
                         });
-                        historiqueFlux.value = _journal;
-                        return _bilanResult;
+                        return { lignes: _bilanResult, journal: _journal };
                     });
+                    // v17.32 : Accesseurs propres — plus de side-effect dans la computed
+                    const bilanLignes = computed(() => bilan.value.lignes || []);
+                    const bilanJournal = computed(() => bilan.value.journal || {});
 
                     // v13.1 : on coupe le bilan à l'année cible de projection (sélecteur d'horizon)
                     const soldeFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
-                        const am = bilan.value.filter(b => Number(b.annee) <= target);
+                        const am = bilanLignes.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0) return am[am.length - 1].soldeCourant;
                         // Année cible antérieure au mois courant : on retombe sur le patrimoine liquide
                         return patrimoineLiquide.value;
                     });
                     const epargneTotaleFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
-                        const am = bilan.value.filter(b => Number(b.annee) <= target);
+                        const am = bilanLignes.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0) {
                             const last = am[am.length - 1];
                             // v17.21 : somme dynamique des detailsEpargne si disponible
@@ -4973,7 +4978,7 @@
                     // v17.21 : détails épargne du dernier mois projeté (pour tooltip)
                     const detailsEpargneFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
-                        const am = bilan.value.filter(b => Number(b.annee) <= target);
+                        const am = bilanLignes.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0 && am[am.length - 1].detailsEpargne) return am[am.length - 1].detailsEpargne;
                         return {};
                     });
@@ -4981,7 +4986,7 @@
                     // v17.25 : détails comptes du dernier mois projeté (pour tooltip)
                     const detailsComptesFinal = computed(() => {
                         const target = Number(anneeCibleProjection.value);
-                        const am = bilan.value.filter(b => Number(b.annee) <= target);
+                        const am = bilanLignes.value.filter(b => Number(b.annee) <= target);
                         if (am.length > 0 && am[am.length - 1].detailsComptes) return am[am.length - 1].detailsComptes;
                         return {};
                     });
@@ -5039,7 +5044,7 @@
                         calculationTick.value;
                         const mCible = Number(moisCibleProjection.value);
                         const aCible = Number(anneeCibleProjectionComptes.value);
-                        const b = bilan.value || [];
+                        const b = bilanLignes.value || [];
 
                         // Cherche la ligne bilan correspondant au mois/année cible
                         const ligneCible = b.find(r => r.numMois === mCible && Number(r.annee) === aCible);
@@ -5086,7 +5091,7 @@
 
                     const auditFinancier = computed(() => {
                         calculationTick.value;
-                        const b = bilan.value || [];
+                        const b = bilanLignes.value || [];
                         const rev = totalRevenusBase.value || 1;
                         const scores = { vert: 2, orange: 1, rouge: 0 };
 
@@ -5327,7 +5332,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
 
                     const lineChartConfig = computed(() => {
                         calculationTick.value;
-                        const b = bilan.value;
+                        const b = bilanLignes.value;
                         return { type: 'line', data: { labels: b.map(x=>x.mois), datasets: [{ label: 'Cash Flow', data: b.map(x=>x.soldeCourant), borderColor: '#3b82f6', tension: 0.4, fill: true, backgroundColor: 'rgba(59,130,246,0.05)' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } };
                     });
 
@@ -5366,7 +5371,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, historiqueFlux, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteLabel, 
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteLabel, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,

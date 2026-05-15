@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [17.32] — 2026-05-15 — Fix Grand Livre
+
+### Corrections
+- **Fix anti-pattern Vue** : le journal des flux n'est plus muté dans une `computed` (side-effect interdit). Le `bilan` retourne désormais `{ lignes, journal }` et deux computed dérivées `bilanLignes` / `bilanJournal` servent d'accesseurs propres.
+- **Fix clé courant** : `_log()` mappe `'courant'` vers `cpt_<id>` du compte courant physique. Les entrées du relevé correspondent maintenant à la clé cliquée dans le tooltip Patrimoine.
+- **Relevé fonctionnel** : la modale lit depuis `bilanJournal` au lieu de `historiqueFlux` (ref jamais alimentée). Tous les mouvements sont visibles.
+- **Références template** : `v-for="row in bilan"` → `v-for="row in bilanLignes"` (desktop + mobile).
+
+---
+
 ## [17.31] — 2026-05-15 — Audit & CRUD
 
 ### Nouveautés
