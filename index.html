@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v17.37 - Finance Master (UI SSOT Sync)</title>
+    <title>v17.38 - Finance Master (SSOT Physique & Purge Doublons)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -158,8 +158,8 @@
                                 <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
                                     <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black" :class="val < 0 ? 'text-red-400' : ''">{{ formatMAD(val) }}</span></div>
                                 </template>
-                                <!-- v17.37 : SSOT — Objectifs épargne depuis bilan -->
-                                <template v-for="(val, key) in detailsEpargneFinal" :key="'tt_'+key">
+                                <!-- v17.38 : Épargne NON liée uniquement (liée = déjà dans comptes physiques) -->
+                                <template v-for="(val, key) in epargneNonLieeFinal" :key="'tt_'+key">
                                     <div class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
                                 </template>
                                 <div class="border-t border-slate-700 pt-1.5 mt-1.5 flex justify-between"><span class="text-emerald-300 font-black">🏛️ Total</span><span class="font-black text-emerald-400">{{ formatMAD(patrimoineProjeteGlobal) }}</span></div>
@@ -3340,8 +3340,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.37";
+                    const CURRENT_VERSION = "17.38";
                     const CHANGELOG = [
+                        { version: "17.38", date: "2026-05-15 — SSOT Physique & Purge Doublons", changes: ["FIX DOUBLE-COMPTAGE : les objectifs d'épargne liés à un cpt_X (linkedAccountId) sont exclus du total patrimoine et du tooltip. Leur solde est déjà inclus dans le compte physique.", "COMPUTED epargneNonLieeFinal : filtre detailsEpargneFinal pour ne garder que les objectifs virtuels stricts (sans linkedAccountId).", "FIX SOLDE COURANT TOOLTIP : suppression de la ligne curSolde codée en dur. Le tooltip affiche tous les comptes physiques depuis detailsComptesFinal (y compris courant avec le vrai solde).", "FIX DROPDOWN DOUBLON : comptesSelectOptions filtre par type ET par id du compte courant pour éliminer le doublon 'Courant' / 'Compte Courant'.", "patrimoineProjeteGlobal = sum(comptes) + sum(épargneNonLiée). epargneTotaleFinal = sum(épargneNonLiée)."] },
                         { version: "17.37", date: "2026-05-15 — UI SSOT Sync", changes: ["ETAT FINAL BILAN : la computed bilan retourne { lignes, journal, etatFinal } avec etatFinal = { courant, comptes, epargne } — snapshot exact de l'état final du moteur.", "SSOT TOOLTIP : le cadre noir 'Patrimoine Projeté' lit STRICTEMENT depuis la dernière ligne bilan filtrée par année cible. Plus de formules parallèles.", "PATRIMOINE GLOBAL : patrimoineProjeteGlobal = sum(detailsComptes) + sum(detailsEpargne). Plus d'addition soldeFinal + epargneTotaleFinal + bourse (qui mélangeait virtuel et physique).", "SOLD FINAL : soldeFinal = sum(comptes physiques) de la dernière ligne bilan. detailsComptesFinal/detailsEpargneFinal lisent depuis _derniereLigneCible.", "TOOLTIP SIMPLIFIÉ : suppression de la branche v-else obsolète. Affichage unifié comptes + épargne + total, avec couleur rouge pour les soldes négatifs."] },
                         { version: "17.36", date: "2026-05-15 — Live Sync Pilotage-Bilan", changes: ["SYNC REVENUS : si 'Paie Globale reçue' est cochée, le mois courant ne ré-ajoute plus les revenus (déjà dans les soldes initiaux). Log 'Revenus (Déjà perçus)' à 0.", "SYNC CHARGES FIXES : le bilan du mois courant ne déduit plus le montant théorique complet. Seul le restant-à-payer (filtré par checklist Pilotage) est utilisé, avec routage parts-aware par sourceCompte. Log 'Charges fixes (Restant à payer)'.", "SYNC CHARGES VARIABLES : prorata Pilotage (semaines restantes × valeur) avec routage parts-aware. Seules les charges courant impactent curSolde, les charges routées cpt_*/ep_* sont déduites physiquement. Log 'Charges variables (Prorata Pilotage)'.", "DÉDUCTION PHYSIQUE ROUTÉE : _deduireChargesComptes utilise désormais fRestParCompte/vRestParCompte (montants restants) au lieu de fixParCompte/varParCompte (montants théoriques)."] },
                         { version: "17.35", date: "2026-05-15 — Soldes Initiaux & Fix Virements", changes: ["SOLDE INITIAL JOURNAL : chaque compte (cpt_*, ep_*) reçoit une première ligne 'SOLDE INITIAL' dans le Grand Livre avant la boucle des mois, avec le vrai solde de départ.", "FIX CRÉDIT DESTINATION ÉPARGNE : quand linkedAccountId pointe vers un compte bancaire (cpt_X), le CRÉDIT du journal va désormais sur le journal de cpt_X (pas seulement sur ep_*). Le solde physique était déjà crédité mais le relevé de compte ne le montrait pas.", "DOUBLE-ENTRÉE COMPLÈTE : Débit source → Crédit destination physique (cpt_X) OU virtuelle (ep_X) selon linkedAccountId."] },
@@ -3759,9 +3760,11 @@
                     );
 
                     // v17.24 : Comptes bancaires disponibles dans les selects source/destination
+                    // v17.38 : Filtrer le compte courant physique — 'courant' est déjà l'option par défaut codée en dur
                     const comptesSelectOptions = computed(() => {
+                        const courantId = comptes.value.find(c => c.type === 'courant')?.id;
                         return comptes.value
-                            .filter(c => c.type !== 'courant') // Courant est déjà l'option par défaut
+                            .filter(c => c.type !== 'courant' && c.id !== courantId)
                             .map(c => ({ id: c.id, label: c.label, type: c.type, icone: c.icone || '💰' }));
                     });
 
@@ -5095,6 +5098,24 @@
                         return (row && row.detailsEpargne) ? row.detailsEpargne : {};
                     });
 
+                    // v17.38 : Épargne NON liée — exclure les objectifs liés à un cpt_X (déjà comptés dans detailsComptes)
+                    const _epargneLinkedKeys = computed(() => {
+                        const linked = new Set();
+                        const d = donneesAnnuelles.value[anneeAffichage.value];
+                        if (d && d.epargne) {
+                            const arr = Array.isArray(d.epargne) ? d.epargne : [];
+                            arr.forEach(ep => { if (ep.linkedAccountId) linked.add('ep_' + ep.id); });
+                        }
+                        return linked;
+                    });
+                    const epargneNonLieeFinal = computed(() => {
+                        const all = detailsEpargneFinal.value;
+                        const linked = _epargneLinkedKeys.value;
+                        const result = {};
+                        Object.entries(all).forEach(([k, v]) => { if (!linked.has(k)) result[k] = v; });
+                        return result;
+                    });
+
                     // v17.37 : soldeFinal = somme des comptes physiques (SSOT)
                     const soldeFinal = computed(() => {
                         const comptes = detailsComptesFinal.value;
@@ -5103,8 +5124,9 @@
                         return row ? row.soldeCourant : patrimoineLiquide.value;
                     });
 
+                    // v17.38 : epargneTotaleFinal = somme des épargnes NON liées uniquement
                     const epargneTotaleFinal = computed(() => {
-                        const ep = detailsEpargneFinal.value;
+                        const ep = epargneNonLieeFinal.value;
                         if (Object.keys(ep).length > 0) return Object.values(ep).reduce((s, v) => s + (Number(v) || 0), 0);
                         const row = _derniereLigneCible.value;
                         return row ? (row.soldeEpargneProjete || 0) : 0;
@@ -5122,13 +5144,11 @@
                         return c ? (c.icone || '💰') : '💰';
                     };
 
-                    // v17.37 : Patrimoine Global Projeté = SSOT — sum(comptes physiques) + sum(épargne virtuelle)
+                    // v17.38 : Patrimoine Global = sum(comptes physiques) + sum(épargne NON liée)
                     const patrimoineProjeteGlobal = computed(() => {
-                        const comptes = detailsComptesFinal.value;
-                        const epargne = detailsEpargneFinal.value;
-                        const totalComptes = Object.values(comptes).reduce((s, v) => s + (Number(v) || 0), 0);
-                        const totalEpargne = Object.values(epargne).reduce((s, v) => s + (Number(v) || 0), 0);
-                        return totalComptes + totalEpargne;
+                        const totalComptes = Object.values(detailsComptesFinal.value).reduce((s, v) => s + (Number(v) || 0), 0);
+                        const totalEpNonLiee = Object.values(epargneNonLieeFinal.value).reduce((s, v) => s + (Number(v) || 0), 0);
+                        return totalComptes + totalEpNonLiee;
                     });
 
                     // === PROJECTION INDIVIDUELLE PAR COMPTE (v15.16) ===
@@ -5499,7 +5519,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
-                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
+                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteLabel, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,

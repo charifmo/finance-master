@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.38] — 2026-05-15 — SSOT Physique & Purge Doublons
+
+### Corrections
+- **Fix double-comptage épargne liée** : les objectifs avec `linkedAccountId` sont exclus du tooltip et du total patrimoine (leur solde est déjà dans le compte physique `cpt_X`). Nouvelle computed `epargneNonLieeFinal`.
+- **Fix solde courant tooltip** : le cadre noir affiche TOUS les comptes physiques depuis `detailsComptesFinal` (y compris courant avec le vrai solde). Plus de ligne `curSolde` codée en dur.
+- **Fix dropdown doublon** : `comptesSelectOptions` filtre par `type !== 'courant'` ET par `id !== courantId` pour éliminer le doublon "Courant" / "Compte Courant".
+- **`patrimoineProjeteGlobal`** = `sum(comptes) + sum(épargneNonLiée)`.
+- **`epargneTotaleFinal`** = `sum(épargneNonLiée)`.
+
+---
+
 ## [17.37] — 2026-05-15 — UI SSOT Sync
 
 ### Corrections
