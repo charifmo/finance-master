@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.36] — 2026-05-15 — Live Sync Pilotage-Bilan
+
+### Corrections
+- **Sync Revenus** : si "Paie Globale reçue" est cochée dans le Pilotage, le bilan du mois courant ne ré-ajoute plus les revenus (déjà dans les soldes initiaux). Log "Revenus (Déjà perçus)" à 0. Les revenus routés vers `cpt_*`/`ep_*` ne sont plus crédités en double.
+- **Sync Charges Fixes (Restant à payer)** : le mois courant ne déduit plus le total théorique. Pour chaque charge fixe, seul le montant restant (`due - paidAmount`) est retenu, avec routage parts-aware par `sourceCompte`. Seul `fRestCourant` impacte `curSolde`. Log "Charges fixes (Restant à payer)".
+- **Sync Charges Variables (Prorata Pilotage)** : le prorata (`valeur × semainesRestantes / 4.3` ou details restants) est calculé avec routage parts-aware. Seul `vRestCourant` impacte `curSolde`. Log "Charges variables (Prorata Pilotage)".
+- **Déduction physique routée** : `_deduireChargesComptes` utilise `fRestParCompte`/`vRestParCompte` (montants restants) au lieu de `fixParCompte`/`varParCompte` (théoriques complets).
+- **Journal par bloc** : les logs revenus/charges sont désormais émis dans les blocs `isCurrentMonth` / `else` séparément, avec des libellés distinctifs pour le mois courant.
+
+---
+
 ## [17.35] — 2026-05-15 — Soldes Initiaux & Fix Virements
 
 ### Nouveautés

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v17.35 - Finance Master (Soldes Initiaux & Fix Virements)</title>
+    <title>v17.36 - Finance Master (Live Sync Pilotage-Bilan)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -3346,8 +3346,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.35";
+                    const CURRENT_VERSION = "17.36";
                     const CHANGELOG = [
+                        { version: "17.36", date: "2026-05-15 — Live Sync Pilotage-Bilan", changes: ["SYNC REVENUS : si 'Paie Globale reçue' est cochée, le mois courant ne ré-ajoute plus les revenus (déjà dans les soldes initiaux). Log 'Revenus (Déjà perçus)' à 0.", "SYNC CHARGES FIXES : le bilan du mois courant ne déduit plus le montant théorique complet. Seul le restant-à-payer (filtré par checklist Pilotage) est utilisé, avec routage parts-aware par sourceCompte. Log 'Charges fixes (Restant à payer)'.", "SYNC CHARGES VARIABLES : prorata Pilotage (semaines restantes × valeur) avec routage parts-aware. Seules les charges courant impactent curSolde, les charges routées cpt_*/ep_* sont déduites physiquement. Log 'Charges variables (Prorata Pilotage)'.", "DÉDUCTION PHYSIQUE ROUTÉE : _deduireChargesComptes utilise désormais fRestParCompte/vRestParCompte (montants restants) au lieu de fixParCompte/varParCompte (montants théoriques)."] },
                         { version: "17.35", date: "2026-05-15 — Soldes Initiaux & Fix Virements", changes: ["SOLDE INITIAL JOURNAL : chaque compte (cpt_*, ep_*) reçoit une première ligne 'SOLDE INITIAL' dans le Grand Livre avant la boucle des mois, avec le vrai solde de départ.", "FIX CRÉDIT DESTINATION ÉPARGNE : quand linkedAccountId pointe vers un compte bancaire (cpt_X), le CRÉDIT du journal va désormais sur le journal de cpt_X (pas seulement sur ep_*). Le solde physique était déjà crédité mais le relevé de compte ne le montrait pas.", "DOUBLE-ENTRÉE COMPLÈTE : Débit source → Crédit destination physique (cpt_X) OU virtuelle (ep_X) selon linkedAccountId."] },
                         { version: "17.34", date: "2026-05-15 — Routage des Chocs", changes: ["FIX IRREGCOURANT : ne capture plus que les chocs sourceCompte='courant'. Les chocs routés vers cpt_X ne gonflent plus le solde courant virtuel.", "DÉDUCTION PHYSIQUE CPT : les chocs routés vers cpt_X sont collectés dans irregCptCompte{} et déduits de soldesComptes. totalIrregRestant inclut courant+ep+cpt pour l'affichage.", "JOURNAL INDIVIDUEL : chaque choc est loggué individuellement ('Choc : NomDuChoc') dans le relevé de son compte de prélèvement réel, au lieu d'un bloc 'Flux exceptionnels' agrégé."] },
                         { version: "17.33", date: "2026-05-15 — Virements Inter-comptes", changes: ["SOURCECOMPTE ÉPARGNE : chaque objectif d'épargne a un champ sourceCompte (De: Courant/Compte bancaire) en plus du linkedAccountId (Vers: destination). UI 'De → Vers' sur Desktop, Mobile et Paramètres.", "MOTEUR BILAN : l'épargne prélevée sur 'courant' impacte curSolde (epCourant), les autres sources sont déduites physiquement de soldesComptes. Les virements liés alimentent le compte destination.", "DOUBLE-ENTRÉE JOURNAL : chaque virement d'épargne génère 2 logs — un DÉBIT sur le compte source ('Virement vers X') et un CRÉDIT sur l'objectif destination ('Virement depuis Y')."] },
@@ -4677,9 +4678,7 @@
                                 }
                             });
                             const revMoisGenere = revCourant + Object.values(revParCompte).reduce((s, v) => s + v, 0);
-                            // v17.31 : Log revenus
-                            if (revCourant > 0) _log('courant', mNum, aNum, 'Revenus courant', revCourant, 'credit');
-                            Object.entries(revParCompte).forEach(([dest, amt]) => { if (amt > 0) _log(dest, mNum, aNum, 'Revenus versés', amt, 'credit'); });
+                            // v17.36 : Les logs revenus sont maintenant émis dans les blocs isCurrentMonth / else séparément
                             // v17.27 : Ventilation des charges fixes par sourceCompte
                             let fixCourant = 0;
                             const fixParCompte = {};
@@ -4726,11 +4725,7 @@
                                 }
                             });
                             const totVarBase = varCourant + Object.values(varParCompte).reduce((s, v) => s + v, 0);
-                            // v17.31 : Log charges
-                            if (fixCourant > 0) _log('courant', mNum, aNum, 'Charges fixes', fixCourant, 'debit');
-                            Object.entries(fixParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges fixes', amt, 'debit'); });
-                            if (varCourant > 0) _log('courant', mNum, aNum, 'Charges variables', varCourant, 'debit');
-                            Object.entries(varParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges variables', amt, 'debit'); });
+                            // v17.36 : Les logs charges sont maintenant émis dans les blocs isCurrentMonth / else séparément
                             const _ep = dataAnnee.epargne;
                             const epArrMois = Array.isArray(_ep) ? _ep : Object.entries(_ep || {}).map(([k,v]) => ({...v, id: k}));
                             const totEpBase = epArrMois.reduce((sum, obj) => sum + Number(obj.valeur || 0), 0);
@@ -4820,41 +4815,95 @@
                             const detailsIrreg = depMois.filter(d => (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
 
                             if (isCurrentMonth) {
-                                let fRest = 0;
+                                const salaireRecu = (soldesInitiaux.value || {}).salaireRecu;
+
+                                // v17.36 : ═══ REVENUS — Sync Pilotage ═══
+                                // Si paie déjà reçue → revenus déjà dans les soldes initiaux, ne pas ré-ajouter
+                                if (!salaireRecu) {
+                                    if (revCourant > 0) _log('courant', mNum, aNum, 'Revenus courant', revCourant, 'credit');
+                                    Object.entries(revParCompte).forEach(([dest, amt]) => { if (amt > 0) _log(dest, mNum, aNum, 'Revenus versés', amt, 'credit'); });
+                                    Object.entries(revParCompte).forEach(([dest, amt]) => {
+                                        if (amt <= 0) return;
+                                        if (dest.startsWith('cpt_') && dest in soldesComptes) { soldesComptes[dest] += amt; }
+                                        else if (dest.startsWith('ep_') && dest in soldesEpargne) { soldesEpargne[dest] += amt; }
+                                    });
+                                } else {
+                                    _log('courant', mNum, aNum, 'Revenus (Déjà perçus)', 0, 'credit');
+                                }
+
+                                // v17.36 : ═══ CHARGES FIXES — Restant à payer avec routage ═══
+                                let fRestCourant = 0;
+                                const fRestParCompte = {};
                                 Object.values(dataAnnee.chargesFixes || {}).forEach(f => {
                                     let due = getDueFixe(f, aNum);
-                                    fRest += Math.max(0, due - getPaidAmount(f, due));
+                                    let remaining = Math.max(0, due - getPaidAmount(f, due));
+                                    if (remaining <= 0) return;
+                                    if (f.parts && f.parts.length > 0) {
+                                        const partsSum = f.parts.reduce((s, p) => s + Number(p.valeur || 0), 0);
+                                        const ratio = partsSum > 0 ? remaining / partsSum : 0;
+                                        f.parts.forEach(p => {
+                                            const pv = Number(p.valeur || 0) * ratio;
+                                            const src = p.sourceCompte || 'courant';
+                                            if (src === 'courant') { fRestCourant += pv; }
+                                            else { fRestParCompte[src] = (fRestParCompte[src] || 0) + pv; }
+                                        });
+                                    } else {
+                                        const src = (f || {}).sourceCompte || 'courant';
+                                        if (src === 'courant') { fRestCourant += remaining; }
+                                        else { fRestParCompte[src] = (fRestParCompte[src] || 0) + remaining; }
+                                    }
                                 });
+                                const fRest = fRestCourant + Object.values(fRestParCompte).reduce((s, v) => s + v, 0);
+                                if (fRestCourant > 0) _log('courant', mNum, aNum, 'Charges fixes (Restant à payer)', fRestCourant, 'debit');
+                                Object.entries(fRestParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges fixes (Restant)', amt, 'debit'); });
 
+                                // v17.36 : ═══ CHARGES VARIABLES — Prorata Pilotage avec routage ═══
                                 const semRest = Number((soldesInitiaux.value || {}).semainesRestantes || 0);
                                 const rConso = semRest / 4.3;
-
-                                let vRest = Object.values(dataAnnee.chargesVariables || {}).reduce((acc, curr) => {
-                                    if (curr?.periode === 'semaine') return acc + (Number(curr?.valeur||0) * semRest);
-                                    else {
-                                        if (curr?.details && curr.details.length > 0) return acc + curr.details.reduce((sum, d) => sum + Math.max(0, Number(d.montant||0) - getPaidAmount(d, Number(d.montant||0))), 0);
-                                        return acc + Number(curr?.valeur||0) * rConso;
+                                let vRestCourant = 0;
+                                const vRestParCompte = {};
+                                Object.values(dataAnnee.chargesVariables || {}).forEach(curr => {
+                                    let remaining;
+                                    if (curr?.periode === 'semaine') {
+                                        remaining = Number(curr?.valeur || 0) * semRest;
+                                    } else {
+                                        if (curr?.details && curr.details.length > 0) {
+                                            remaining = curr.details.reduce((sum, d) => sum + Math.max(0, Number(d.montant || 0) - getPaidAmount(d, Number(d.montant || 0))), 0);
+                                        } else {
+                                            remaining = Number(curr?.valeur || 0) * rConso;
+                                        }
                                     }
-                                }, 0);
-
-                                // v17.26 : Routage des revenus vers comptes spécifiques
-                                const revCourantApplique = decalagePaie ? 0 : revCourant;
-                                Object.entries(revParCompte).forEach(([dest, amt]) => {
-                                    if (amt <= 0) return;
-                                    if (dest.startsWith('cpt_') && dest in soldesComptes) { soldesComptes[dest] += amt; }
-                                    else if (dest.startsWith('ep_') && dest in soldesEpargne) { soldesEpargne[dest] += amt; }
+                                    if (remaining <= 0) return;
+                                    if (curr.parts && curr.parts.length > 0) {
+                                        const partsSum = curr.parts.reduce((s, p) => s + Number(p.valeur || 0), 0);
+                                        const ratio = partsSum > 0 ? remaining / partsSum : 0;
+                                        curr.parts.forEach(p => {
+                                            const pv = Number(p.valeur || 0) * ratio;
+                                            const src = p.sourceCompte || 'courant';
+                                            if (src === 'courant') { vRestCourant += pv; }
+                                            else { vRestParCompte[src] = (vRestParCompte[src] || 0) + pv; }
+                                        });
+                                    } else {
+                                        const src = (curr || {}).sourceCompte || 'courant';
+                                        if (src === 'courant') { vRestCourant += remaining; }
+                                        else { vRestParCompte[src] = (vRestParCompte[src] || 0) + remaining; }
+                                    }
                                 });
+                                const vRest = vRestCourant + Object.values(vRestParCompte).reduce((s, v) => s + v, 0);
+                                if (vRestCourant > 0) _log('courant', mNum, aNum, 'Charges variables (Prorata Pilotage)', vRestCourant, 'debit');
+                                Object.entries(vRestParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges variables (Prorata)', amt, 'debit'); });
 
+                                // v17.36 : ═══ SOLDE FIN — uniquement charges courant ═══
                                 if (decalagePaie) {
                                     entreesAppliquees = 0;
-                                    solde_fin = curSolde - fRest - vRest - epCourant - irregCourant; // v17.33 : epCourant au lieu de totEpBase
-                                    if ((soldesInitiaux.value || {}).salaireRecu) revMoisPrecedent = 0;
+                                    solde_fin = curSolde - fRestCourant - vRestCourant - epCourant - irregCourant;
+                                    if (salaireRecu) revMoisPrecedent = 0;
                                     else revMoisPrecedent = revMoisGenere;
                                     curSolde = solde_fin;
                                 } else {
                                     entreesAppliquees = revMoisGenere;
-                                    solde_fin = curSolde - fRest - vRest - epCourant - irregCourant; // v17.33 : epCourant au lieu de totEpBase
-                                    if (!(soldesInitiaux.value || {}).salaireRecu) solde_fin += revCourant;
+                                    solde_fin = curSolde - fRestCourant - vRestCourant - epCourant - irregCourant;
+                                    if (!salaireRecu) solde_fin += revCourant;
                                     curSolde = solde_fin;
                                 }
 
@@ -4869,15 +4918,12 @@
                                     if (amt <= 0) return;
                                     const src = ep.sourceCompte || 'courant';
                                     const srcKey = (src === 'courant') ? courantCptKey : src;
-                                    // Déduire du compte source physique
                                     if (srcKey && srcKey in soldesComptes) soldesComptes[srcKey] -= amt;
-                                    // Ajouter au compte destination lié
                                     if (ep.linkedAccountId) {
                                         const destKey = 'cpt_' + ep.linkedAccountId;
                                         if (destKey in soldesComptes) soldesComptes[destKey] += amt;
                                     }
                                 });
-                                // Note v17.33 : les déductions physiques sont gérées dans la boucle epArrMois ci-dessus
                                 // Chocs physiques sur comptes (v17.29 : parts-aware)
                                 depMoisExpanded.forEach(d => {
                                     const src = d.sourceCompte || 'courant';
@@ -4898,7 +4944,7 @@
                                         soldesComptes[courantCptKey] -= montantEffectif;
                                     }
                                 });
-                                // v17.27 : Déduction physique des charges routées sur comptes spécifiques
+                                // v17.36 : Déduction physique des charges RESTANTES routées
                                 const _deduireChargesComptes = (parCompte) => {
                                     Object.entries(parCompte).forEach(([src, amt]) => {
                                         if (amt <= 0) return;
@@ -4911,8 +4957,8 @@
                                         }
                                     });
                                 };
-                                _deduireChargesComptes(fixParCompte);
-                                _deduireChargesComptes(varParCompte);
+                                _deduireChargesComptes(fRestParCompte);
+                                _deduireChargesComptes(vRestParCompte);
 
                                 cumulEpargne += epargneMensuellePrevue;
                                 return {
@@ -4924,6 +4970,14 @@
                                 };
                             }
                             else {
+                                // v17.36 : Logs théoriques pour mois futurs
+                                if (revCourant > 0) _log('courant', mNum, aNum, 'Revenus courant', revCourant, 'credit');
+                                Object.entries(revParCompte).forEach(([dest, amt]) => { if (amt > 0) _log(dest, mNum, aNum, 'Revenus versés', amt, 'credit'); });
+                                if (fixCourant > 0) _log('courant', mNum, aNum, 'Charges fixes', fixCourant, 'debit');
+                                Object.entries(fixParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges fixes', amt, 'debit'); });
+                                if (varCourant > 0) _log('courant', mNum, aNum, 'Charges variables', varCourant, 'debit');
+                                Object.entries(varParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges variables', amt, 'debit'); });
+
                                 // v17.26 : Routage des revenus vers comptes spécifiques (mois futurs)
                                 Object.entries(revParCompte).forEach(([dest, amt]) => {
                                     if (amt <= 0) return;
