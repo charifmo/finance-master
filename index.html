@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finance Master - Vision Multi-Années v11.0 (Merged Ultimate)</title>
+    <title>v17.35 - Finance Master (Soldes Initiaux & Fix Virements)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -3306,12 +3306,12 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(e, i) in releveCompte" :key="i" class="border-b border-gray-100 hover:bg-gray-50">
+                            <tr v-for="(e, i) in releveCompte" :key="i" :class="e.type === 'initial' ? 'border-b-2 border-blue-300 bg-blue-50' : 'border-b border-gray-100 hover:bg-gray-50'">
                                 <td class="p-2 font-bold text-gray-600 whitespace-nowrap">{{ e.mois }}</td>
-                                <td class="p-2 text-gray-700">{{ e.libelle }}</td>
+                                <td class="p-2" :class="e.type === 'initial' ? 'font-black text-blue-700 uppercase text-xs tracking-wider' : 'text-gray-700'">{{ e.libelle }}</td>
                                 <td class="p-2 text-right font-bold text-red-500">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
                                 <td class="p-2 text-right font-bold text-green-600">{{ e.type === 'credit' ? formatMAD(e.montant) : '' }}</td>
-                                <td class="p-2 text-right font-black">{{ formatMAD(e.soldeApres) }}</td>
+                                <td class="p-2 text-right font-black" :class="e.type === 'initial' ? 'text-blue-700' : ''">{{ formatMAD(e.soldeApres) }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -3346,8 +3346,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.34";
+                    const CURRENT_VERSION = "17.35";
                     const CHANGELOG = [
+                        { version: "17.35", date: "2026-05-15 — Soldes Initiaux & Fix Virements", changes: ["SOLDE INITIAL JOURNAL : chaque compte (cpt_*, ep_*) reçoit une première ligne 'SOLDE INITIAL' dans le Grand Livre avant la boucle des mois, avec le vrai solde de départ.", "FIX CRÉDIT DESTINATION ÉPARGNE : quand linkedAccountId pointe vers un compte bancaire (cpt_X), le CRÉDIT du journal va désormais sur le journal de cpt_X (pas seulement sur ep_*). Le solde physique était déjà crédité mais le relevé de compte ne le montrait pas.", "DOUBLE-ENTRÉE COMPLÈTE : Débit source → Crédit destination physique (cpt_X) OU virtuelle (ep_X) selon linkedAccountId."] },
                         { version: "17.34", date: "2026-05-15 — Routage des Chocs", changes: ["FIX IRREGCOURANT : ne capture plus que les chocs sourceCompte='courant'. Les chocs routés vers cpt_X ne gonflent plus le solde courant virtuel.", "DÉDUCTION PHYSIQUE CPT : les chocs routés vers cpt_X sont collectés dans irregCptCompte{} et déduits de soldesComptes. totalIrregRestant inclut courant+ep+cpt pour l'affichage.", "JOURNAL INDIVIDUEL : chaque choc est loggué individuellement ('Choc : NomDuChoc') dans le relevé de son compte de prélèvement réel, au lieu d'un bloc 'Flux exceptionnels' agrégé."] },
                         { version: "17.33", date: "2026-05-15 — Virements Inter-comptes", changes: ["SOURCECOMPTE ÉPARGNE : chaque objectif d'épargne a un champ sourceCompte (De: Courant/Compte bancaire) en plus du linkedAccountId (Vers: destination). UI 'De → Vers' sur Desktop, Mobile et Paramètres.", "MOTEUR BILAN : l'épargne prélevée sur 'courant' impacte curSolde (epCourant), les autres sources sont déduites physiquement de soldesComptes. Les virements liés alimentent le compte destination.", "DOUBLE-ENTRÉE JOURNAL : chaque virement d'épargne génère 2 logs — un DÉBIT sur le compte source ('Virement vers X') et un CRÉDIT sur l'objectif destination ('Virement depuis Y')."] },
                         { version: "17.32", date: "2026-05-15 — Fix Grand Livre", changes: ["FIX ANTI-PATTERN VUE : le journal des flux n'est plus muté dans une computed (side-effect). Le bilan retourne { lignes, journal } et deux computed dérivées bilanLignes/bilanJournal servent d'accesseurs.", "FIX CLÉ COURANT : _log() mappe 'courant' → cpt_<id> du compte courant physique. Les entrées du relevé correspondent maintenant à la clé cliquée dans le tooltip Patrimoine.", "RELEVÉ FONCTIONNEL : la modale lit depuis bilanJournal au lieu de historiqueFlux (ref jamais alimentée). Tous les mouvements sont maintenant visibles."] },
@@ -4621,6 +4622,20 @@
 
                         const maxAnnee = Math.max(...anneesDisponibles.value);
 
+                        // v17.35 : Injection SOLDE INITIAL dans le journal de chaque compte connu
+                        comptes.value.forEach(c => {
+                            const cle = 'cpt_' + c.id;
+                            const soldeInit = Number(c.solde) || 0;
+                            if (!_journal[cle]) _journal[cle] = [];
+                            _journal[cle].push({ mois: '—', libelle: 'SOLDE INITIAL', montant: soldeInit, type: 'initial', soldeApres: soldeInit });
+                        });
+                        epArr.forEach(ep => {
+                            const cle = 'ep_' + ep.id;
+                            const soldeInit = Number((soldesInitiaux.value || {})[cle] || 0);
+                            if (!_journal[cle]) _journal[cle] = [];
+                            _journal[cle].push({ mois: '—', libelle: 'SOLDE INITIAL', montant: soldeInit, type: 'initial', soldeApres: soldeInit });
+                        });
+
                         let periods = [];
                         for(let a = anneeActuelle; a <= maxAnnee; a++) {
                             if (!donneesAnnuelles.value[a]) continue;
@@ -4760,12 +4775,13 @@
                                 else { epSourceParCompte[src] = (epSourceParCompte[src] || 0) + amt; }
                                 // v17.23 : enregistrer dynamiquement les nouvelles clés épargne dans le dictionnaire
                                 if (!(k in soldesEpargne)) soldesEpargne[k] = Number((soldesInitiaux.value || {})[k] || 0);
-                                // v17.33 : Double-entrée journal — Débit source + Crédit destination
+                                // v17.35 : Double-entrée journal — Débit source + Crédit destination (physique si liée)
                                 if (amt > 0) {
+                                    const destCle = ep.linkedAccountId ? 'cpt_' + ep.linkedAccountId : k;
                                     const destLabel = ep.linkedAccountId ? getCompteLabel('cpt_' + ep.linkedAccountId) : (ep.nom || k);
                                     const srcLabel = src === 'courant' ? 'Compte Courant' : getCompteLabel(src);
                                     _log(src, mNum, aNum, 'Virement vers ' + destLabel, amt, 'debit');
-                                    _log(k, mNum, aNum, 'Virement depuis ' + srcLabel, amt, 'credit');
+                                    _log(destCle, mNum, aNum, 'Virement depuis ' + srcLabel, amt, 'credit');
                                 }
                             });
                             let entreesAppliquees = 0; let solde_fin = 0;

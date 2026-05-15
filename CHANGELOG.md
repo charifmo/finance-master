@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.35] — 2026-05-15 — Soldes Initiaux & Fix Virements
+
+### Nouveautés
+- **SOLDE INITIAL dans le Journal** : chaque compte (`cpt_*`, `ep_*`) reçoit une première ligne "SOLDE INITIAL" dans le Grand Livre avant la boucle des mois, affichant le vrai solde de départ. Ligne stylée en bleu avec bordure distincte.
+
+### Corrections
+- **Fix crédit destination épargne** : quand un objectif d'épargne a un `linkedAccountId` pointant vers un compte bancaire (`cpt_X`), le CRÉDIT du journal va désormais sur le journal de `cpt_X` (au lieu de `ep_*`). Le relevé de compte du compte bancaire de destination affiche enfin les virements reçus.
+- **Double-entrée complète** : Débit sur source → Crédit sur destination physique (`cpt_X`) OU virtuelle (`ep_X`) selon la présence de `linkedAccountId`.
+
+---
+
 ## [17.34] — 2026-05-15 — Routage des Chocs
 
 ### Corrections
