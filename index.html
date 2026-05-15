@@ -899,6 +899,9 @@
                             </h2>
                             <p class="text-sm text-gray-500">Planifiez vos dépenses lourdes de cette année spécifique.</p>
                         </div>
+                        <button @click="ouvrirReleve('__global__')" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-md transition-all">
+                            📋 Historique Comptes
+                        </button>
                     </div>
 
                     <div class="space-y-4">
@@ -3282,10 +3285,10 @@
         </div>
 
         <!-- v17.31 : Modale Relevé de Compte -->
-        <!-- v17.42 : Modal Relevé multi-onglets + global + filtre mois/année -->
+        <!-- v17.43 : Modal Relevé multi-onglets + global + mode évolution -->
         <div v-if="showReleveModal" class="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center p-4" @click.self="fermerReleve()">
             <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
-                <!-- Header + Filtres -->
+                <!-- Header : titre + filtres + fermer -->
                 <div class="p-4 pb-3 border-b bg-gradient-to-r from-gray-50 to-white rounded-t-2xl">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-base font-black uppercase tracking-wide text-gray-800">📋 Relevé de Comptes</h3>
@@ -3298,8 +3301,13 @@
                                 <option :value="0">Tous mois</option>
                                 <option v-for="m in releveMoisDisponibles" :key="m.num" :value="m.num">{{ m.nom }}</option>
                             </select>
-                            <span class="text-[10px] text-gray-400 font-bold ml-1">{{ releveCompte.length }}</span>
-                            <button @click="fermerReleve()" class="text-gray-400 hover:text-gray-600 text-xl font-bold leading-none ml-2">&times;</button>
+                            <!-- Toggle Transactions / Évolution -->
+                            <button @click="releveModeEvolution = !releveModeEvolution"
+                                :class="releveModeEvolution ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                                class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border border-gray-200" :title="releveModeEvolution ? 'Voir les transactions' : 'Voir évolution des soldes'">
+                                {{ releveModeEvolution ? '📈 Soldes' : '📋 Détail' }}
+                            </button>
+                            <button @click="fermerReleve()" class="text-gray-400 hover:text-gray-600 text-xl font-bold leading-none ml-1">&times;</button>
                         </div>
                     </div>
                     <!-- Onglets en grille wrap -->
@@ -3316,8 +3324,8 @@
                         </button>
                     </div>
                 </div>
-                <!-- Tableau -->
-                <div class="flex-1 overflow-auto">
+                <!-- Tableau : Mode Transactions -->
+                <div v-if="!releveModeEvolution" class="flex-1 overflow-auto">
                     <table v-if="releveCompte.length > 0" class="w-full text-sm">
                         <thead class="bg-gray-50 sticky top-0 z-10">
                             <tr>
@@ -3342,6 +3350,28 @@
                         </tbody>
                     </table>
                     <p v-else class="text-center text-gray-400 py-8 font-bold">Aucun mouvement enregistré.</p>
+                </div>
+                <!-- Tableau : Mode Évolution des Soldes -->
+                <div v-else class="flex-1 overflow-auto">
+                    <table v-if="releveEvolution.length > 0" class="w-full text-sm">
+                        <thead class="bg-emerald-50 sticky top-0 z-10">
+                            <tr>
+                                <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Mois</th>
+                                <th v-if="releveOnglet === '__global__'" class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
+                                <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-emerald-600">Solde</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(e, i) in releveEvolution" :key="i" class="border-b border-gray-100 hover:bg-emerald-50/50">
+                                <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
+                                <td v-if="releveOnglet === '__global__'" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">
+                                    {{ e._compteIcon }} {{ e._compteLabel }}
+                                </td>
+                                <td class="p-2 text-right font-black text-sm" :class="e.solde < 0 ? 'text-red-600' : 'text-emerald-700'">{{ formatMAD(e.solde) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-else class="text-center text-gray-400 py-8 font-bold">Aucune donnée de projection.</p>
                 </div>
             </div>
         </div>
@@ -3372,8 +3402,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.42";
+                    const CURRENT_VERSION = "17.43";
                     const CHANGELOG = [
+                        { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
                         { version: "17.41", date: "2026-05-15 — Journal-Sync SSOT Courant", changes: ["FIX DÉFINITIF TOOLTIP/RELEVÉ : abandon de l'approche delta (curSolde - before) qui héritait le biais de patrimoineLiquide (somme de TOUS les comptes).", "JOURNAL-SYNC : soldesComptes[courantCptKey] = dernier soldeApres du journal. Le journal chaîne SOLDE INITIAL → crédits → débits exactement comme le relevé. Le tooltip lit maintenant la même valeur.", "AUTO-SWEEP LOGGING : quand le surplus est redirigé vers une épargne (destSurplus), un débit 'Auto-Sweep surplus' est enregistré dans le journal courant. Le relevé affiche désormais cette opération.", "Appliqué aux 2 blocs (isCurrentMonth + mois futurs). Aucune dépendance à curSolde pour le solde physique du courant."] },
                         { version: "17.40", date: "2026-05-15 — Delta Sync Courant", changes: ["FIX DÉCALAGE TOOLTIP/RELEVÉ : curSolde démarrait à patrimoineLiquide (100 900 = somme de TOUS les comptes), puis était copié dans soldesComptes[courant] → le tooltip affichait ~101 788 au lieu de 501.", "DELTA au lieu de SYNC : soldesComptes[courantCptKey] += (curSolde - curSoldeBefore) au lieu de = curSolde. Le compte courant physique garde son vrai solde initial et reçoit les mêmes variations mensuelles que curSolde.", "Appliqué aux 2 blocs (isCurrentMonth + mois futurs). Le relevé et le tooltip montrent désormais le même solde pour le Compte Courant."] },
@@ -4407,22 +4438,32 @@
                         return item.parts.reduce((s, p) => s + Number(p[valField] || 0), 0);
                     };
 
-                    // v17.41 : Relevé de compte — onglets multi-comptes + global + filtre mois/année
-                    const releveOnglet = ref(null); // clé du compte actif ou '__global__'
-                    const releveMoisFiltre = ref(0); // 0 = tous les mois
-                    const releveAnneeFiltre = ref(0); // 0 = toutes les années
+                    // v17.43 : Relevé de compte — onglets multi-comptes + global + filtre mois/année + mode évolution
+                    const releveOnglet = ref(null);
+                    const releveMoisFiltre = ref(0);
+                    const releveAnneeFiltre = ref(0);
+                    const releveModeEvolution = ref(false); // true = n'afficher que l'évolution des soldes
                     const releveOnglets = computed(() => {
                         const j = bilanJournal.value;
                         if (!j || Object.keys(j).length === 0) return [];
                         const tabs = [];
-                        // Comptes physiques d'abord (cpt_*)
+                        // v17.43 : Set des ep_* liés à un compte physique (dédoublonner)
+                        const linkedEpKeys = new Set();
+                        Object.values(donneesAnnuelles.value).forEach(da => {
+                            (Array.isArray(da.epargne) ? da.epargne : []).forEach(ep => {
+                                if (ep.linkedAccountId) linkedEpKeys.add('ep_' + ep.id);
+                            });
+                        });
+                        // Comptes physiques (cpt_*)
                         comptes.value.forEach(c => {
                             const k = 'cpt_' + c.id;
                             if (j[k] && j[k].length > 0) tabs.push({ key: k, label: c.nom || c.label || k, icon: c.icone || (c.type === 'courant' ? '💳' : c.type === 'epargne' ? '🏦' : '📈'), type: 'cpt' });
                         });
-                        // Épargne virtuelle (ep_*)
+                        // v17.43 : Épargne virtuelle UNIQUEMENT si NON liée ET avec des mouvements réels (pas juste SOLDE INITIAL)
                         Object.keys(j).filter(k => k.startsWith('ep_')).forEach(k => {
-                            if (j[k] && j[k].length > 0) tabs.push({ key: k, label: getEpargneLabel(k), icon: '🎯', type: 'ep' });
+                            if (linkedEpKeys.has(k)) return;
+                            const realEntries = j[k].filter(e => e.type !== 'initial');
+                            if (realEntries.length > 0) tabs.push({ key: k, label: getEpargneLabel(k), icon: '🎯', type: 'ep' });
                         });
                         return tabs;
                     });
@@ -4500,6 +4541,31 @@
                         if (tab.startsWith('cpt_')) return getCompteLabel(tab);
                         if (tab.startsWith('ep_')) return '🎯 ' + getEpargneLabel(tab);
                         return tab;
+                    });
+                    // v17.43 : Mode Évolution — snapshot des soldes par mois (depuis bilanLignes)
+                    const releveEvolution = computed(() => {
+                        const lignes = bilanLignes.value;
+                        if (!lignes || lignes.length === 0) return [];
+                        const tab = releveOnglet.value;
+                        const aF = releveAnneeFiltre.value;
+                        const mF = releveMoisFiltre.value;
+                        const onglets = releveOnglets.value;
+                        const rows = [];
+                        lignes.forEach(row => {
+                            if (aF && Number(row.annee) !== aF) return;
+                            if (mF && Number(row.numMois) !== mF) return;
+                            if (tab === '__global__') {
+                                // Une ligne par compte pour ce mois
+                                onglets.forEach(t => {
+                                    const val = t.type === 'cpt' ? ((row.detailsComptes || {})[t.key] || 0) : ((row.detailsEpargne || {})[t.key] || 0);
+                                    rows.push({ mois: row.mois, _compteLabel: t.label, _compteIcon: t.icon, _compteKey: t.key, solde: val });
+                                });
+                            } else {
+                                const val = tab.startsWith('cpt_') ? ((row.detailsComptes || {})[tab] || 0) : ((row.detailsEpargne || {})[tab] || 0);
+                                rows.push({ mois: row.mois, solde: val });
+                            }
+                        });
+                        return rows;
                     });
 
                     const deplacerDepense = (dep) => {
@@ -5638,7 +5704,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteLabel, releveOnglet, releveOnglets, releveMoisFiltre, releveAnneeFiltre, releveAnneesDisponibles, releveMoisDisponibles, 
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteLabel, releveOnglet, releveOnglets, releveMoisFiltre, releveAnneeFiltre, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
