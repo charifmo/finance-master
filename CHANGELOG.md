@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [17.39] — 2026-05-15 — Unification des Flux
+
+### Corrections
+- **Stop double déduction** : `soldesComptes[courantCptKey]` n'est PLUS muté directement par les boucles de translocation, chocs ou charges. Toutes les déductions courant passent exclusivement par `curSolde`.
+- **Sync fin de mois** : `soldesComptes[courantCptKey] = curSolde` en fin de chaque mois (isCurrentMonth + futurs). Le relevé de compte et le tooltip lisent la même valeur.
+- **Skip courantCptKey** : toutes les boucles physiques (épargne translocation, chocs, charges routées, revenus routés) excluent `courantCptKey` avec `src !== courantCptKey` / `dest !== courantCptKey`.
+- **Résultat** : le solde courant du relevé (-1 299 DH) = solde courant du tooltip = `curSolde` du moteur.
+
+---
+
 ## [17.38] — 2026-05-15 — SSOT Physique & Purge Doublons
 
 ### Corrections
