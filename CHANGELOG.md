@@ -5,6 +5,15 @@ Format : [version] — date — description
 
 ---
 
+## [17.33] — 2026-05-15 — Virements Inter-comptes
+
+### Nouveautés
+- **Source épargne** : chaque objectif d'épargne dispose d'un champ `sourceCompte` (De : Courant / Compte bancaire) en plus du `linkedAccountId` (Vers : destination). Interface "De → Vers" sur Desktop, Mobile et Paramètres.
+- **Moteur bilan** : l'épargne prélevée sur `courant` impacte `curSolde` (`epCourant`), les sources `cpt_*` sont déduites physiquement de `soldesComptes`. Les virements liés alimentent le compte destination.
+- **Double-entrée journal** : chaque virement d'épargne génère 2 logs — un DÉBIT sur le source ("Virement vers X") et un CRÉDIT sur la destination ("Virement depuis Y").
+
+---
+
 ## [17.32] — 2026-05-15 — Fix Grand Livre
 
 ### Corrections
