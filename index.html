@@ -157,13 +157,13 @@
                                 <!-- v17.25 : Affichage per-compte physique -->
                                 <template v-if="Object.keys(detailsComptesFinal).length > 0">
                                     <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
-                                        <div class="flex justify-between"><span class="text-blue-300 font-bold">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                        <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
                                     </template>
                                 </template>
                                 <template v-else>
-                                    <div class="flex justify-between"><span class="text-blue-300 font-bold">💰 Compte Courant</span><span class="font-black">{{ formatMAD(soldeFinal) }}</span></div>
+                                    <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve('courant')">💰 Compte Courant</span><span class="font-black">{{ formatMAD(soldeFinal) }}</span></div>
                                     <template v-for="(val, key) in detailsEpargneFinal" :key="'tt_'+key">
-                                        <div class="flex justify-between"><span class="text-purple-300 font-bold">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                        <div class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
                                     </template>
                                     <div v-if="Object.keys(detailsEpargneFinal).length === 0" class="flex justify-between"><span class="text-purple-300 font-bold">🏦 Épargne</span><span class="font-black">{{ formatMAD(epargneTotaleFinal) }}</span></div>
                                     <div class="flex justify-between"><span class="text-amber-300 font-bold">📈 Bourse</span><span class="font-black">{{ formatMAD(soldesInitiaux.bourse || 0) }}</span></div>
@@ -511,8 +511,8 @@
                                         <button @click="item.showExceptions = !item.showExceptions" class="text-[10px] text-blue-500 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
                                             {{ item.showExceptions ? '➖ Masquer options' : '➕ Suspendre / Modifier Période' }}
                                         </button>
-                                        <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
-                                        <button @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette entrée">🗑️ Supprimer</button>
+                                        <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
+                                        <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette entrée">🗑️ Supprimer</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3">
@@ -564,6 +564,7 @@
                                 <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
                             </div>
                         </div>
+                        <button v-if="modeEdition" @click="ajouterEntree()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-green-600 bg-green-50 border-2 border-dashed border-green-300 rounded-xl hover:bg-green-100 transition-colors">+ Ajouter une Entrée</button>
                         </div><!-- /cfo-collapsible-body revenus -->
                     </div><!-- /param-revenus -->
 
@@ -583,8 +584,8 @@
                                         <button @click="item.showExceptions = !item.showExceptions" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-orange-50 px-2 py-0.5 rounded">
                                             {{ item.showExceptions ? '➖ Masquer options' : '➕ Gérer Périodes' }}
                                         </button>
-                                        <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
-                                        <button @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
+                                        <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
+                                        <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3">
@@ -635,6 +636,7 @@
                                 <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
                             </div>
                         </div>
+                        <button v-if="modeEdition" @click="ajouterChargeFixe()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-orange-600 bg-orange-50 border-2 border-dashed border-orange-300 rounded-xl hover:bg-orange-100 transition-colors">+ Ajouter une Charge Fixe</button>
                         </div><!-- /cfo-collapsible-body charges-fixes -->
                     </div><!-- /param-charges-fixes -->
 
@@ -653,8 +655,8 @@
                                         <button @click="item.showDetails = !item.showDetails" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
                                             {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
                                         </button>
-                                        <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
-                                        <button @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
+                                        <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
+                                        <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -713,6 +715,7 @@
                                 </div>
                             </div>
                         </div>
+                        <button v-if="modeEdition" @click="ajouterChargeVariable()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-red-600 bg-red-50 border-2 border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
                         </div><!-- /cfo-collapsible-body charges-var -->
                     </div><!-- /param-charges-var -->
 
@@ -2839,8 +2842,8 @@
                                     <button @click="item.showExceptions = !item.showExceptions" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
                                         {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Suspendre / Modifier Période' }}
                                     </button>
-                                    <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
-                                    <button @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
+                                    <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
                                 </div>
                                 <div v-if="item.showExceptions" class="mt-3 bg-blue-50 rounded-xl p-3 border border-blue-100">
                                     <p class="text-[9px] font-black text-blue-800 uppercase tracking-widest mb-2">Règles d'exception</p>
@@ -2864,6 +2867,7 @@
                                     <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2 text-xs text-white bg-blue-600 rounded-lg font-bold uppercase tracking-widest">+ Ajouter Règle</button>
                                 </div>
                             </div>
+                            <button v-if="modeEdition" @click="ajouterEntree()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-green-600 bg-green-50 border-2 border-dashed border-green-300 rounded-xl hover:bg-green-100 transition-colors">+ Ajouter une Entrée</button>
                         </div>
                     </details>
 
@@ -2923,8 +2927,8 @@
                                     <button @click="item.showExceptions = !item.showExceptions" class="flex-1 py-2 text-[10px] text-orange-600 font-bold uppercase tracking-widest bg-orange-50 rounded-lg">
                                         {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Gérer Périodes' }}
                                     </button>
-                                    <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
-                                    <button @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
+                                    <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
                                 </div>
                                 <div v-if="item.showExceptions" class="mt-3 bg-orange-50 rounded-xl p-3 border border-orange-100">
                                     <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-orange-100 mb-2">
@@ -2947,6 +2951,7 @@
                                     <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2 text-xs text-white bg-orange-600 rounded-lg font-bold uppercase tracking-widest">+ Ajouter Règle</button>
                                 </div>
                             </div>
+                            <button v-if="modeEdition" @click="ajouterChargeFixe()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-orange-600 bg-orange-50 border-2 border-dashed border-orange-300 rounded-xl hover:bg-orange-100 transition-colors">+ Ajouter une Charge Fixe</button>
                         </div>
                     </details>
 
@@ -3014,8 +3019,8 @@
                                     <button @click="item.showDetails = !item.showDetails" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
                                     {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
                                 </button>
-                                    <button v-if="!item.parts || !item.parts.length" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
-                                    <button @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
+                                    <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
                                 </div>
                                 <div v-if="item.showDetails" class="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
                                     <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3 text-center border-b border-gray-200 pb-1">Détail (total remplace la valeur)</p>
@@ -3029,6 +3034,7 @@
                                     <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, paye: false, montantPaye: 0 }); handleDataChange()" class="w-full py-2 mt-3 text-xs text-white bg-gray-700 rounded-lg font-bold uppercase tracking-widest">+ Nouvelle ligne</button>
                                 </div>
                             </div>
+                            <button v-if="modeEdition" @click="ajouterChargeVariable()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-red-600 bg-red-50 border-2 border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
                         </div>
                     </details>
 
@@ -3259,6 +3265,39 @@
             </div>
         </div>
 
+        <!-- v17.31 : Modale Relevé de Compte -->
+        <div v-if="showReleveModal" class="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center p-4" @click.self="fermerReleve()">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                <div class="p-6 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-black uppercase tracking-wide">📋 Relevé — {{ releveCompteLabel }}</h3>
+                    <button @click="fermerReleve()" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+                </div>
+                <div class="flex-1 overflow-auto p-4">
+                    <table v-if="releveCompte.length > 0" class="w-full text-sm">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Mois</th>
+                                <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Libellé</th>
+                                <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Débit</th>
+                                <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Crédit</th>
+                                <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Solde</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(e, i) in releveCompte" :key="i" class="border-b border-gray-100 hover:bg-gray-50">
+                                <td class="p-2 font-bold text-gray-600 whitespace-nowrap">{{ e.mois }}</td>
+                                <td class="p-2 text-gray-700">{{ e.libelle }}</td>
+                                <td class="p-2 text-right font-bold text-red-500">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
+                                <td class="p-2 text-right font-bold text-green-600">{{ e.type === 'credit' ? formatMAD(e.montant) : '' }}</td>
+                                <td class="p-2 text-right font-black">{{ formatMAD(e.soldeApres) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-else class="text-center text-gray-400 py-8 font-bold">Aucun mouvement enregistré pour ce compte.</p>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -3285,8 +3324,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.30";
+                    const CURRENT_VERSION = "17.31";
                     const CHANGELOG = [
+                        { version: "17.31", date: "2026-05-15 — Audit & CRUD", changes: ["GRAND LIVRE : traçabilité complète des flux — chaque mouvement (revenu, charge, choc, épargne) est journalisé par compte avec libellé, montant, type et solde après opération.", "RELEVÉ DE COMPTE : modale accessible en cliquant sur un nom de compte dans le tooltip Patrimoine. Affiche un tableau chronologique Débit/Crédit/Solde.", "CRUD COMPLET : boutons + Ajouter une Entrée / Charge Fixe / Charge Variable en mode édition. Boutons Supprimer et Scinder visibles uniquement en mode édition.", "FONCTIONS ajouterEntree(), ajouterChargeFixe(), ajouterChargeVariable() pour insérer des lignes par défaut avec ID unique."] },
                         { version: "17.30", date: "2026-05-14 — Bouton Supprimer Lignes", changes: ["BOUTON 🗑️ SUPPRIMER sur chaque ligne de Revenus, Charges Fixes et Charges Variables (Desktop + Mobile). Permet de nettoyer les anciennes entrées dupliquées créées par l'ancien Scinder.", "FONCTION supprimerLigneObj() : supprime une clé d'un objet (revenus/chargesFixes/chargesVariables) et déclenche la sauvegarde automatique."] },
                         { version: "17.29", date: "2026-05-14 — Scission en Sous-Catégories", changes: ["SCINDER REFACTORISÉ : la scission crée désormais des sous-catégories (parts[]) imbriquées sous l'élément parent au lieu de lignes indépendantes en bas. Chaque part a son propre label, montant et routage.", "GESTION DES PARTS : bouton ✂️ Scinder pour initialiser 2 parts, bouton + Ajouter une partie, bouton ✕ pour supprimer chaque part individuellement. Le montant parent est désactivé quand des parts existent.", "MOTEUR BILAN PARTS-AWARE : revenus, charges fixes, charges variables et chocs détectent item.parts et routent chaque sous-catégorie indépendamment. Les exceptions parent sont distribuées proportionnellement sur les parts.", "UI 8 SECTIONS : affichage imbriqué (border-l-2 coloré) pour Desktop et Mobile — Revenus (vert), Charges Fixes (orange), Charges Variables (rouge), Chocs (gris). Badge '✂️ N parties' sur le label parent."] },
                         { version: "17.28", date: "2026-05-14 — Debug Scission & Alerte Liquidité", changes: ["BOUTON SCINDER TOUJOURS VISIBLE : suppression du v-if='modeEdition', style bleu uniforme (border border-blue-200, hover:bg-blue-50) sur Desktop et Mobile pour Revenus, Charges Fixes, Variables et Chocs.", "ALERTE DÉFICIT : si le Solde Courant passe en négatif dans le Bilan, affichage en rouge vif + fond rouge clair + animation pulse + badge '⚠️ Déficit' (Desktop) / '⚠️' (Mobile).", "VÉRIFICATION ROUTAGE CHARGES : confirmation que les selects 'Prélever sur' sont fonctionnels sur toutes les charges et que le moteur déduit bien les charges routées de soldesComptes/soldesEpargne."] },
@@ -3359,6 +3399,9 @@
 
                     const activeTab = ref('dashboard');
                     const modeEdition = ref(false);
+                    const historiqueFlux = ref({});
+                    const compteReleve = ref(null);
+                    const showReleveModal = ref(false);
                     const calculationTick = ref(0);
                     const dropdownFacturesOpen = ref(true);
 
@@ -4235,6 +4278,29 @@
                         handleDataChange();
                     };
 
+                    // v17.31 : Ajouter des entrées par défaut
+                    const ajouterEntree = () => {
+                        const yr = anneeAffichage.value;
+                        if (!donneesAnnuelles.value[yr]) return;
+                        const id = 'rev_' + Date.now();
+                        donneesAnnuelles.value[yr].revenus[id] = { label: 'Nouveau revenu', base: 0, destinationCompte: 'courant', exceptions: [] };
+                        handleDataChange();
+                    };
+                    const ajouterChargeFixe = () => {
+                        const yr = anneeAffichage.value;
+                        if (!donneesAnnuelles.value[yr]) return;
+                        const id = 'fix_' + Date.now();
+                        donneesAnnuelles.value[yr].chargesFixes[id] = { label: 'Nouvelle charge fixe', valeur: 0, sourceCompte: 'courant', exceptions: [] };
+                        handleDataChange();
+                    };
+                    const ajouterChargeVariable = () => {
+                        const yr = anneeAffichage.value;
+                        if (!donneesAnnuelles.value[yr]) return;
+                        const id = 'var_' + Date.now();
+                        donneesAnnuelles.value[yr].chargesVariables[id] = { label: 'Nouvelle charge variable', valeur: 0, periode: 'mois', sourceCompte: 'courant' };
+                        handleDataChange();
+                    };
+
                     // v17.29 : Scinder = sous-catégories imbriquées sous le parent
                     const scinderLigneObj = (item) => {
                         if (!item) return;
@@ -4279,6 +4345,27 @@
                         const valField = 'base' in item ? 'base' : ('montant' in item ? 'montant' : 'valeur');
                         return item.parts.reduce((s, p) => s + Number(p[valField] || 0), 0);
                     };
+
+                    // v17.31 : Relevé de compte
+                    const ouvrirReleve = (compteKey) => {
+                        compteReleve.value = compteKey;
+                        showReleveModal.value = true;
+                    };
+                    const fermerReleve = () => {
+                        showReleveModal.value = false;
+                        compteReleve.value = null;
+                    };
+                    const releveCompte = computed(() => {
+                        if (!compteReleve.value) return [];
+                        return historiqueFlux.value[compteReleve.value] || [];
+                    });
+                    const releveCompteLabel = computed(() => {
+                        if (!compteReleve.value) return '';
+                        if (compteReleve.value === 'courant') return '💳 Compte Courant';
+                        if (compteReleve.value.startsWith('cpt_')) return getCompteLabel(compteReleve.value);
+                        if (compteReleve.value.startsWith('ep_')) return '🎯 ' + getEpargneLabel(compteReleve.value);
+                        return compteReleve.value;
+                    });
 
                     const deplacerDepense = (dep) => {
                         dep.paye = false; dep.montantPaye = 0;
@@ -4469,6 +4556,15 @@
                     // MOTEUR MULTI-ANNEES (V11.0) — v17.21 : Comptes épargne 100% dynamiques
                     const bilan = computed(() => {
                         calculationTick.value;
+                        // v17.31 : Grand Livre — journal de tous les flux par compte
+                        const _journal = {};
+                        const _log = (compte, mois, annee, libelle, montant, type) => {
+                            if (!_journal[compte]) _journal[compte] = [];
+                            const entries = _journal[compte];
+                            const soldeBefore = entries.length > 0 ? entries[entries.length - 1].soldeApres : (compte.startsWith('cpt_') ? (Number((comptes.value.find(c => 'cpt_'+c.id === compte) || {}).solde) || 0) : Number((soldesInitiaux.value || {})[compte] || 0));
+                            const soldeApres = type === 'credit' ? soldeBefore + Math.abs(montant) : soldeBefore - Math.abs(montant);
+                            entries.push({ mois: nomDuMois(mois) + ' ' + annee, libelle, montant: Number(montant), type, soldeApres });
+                        };
                         let curSolde = patrimoineLiquide.value;
                         const moisActuel = Number((soldesInitiaux.value || {}).moisActuel || 4);
                         const anneeActuelle = Number((soldesInitiaux.value || {}).anneeActuelle || 2026);
@@ -4507,7 +4603,7 @@
                             }
                         }
 
-                        return periods.map(p => {
+                        const _bilanResult = periods.map(p => {
                             const mNum = p.mois;
                             const aNum = p.annee;
                             const isCurrentMonth = (mNum === moisActuel && aNum === anneeActuelle);
@@ -4539,6 +4635,9 @@
                                 }
                             });
                             const revMoisGenere = revCourant + Object.values(revParCompte).reduce((s, v) => s + v, 0);
+                            // v17.31 : Log revenus
+                            if (revCourant > 0) _log('courant', mNum, aNum, 'Revenus courant', revCourant, 'credit');
+                            Object.entries(revParCompte).forEach(([dest, amt]) => { if (amt > 0) _log(dest, mNum, aNum, 'Revenus versés', amt, 'credit'); });
                             // v17.27 : Ventilation des charges fixes par sourceCompte
                             let fixCourant = 0;
                             const fixParCompte = {};
@@ -4585,6 +4684,11 @@
                                 }
                             });
                             const totVarBase = varCourant + Object.values(varParCompte).reduce((s, v) => s + v, 0);
+                            // v17.31 : Log charges
+                            if (fixCourant > 0) _log('courant', mNum, aNum, 'Charges fixes', fixCourant, 'debit');
+                            Object.entries(fixParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges fixes', amt, 'debit'); });
+                            if (varCourant > 0) _log('courant', mNum, aNum, 'Charges variables', varCourant, 'debit');
+                            Object.entries(varParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges variables', amt, 'debit'); });
                             const _ep = dataAnnee.epargne;
                             const epArrMois = Array.isArray(_ep) ? _ep : Object.entries(_ep || {}).map(([k,v]) => ({...v, id: k}));
                             const totEpBase = epArrMois.reduce((sum, obj) => sum + Number(obj.valeur || 0), 0);
@@ -4625,6 +4729,8 @@
                                 if (!(k in soldesEpargne)) soldesEpargne[k] = Number((soldesInitiaux.value || {})[k] || 0);
                             });
 
+                            // v17.31 : Log épargne
+                            Object.entries(epargneParCompte).forEach(([k, amt]) => { if (amt > 0) _log(k, mNum, aNum, 'Épargne mensuelle', amt, 'credit'); });
                             let entreesAppliquees = 0; let solde_fin = 0;
                             // v17.24 : irregCourant capture TOUS les chocs non-épargne (courant + cpt_* + inconnus)
                             const irregCourant = depMoisExpanded.filter(d => !(d.sourceCompte || 'courant').startsWith('ep_')).reduce((s, d) => {
@@ -4639,6 +4745,9 @@
                             allEpKeys.forEach(k => { irregParCompte[k] = calcIrregBySource(k); });
                             const totalIrregEpargne = Object.values(irregParCompte).reduce((s,v) => s+v, 0);
                             const totalIrregRestant = irregCourant + totalIrregEpargne;
+                            // v17.31 : Log flux exceptionnels
+                            if (irregCourant !== 0) _log('courant', mNum, aNum, 'Flux exceptionnels', Math.abs(irregCourant), irregCourant > 0 ? 'debit' : 'credit');
+                            Object.entries(irregParCompte).forEach(([src, amt]) => { if (amt !== 0) _log(src, mNum, aNum, 'Flux exceptionnels', Math.abs(amt), amt > 0 ? 'debit' : 'credit'); });
                             const detailsIrreg = depMois.filter(d => (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
 
                             if (isCurrentMonth) {
@@ -4838,6 +4947,8 @@
                                 };
                             }
                         });
+                        historiqueFlux.value = _journal;
+                        return _bilanResult;
                     });
 
                     // v13.1 : on coupe le bilan à l'année cible de projection (sélecteur d'horizon)
@@ -5255,7 +5366,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, 
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, historiqueFlux, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteLabel, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,

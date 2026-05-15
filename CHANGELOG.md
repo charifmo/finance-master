@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.31] — 2026-05-15 — Audit & CRUD
+
+### Nouveautés
+- **Grand Livre (traçabilité)** : chaque mouvement (revenu, charge, choc, épargne) est journalisé par compte dans `historiqueFlux` avec libellé, montant, type (débit/crédit) et solde après opération.
+- **Relevé de Compte** : modale accessible en cliquant sur un nom de compte dans le tooltip Patrimoine Projeté. Affiche un tableau chronologique Mois / Libellé / Débit / Crédit / Solde.
+- **CRUD complet** : boutons `+ Ajouter une Entrée`, `+ Ajouter une Charge Fixe`, `+ Ajouter une Charge Variable` en mode édition (desktop + mobile).
+- **Mode édition** : boutons 🗑️ Supprimer et ✂️ Scinder visibles uniquement en mode édition (`v-if="modeEdition"`).
+- **Fonctions** : `ajouterEntree()`, `ajouterChargeFixe()`, `ajouterChargeVariable()` insèrent des lignes par défaut avec ID unique.
+
+---
+
 ## [17.30] — 2026-05-14 — Bouton Supprimer Lignes
 
 ### Nouveautés
