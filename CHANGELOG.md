@@ -5,6 +5,17 @@ Format : [version] — date — description
 
 ---
 
+## [17.37] — 2026-05-15 — UI SSOT Sync
+
+### Corrections
+- **`etatFinal` dans bilan** : la computed retourne `{ lignes, journal, etatFinal }` avec `etatFinal = { courant: curSolde, comptes: {...soldesComptes}, epargne: {...soldesEpargne} }` — snapshot exact de l'état final.
+- **SSOT Tooltip** : le cadre noir "Patrimoine Projeté" lit STRICTEMENT depuis `_derniereLigneCible` (dernière ligne bilan ≤ année cible). Plus de formules parallèles.
+- **`patrimoineProjeteGlobal`** : `= sum(detailsComptesFinal) + sum(detailsEpargneFinal)`. Remplace l'ancien `soldeFinal + epargneTotaleFinal + bourse` qui mélangeait solde virtuel (curSolde) et comptes physiques.
+- **`soldeFinal`** : `= sum(comptes physiques)` de la dernière ligne bilan. `detailsComptesFinal`/`detailsEpargneFinal` lisent directement depuis `_derniereLigneCible.detailsComptes`/`.detailsEpargne`.
+- **Tooltip simplifié** : suppression de la branche `v-else` obsolète (fallback sans comptes). Affichage unifié comptes + épargne + total. Soldes négatifs en rouge.
+
+---
+
 ## [17.36] — 2026-05-15 — Live Sync Pilotage-Bilan
 
 ### Corrections
