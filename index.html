@@ -3346,8 +3346,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.33";
+                    const CURRENT_VERSION = "17.34";
                     const CHANGELOG = [
+                        { version: "17.34", date: "2026-05-15 — Routage des Chocs", changes: ["FIX IRREGCOURANT : ne capture plus que les chocs sourceCompte='courant'. Les chocs routés vers cpt_X ne gonflent plus le solde courant virtuel.", "DÉDUCTION PHYSIQUE CPT : les chocs routés vers cpt_X sont collectés dans irregCptCompte{} et déduits de soldesComptes. totalIrregRestant inclut courant+ep+cpt pour l'affichage.", "JOURNAL INDIVIDUEL : chaque choc est loggué individuellement ('Choc : NomDuChoc') dans le relevé de son compte de prélèvement réel, au lieu d'un bloc 'Flux exceptionnels' agrégé."] },
                         { version: "17.33", date: "2026-05-15 — Virements Inter-comptes", changes: ["SOURCECOMPTE ÉPARGNE : chaque objectif d'épargne a un champ sourceCompte (De: Courant/Compte bancaire) en plus du linkedAccountId (Vers: destination). UI 'De → Vers' sur Desktop, Mobile et Paramètres.", "MOTEUR BILAN : l'épargne prélevée sur 'courant' impacte curSolde (epCourant), les autres sources sont déduites physiquement de soldesComptes. Les virements liés alimentent le compte destination.", "DOUBLE-ENTRÉE JOURNAL : chaque virement d'épargne génère 2 logs — un DÉBIT sur le compte source ('Virement vers X') et un CRÉDIT sur l'objectif destination ('Virement depuis Y')."] },
                         { version: "17.32", date: "2026-05-15 — Fix Grand Livre", changes: ["FIX ANTI-PATTERN VUE : le journal des flux n'est plus muté dans une computed (side-effect). Le bilan retourne { lignes, journal } et deux computed dérivées bilanLignes/bilanJournal servent d'accesseurs.", "FIX CLÉ COURANT : _log() mappe 'courant' → cpt_<id> du compte courant physique. Les entrées du relevé correspondent maintenant à la clé cliquée dans le tooltip Patrimoine.", "RELEVÉ FONCTIONNEL : la modale lit depuis bilanJournal au lieu de historiqueFlux (ref jamais alimentée). Tous les mouvements sont maintenant visibles."] },
                         { version: "17.31", date: "2026-05-15 — Audit & CRUD", changes: ["GRAND LIVRE : traçabilité complète des flux — chaque mouvement (revenu, charge, choc, épargne) est journalisé par compte avec libellé, montant, type et solde après opération.", "RELEVÉ DE COMPTE : modale accessible en cliquant sur un nom de compte dans le tooltip Patrimoine. Affiche un tableau chronologique Débit/Crédit/Solde.", "CRUD COMPLET : boutons + Ajouter une Entrée / Charge Fixe / Charge Variable en mode édition. Boutons Supprimer et Scinder visibles uniquement en mode édition.", "FONCTIONS ajouterEntree(), ajouterChargeFixe(), ajouterChargeVariable() pour insérer des lignes par défaut avec ID unique."] },
@@ -4768,22 +4769,38 @@
                                 }
                             });
                             let entreesAppliquees = 0; let solde_fin = 0;
-                            // v17.24 : irregCourant capture TOUS les chocs non-épargne (courant + cpt_* + inconnus)
-                            const irregCourant = depMoisExpanded.filter(d => !(d.sourceCompte || 'courant').startsWith('ep_')).reduce((s, d) => {
+                            // v17.34 : irregCourant = UNIQUEMENT les chocs sourceCompte 'courant' (ou vide)
+                            const _chocEffectif = (d) => {
                                 let due = Number(d.montant || 0);
-                                if (d._virtual) return s + due;
-                                if (due < 0) return isItemPaid(d, due) ? s : s + due;
-                                return s + Math.max(0, due - getPaidAmount(d, due));
-                            }, 0);
-                            // v17.23 : Calcul des chocs — union des clés soldesEpargne + epargneParCompte
+                                if (d._virtual) return due;
+                                if (due < 0) return isItemPaid(d, due) ? 0 : due;
+                                return Math.max(0, due - getPaidAmount(d, due));
+                            };
+                            const irregCourant = depMoisExpanded.filter(d => (d.sourceCompte || 'courant') === 'courant').reduce((s, d) => s + _chocEffectif(d), 0);
+                            // v17.34 : irregParCompte — ep_* ET cpt_* pour déduction physique
                             const irregParCompte = {};
                             const allEpKeys = new Set([...Object.keys(soldesEpargne), ...Object.keys(epargneParCompte)]);
                             allEpKeys.forEach(k => { irregParCompte[k] = calcIrregBySource(k); });
+                            // v17.34 : Collecter aussi les chocs routés vers cpt_*
+                            const irregCptCompte = {};
+                            depMoisExpanded.forEach(d => {
+                                const src = d.sourceCompte || 'courant';
+                                if (src.startsWith('cpt_')) {
+                                    const eff = _chocEffectif(d);
+                                    if (eff !== 0) irregCptCompte[src] = (irregCptCompte[src] || 0) + eff;
+                                }
+                            });
                             const totalIrregEpargne = Object.values(irregParCompte).reduce((s,v) => s+v, 0);
-                            const totalIrregRestant = irregCourant + totalIrregEpargne;
-                            // v17.31 : Log flux exceptionnels
-                            if (irregCourant !== 0) _log('courant', mNum, aNum, 'Flux exceptionnels', Math.abs(irregCourant), irregCourant > 0 ? 'debit' : 'credit');
-                            Object.entries(irregParCompte).forEach(([src, amt]) => { if (amt !== 0) _log(src, mNum, aNum, 'Flux exceptionnels', Math.abs(amt), amt > 0 ? 'debit' : 'credit'); });
+                            const totalIrregCpt = Object.values(irregCptCompte).reduce((s,v) => s+v, 0);
+                            const totalIrregRestant = irregCourant + totalIrregEpargne + totalIrregCpt;
+                            // v17.34 : Log chocs individuellement par compte de prélèvement
+                            depMoisExpanded.forEach(d => {
+                                const eff = _chocEffectif(d);
+                                if (eff === 0) return;
+                                const src = d.sourceCompte || 'courant';
+                                const nom = d._virtual ? (d.nom || 'Choc') : (d.nom || 'Choc');
+                                _log(src, mNum, aNum, 'Choc : ' + nom, Math.abs(eff), eff > 0 ? 'debit' : 'credit');
+                            });
                             const detailsIrreg = depMois.filter(d => (Number(d.montant||0) < 0 || !isItemPaid(d, Number(d.montant||0))));
 
                             if (isCurrentMonth) {

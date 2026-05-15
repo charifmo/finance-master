@@ -5,6 +5,15 @@ Format : [version] — date — description
 
 ---
 
+## [17.34] — 2026-05-15 — Routage des Chocs
+
+### Corrections
+- **Fix `irregCourant`** : ne capture plus que les chocs dont `sourceCompte === 'courant'`. Les chocs routés vers `cpt_X` ne gonflent plus le solde courant virtuel (`curSolde`).
+- **Déduction physique `cpt_*`** : les chocs routés vers des comptes bancaires sont collectés dans `irregCptCompte{}` et déduits de `soldesComptes`. `totalIrregRestant` inclut courant + ep + cpt pour l'affichage total.
+- **Journal individuel** : chaque choc est loggué individuellement ("Choc : Voyage Europe") dans le relevé de son compte de prélèvement réel, au lieu d'un bloc agrégé "Flux exceptionnels".
+
+---
+
 ## [17.33] — 2026-05-15 — Virements Inter-comptes
 
 ### Nouveautés
