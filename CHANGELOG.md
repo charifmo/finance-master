@@ -5,6 +5,15 @@ Format : [version] — date — description
 
 ---
 
+## [17.40] — 2026-05-15 — Delta Sync Courant
+
+### Corrections
+- **Fix décalage tooltip vs relevé** : `curSolde` démarrait à `patrimoineLiquide` (somme de TOUS les comptes, ~100 900 DH), puis la v17.39 copiait cette valeur dans `soldesComptes[courantCptKey]`. Le tooltip affichait ~101 788 DH au lieu de 501 DH (la vraie valeur du relevé).
+- **DELTA au lieu de SYNC** : `soldesComptes[courantCptKey] += (curSolde - curSoldeBefore)` remplace `= curSolde`. Le compte courant physique conserve son vrai solde initial et reçoit les mêmes variations mensuelles que `curSolde`.
+- Appliqué aux 2 blocs (isCurrentMonth + mois futurs).
+
+---
+
 ## [17.39] — 2026-05-15 — Unification des Flux
 
 ### Corrections

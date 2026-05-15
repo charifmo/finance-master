@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v17.39 - Finance Master (Unification des Flux)</title>
+    <title>v17.40 - Finance Master (Delta Sync Courant)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -3340,8 +3340,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.39";
+                    const CURRENT_VERSION = "17.40";
                     const CHANGELOG = [
+                        { version: "17.40", date: "2026-05-15 — Delta Sync Courant", changes: ["FIX DÉCALAGE TOOLTIP/RELEVÉ : curSolde démarrait à patrimoineLiquide (100 900 = somme de TOUS les comptes), puis était copié dans soldesComptes[courant] → le tooltip affichait ~101 788 au lieu de 501.", "DELTA au lieu de SYNC : soldesComptes[courantCptKey] += (curSolde - curSoldeBefore) au lieu de = curSolde. Le compte courant physique garde son vrai solde initial et reçoit les mêmes variations mensuelles que curSolde.", "Appliqué aux 2 blocs (isCurrentMonth + mois futurs). Le relevé et le tooltip montrent désormais le même solde pour le Compte Courant."] },
                         { version: "17.39", date: "2026-05-15 — Unification des Flux", changes: ["STOP DOUBLE DÉDUCTION : soldesComptes[courantCptKey] n'est PLUS muté directement. Toutes les déductions courant passent par curSolde, puis sync finale soldesComptes[courantCptKey] = curSolde en fin de mois.", "SKIP COURANT dans translocation/chocs/charges : toutes les boucles physiques (épargne, chocs, charges routées) excluent courantCptKey — seuls les vrais comptes tiers (cpt_X ≠ courant) sont impactés.", "SYNC FIN DE MOIS : isCurrentMonth ET mois futurs — soldesComptes[courantCptKey] = curSolde avant le return. Le relevé de compte et le tooltip lisent désormais la même valeur.", "Revenus routés : skip courantCptKey dans le routage physique (déjà capté par curSolde via revCourant)."] },
                         { version: "17.38", date: "2026-05-15 — SSOT Physique & Purge Doublons", changes: ["FIX DOUBLE-COMPTAGE : les objectifs d'épargne liés à un cpt_X (linkedAccountId) sont exclus du total patrimoine et du tooltip. Leur solde est déjà inclus dans le compte physique.", "COMPUTED epargneNonLieeFinal : filtre detailsEpargneFinal pour ne garder que les objectifs virtuels stricts (sans linkedAccountId).", "FIX SOLDE COURANT TOOLTIP : suppression de la ligne curSolde codée en dur. Le tooltip affiche tous les comptes physiques depuis detailsComptesFinal (y compris courant avec le vrai solde).", "FIX DROPDOWN DOUBLON : comptesSelectOptions filtre par type ET par id du compte courant pour éliminer le doublon 'Courant' / 'Compte Courant'.", "patrimoineProjeteGlobal = sum(comptes) + sum(épargneNonLiée). epargneTotaleFinal = sum(épargneNonLiée)."] },
                         { version: "17.37", date: "2026-05-15 — UI SSOT Sync", changes: ["ETAT FINAL BILAN : la computed bilan retourne { lignes, journal, etatFinal } avec etatFinal = { courant, comptes, epargne } — snapshot exact de l'état final du moteur.", "SSOT TOOLTIP : le cadre noir 'Patrimoine Projeté' lit STRICTEMENT depuis la dernière ligne bilan filtrée par année cible. Plus de formules parallèles.", "PATRIMOINE GLOBAL : patrimoineProjeteGlobal = sum(detailsComptes) + sum(detailsEpargne). Plus d'addition soldeFinal + epargneTotaleFinal + bourse (qui mélangeait virtuel et physique).", "SOLD FINAL : soldeFinal = sum(comptes physiques) de la dernière ligne bilan. detailsComptesFinal/detailsEpargneFinal lisent depuis _derniereLigneCible.", "TOOLTIP SIMPLIFIÉ : suppression de la branche v-else obsolète. Affichage unifié comptes + épargne + total, avec couleur rouge pour les soldes négatifs."] },
@@ -4893,7 +4894,8 @@
                                 if (vRestCourant > 0) _log('courant', mNum, aNum, 'Charges variables (Prorata Pilotage)', vRestCourant, 'debit');
                                 Object.entries(vRestParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges variables (Prorata)', amt, 'debit'); });
 
-                                // v17.36 : ═══ SOLDE FIN — uniquement charges courant ═══
+                                // v17.40 : ═══ SOLDE FIN — delta tracking pour le compte courant physique ═══
+                                const _curSoldeBefore = curSolde;
                                 if (decalagePaie) {
                                     entreesAppliquees = 0;
                                     solde_fin = curSolde - fRestCourant - vRestCourant - epCourant - irregCourant;
@@ -4960,8 +4962,8 @@
                                 _deduireChargesComptes(fRestParCompte);
                                 _deduireChargesComptes(vRestParCompte);
 
-                                // v17.39 : SYNC — curSolde est la seule vérité pour le compte courant
-                                if (courantCptKey) soldesComptes[courantCptKey] = curSolde;
+                                // v17.40 : DELTA — applique le même changement que curSolde au compte courant physique
+                                if (courantCptKey) soldesComptes[courantCptKey] += (curSolde - _curSoldeBefore);
 
                                 cumulEpargne += epargneMensuellePrevue;
                                 return {
@@ -4988,12 +4990,12 @@
                                     else if (dest.startsWith('ep_') && dest in soldesEpargne) { soldesEpargne[dest] += amt; }
                                 });
 
-                                // v17.33 : surplusMois déduit epCourant (pas totEpBase — les sources non-courant sont gérées physiquement)
+                                // v17.40 : delta tracking pour le compte courant physique
+                                const _curSoldeBeforeF = curSolde;
                                 if (decalagePaie) {
                                     entreesAppliquees = revMoisPrecedent;
                                     const surplusMois = entreesAppliquees - fixCourant - varCourant - epCourant;
                                     const cashflowMois = surplusMois - irregCourant;
-                                    // v17.21 : Auto-Sweep dynamique
                                     if (cashflowMois > 0 && destSurplus.startsWith('ep_')) {
                                         soldesEpargne[destSurplus] = (soldesEpargne[destSurplus] || 0) + cashflowMois;
                                     } else {
@@ -5063,8 +5065,8 @@
 
                                 totalMoisEcoules++;
                                 cumulEpargne += epargneMensuellePrevue;
-                                // v17.39 : SYNC — curSolde est la seule vérité pour le compte courant
-                                if (courantCptKey) soldesComptes[courantCptKey] = curSolde;
+                                // v17.40 : DELTA — applique le même changement que curSolde au compte courant physique
+                                if (courantCptKey) soldesComptes[courantCptKey] += (curSolde - _curSoldeBeforeF);
                                 return {
                                     mois: `${nomDuMois(mNum)} ${aNum}`, numMois: mNum, annee: aNum, entrees: revMoisGenere, revenusAppliques: entreesAppliquees,
                                     charges: fixMois+totVarBase+totEpBase,
