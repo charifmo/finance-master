@@ -158,9 +158,9 @@
                                 <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
                                     <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black" :class="val < 0 ? 'text-red-400' : ''">{{ formatMAD(val) }}</span></div>
                                 </template>
-                                <!-- v17.38 : Épargne NON liée uniquement (liée = déjà dans comptes physiques) -->
+                                <!-- v17.42 : Épargne NON liée uniquement (liée = déjà dans comptes physiques) -->
                                 <template v-for="(val, key) in epargneNonLieeFinal" :key="'tt_'+key">
-                                    <div class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                    <div v-if="!isEpLinked(key)" class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
                                 </template>
                                 <div class="border-t border-slate-700 pt-1.5 mt-1.5 flex justify-between"><span class="text-emerald-300 font-black">🏛️ Total</span><span class="font-black text-emerald-400">{{ formatMAD(patrimoineProjeteGlobal) }}</span></div>
                             </div>
@@ -3714,6 +3714,7 @@
                                     chargesVariables: chargesVariablesV10,
                                     epargne: [ { id: 1, nom: 'Urgence', valeur: 0 }, { id: 2, nom: 'Long Terme', valeur: 0 } ], // v17.15 : tableau dynamique (CRUD)
                                     depensesIrregulieres: depensesV10,
+                                    virementsInternes: [],
                                     projetStudio: { prixM2: 26000, surface: 40, avance: 500000, taux: 4.5, duree: 20, taxSyndic: 70240, taxCouvertCredit: 45000, surplusCredit: 85000, assuranceMensuelle: 380, travaux: 80000, epargneDispo: 53000 }
                                 }
                             }
@@ -5391,11 +5392,10 @@
                     // v17.38 : Épargne NON liée — exclure les objectifs liés à un cpt_X (déjà comptés dans detailsComptes)
                     const _epargneLinkedKeys = computed(() => {
                         const linked = new Set();
-                        const d = donneesAnnuelles.value[anneeAffichage.value];
-                        if (d && d.epargne) {
-                            const arr = Array.isArray(d.epargne) ? d.epargne : [];
+                        Object.values(donneesAnnuelles.value).forEach(d => {
+                            const arr = Array.isArray(d?.epargne) ? d.epargne : [];
                             arr.forEach(ep => { if (ep.linkedAccountId) linked.add('ep_' + ep.id); });
-                        }
+                        });
                         return linked;
                     });
                     const epargneNonLieeFinal = computed(() => {
@@ -5405,6 +5405,7 @@
                         Object.entries(all).forEach(([k, v]) => { if (!linked.has(k)) result[k] = v; });
                         return result;
                     });
+                    const isEpLinked = (key) => _epargneLinkedKeys.value.has(key);
 
                     // v17.37 : soldeFinal = somme des comptes physiques (SSOT)
                     const soldeFinal = computed(() => {
@@ -5831,7 +5832,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         addCompte, deleteCompte, startEditCompte, saveEditCompte, cancelEditCompte, moveCompte, uploadMedia,
                         addObjectifEpargne, deleteObjectifEpargne,
                         comptesSelectOptions,
-                        detailsComptesFinal, getCompteLabel, getCompteIcone
+                        detailsComptesFinal, getCompteLabel, getCompteIcone,
+                        getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked
                     };
                 }
             });
