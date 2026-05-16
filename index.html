@@ -1836,6 +1836,24 @@
                         </div>
                     </section>
 
+                    <!-- ── SAUVEGARDE ── -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">💾 Sauvegarde Automatique</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Délai entre chaque backup <span class="text-emerald-600">({{ parametres.backupIntervalMinutes }} min)</span></label>
+                                <select v-model.number="parametres.backupIntervalMinutes" @change="handleDataChange" class="w-full p-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 cursor-pointer">
+                                    <option :value="5">5 minutes</option>
+                                    <option :value="10">10 minutes</option>
+                                    <option :value="15">15 minutes (défaut)</option>
+                                    <option :value="30">30 minutes</option>
+                                    <option :value="60">60 minutes</option>
+                                </select>
+                                <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">Le backup JSON est envoyé automatiquement au VPS selon cet intervalle</p>
+                            </div>
+                        </div>
+                    </section>
+
                     <!-- ── BRANDING ── -->
                     <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                         <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">🎨 Branding de l'Application</h3>
@@ -3390,7 +3408,7 @@
                         </thead>
                         <tbody>
                             <tr v-for="(e, i) in releveCompteGrouped" :key="i"
-                                :class="e.type === 'initial' ? 'border-b-2 border-blue-300 bg-blue-50' : (e._gMois % 2 === 0 ? 'border-b border-gray-100 hover:bg-gray-50' : 'border-b border-gray-100 bg-slate-50 hover:bg-slate-100')">
+                                :class="[e.type === 'initial' ? 'border-b-2 border-blue-300 bg-blue-50' : (e._gMois % 2 === 0 ? 'border-b border-gray-100 hover:bg-white bg-white' : 'border-b border-indigo-100 bg-indigo-50/60 hover:bg-indigo-100/60'), e._isNewMonth && e.type !== 'initial' ? 'border-t-2 border-indigo-300' : '']">
                                 <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
                                 <td v-if="releveOnglet === '__global__'" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">{{ e._compteLabel }}</td>
                                 <td class="p-2 text-xs" :class="e.type === 'initial' ? 'font-black text-blue-700 uppercase tracking-wider' : 'text-gray-700'">{{ e.libelle }}</td>
@@ -3413,7 +3431,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(e, i) in releveEvolution" :key="i" class="border-b border-gray-100 hover:bg-emerald-50/50">
+                            <tr v-for="(e, i) in releveEvolution" :key="i"
+                                :class="[e._gMois % 2 === 0 ? 'border-b border-gray-100 bg-white hover:bg-emerald-50/40' : 'border-b border-emerald-100 bg-emerald-50/50 hover:bg-emerald-100/60', e._isNewMonth ? 'border-t-2 border-emerald-300' : '']">
                                 <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
                                 <td v-if="releveOnglet === '__global__'" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">
                                     {{ e._compteIcon }} {{ e._compteLabel }}
@@ -3453,7 +3472,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.45";
+                    const CURRENT_VERSION = "17.96";
                     const CHANGELOG = [
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
@@ -3841,6 +3860,7 @@
                     const parametres = ref({
                         moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), semainesRestantes: 3,
                         objectifFondsSecuriteMois: 6, hypotheseInflation: 2.5,
+                        backupIntervalMinutes: 15,
                         ribbon: { soldeMois: true, cumulatif: true, statsAnnuelles: true, projection: true },
                         branding: { logoUrl: null, faviconUrl: null, appName: 'Finance Master' }
                     });
@@ -4655,8 +4675,9 @@
                     const releveCompteGrouped = computed(() => {
                         let gIdx = -1, lastMois = null;
                         return releveCompte.value.map(e => {
-                            if (e.type !== 'initial' && e.mois !== lastMois) { lastMois = e.mois; gIdx++; }
-                            return { ...e, _gMois: gIdx };
+                            let _isNewMonth = false;
+                            if (e.type !== 'initial' && e.mois !== lastMois) { lastMois = e.mois; gIdx++; _isNewMonth = true; }
+                            return { ...e, _gMois: gIdx, _isNewMonth };
                         });
                     });
                     const releveCompteLabel = computed(() => {
@@ -4676,18 +4697,20 @@
                         const mF = releveMoisFiltre.value;
                         const onglets = releveOnglets.value;
                         const rows = [];
+                        let gIdx = -1, lastMois = null;
                         lignes.forEach(row => {
                             if (aF && Number(row.annee) !== aF) return;
                             if (mF && Number(row.numMois) !== mF) return;
+                            const isNewMoisGroup = row.mois !== lastMois;
+                            if (isNewMoisGroup) { lastMois = row.mois; gIdx++; }
                             if (tab === '__global__') {
-                                // Une ligne par compte pour ce mois
-                                onglets.forEach(t => {
+                                onglets.forEach((t, ti) => {
                                     const val = t.type === 'cpt' ? ((row.detailsComptes || {})[t.key] || 0) : ((row.detailsEpargne || {})[t.key] || 0);
-                                    rows.push({ mois: row.mois, _compteLabel: t.label, _compteIcon: t.icon, _compteKey: t.key, solde: val });
+                                    rows.push({ mois: row.mois, _compteLabel: t.label, _compteIcon: t.icon, _compteKey: t.key, solde: val, _gMois: gIdx, _isNewMonth: isNewMoisGroup && ti === 0 });
                                 });
                             } else {
                                 const val = tab.startsWith('cpt_') ? ((row.detailsComptes || {})[tab] || 0) : ((row.detailsEpargne || {})[tab] || 0);
-                                rows.push({ mois: row.mois, solde: val });
+                                rows.push({ mois: row.mois, solde: val, _gMois: gIdx, _isNewMonth: isNewMoisGroup });
                             }
                         });
                         return rows;
@@ -5867,15 +5890,22 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             }
                         } catch (e) { addLog("Mode hors-ligne local activé.", 'warn'); }
 
-                        // v17.45 : Auto-backup VPS toutes les 15 minutes
-                        setInterval(async () => {
-                            try {
-                                await saveToServer();
-                                addLog('🔄 Auto-backup VPS — ' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), 'success');
-                                autoBackupToast.value = true;
-                                setTimeout(() => { autoBackupToast.value = false; }, 3500);
-                            } catch(e) { addLog('❌ Auto-backup VPS échoué', 'error'); }
-                        }, 900000);
+                        // v17.96 : Auto-backup VPS — délai configurable via parametres.backupIntervalMinutes
+                        let _backupTimer = null;
+                        const _startBackupInterval = () => {
+                            if (_backupTimer) clearInterval(_backupTimer);
+                            const ms = Math.max(1, Number(parametres.value.backupIntervalMinutes) || 15) * 60000;
+                            _backupTimer = setInterval(async () => {
+                                try {
+                                    await saveToServer();
+                                    addLog('🔄 Auto-backup VPS — ' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), 'success');
+                                    autoBackupToast.value = true;
+                                    setTimeout(() => { autoBackupToast.value = false; }, 3500);
+                                } catch(e) { addLog('❌ Auto-backup VPS échoué', 'error'); }
+                            }, ms);
+                        };
+                        _startBackupInterval();
+                        watch(() => parametres.value.backupIntervalMinutes, () => _startBackupInterval());
                     });
 
                     onBeforeUnmount(() => {
