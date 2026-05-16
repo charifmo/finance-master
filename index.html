@@ -19,6 +19,8 @@
         .log-success { border-left-color: #34d399; background: rgba(52, 211, 153, 0.1); }
         .log-warn { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.4s ease, transform 0.4s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(12px); }
         /* === v13.0 CFO agent HTML === */
         .cfo-html { line-height: 1.55; }
         .cfo-html b, .cfo-html strong { font-weight: 800; }
@@ -44,6 +46,8 @@
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans md:overflow-hidden">
     <div id="app" class="min-h-screen md:h-screen w-full flex flex-col md:flex-row relative" v-cloak>
+        <!-- v17.45 : Toast auto-backup -->
+        <transition name="fade"><div v-if="autoBackupToast" class="fixed bottom-6 right-6 z-[9999] bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-black flex items-center gap-2 border border-emerald-500/40">💾 Auto-backup VPS réussi</div></transition>
 
         <div v-if="!isMobile" class="w-full md:w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 shadow-2xl z-30 md:h-full md:overflow-y-auto custom-scroll border-r border-slate-800">
             <div>
@@ -67,6 +71,11 @@
                     <button @click="activeTab = 'cfo'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'cfo' ? 'bg-gradient-to-r from-fuchsia-600 to-purple-700 shadow-lg shadow-purple-900/50' : 'hover:bg-slate-800 text-slate-300']">🧠 CFO & Audit <span class="ml-auto text-[9px] bg-purple-900/80 text-purple-100 px-1.5 py-0.5 rounded border border-purple-400/30">v14</span></button>
                     <button @click="activeTab = 'settings'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'settings' ? 'bg-slate-700 shadow-lg' : 'hover:bg-slate-800 text-slate-300']">🛠️ Paramètres</button>
                     <button @click="showChangelog = true" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-slate-400 hover:bg-slate-800 mt-4 border-t border-slate-800 text-xs font-medium uppercase tracking-widest">📖 Changelog</button>
+                    <!-- v17.45 : Undo / Redo -->
+                    <div class="flex gap-2 mt-2 px-1">
+                        <button @click="undo" :disabled="!canUndo" :title="'Annuler (' + undoCount + ' disponible' + (undoCount > 1 ? 's' : '') + ')'" :class="['flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all border', canUndo ? 'bg-slate-700 hover:bg-amber-600 text-white border-slate-600' : 'bg-slate-900 text-slate-700 cursor-not-allowed border-slate-800']">↩ Undo</button>
+                        <button @click="redo" :disabled="!canRedo" :title="'Refaire (' + redoCount + ' disponible' + (redoCount > 1 ? 's' : '') + ')'" :class="['flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all border', canRedo ? 'bg-slate-700 hover:bg-blue-600 text-white border-slate-600' : 'bg-slate-900 text-slate-700 cursor-not-allowed border-slate-800']">↪ Redo</button>
+                    </div>
                 </nav>
             </div>
             
@@ -158,9 +167,9 @@
                                 <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
                                     <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black" :class="val < 0 ? 'text-red-400' : ''">{{ formatMAD(val) }}</span></div>
                                 </template>
-                                <!-- v17.42 : Épargne NON liée uniquement (liée = déjà dans comptes physiques) -->
-                                <template v-for="(val, key) in epargneNonLieeFinal" :key="'tt_'+key">
-                                    <div v-if="!isEpLinked(key)" class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                <!-- v17.45 : Radical — masque tout objectif ayant linkedAccountId, quelle que soit sa valeur -->
+                                <template v-for="(val, key) in detailsEpargneFinal" :key="'tt_'+key">
+                                    <div v-if="!getEpLinkedId(key)" class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
                                 </template>
                                 <div class="border-t border-slate-700 pt-1.5 mt-1.5 flex justify-between"><span class="text-emerald-300 font-black">🏛️ Total</span><span class="font-black text-emerald-400">{{ formatMAD(patrimoineProjeteGlobal) }}</span></div>
                             </div>
@@ -4017,14 +4026,64 @@
                     const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 18, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value });
                     // v17.19 : Auto-Save debounce 2s
                     let _autoSaveTimer = null;
+
+                    // v17.45 : Undo / Redo (max 10 snapshots)
+                    const autoBackupToast = ref(false);
+                    const _history = ref([]);
+                    const _historyIdx = ref(-1);
+                    let _isHistoryOp = false;
+
+                    const _saveSnapshot = () => {
+                        if (_isHistoryOp || _importInProgress.value) return;
+                        try {
+                            const snap = JSON.stringify({ da: toRaw(donneesAnnuelles.value), cpts: toRaw(comptes.value) });
+                            if (_historyIdx.value < _history.value.length - 1) {
+                                _history.value = _history.value.slice(0, _historyIdx.value + 1);
+                            }
+                            _history.value.push(snap);
+                            if (_history.value.length > 10) _history.value.shift();
+                            _historyIdx.value = _history.value.length - 1;
+                        } catch(_) {}
+                    };
+
+                    const canUndo = computed(() => _historyIdx.value > 0);
+                    const canRedo = computed(() => _historyIdx.value < _history.value.length - 1);
+                    const undoCount = computed(() => Math.max(0, _historyIdx.value));
+                    const redoCount = computed(() => Math.max(0, _history.value.length - 1 - _historyIdx.value));
+
+                    const undo = () => {
+                        if (!canUndo.value) return;
+                        _isHistoryOp = true;
+                        _historyIdx.value--;
+                        const snap = JSON.parse(_history.value[_historyIdx.value]);
+                        donneesAnnuelles.value = snap.da;
+                        comptes.value = snap.cpts;
+                        _isHistoryOp = false;
+                        forceUpdateCalculations();
+                        serverSyncStatus.value = 'modified';
+                        clearTimeout(_autoSaveTimer);
+                        _autoSaveTimer = setTimeout(() => saveToServer(), 2000);
+                    };
+
+                    const redo = () => {
+                        if (!canRedo.value) return;
+                        _isHistoryOp = true;
+                        _historyIdx.value++;
+                        const snap = JSON.parse(_history.value[_historyIdx.value]);
+                        donneesAnnuelles.value = snap.da;
+                        comptes.value = snap.cpts;
+                        _isHistoryOp = false;
+                        forceUpdateCalculations();
+                        serverSyncStatus.value = 'modified';
+                        clearTimeout(_autoSaveTimer);
+                        _autoSaveTimer = setTimeout(() => saveToServer(), 2000);
+                    };
+
                     const handleDataChange = () => {
-                        // v17.23 debug : tracer les comptes épargne disponibles
-                        const _dbgEp = (donneesAnnuelles.value[anneeAffichage.value] || {}).epargne;
-                        console.log('[v17.23] handleDataChange — epargne[' + anneeAffichage.value + ']:', Array.isArray(_dbgEp) ? _dbgEp.map(e => ({id: e.id, nom: e.nom})) : _dbgEp);
+                        _saveSnapshot();
                         forceUpdateCalculations();
                         serverSyncStatus.value = 'modified';
                         if (syncStatus.value === 'synced') syncStatus.value = 'modified';
-                        // Auto-save debounce
                         clearTimeout(_autoSaveTimer);
                         _autoSaveTimer = setTimeout(() => { saveToServer(); }, 2000);
                     };
@@ -4513,24 +4572,14 @@
                         const j = bilanJournal.value;
                         if (!j || Object.keys(j).length === 0) return [];
                         const tabs = [];
-                        // v17.44 : Set des ep_* liés — robust (String(), nulls explicites)
-                        const linkedEpKeys = new Set();
-                        Object.values(donneesAnnuelles.value).forEach(da => {
-                            (Array.isArray(da?.epargne) ? da.epargne : []).forEach(ep => {
-                                const lid = ep.linkedAccountId;
-                                if (lid !== null && lid !== undefined && lid !== '' && lid !== 0) {
-                                    linkedEpKeys.add('ep_' + String(ep.id));
-                                }
-                            });
-                        });
                         // Comptes physiques (cpt_*)
                         comptes.value.forEach(c => {
                             const k = 'cpt_' + c.id;
                             if (j[k] && j[k].length > 0) tabs.push({ key: k, label: c.nom || c.label || k, icon: c.icone || (c.type === 'courant' ? '💳' : c.type === 'epargne' ? '🏦' : '📈'), type: 'cpt' });
                         });
-                        // v17.43 : Épargne virtuelle UNIQUEMENT si NON liée ET avec des mouvements réels (pas juste SOLDE INITIAL)
+                        // v17.45 : Épargne virtuelle — masquer si linkedAccountId (getEpLinkedId, radical)
                         Object.keys(j).filter(k => k.startsWith('ep_')).forEach(k => {
-                            if (linkedEpKeys.has(k)) return;
+                            if (getEpLinkedId(k)) return;
                             const realEntries = j[k].filter(e => e.type !== 'initial');
                             if (realEntries.length > 0) tabs.push({ key: k, label: getEpargneLabel(k), icon: '🎯', type: 'ep' });
                         });
@@ -5396,13 +5445,8 @@
                     const _epargneLinkedKeys = computed(() => {
                         const linked = new Set();
                         Object.values(donneesAnnuelles.value).forEach(d => {
-                            const arr = Array.isArray(d?.epargne) ? d.epargne : [];
-                            arr.forEach(ep => {
-                                const lid = ep.linkedAccountId;
-                                // v17.44 : explicit null/empty/0 check + String() pour éviter mismatch number vs string
-                                if (lid !== null && lid !== undefined && lid !== '' && lid !== 0) {
-                                    linked.add('ep_' + String(ep.id));
-                                }
+                            (Array.isArray(d?.epargne) ? d.epargne : []).forEach(ep => {
+                                if (!!ep.linkedAccountId) linked.add('ep_' + String(ep.id));
                             });
                         });
                         return linked;
@@ -5414,19 +5458,19 @@
                         Object.entries(all).forEach(([k, v]) => { if (!linked.has(k)) result[k] = v; });
                         return result;
                     });
-                    // v17.44 : isEpLinked — lookup direct toutes années, String() pour robustesse
-                    const isEpLinked = (epKey) => {
-                        if (!epKey || !epKey.startsWith('ep_')) return false;
-                        const epIdStr = epKey.replace('ep_', '');
-                        return Object.values(donneesAnnuelles.value).some(d => {
-                            const arr = Array.isArray(d?.epargne) ? d.epargne : [];
-                            return arr.some(ep => {
-                                if (String(ep.id) !== epIdStr) return false;
-                                const lid = ep.linkedAccountId;
-                                return lid !== null && lid !== undefined && lid !== '' && lid !== 0;
-                            });
-                        });
+                    // v17.45 : getEpLinkedId — lookup radical direct dans TOUTES les années
+                    // Retourne la valeur brute de linkedAccountId (truthy = lié), null sinon
+                    const getEpLinkedId = (epKey) => {
+                        const id = String(epKey || '').replace('ep_', '');
+                        if (!id) return null;
+                        for (const d of Object.values(donneesAnnuelles.value)) {
+                            for (const ep of (Array.isArray(d?.epargne) ? d.epargne : [])) {
+                                if (String(ep.id) === id) return ep.linkedAccountId || null;
+                            }
+                        }
+                        return null;
                     };
+                    const isEpLinked = (epKey) => !!getEpLinkedId(epKey);
 
                     // v17.37 : soldeFinal = somme des comptes physiques (SSOT)
                     const soldeFinal = computed(() => {
@@ -5822,6 +5866,16 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 serverSyncStatus.value = 'synced';
                             }
                         } catch (e) { addLog("Mode hors-ligne local activé.", 'warn'); }
+
+                        // v17.45 : Auto-backup VPS toutes les 15 minutes
+                        setInterval(async () => {
+                            try {
+                                await saveToServer();
+                                addLog('🔄 Auto-backup VPS — ' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), 'success');
+                                autoBackupToast.value = true;
+                                setTimeout(() => { autoBackupToast.value = false; }, 3500);
+                            } catch(e) { addLog('❌ Auto-backup VPS échoué', 'error'); }
+                        }, 900000);
                     });
 
                     onBeforeUnmount(() => {
@@ -5854,7 +5908,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         addObjectifEpargne, deleteObjectifEpargne,
                         comptesSelectOptions,
                         detailsComptesFinal, getCompteLabel, getCompteIcone,
-                        getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked
+                        getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
+                        canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast
                     };
                 }
             });
