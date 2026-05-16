@@ -812,7 +812,7 @@
                             <select v-model="soldesInitiaux.destinationSurplus" @change="handleDataChange" class="bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold outline-none border border-slate-600 cursor-pointer focus:border-blue-500">
                                 <option value="courant">💳 Compte Courant</option>
                                 <option v-for="c in comptesSelectOptions" :key="'dcpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'dest_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                <option v-for="ep in epargneNonLiee" :key="'dest_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                             </select>
                         </div>
 
@@ -921,7 +921,7 @@
                                         <select v-if="!depense.parts || !depense.parts.length" v-model="depense.sourceCompte" @change="handleDataChange" class="bg-gray-100 text-gray-700 px-2 py-1.5 rounded-lg font-bold text-[10px] outline-none cursor-pointer border border-gray-200" title="Compte source">
                                             <option value="courant">💳 Courant</option>
                                             <option v-for="c in comptesSelectOptions" :key="'scpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                            <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'src_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                            <option v-for="ep in epargneNonLiee" :key="'src_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                         </select>
                                         <select v-model.number="depense.mois" @change="deplacerDepense(depense)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-2 rounded-lg font-black transition-colors text-xs uppercase tracking-widest shadow-sm outline-none cursor-pointer" title="Déplacer vers un autre mois de cette année">
                                             <option disabled :value="moisNum">Vers... ⏭️</option>
@@ -938,7 +938,7 @@
                                             <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-gray-200 rounded bg-gray-50 p-1.5 outline-none max-w-[120px]">
                                                 <option value="courant">💳 Courant</option>
                                                 <option v-for="c in comptesSelectOptions" :key="'psc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                                <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'pse_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                                <option v-for="ep in epargneNonLiee" :key="'pse_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                             </select>
                                             <button @click="supprimerPart(depense, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold text-sm">✕</button>
                                         </div>
@@ -949,6 +949,27 @@
                                     </div>
                                 </div>
                                 <button @click="ajouterDepense(moisNum, anneeAffichage); handleDataChange()" class="w-full py-3.5 mt-2 rounded-xl border-2 border-dashed border-gray-200 text-[10px] font-black text-gray-500 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 uppercase transition-all tracking-[0.2em]">+ Ajouter un choc en {{ nomDuMois(moisNum) }} {{ anneeAffichage }}</button>
+                                <!-- v17.96 : Virements internes -->
+                                <div class="mt-4 pt-4 border-t border-gray-100">
+                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-2">🔄 Virements internes</h4>
+                                    <div v-for="vir in getVirementsMois(moisNum, anneeAffichage)" :key="vir.id" class="flex items-center gap-2 mb-2 bg-indigo-50 rounded-xl p-2.5 border border-indigo-100">
+                                        <select v-model="vir.sourceCompte" @change="handleDataChange" class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none cursor-pointer text-gray-700" title="Compte source">
+                                            <option value="courant">💳 Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'vsrc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in epargneNonLiee" :key="'vsrep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        </select>
+                                        <span class="text-indigo-400 font-bold text-xs shrink-0">→</span>
+                                        <select v-model="vir.destinationCompte" @change="handleDataChange" class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none cursor-pointer text-gray-700" title="Compte destination">
+                                            <option value="courant">💳 Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'vdst_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in epargneNonLiee" :key="'vdep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        </select>
+                                        <input type="number" v-model.number="vir.montant" @input="handleDataChange" min="0" class="w-24 text-right font-black text-indigo-700 bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none text-xs"/>
+                                        <span class="text-[9px] text-gray-400 font-bold shrink-0">DH</span>
+                                        <button @click="supprimerVirementInterne(vir.id, anneeAffichage)" class="text-red-400 hover:text-red-600 px-1 font-bold text-sm shrink-0">✕</button>
+                                    </div>
+                                    <button @click="ajouterVirementInterne(moisNum, anneeAffichage)" class="w-full py-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-[10px] font-black text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 uppercase transition-all tracking-[0.15em]">+ Virement interne en {{ nomDuMois(moisNum) }}</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -996,7 +1017,7 @@
                                     <select v-model="projetStudio.compteSourceCash" @change="handleDataChange" class="bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold outline-none border border-slate-600 cursor-pointer">
                                         <option value="courant">💳 Courant</option>
                                         <option v-for="c in comptesSelectOptions" :key="'stcpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                        <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'studio_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        <option v-for="ep in epargneNonLiee" :key="'studio_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                     </select>
                                 </div>
                                 <button @click="appliquerMensualiteStudio" class="w-full py-5 mt-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl hover:bg-blue-500 hover:scale-105 transition-all active:scale-95 uppercase text-xs tracking-widest shadow-blue-500/30 border border-blue-400/50">👉 Injecter Crédit + Cash Studio</button>
@@ -1372,15 +1393,18 @@
                     <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">💎 Patrimoine & Objectifs</h2>
 
                     <!-- ── Section 1 : Smart Goals CRUD (v17.16) ── -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-100 flex items-center justify-between">
+                    <div data-cfo-collapse="wealth-goals" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
                             <div>
                                 <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">🎯 Objectifs & Projets</h3>
                                 <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Suivi de progression Smart Goals</p>
                             </div>
-                            <span class="text-xs font-bold text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">{{ wealthGoals.length }} objectif{{ wealthGoals.length > 1 ? 's' : '' }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">{{ wealthGoals.length }} objectif{{ wealthGoals.length > 1 ? 's' : '' }}</span>
+                                <span class="cfo-chevron text-gray-400 text-xs">▼</span>
+                            </div>
                         </div>
-                        <div class="p-6 space-y-4">
+                        <div class="p-6 space-y-4 cfo-collapsible-body">
                             <div v-for="(goal, idx) in wealthGoals" :key="idx" class="p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors">
                                 <!-- Ligne d'édition inline -->
                                 <div class="flex items-center gap-2 mb-3">
@@ -1421,15 +1445,18 @@
                     </div>
 
                     <!-- ── Section 1b : Objectifs Épargne CRUD (v17.15) ── -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-purple-50 to-violet-50 border-b border-purple-100 flex items-center justify-between">
+                    <div data-cfo-collapse="wealth-epargne" class="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden">
+                        <div class="px-6 py-4 bg-gradient-to-r from-purple-50 to-violet-50 border-b border-purple-100 flex items-center justify-between cfo-collapse-header">
                             <div>
                                 <h3 class="font-black uppercase tracking-widest text-purple-900 text-sm">💜 Objectifs Épargne ({{ anneeAffichage }})</h3>
                                 <p class="text-[10px] text-purple-500 mt-0.5 uppercase tracking-widest">Virements mensuels planifiés vers l'épargne</p>
                             </div>
-                            <span class="text-xs font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded-full border border-purple-200">{{ formatMAD(totalEpargne) }}/mois</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded-full border border-purple-200">{{ formatMAD(totalEpargne) }}/mois</span>
+                                <span class="cfo-chevron text-gray-400 text-xs">▼</span>
+                            </div>
                         </div>
-                        <div class="p-6 space-y-3">
+                        <div class="p-6 space-y-3 cfo-collapsible-body">
                             <div v-for="(obj, idx) in donneesAnnuelles[anneeAffichage].epargne" :key="obj.id" class="space-y-1.5">
                                 <div class="flex items-center gap-3">
                                     <input type="text" v-model="obj.nom" @input="handleDataChange" placeholder="Nom de l'objectif" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-purple-400 min-w-0"/>
@@ -1453,22 +1480,33 @@
                                 </div>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-sm py-6 italic">Aucun objectif d'épargne configuré.</div>
-                            <button @click="addObjectifEpargne(anneeAffichage)" class="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-sm uppercase tracking-widest shadow-sm transition-colors">
+                            <!-- v17.96 : Compte lié obligatoire avant création -->
+                            <div class="mt-3 flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl px-3 py-2">
+                                <span class="text-[10px] font-black text-purple-700 uppercase tracking-widest shrink-0">Compte lié :</span>
+                                <select v-model="newEpargneLinkedId" class="flex-1 text-xs font-bold bg-white border border-purple-200 rounded-lg px-2 py-1.5 outline-none text-purple-700 cursor-pointer focus:border-purple-400">
+                                    <option :value="null" disabled>— Sélectionner un compte —</option>
+                                    <option v-for="c in comptesSelectOptions" :key="'nlink_'+c.id" :value="c.id">{{ c.icone || '💰' }} {{ c.label }}</option>
+                                </select>
+                            </div>
+                            <button @click="addObjectifEpargne(anneeAffichage)" :disabled="!newEpargneLinkedId" :class="['mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm uppercase tracking-widest shadow-sm transition-colors', newEpargneLinkedId ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed']">
                                 <span class="text-lg leading-none">＋</span> Ajouter un objectif
                             </button>
                         </div>
                     </div>
 
                     <!-- ── Section 2 : ROI Tracker ── -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-gray-100 flex items-center justify-between">
+                    <div data-cfo-collapse="wealth-roi" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
                             <div>
                                 <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">📈 Rendement du Patrimoine</h3>
                                 <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Yield & ROI par actif productif</p>
                             </div>
-                            <span class="text-xs font-bold text-violet-600 bg-violet-100 px-3 py-1 rounded-full border border-violet-200">{{ roiAssets.length }} actif{{ roiAssets.length > 1 ? 's' : '' }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-violet-600 bg-violet-100 px-3 py-1 rounded-full border border-violet-200">{{ roiAssets.length }} actif{{ roiAssets.length > 1 ? 's' : '' }}</span>
+                                <span class="cfo-chevron text-gray-400 text-xs">▼</span>
+                            </div>
                         </div>
-                        <div class="p-6">
+                        <div class="p-6 cfo-collapsible-body">
                             <div class="space-y-3 mb-5">
                                 <div v-for="asset in roiAssets" :key="asset.id"
                                      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-violet-300 transition-colors">
@@ -1552,14 +1590,15 @@
                     </div>
 
                     <!-- ── Section 3 : Simulateur Arbitrage ── -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-gray-100 flex items-center justify-between">
+                    <div data-cfo-collapse="wealth-arbitrage" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
                             <div>
                                 <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">⚖️ Simulateur Arbitrage : Rembourser ou Investir ?</h3>
                                 <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Dette vs Investissement — Intérêts composés sur la durée</p>
                             </div>
+                            <span class="cfo-chevron text-gray-400 text-xs">▼</span>
                         </div>
-                        <div class="p-6">
+                        <div class="p-6 cfo-collapsible-body">
                             <!-- Inputs -->
                             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                                 <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
@@ -1653,15 +1692,18 @@
                     </div>
 
                     <!-- ── Section 4 : Stress Test Foncier & Indivision ── -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-gray-100 flex items-center justify-between">
+                    <div data-cfo-collapse="wealth-stress" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
                             <div>
                                 <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">🏗️ Stress Test Foncier & Indivision (Marrakech)</h3>
                                 <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Matrice de risque · 3 scénarios de valorisation</p>
                             </div>
-                            <span class="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">{{ stressAssets.length }} actif{{ stressAssets.length > 1 ? 's' : '' }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">{{ stressAssets.length }} actif{{ stressAssets.length > 1 ? 's' : '' }}</span>
+                                <span class="cfo-chevron text-gray-400 text-xs">▼</span>
+                            </div>
                         </div>
-                        <div class="p-6">
+                        <div class="p-6 cfo-collapsible-body">
                             <div class="overflow-x-auto rounded-xl border border-gray-200">
                                 <table class="w-full text-sm">
                                     <thead class="bg-gray-50 border-b-2 border-gray-200">
@@ -2078,7 +2120,7 @@
                                 <select v-model="choc.sourceCompte" @change="handleDataChange" class="w-full p-2 border rounded-lg font-bold bg-gray-50 outline-none text-sm">
                                     <option value="courant">💳 Courant</option>
                                     <option v-for="c in comptesSelectOptions" :key="'mscpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                    <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'msrc_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                    <option v-for="ep in epargneNonLiee" :key="'msrc_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                 </select>
                             </div>
                             <!-- v17.27 : Scinder le choc -->
@@ -2095,7 +2137,7 @@
                                         <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-gray-200 rounded bg-gray-50 p-1.5 outline-none flex-1">
                                             <option value="courant">💳 Courant</option>
                                             <option v-for="c in comptesSelectOptions" :key="'mpsc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                            <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'mpse_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                            <option v-for="ep in epargneNonLiee" :key="'mpse_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                         </select>
                                     </div>
                                 </div>
@@ -2124,7 +2166,7 @@
                             <select v-model="projetStudio.compteSourceCash" @change="handleDataChange" class="bg-slate-700 text-white px-2 py-1.5 rounded-lg text-xs font-bold outline-none border border-slate-600 cursor-pointer">
                                 <option value="courant">💳 Courant</option>
                                 <option v-for="c in comptesSelectOptions" :key="'mstcpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'mstudio_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                <option v-for="ep in epargneNonLiee" :key="'mstudio_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                             </select>
                         </div>
                     </div>
@@ -2723,7 +2765,7 @@
                                     <select v-model="soldesInitiaux.destinationSurplus" @change="handleDataChange" class="w-full bg-slate-900 text-white font-bold text-sm p-3 rounded-xl outline-none border border-slate-600">
                                         <option value="courant">💳 Compte Courant</option>
                                         <option v-for="c in comptesSelectOptions" :key="'mdcpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                        <option v-for="ep in (donneesAnnuelles[anneeAffichage] || {}).epargne || []" :key="'mdest_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        <option v-for="ep in epargneNonLiee" :key="'mdest_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                     </select>
                                 </div>
                                 <!-- Paie reçue -->
@@ -3338,8 +3380,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(e, i) in releveCompte" :key="i"
-                                :class="e.type === 'initial' ? 'border-b-2 border-blue-300 bg-blue-50' : 'border-b border-gray-100 hover:bg-gray-50'">
+                            <tr v-for="(e, i) in releveCompteGrouped" :key="i"
+                                :class="e.type === 'initial' ? 'border-b-2 border-blue-300 bg-blue-50' : (e._gMois % 2 === 0 ? 'border-b border-gray-100 hover:bg-gray-50' : 'border-b border-gray-100 bg-slate-50 hover:bg-slate-100')">
                                 <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
                                 <td v-if="releveOnglet === '__global__'" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">{{ e._compteLabel }}</td>
                                 <td class="p-2 text-xs" :class="e.type === 'initial' ? 'font-black text-blue-700 uppercase tracking-wider' : 'text-gray-700'">{{ e.libelle }}</td>
@@ -3807,6 +3849,7 @@
                     }, { immediate: true });
                     const editingCompteId = ref(null);
                     const editingCompte = ref(null);
+                    const newEpargneLinkedId = ref(null);
 
                     // ── v17.16 : Time Machine Comptes ──────────────────
                     const moisCibleProjection = ref(12);
@@ -3834,6 +3877,11 @@
                             .filter(c => c.type !== 'courant' && c.id !== courantId)
                             .map(c => ({ id: c.id, label: c.label, type: c.type, icone: c.icone || '💰' }));
                     });
+                    // v17.96 : Épargne non liée — exclut les objectifs dont la valeur est trackée par un compte physique
+                    const epargneNonLiee = computed(() =>
+                        ((donneesAnnuelles.value[anneeAffichage.value] || {}).epargne || [])
+                            .filter(ep => !ep.linkedAccountId)
+                    );
 
                     const addCompte = () => {
                         if (!newCompte.value.label.trim()) return;
@@ -3851,12 +3899,12 @@
                     // v17.15 — CRUD Objectifs Épargne
                     const addObjectifEpargne = (annee) => {
                         if (!donneesAnnuelles.value[annee]) return;
+                        if (!newEpargneLinkedId.value) return; // v17.96 : compte lié obligatoire
                         if (!Array.isArray(donneesAnnuelles.value[annee].epargne)) donneesAnnuelles.value[annee].epargne = [];
                         const newId = Date.now();
-                        donneesAnnuelles.value[annee].epargne.push({ id: newId, nom: 'Nouvel objectif', valeur: 0, linkedAccountId: null, sourceCompte: 'courant' });
-                        // v17.23 : init solde pour le nouveau compte (évite NaN dans le moteur)
+                        donneesAnnuelles.value[annee].epargne.push({ id: newId, nom: 'Nouvel objectif', valeur: 0, linkedAccountId: newEpargneLinkedId.value, sourceCompte: 'courant' });
                         soldesInitiaux.value['ep_' + newId] = 0;
-                        console.log('[v17.23] Objectif épargne créé:', { annee, id: newId, epargneKeys: donneesAnnuelles.value[annee].epargne.map(e => 'ep_'+e.id) });
+                        newEpargneLinkedId.value = null;
                         handleDataChange();
                     };
                     const deleteObjectifEpargne = (annee, idx) => {
@@ -4233,6 +4281,9 @@
                                             ? Object.entries(annee.epargne).map(([key, item], idx) => ({ id: Date.now() + idx, nom: item?.label || key, valeur: Number(item?.valeur) || 0 }))
                                             : [];
                                     }
+                                    if (!Array.isArray(annee.virementsInternes)) {
+                                        annee.virementsInternes = [];
+                                    }
                                 });
                             }
                             if(data.gConfig) gConfig.value = data.gConfig;
@@ -4362,6 +4413,20 @@
                     
                     const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant' }); handleDataChange(); };
                     const supprimerDepense = (id) => { if(donneesAnnuelles.value[anneeAffichage.value]) donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres = donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres.filter(d => d.id !== id); handleDataChange(); };
+                    // v17.96 : Virements internes CRUD
+                    const getVirementsMois = (m, a) => (donneesAnnuelles.value[a]?.virementsInternes || []).filter(v => v.mois === m);
+                    const ajouterVirementInterne = (m, a) => {
+                        if (!donneesAnnuelles.value[a]) return;
+                        if (!Array.isArray(donneesAnnuelles.value[a].virementsInternes)) donneesAnnuelles.value[a].virementsInternes = [];
+                        const defaultDst = comptesSelectOptions.value[0] ? 'cpt_' + comptesSelectOptions.value[0].id : 'courant';
+                        donneesAnnuelles.value[a].virementsInternes.push({ id: Date.now(), mois: m, sourceCompte: 'courant', destinationCompte: defaultDst, montant: 0 });
+                        handleDataChange();
+                    };
+                    const supprimerVirementInterne = (id, a) => {
+                        if (!donneesAnnuelles.value[a]) return;
+                        donneesAnnuelles.value[a].virementsInternes = (donneesAnnuelles.value[a].virementsInternes || []).filter(v => v.id !== id);
+                        handleDataChange();
+                    };
 
                     // v17.30 : Supprimer une ligne d'un objet (revenus, chargesFixes, chargesVariables)
                     const supprimerLigneObj = (collection, key) => {
@@ -4533,6 +4598,13 @@
                             });
                         }
                         return entries;
+                    });
+                    const releveCompteGrouped = computed(() => {
+                        let gIdx = -1, lastMois = null;
+                        return releveCompte.value.map(e => {
+                            if (e.type !== 'initial' && e.mois !== lastMois) { lastMois = e.mois; gIdx++; }
+                            return { ...e, _gMois: gIdx };
+                        });
                     });
                     const releveCompteLabel = computed(() => {
                         const tab = releveOnglet.value;
@@ -5135,6 +5207,23 @@
                                 _deduireChargesComptes(fRestParCompte);
                                 _deduireChargesComptes(vRestParCompte);
 
+                                // v17.96 : Virements internes (mois courant)
+                                (dataAnnee.virementsInternes || []).filter(v => v.mois === mNum).forEach(v => {
+                                    const src = v.sourceCompte || 'courant'; const dst = v.destinationCompte || 'courant';
+                                    const amt = Number(v.montant || 0);
+                                    if (amt <= 0 || src === dst) return;
+                                    const dstLabel = dst === 'courant' ? 'Compte Courant' : getCompteLabel(dst);
+                                    const srcLabel = src === 'courant' ? 'Compte Courant' : getCompteLabel(src);
+                                    if (src === 'courant') { curSolde -= amt; solde_fin = curSolde; }
+                                    else if (src.startsWith('cpt_') && src !== courantCptKey && src in soldesComptes) soldesComptes[src] -= amt;
+                                    else if (src.startsWith('ep_') && src in soldesEpargne) soldesEpargne[src] -= amt;
+                                    if (dst === 'courant') { curSolde += amt; solde_fin = curSolde; }
+                                    else if (dst.startsWith('cpt_') && dst !== courantCptKey && dst in soldesComptes) soldesComptes[dst] += amt;
+                                    else if (dst.startsWith('ep_') && dst in soldesEpargne) soldesEpargne[dst] += amt;
+                                    _log(src, mNum, aNum, 'Virement → ' + dstLabel, amt, 'debit');
+                                    _log(dst, mNum, aNum, 'Virement ← ' + srcLabel, amt, 'credit');
+                                });
+
                                 // v17.41 : JOURNAL-SYNC — le solde courant physique = dernier soldeApres du journal
                                 if (courantCptKey && _journal[courantCptKey] && _journal[courantCptKey].length > 0) {
                                     soldesComptes[courantCptKey] = _journal[courantCptKey][_journal[courantCptKey].length - 1].soldeApres;
@@ -5240,6 +5329,23 @@
                                 };
                                 _deduireChargesComptesFutur(fixParCompte);
                                 _deduireChargesComptesFutur(varParCompte);
+
+                                // v17.96 : Virements internes (mois futurs)
+                                (dataAnnee.virementsInternes || []).filter(v => v.mois === mNum).forEach(v => {
+                                    const src = v.sourceCompte || 'courant'; const dst = v.destinationCompte || 'courant';
+                                    const amt = Number(v.montant || 0);
+                                    if (amt <= 0 || src === dst) return;
+                                    const dstLabel = dst === 'courant' ? 'Compte Courant' : getCompteLabel(dst);
+                                    const srcLabel = src === 'courant' ? 'Compte Courant' : getCompteLabel(src);
+                                    if (src === 'courant') { curSolde -= amt; solde_fin = curSolde; }
+                                    else if (src.startsWith('cpt_') && src !== courantCptKey && src in soldesComptes) soldesComptes[src] -= amt;
+                                    else if (src.startsWith('ep_') && src in soldesEpargne) soldesEpargne[src] -= amt;
+                                    if (dst === 'courant') { curSolde += amt; solde_fin = curSolde; }
+                                    else if (dst.startsWith('cpt_') && dst !== courantCptKey && dst in soldesComptes) soldesComptes[dst] += amt;
+                                    else if (dst.startsWith('ep_') && dst in soldesEpargne) soldesEpargne[dst] += amt;
+                                    _log(src, mNum, aNum, 'Virement → ' + dstLabel, amt, 'debit');
+                                    _log(dst, mNum, aNum, 'Virement ← ' + srcLabel, amt, 'credit');
+                                });
 
                                 totalMoisEcoules++;
                                 cumulEpargne += epargneMensuellePrevue;
