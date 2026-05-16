@@ -4513,11 +4513,14 @@
                         const j = bilanJournal.value;
                         if (!j || Object.keys(j).length === 0) return [];
                         const tabs = [];
-                        // v17.43 : Set des ep_* liés à un compte physique (dédoublonner)
+                        // v17.44 : Set des ep_* liés — robust (String(), nulls explicites)
                         const linkedEpKeys = new Set();
                         Object.values(donneesAnnuelles.value).forEach(da => {
-                            (Array.isArray(da.epargne) ? da.epargne : []).forEach(ep => {
-                                if (ep.linkedAccountId) linkedEpKeys.add('ep_' + ep.id);
+                            (Array.isArray(da?.epargne) ? da.epargne : []).forEach(ep => {
+                                const lid = ep.linkedAccountId;
+                                if (lid !== null && lid !== undefined && lid !== '' && lid !== 0) {
+                                    linkedEpKeys.add('ep_' + String(ep.id));
+                                }
                             });
                         });
                         // Comptes physiques (cpt_*)
@@ -5394,7 +5397,13 @@
                         const linked = new Set();
                         Object.values(donneesAnnuelles.value).forEach(d => {
                             const arr = Array.isArray(d?.epargne) ? d.epargne : [];
-                            arr.forEach(ep => { if (ep.linkedAccountId) linked.add('ep_' + ep.id); });
+                            arr.forEach(ep => {
+                                const lid = ep.linkedAccountId;
+                                // v17.44 : explicit null/empty/0 check + String() pour éviter mismatch number vs string
+                                if (lid !== null && lid !== undefined && lid !== '' && lid !== 0) {
+                                    linked.add('ep_' + String(ep.id));
+                                }
+                            });
                         });
                         return linked;
                     });
@@ -5405,7 +5414,19 @@
                         Object.entries(all).forEach(([k, v]) => { if (!linked.has(k)) result[k] = v; });
                         return result;
                     });
-                    const isEpLinked = (key) => _epargneLinkedKeys.value.has(key);
+                    // v17.44 : isEpLinked — lookup direct toutes années, String() pour robustesse
+                    const isEpLinked = (epKey) => {
+                        if (!epKey || !epKey.startsWith('ep_')) return false;
+                        const epIdStr = epKey.replace('ep_', '');
+                        return Object.values(donneesAnnuelles.value).some(d => {
+                            const arr = Array.isArray(d?.epargne) ? d.epargne : [];
+                            return arr.some(ep => {
+                                if (String(ep.id) !== epIdStr) return false;
+                                const lid = ep.linkedAccountId;
+                                return lid !== null && lid !== undefined && lid !== '' && lid !== 0;
+                            });
+                        });
+                    };
 
                     // v17.37 : soldeFinal = somme des comptes physiques (SSOT)
                     const soldeFinal = computed(() => {
@@ -5811,7 +5832,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteLabel, releveOnglet, releveOnglets, releveMoisFiltre, releveAnneeFiltre, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, 
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveOnglet, releveOnglets, releveMoisFiltre, releveAnneeFiltre, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
