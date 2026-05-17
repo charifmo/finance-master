@@ -2260,7 +2260,10 @@
                         <div v-for="(choc, i) in donneesAnnuelles[anneeAffichage].depensesIrregulieres" :key="choc.id || i"
                              :class="['rounded-2xl border p-3 mb-3 shadow-sm', choc.montant < 0 ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200']">
                             <div class="mb-2">
-                                <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1 block">Nom</label>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 flex-1">Nom</label>
+                                    <button @click="supprimerDepense(choc.id)" class="min-w-[36px] min-h-[36px] flex items-center justify-center text-red-400 font-black text-lg bg-red-50 rounded-lg border border-red-200">🗑️</button>
+                                </div>
                                 <input type="text" v-model="choc.nom" @input="handleDataChange" class="w-full p-3 border rounded-lg font-bold bg-white outline-none text-sm"/>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
@@ -2312,6 +2315,47 @@
                         </div>
                         <p v-if="donneesAnnuelles[anneeAffichage].depensesIrregulieres.length === 0" class="text-center text-sm text-gray-400 italic py-4">Aucun flux exceptionnel enregistré.</p>
                     </template>
+                    <!-- v18.30 : Bouton Ajouter choc -->
+                    <button @click="ajouterDepense(soldesInitiaux.moisActuel, anneeAffichage)" class="w-full py-3 mb-4 rounded-xl border-2 border-dashed border-gray-300 text-[10px] font-black text-gray-500 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-300 uppercase tracking-widest transition-all min-h-[44px]">+ Ajouter un flux exceptionnel</button>
+
+                    <!-- v18.30 : Virements Internes mobile -->
+                    <div v-if="donneesAnnuelles[anneeAffichage]" class="bg-indigo-50 rounded-2xl border border-indigo-200 overflow-hidden mb-4">
+                        <div class="px-4 py-3 bg-indigo-100 border-b border-indigo-200 flex items-center justify-between">
+                            <span class="text-xs font-black uppercase tracking-widest text-indigo-800">🔄 Virements Internes {{ anneeAffichage }}</span>
+                            <span class="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-200">{{ (donneesAnnuelles[anneeAffichage].virementsInternes || []).length }} virement{{ (donneesAnnuelles[anneeAffichage].virementsInternes || []).length !== 1 ? 's' : '' }}</span>
+                        </div>
+                        <div class="p-3 space-y-2">
+                            <div v-for="vir in (donneesAnnuelles[anneeAffichage].virementsInternes || [])" :key="vir.id" class="bg-white rounded-xl border border-indigo-100 p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <select v-model.number="vir.mois" @change="handleDataChange" class="text-xs font-bold bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1.5 outline-none text-indigo-700 cursor-pointer min-h-[44px]">
+                                        <option v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :value="m">{{ nomDuMois(m) }}</option>
+                                    </select>
+                                    <button @click="supprimerVirementInterne(vir.id, anneeAffichage)" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-red-400 font-black text-base bg-red-50 rounded-lg border border-red-200">✕</button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mb-2">
+                                    <div>
+                                        <p class="text-[8px] font-black text-gray-400 uppercase mb-1">De</p>
+                                        <select v-model="vir.sourceCompte" @change="handleDataChange" class="w-full text-xs font-bold bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 outline-none text-gray-700 cursor-pointer min-h-[44px]">
+                                            <option value="courant">💳 Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'mvsrc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in epargneNonLiee" :key="'mvsep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <p class="text-[8px] font-black text-gray-400 uppercase mb-1">Vers</p>
+                                        <select v-model="vir.destinationCompte" @change="handleDataChange" class="w-full text-xs font-bold bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 outline-none text-gray-700 cursor-pointer min-h-[44px]">
+                                            <option value="courant">💳 Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'mvdst_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in epargneNonLiee" :key="'mvdep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <input type="number" v-model.number="vir.montant" @input="handleDataChange" min="0" placeholder="Montant (DH)" class="w-full p-3 text-sm font-black text-indigo-700 text-right border border-indigo-200 rounded-lg bg-indigo-50 outline-none min-h-[44px]"/>
+                            </div>
+                            <p v-if="!(donneesAnnuelles[anneeAffichage].virementsInternes || []).length" class="text-center text-xs text-gray-400 italic py-2">Aucun virement planifié.</p>
+                            <button @click="ajouterVirementInterne(soldesInitiaux.moisActuel, anneeAffichage)" class="w-full py-3 rounded-xl border-2 border-dashed border-indigo-300 text-[10px] font-black text-indigo-500 hover:bg-indigo-100 uppercase tracking-widest transition-all min-h-[44px]">+ Ajouter un virement interne</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- ━━ STUDIO ━━ -->
@@ -3365,7 +3409,7 @@
                         </div>
                     </details>
 
-                    <!-- ACCORDÉON 6 : COMPTES -->
+                    <!-- ACCORDÉON 6 : COMPTES — v18.30 CRUD complet -->
                     <details class="bg-white rounded-2xl border border-gray-200 shadow-sm mb-3 overflow-hidden">
                         <summary class="p-4 cursor-pointer bg-gradient-to-r from-slate-50 to-white flex items-center justify-between list-none">
                             <div class="flex items-center gap-2">
@@ -3377,19 +3421,83 @@
                             </div>
                             <span class="text-slate-400 text-lg">⌄</span>
                         </summary>
-                        <div class="divide-y divide-gray-100">
-                            <div v-for="compte in comptes" :key="compte.id" class="p-4 flex items-center gap-3">
-                                <span class="text-xl shrink-0">{{ compte.icone || '💳' }}</span>
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-black text-gray-800 text-sm truncate">{{ compte.label }}</p>
-                                    <span :class="['text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full', compte.type === 'liquide' ? 'bg-blue-100 text-blue-700' : compte.type === 'epargne' ? 'bg-green-100 text-green-700' : compte.type === 'investissement' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700']">{{ compte.type }}</span>
+                        <div class="p-4 space-y-3">
+                            <div v-for="compte in comptes" :key="compte.id" class="bg-gray-50 rounded-xl border border-gray-200 p-3">
+                                <!-- Ligne 1 : icone + label + delete -->
+                                <div class="flex items-center gap-2 mb-2">
+                                    <input type="text" v-model="compte.icone" @input="handleDataChange" placeholder="🏦" class="w-10 text-xl text-center bg-white border border-gray-200 rounded-lg p-1 outline-none min-h-[40px]"/>
+                                    <input type="text" v-model="compte.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-800 bg-white border border-gray-300 rounded-lg px-2 py-2 outline-none min-h-[40px]"/>
+                                    <button @click="deleteCompte(compte.id)" class="min-w-[40px] min-h-[40px] flex items-center justify-center text-red-400 font-black bg-red-50 rounded-lg border border-red-200">🗑️</button>
                                 </div>
-                                <div class="text-right shrink-0">
-                                    <input type="number" v-model.number="compte.solde" @change="handleDataChange"
-                                        :class="['w-28 text-sm font-black text-right tabular-nums bg-transparent border-b-2 outline-none transition-colors', compte.solde >= 0 ? 'text-gray-800 border-transparent hover:border-gray-300 focus:border-blue-500' : 'text-red-600 border-red-200 focus:border-red-500']"
-                                        step="100" />
-                                    <p class="text-[10px] font-bold text-purple-500 mt-0.5 tabular-nums">→ {{ formatMAD(getCompteProjection(compte)) }}</p>
+                                <!-- Ligne 2 : type + solde -->
+                                <div class="grid grid-cols-2 gap-2">
+                                    <select v-model="compte.type" @change="handleDataChange" class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 outline-none cursor-pointer min-h-[44px]">
+                                        <option value="liquide">💳 Liquide</option>
+                                        <option value="epargne">💰 Épargne</option>
+                                        <option value="investissement">📈 Investissement</option>
+                                        <option value="credit">🏦 Crédit</option>
+                                    </select>
+                                    <input type="number" v-model.number="compte.solde" @change="handleDataChange" step="100" class="text-sm font-black text-right text-gray-800 bg-white border border-gray-200 rounded-lg px-2 py-2 outline-none min-h-[44px]"/>
                                 </div>
+                                <p class="text-[9px] font-bold text-purple-500 mt-1 text-right">Projection : {{ formatMAD(getCompteProjection(compte)) }}</p>
+                            </div>
+                            <!-- Formulaire ajout compte -->
+                            <div class="bg-green-50 rounded-xl border-2 border-dashed border-green-300 p-3 space-y-2">
+                                <p class="text-[9px] font-black text-green-700 uppercase tracking-widest">+ Nouveau compte</p>
+                                <div class="flex gap-2">
+                                    <input type="text" v-model="newCompte.label" placeholder="Nom du compte" class="flex-1 text-sm font-bold bg-white border border-gray-300 rounded-lg px-2 py-2 outline-none min-h-[44px]"/>
+                                    <input type="number" v-model.number="newCompte.solde" placeholder="Solde" class="w-28 text-sm font-black text-right bg-white border border-gray-200 rounded-lg px-2 py-2 outline-none min-h-[44px]"/>
+                                </div>
+                                <select v-model="newCompte.type" class="w-full text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 outline-none cursor-pointer min-h-[44px]">
+                                    <option value="liquide">💳 Liquide</option>
+                                    <option value="epargne">💰 Épargne</option>
+                                    <option value="investissement">📈 Investissement</option>
+                                    <option value="credit">🏦 Crédit</option>
+                                </select>
+                                <button @click="addCompte" :disabled="!newCompte.label.trim()" :class="['w-full py-3 rounded-xl font-black text-xs uppercase tracking-widest min-h-[44px] transition-colors', newCompte.label.trim() ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed']">+ Ajouter ce compte</button>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- ACCORDÉON 7 : PARAMÈTRES APP — v18.30 -->
+                    <details class="bg-white rounded-2xl border border-gray-200 shadow-sm mb-3 overflow-hidden">
+                        <summary class="p-4 cursor-pointer bg-gradient-to-r from-gray-50 to-white flex items-center justify-between list-none">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🛠️</span>
+                                <div>
+                                    <p class="text-sm font-black text-gray-900 uppercase tracking-tighter">Paramètres Application</p>
+                                    <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Fonds sécurité · Inflation · Backup</p>
+                                </div>
+                            </div>
+                            <span class="text-gray-400 text-lg">⌄</span>
+                        </summary>
+                        <div class="p-4 space-y-4">
+                            <!-- Fonds de sécurité -->
+                            <div>
+                                <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-2">Objectif Fonds de Sécurité <span class="text-blue-600 normal-case">({{ parametres.objectifFondsSecuriteMois }} mois)</span></label>
+                                <input type="range" v-model.number="parametres.objectifFondsSecuriteMois" min="1" max="24" step="1" @change="handleDataChange" class="w-full accent-blue-600 mb-1"/>
+                                <div class="flex justify-between text-[8px] text-gray-400 mb-1"><span>1 mois</span><span>6 mois</span><span>24 mois</span></div>
+                                <p class="text-xs font-black text-blue-700 text-right">Cible : {{ formatMAD(surplusMensuelBase * parametres.objectifFondsSecuriteMois) }}</p>
+                            </div>
+                            <!-- Inflation -->
+                            <div>
+                                <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-2">Hypothèse d'Inflation</label>
+                                <div class="flex items-center gap-3">
+                                    <input type="number" v-model.number="parametres.hypotheseInflation" @change="handleDataChange" step="0.1" min="0" max="20" class="flex-1 p-3 border border-gray-200 rounded-xl text-xl font-black text-right outline-none focus:border-blue-500 min-h-[44px]"/>
+                                    <span class="text-lg font-black text-gray-400">%</span>
+                                </div>
+                            </div>
+                            <!-- Backup auto -->
+                            <div>
+                                <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-2">Sauvegarde automatique (minutes)</label>
+                                <select v-model.number="parametres.backupIntervalMinutes" @change="handleDataChange" class="w-full p-3 border border-gray-200 rounded-xl text-sm font-bold bg-gray-50 outline-none cursor-pointer min-h-[44px]">
+                                    <option :value="5">5 minutes</option>
+                                    <option :value="10">10 minutes</option>
+                                    <option :value="15">15 minutes</option>
+                                    <option :value="30">30 minutes</option>
+                                    <option :value="60">1 heure</option>
+                                    <option :value="0">Désactivé</option>
+                                </select>
                             </div>
                         </div>
                     </details>
@@ -3688,7 +3796,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "18.20";
+                    const CURRENT_VERSION = "18.30";
                     const CHANGELOG = [
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
