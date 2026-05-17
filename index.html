@@ -262,9 +262,29 @@
                     </div>
                     <!-- v18.00 : KPIs ruban responsive — grid sur petits écrans -->
                     <div class="grid grid-cols-2 lg:flex lg:flex-wrap gap-2 lg:gap-3 lg:items-center">
-                        <div :class="['border rounded-xl px-2 py-1.5 lg:px-3 lg:py-2', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
-                            <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">💰 Surplus /mois</p>
-                            <p :class="['text-xs lg:text-sm font-black', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
+                        <!-- v18.40 : Tooltip Surplus mois par mois -->
+                        <div class="relative" @mouseenter="showSurplusTooltip = true" @mouseleave="showSurplusTooltip = false" @click.stop="showSurplusTooltip = !showSurplusTooltip">
+                            <div :class="['border rounded-xl px-2 py-1.5 lg:px-3 lg:py-2 cursor-pointer select-none', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
+                                <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">💰 Surplus /mois ⓘ</p>
+                                <p :class="['text-xs lg:text-sm font-black', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
+                            </div>
+                            <div v-if="showSurplusTooltip" class="absolute left-0 top-full mt-2 z-[300] w-60 bg-gray-950 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden" @click.stop>
+                                <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">Surplus réel — {{ anneeAffichage }}</p>
+                                    <button @click.stop="showSurplusTooltip = false" class="text-gray-500 hover:text-gray-300 text-xs font-black px-1">✕</button>
+                                </div>
+                                <div class="p-2 max-h-72 overflow-y-auto custom-scroll">
+                                    <div v-for="row in surplusParMois" :key="row.mNum" class="flex justify-between items-center px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors">
+                                        <span class="text-[10px] font-bold text-gray-400 w-20">{{ nomDuMois(row.mNum) }}</span>
+                                        <span :class="['text-[11px] font-black tabular-nums', row.surplus >= 0 ? 'text-emerald-400' : 'text-rose-400']">
+                                            {{ row.surplus >= 0 ? '+' : '' }}{{ formatMAD(row.surplus) }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="px-3 py-2 border-t border-gray-800 bg-gray-900/50">
+                                    <p class="text-[8px] text-gray-500 font-bold uppercase tracking-widest text-center">Revenus – Fixes – Variables – Épargne (exceptions incluses)</p>
+                                </div>
+                            </div>
                         </div>
                         <div class="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 lg:px-3 lg:py-2">
                             <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">🏦 Mensualités</p>
@@ -2115,9 +2135,29 @@
                 </div>
                 <!-- v18.00 : KPIs grille 2x3 compacte — tous indicateurs visibles -->
                 <div class="grid grid-cols-3 gap-1.5 mb-1.5">
-                    <div :class="['rounded-lg px-2 py-1.5 text-center border', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
-                        <p class="text-[7px] font-black uppercase tracking-widest text-gray-500">💰 Surplus</p>
-                        <p :class="['text-[10px] font-black truncate', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
+                    <!-- v18.40 : Tooltip surplus mobile -->
+                    <div class="relative" @click.stop="showSurplusTooltip = !showSurplusTooltip">
+                        <div :class="['rounded-lg px-2 py-1.5 text-center border cursor-pointer select-none', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
+                            <p class="text-[7px] font-black uppercase tracking-widest text-gray-500">💰 Surplus ⓘ</p>
+                            <p :class="['text-[10px] font-black truncate', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
+                        </div>
+                        <div v-if="showSurplusTooltip" class="absolute left-0 top-full mt-1 z-[300] w-64 bg-gray-950 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden" @click.stop>
+                            <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                                <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">Surplus réel — {{ anneeAffichage }}</p>
+                                <button @click.stop="showSurplusTooltip = false" class="text-gray-500 text-xs font-black px-1 min-h-[32px] min-w-[32px]">✕</button>
+                            </div>
+                            <div class="p-2 max-h-64 overflow-y-auto">
+                                <div v-for="row in surplusParMois" :key="row.mNum" class="flex justify-between items-center px-2 py-1.5 rounded-lg">
+                                    <span class="text-[10px] font-bold text-gray-400">{{ nomDuMois(row.mNum) }}</span>
+                                    <span :class="['text-[11px] font-black tabular-nums', row.surplus >= 0 ? 'text-emerald-400' : 'text-rose-400']">
+                                        {{ row.surplus >= 0 ? '+' : '' }}{{ formatMAD(row.surplus) }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="px-3 py-2 border-t border-gray-800 bg-gray-900/50">
+                                <p class="text-[8px] text-gray-500 font-bold uppercase tracking-widest text-center">Rev – Fixes – Var – Épargne (exceptions)</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-center">
                         <p class="text-[7px] font-black uppercase tracking-widest text-gray-500">🏦 Crédit</p>
@@ -3796,7 +3836,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "18.30";
+                    const CURRENT_VERSION = "18.40";
                     const CHANGELOG = [
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
@@ -4880,7 +4920,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 }
                             }
                             if (data.parametres && typeof data.parametres === 'object') {
-                                parametres.value = data.parametres;
+                                // v18.40 : safeMerge préserve les nouveaux champs par défaut (ex: inclureLongTermeRuban)
+                                // si le fichier serveur est ancien et ne les contient pas encore
+                                parametres.value = safeMerge(parametres.value, data.parametres);
                             }
                             // v16.3 : hydratation Wealth Goals
                             if (Array.isArray(data.wealthGoals)) wealthGoals.value = data.wealthGoals;
@@ -5281,6 +5323,43 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return Object.values(ep || {}).reduce((sum, item) => sum + Number((item || {}).valeur || 0), 0);
                     });
                     const surplusMensuelBase = computed(() => totalRevenusBase.value - totalFixes.value - totalVariables.value - totalEpargne.value);
+
+                    // v18.40 : Surplus réel mois par mois avec toutes les exceptions appliquées
+                    const surplusParMois = computed(() => {
+                        calculationTick.value;
+                        const d = donneesAnnuelles.value[anneeAffichage.value];
+                        if (!d) return [];
+                        return Array.from({ length: 12 }, (_, i) => {
+                            const mNum = i + 1;
+                            let rev = 0;
+                            Object.values(d.revenus || {}).forEach(r => {
+                                let v = Number(r?.base || 0);
+                                (r?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                rev += v;
+                            });
+                            let fix = 0;
+                            Object.values(d.chargesFixes || {}).forEach(f => {
+                                let v = Number(f?.valeur || 0);
+                                (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                fix += v;
+                            });
+                            let vari = 0;
+                            Object.values(d.chargesVariables || {}).forEach(c => {
+                                let v = getMonthlyVariableValue(c || {});
+                                (c?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                vari += v;
+                            });
+                            const epArr = Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {});
+                            let ep = 0;
+                            epArr.forEach(obj => {
+                                let v = Number(obj.valeur || 0);
+                                (obj.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                ep += v;
+                            });
+                            return { mNum, surplus: rev - fix - vari - ep };
+                        });
+                    });
+                    const showSurplusTooltip = ref(false);
 
                     const statsFluxAnnee = computed(() => {
                         calculationTick.value;
@@ -6413,7 +6492,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
-                        surplusMensuelBase, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
+                        surplusMensuelBase, surplusParMois, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveOnglet, releveOnglets, releveMoisFiltre, releveAnneeFiltre, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, 
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
