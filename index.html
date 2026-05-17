@@ -256,6 +256,17 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3 flex-wrap" title="Indique quelle part de votre épargne mensuelle est absorbée par le reste à charge de vos projets.">
+                        <!-- v17.99 : KPI Surplus Mensuel Base -->
+                        <div :class="['border rounded-xl px-3 py-2 min-w-[120px]', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-gray-500">💰 Surplus / mois</p>
+                            <p :class="['text-sm font-black', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
+                        </div>
+                        <!-- v17.99 : KPI Mensualités Crédits + taux endettement -->
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 min-w-[120px]">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-gray-500">🏦 Mensualités</p>
+                            <p class="text-sm font-black text-slate-700">{{ formatMAD(totalCreditsMensuels) }}</p>
+                            <p :class="['text-[9px] font-bold uppercase tracking-widest', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-600')]">{{ tauxEndettement.toFixed(1) }}% endettem.</p>
+                        </div>
                         <div class="bg-green-50 border border-green-200 rounded-xl px-3 py-2 min-w-[110px]">
                             <p class="text-[9px] font-black text-green-600 uppercase tracking-widest">↑ Entrées {{anneeAffichage}}</p>
                             <p class="text-sm font-black text-green-700">+{{ formatMAD(statsFluxAnnee.totalEntrees) }}</p>
@@ -725,6 +736,9 @@
                                         <button @click="item.showDetails = !item.showDetails" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
                                             {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
                                         </button>
+                                        <button @click="item.showExceptions = !item.showExceptions" class="text-[10px] text-red-600 hover:text-red-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded">
+                                            {{ item.showExceptions ? '➖ Masquer options' : '➕ Gérer Périodes' }}
+                                        </button>
                                         <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
                                         <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
                                     </div>
@@ -783,6 +797,19 @@
                                 <div class="text-center">
                                     <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, paye: false, montantPaye: 0 }); handleDataChange()" class="text-[10px] text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 hover:text-blue-600 px-4 py-2 rounded-lg font-black transition-colors shadow-sm uppercase tracking-widest">+ Nouvelle ligne</button>
                                 </div>
+                            </div>
+                            <!-- v17.99 : Gérer Périodes — Exceptions variables -->
+                            <div v-if="item.showExceptions" class="mt-4 bg-red-50/50 rounded-xl p-4 border border-red-100 shadow-inner">
+                                <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-red-100 shadow-sm flex-wrap sm:flex-nowrap">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">De</span>
+                                    <select v-model.number="exc.moisDebut" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">à</span>
+                                    <select v-model.number="exc.moisFin" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase ml-2">Nouveau :</span>
+                                    <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" class="w-24 p-1.5 text-sm font-black text-red-700 border rounded text-right bg-red-50 outline-none"/>
+                                    <button @click="(item.exceptions || []).splice(idx, 1); handleDataChange()" class="text-red-500 hover:text-red-700 font-bold ml-auto px-2">✕</button>
+                                </div>
+                                <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
                             </div>
                         </div>
                         <button v-if="modeEdition" @click="ajouterChargeVariable()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-red-600 bg-red-50 border-2 border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
@@ -1553,6 +1580,22 @@
                                         <option :value="null">🎯 Enveloppe virtuelle</option>
                                         <option v-for="c in comptes" :key="'linkw_'+c.id" :value="c.id">{{ c.icone || '💰' }} {{ c.label }}</option>
                                     </select>
+                                    <button @click="obj.showExceptions = !obj.showExceptions; handleDataChange()" class="text-[10px] text-purple-600 hover:text-purple-800 font-bold uppercase tracking-widest bg-purple-50 px-2 py-0.5 rounded border border-purple-200 transition-colors ml-1">
+                                        {{ obj.showExceptions ? '➖ Masquer' : '➕ Gérer Périodes' }}
+                                    </button>
+                                </div>
+                                <!-- v17.99 : Exceptions épargne -->
+                                <div v-if="obj.showExceptions" class="mt-3 bg-purple-50/60 rounded-xl p-4 border border-purple-100 shadow-inner ml-1">
+                                    <div v-for="(exc, idx) in (obj.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-purple-100 shadow-sm flex-wrap sm:flex-nowrap">
+                                        <span class="text-[10px] font-bold text-gray-500 uppercase">De</span>
+                                        <select v-model.number="exc.moisDebut" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                        <span class="text-[10px] font-bold text-gray-500 uppercase">à</span>
+                                        <select v-model.number="exc.moisFin" @change="handleDataChange" class="p-1.5 text-xs font-bold border rounded bg-gray-50 outline-none"><option v-for="m in 12" :value="m">M{{m}}</option></select>
+                                        <span class="text-[10px] font-bold text-gray-500 uppercase ml-2">Nouveau :</span>
+                                        <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" class="w-24 p-1.5 text-sm font-black text-purple-700 border rounded text-right bg-purple-50 outline-none"/>
+                                        <button @click="(obj.exceptions || []).splice(idx, 1); handleDataChange()" class="text-red-500 hover:text-red-700 font-bold ml-auto px-2">✕</button>
+                                    </div>
+                                    <button @click="(obj.exceptions = obj.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-purple-600 hover:bg-purple-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
                                 </div>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-sm py-6 italic">Aucun objectif d'épargne configuré.</div>
@@ -1899,6 +1942,28 @@
                                     <span class="text-lg font-black text-gray-400">%</span>
                                 </div>
                                 <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">Utilisée pour les projections multi-années</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ── RUBAN & FLUX ── -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">📊 Affichage du Ruban Fixe</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Flux annuels (Entrées / Sorties)</label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <div @click="parametres.inclureLongTermeRuban = !parametres.inclureLongTermeRuban; handleDataChange()"
+                                         :class="['relative w-12 h-6 rounded-full transition-colors duration-200 shrink-0', parametres.inclureLongTermeRuban ? 'bg-blue-600' : 'bg-gray-300']">
+                                        <div :class="['absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200', parametres.inclureLongTermeRuban ? 'translate-x-6' : 'translate-x-0']"></div>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm font-black text-gray-700">Inclure le compte Long Terme (Investissements)</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5 uppercase tracking-widest">
+                                            {{ parametres.inclureLongTermeRuban ? 'Activé — tous les flux apparaissent dans le ruban' : 'Désactivé — flux Long Terme exclus du ruban' }}
+                                        </p>
+                                    </div>
+                                </label>
                             </div>
                         </div>
                     </section>
@@ -3539,7 +3604,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.98";
+                    const CURRENT_VERSION = "17.99";
                     const CHANGELOG = [
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
@@ -3929,6 +3994,7 @@
                         moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), semainesRestantes: 3,
                         objectifFondsSecuriteMois: 6, hypotheseInflation: 2.5,
                         backupIntervalMinutes: 15,
+                        inclureLongTermeRuban: false,
                         ribbon: { soldeMois: true, cumulatif: true, statsAnnuelles: true, projection: true },
                         branding: { logoUrl: null, faviconUrl: null, appName: 'Finance Master' }
                     });
@@ -5028,7 +5094,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return { totalEntrees: 0, totalSorties: 0, netAnnuel: 0, surplusMensuelMoyen: 0, impactSurplus: 0 };
-                        const chocs = Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [];
+                        const _inclureLT = parametres.value.inclureLongTermeRuban !== false;
+                        const _ltComptes = _inclureLT ? null : new Set(comptes.value.filter(c => /long.term|invest/i.test(c.label || '') || c.type === 'investissement').map(c => 'cpt_' + c.id));
+                        const chocs = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [])
+                            .filter(c => _inclureLT || !_ltComptes.has(c.sourceCompte || ''));
                         let totalEntrees = 0, totalSorties = 0;
                         chocs.forEach(c => {
                             const m = Number(c.montant || 0);
@@ -5255,7 +5324,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             let varCourant = 0;
                             const varParCompte = {};
                             Object.values(dataAnnee.chargesVariables || {}).forEach(curr => {
-                                const effVal = getMonthlyVariableValue(curr || {});
+                                let effVal = getMonthlyVariableValue(curr || {});
+                                // v17.99 : Exceptions périodes variables
+                                (curr?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) effVal = Number(e.nouvelleValeur || 0); });
                                 // v17.29 : parts-aware routing
                                 if (curr.parts && curr.parts.length > 0) {
                                     const partsSum = curr.parts.reduce((s, p) => s + Number(p.valeur || 0), 0);
@@ -5276,7 +5347,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             // v17.36 : Les logs charges sont maintenant émis dans les blocs isCurrentMonth / else séparément
                             const _ep = dataAnnee.epargne;
                             const epArrMois = Array.isArray(_ep) ? _ep : Object.entries(_ep || {}).map(([k,v]) => ({...v, id: k}));
-                            const totEpBase = epArrMois.reduce((sum, obj) => sum + Number(obj.valeur || 0), 0);
+                            // v17.99 : Exceptions périodes épargne
+                            const totEpBase = epArrMois.reduce((sum, obj) => {
+                                let val = Number(obj.valeur || 0);
+                                (obj.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) val = Number(e.nouvelleValeur || 0); });
+                                return sum + val;
+                            }, 0);
 
                             const _EPKW = /epargne|épargne|urgence|long.?terme|investissement|virement/i;
                             const _epFixes = Object.values(dataAnnee.chargesFixes || {}).reduce((sum, f) => _EPKW.test(f?.label || '') ? sum + Number((f || {}).valeur || 0) : sum, 0);
@@ -5311,7 +5387,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const epSourceParCompte = {}; // { 'cpt_xxx': amount } pour les sources non-courant
                             epArrMois.forEach(ep => {
                                 const k = 'ep_' + ep.id;
-                                const amt = Number(ep.valeur || 0);
+                                let amt = Number(ep.valeur || 0);
+                                // v17.99 : Exceptions périodes épargne (par item)
+                                (ep.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) amt = Number(e.nouvelleValeur || 0); });
                                 epargneParCompte[k] = amt;
                                 const src = ep.sourceCompte || 'courant';
                                 if (src === 'courant') { epCourant += amt; }
@@ -5463,7 +5541,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                                 // v17.39 : Translocation physique — SKIP courantCptKey (déjà dans curSolde via epCourant)
                                 epArrMois.forEach(ep => {
-                                    const amt = Number(ep.valeur || 0);
+                                    let amt = Number(ep.valeur || 0);
+                                    // v17.99 : Exceptions périodes épargne
+                                    (ep.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) amt = Number(e.nouvelleValeur || 0); });
                                     if (amt <= 0) return;
                                     const src = ep.sourceCompte || 'courant';
                                     const srcKey = (src === 'courant') ? courantCptKey : src;
