@@ -2668,6 +2668,34 @@
                                         <option v-for="c in comptes" :key="'mlinkw_'+c.id" :value="c.id">{{ c.icone || '💰' }} {{ c.label }}</option>
                                     </select>
                                 </div>
+                                <!-- v18.10 : Gérer Périodes épargne mobile -->
+                                <button @click="obj.showExceptions = !obj.showExceptions; handleDataChange()" class="w-full py-2.5 text-[10px] text-purple-600 font-bold uppercase tracking-widest bg-purple-50 rounded-lg border border-purple-200 min-h-[44px]">
+                                    {{ obj.showExceptions ? '➖ Masquer périodes' : '➕ Gérer Périodes' }}
+                                </button>
+                                <div v-if="obj.showExceptions" class="bg-purple-50/60 rounded-xl p-3 border border-purple-100">
+                                    <p class="text-[9px] font-black text-purple-500 uppercase tracking-widest mb-3 text-center border-b border-purple-100 pb-1">Exceptions par période</p>
+                                    <div v-for="(exc, idx) in (obj.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-purple-100 mb-2">
+                                        <div class="grid grid-cols-2 gap-2 mb-2">
+                                            <div>
+                                                <p class="text-[8px] font-black text-gray-400 uppercase mb-1">De</p>
+                                                <select v-model.number="exc.moisDebut" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-gray-200 rounded-lg bg-gray-50 outline-none min-h-[44px]">
+                                                    <option v-for="m in 12" :value="m">M{{m}}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <p class="text-[8px] font-black text-gray-400 uppercase mb-1">À</p>
+                                                <select v-model.number="exc.moisFin" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-gray-200 rounded-lg bg-gray-50 outline-none min-h-[44px]">
+                                                    <option v-for="m in 12" :value="m">M{{m}}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" placeholder="Nouvelle valeur" class="flex-1 p-2 text-sm font-black text-purple-700 text-right border border-purple-200 rounded-lg bg-purple-50 outline-none min-h-[44px]"/>
+                                            <button @click="(obj.exceptions || []).splice(idx, 1); handleDataChange()" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-red-500 font-black text-lg bg-red-50 rounded-lg border border-red-200">✕</button>
+                                        </div>
+                                    </div>
+                                    <button @click="(obj.exceptions = obj.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2.5 mt-1 text-xs text-white bg-purple-600 rounded-lg font-bold uppercase tracking-widest min-h-[44px]">+ Ajouter Règle</button>
+                                </div>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-xs py-3 italic">Aucun objectif.</div>
                             <button @click="addObjectifEpargne(anneeAffichage)" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs uppercase tracking-widest transition-colors">
@@ -3245,8 +3273,36 @@
                                     <button @click="item.showDetails = !item.showDetails" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
                                     {{ item.showDetails ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
                                 </button>
+                                    <button @click="item.showExceptions = !item.showExceptions; handleDataChange()" class="flex-1 py-2 text-[10px] text-red-600 font-bold uppercase tracking-widest bg-red-50 rounded-lg border border-red-200">
+                                        {{ item.showExceptions ? '➖ Masquer périodes' : '➕ Gérer Périodes' }}
+                                    </button>
                                     <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
                                     <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
+                                </div>
+                                <!-- v18.10 : Gérer Périodes variables mobile -->
+                                <div v-if="item.showExceptions" class="mt-3 bg-red-50 rounded-xl p-3 border border-red-100">
+                                    <p class="text-[9px] font-black text-red-500 uppercase tracking-widest mb-3 text-center border-b border-red-100 pb-1">Exceptions par période</p>
+                                    <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-red-100 mb-2">
+                                        <div class="grid grid-cols-2 gap-2 mb-2">
+                                            <div>
+                                                <p class="text-[8px] font-black text-gray-400 uppercase mb-1">De</p>
+                                                <select v-model.number="exc.moisDebut" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-gray-200 rounded-lg bg-gray-50 outline-none min-h-[44px]">
+                                                    <option v-for="m in 12" :value="m">M{{m}}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <p class="text-[8px] font-black text-gray-400 uppercase mb-1">À</p>
+                                                <select v-model.number="exc.moisFin" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-gray-200 rounded-lg bg-gray-50 outline-none min-h-[44px]">
+                                                    <option v-for="m in 12" :value="m">M{{m}}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="number" v-model.number="exc.nouvelleValeur" @input="handleDataChange" placeholder="Nouvelle valeur" class="flex-1 p-2 text-sm font-black text-red-600 text-right border border-red-200 rounded-lg bg-red-50 outline-none min-h-[44px]"/>
+                                            <button @click="(item.exceptions || []).splice(idx, 1); handleDataChange()" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-red-500 font-black text-lg bg-red-50 rounded-lg border border-red-200">✕</button>
+                                        </div>
+                                    </div>
+                                    <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2.5 mt-1 text-xs text-white bg-red-600 rounded-lg font-bold uppercase tracking-widest min-h-[44px]">+ Ajouter Règle</button>
                                 </div>
                                 <div v-if="item.showDetails" class="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
                                     <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3 text-center border-b border-gray-200 pb-1">Détail (total remplace la valeur)</p>
@@ -3610,7 +3666,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "18.00";
+                    const CURRENT_VERSION = "18.10";
                     const CHANGELOG = [
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
