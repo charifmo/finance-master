@@ -3976,6 +3976,118 @@
                         }, 50);
                     };
 
+                    // ═══ v19.00 : CFO OMNISCIENT — Snapshot visuel et financier en direct ═══
+                    const obtenirEtatVisuelComplet = () => {
+                        try {
+                            const aNum = anneeAffichage.value;
+                            const rev = Number(totalRevenusBase.value) || 0;
+                            const fixes = Number(totalFixes.value) || 0;
+                            const conso = Number(totalVariables.value) || 0;
+                            const ep = Number(totalEpargne.value) || 0;
+                            const surplus = Number(surplusMensuelBase.value) || 0;
+                            const credits = Number(totalCreditsMensuels.value) || 0;
+                            const tauxEnd = Number(tauxEndettement.value) || 0;
+                            const entreesAnn = rev * 12;
+                            const sortiesAnn = (fixes + conso + ep) * 12;
+
+                            const lines = [];
+                            lines.push('=== [PROJECTION & ÉTAT VISUEL DE L\'APPLICATION EN DIRECT] ===');
+                            lines.push('');
+                            lines.push('[KPIs DU RUBAN FIXE] — Année ' + aNum);
+                            lines.push('• Entrées Annuelles : ' + formatMAD(entreesAnn));
+                            lines.push('• Sorties Annuelles : ' + formatMAD(sortiesAnn) + '  (Fixes ' + formatMAD(fixes * 12) + ' + Variables ' + formatMAD(conso * 12) + ' + Épargne ' + formatMAD(ep * 12) + ')');
+                            lines.push('• Surplus Mensuel de Base : ' + formatMAD(surplus));
+                            lines.push('• Mensualités Crédits : ' + formatMAD(credits) + ' (Endettement : ' + tauxEnd.toFixed(1) + '%)');
+                            lines.push('• Patrimoine Net actuel : ' + formatMAD(patrimoineNet.value) + ' | Liquide : ' + formatMAD(patrimoineLiquide.value));
+                            lines.push('');
+
+                            lines.push('[PATRIMOINE & ACTIFS (Onglet Wealth)]');
+                            const assets = Array.isArray(masterAssets.value) ? masterAssets.value : [];
+                            if (assets.length === 0) {
+                                lines.push('• (Aucun actif enregistré)');
+                            } else {
+                                assets.forEach((a, i) => {
+                                    if (!a) return;
+                                    const valActu = Number(a.valeur_actuelle) || Number(a.value) || 0;
+                                    const detteRest = Number(a.montant_credit) || 0;
+                                    const revAnnuel = Number(a.revenue) || 0;
+                                    const annRest = Number(a.annees_restantes) || 0;
+                                    let row = '• Actif ' + (i + 1) + ' (' + (a.name || 'Sans nom') + ' · ' + (a.type || '?') + ' · ' + (a.quotePart || '100%') + ') : Valeur actuelle = ' + formatMAD(valActu);
+                                    if (detteRest > 0 || annRest > 0) row += ' | Dette restante = ' + formatMAD(detteRest) + ' (' + annRest + ' ans restants @ ' + (Number(a.taux_credit) || 0) + '%)';
+                                    if (revAnnuel > 0) row += ' | Revenu annuel = ' + formatMAD(revAnnuel);
+                                    if (a.isProductive === false) row += ' | (non productif — pessimiste: ' + formatMAD(a.val_pessimiste) + ' / optimiste: ' + formatMAD(a.val_optimiste) + ')';
+                                    lines.push(row);
+                                });
+                                lines.push('  → Total conservateur (non productif) : ' + formatMAD(totalConservateur.value));
+                                lines.push('  → Total pessimiste : ' + formatMAD(totalPessimiste.value) + ' | optimiste : ' + formatMAD(totalOptimiste.value));
+                            }
+                            lines.push('');
+
+                            lines.push('[OBJECTIFS D\'ÉPARGNE (Onglet Wealth)]');
+                            const goals = Array.isArray(wealthGoals.value) ? wealthGoals.value : [];
+                            if (goals.length === 0) {
+                                lines.push('• (Aucun objectif Smart Goal enregistré)');
+                            } else {
+                                goals.forEach((g, i) => {
+                                    if (!g) return;
+                                    const cur = Number(g.current) || 0;
+                                    const tgt = Number(g.target) || 0;
+                                    const pct = tgt > 0 ? Math.round((cur / tgt) * 100) : 0;
+                                    const reste = Math.max(0, tgt - cur);
+                                    let row = '• Objectif ' + (i + 1) + ' (' + (g.name || 'Sans nom') + ') : Montant actuel = ' + formatMAD(cur) + ' / Cible = ' + formatMAD(tgt) + ' (' + pct + '%)';
+                                    if (reste > 0 && surplus > 0) row += ' — reste ' + formatMAD(reste) + ' (~' + Math.ceil(reste / surplus) + ' mois au rythme actuel)';
+                                    lines.push(row);
+                                });
+                            }
+                            // Lignes épargne mensuelle de l'année (sans cible mais avec versement mensuel)
+                            const dAnnee = donneesAnnuelles.value[aNum] || {};
+                            const epArrYear = (Array.isArray(dAnnee.epargne) ? dAnnee.epargne : []).filter(Boolean);
+                            if (epArrYear.length > 0) {
+                                lines.push('  Versements épargne mensuels configurés ' + aNum + ' :');
+                                epArrYear.forEach(o => {
+                                    const lab = o.nom || o.label || 'Épargne';
+                                    const v = Number(o.valeur) || 0;
+                                    const link = o.linkedAccountId ? ' (lié à compte ' + getCompteLabel('cpt_' + o.linkedAccountId) + ')' : '';
+                                    lines.push('  - ' + lab + ' : ' + formatMAD(v) + '/mois' + link);
+                                });
+                            }
+                            lines.push('');
+
+                            lines.push('[MATRICE DES COMPTES MOIS PAR MOIS (Moteur Cash-Flow) — Année ' + aNum + ']');
+                            lines.push('Soldes réels à la fin de chaque mois :');
+                            const rowsAnnee = (bilanLignes.value || []).filter(b => Number(b.annee) === Number(aNum));
+                            if (rowsAnnee.length === 0) {
+                                lines.push('• (Aucune ligne bilan calculée pour cette année)');
+                            } else {
+                                rowsAnnee.forEach(r => {
+                                    const m = nomDuMois(r.mois);
+                                    const dc = r.detailsComptes || {};
+                                    const de = r.detailsEpargne || {};
+                                    const partsC = Object.entries(dc).map(([k, v]) => getCompteLabel(k) + ' = ' + formatMAD(v));
+                                    const partsE = Object.entries(de)
+                                        .filter(([k]) => !_epargneLinkedKeys.value.has(k))
+                                        .map(([k, v]) => {
+                                            const id = String(k).replace('ep_', '');
+                                            const obj = epArrYear.find(o => String(o.id) === id);
+                                            const lab = (obj && (obj.nom || obj.label)) || k;
+                                            return lab + ' = ' + formatMAD(v);
+                                        });
+                                    let line = '• ' + m + ' : ';
+                                    if (partsC.length) line += partsC.join(' | ');
+                                    else line += 'Courant = ' + formatMAD(r.soldeCourant || 0);
+                                    if (partsE.length) line += '  ⟶ Épargne non liée : ' + partsE.join(' | ');
+                                    line += '  [Total patrimoine : ' + formatMAD((r.soldeCourant || 0) + (r.soldeEpargneProjete || 0)) + ']';
+                                    lines.push(line);
+                                });
+                            }
+                            lines.push('');
+                            lines.push('============================================================');
+                            return lines.join('\n');
+                        } catch (e) {
+                            return '=== [ÉTAT VISUEL INDISPONIBLE] ===\nErreur de capture : ' + (e && e.message ? e.message : e) + '\n============================================================';
+                        }
+                    };
+
                     const consulterCFO = async (question) => {
                         if (!cfoWebhookUrl.value) { alert('Configurez d\'abord l\'URL du Webhook n8n.'); return; }
                         if (!question || !question.trim()) return;
@@ -3985,6 +4097,7 @@
                         cfoLoading.value = true;
                         scrollCFOToBottom();
                         try {
+                            const etatVisuel = obtenirEtatVisuelComplet();
                             const res = await fetch(cfoWebhookUrl.value, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -3993,6 +4106,7 @@
                                     question: question,
                                     source: 'web',
                                     system_prompt: CFO_SYSTEM_PROMPT,
+                                    etat_visuel_app: etatVisuel,
                                     finance_data: getExportData()
                                 })
                             });
@@ -4420,7 +4534,11 @@
                     const CFO_SYSTEM_PROMPT = `Tu es le CFO personnel IA de Mohamed, responsable du pilotage budgétaire et stratégique du foyer (Maroc, devise DH). Ton rôle n'est pas seulement de cracher des chiffres, mais d'agir comme un véritable conseiller financier haut de gamme : tu dois être analytique, pédagogique, détaillé et force de proposition stratégique.
 
 ═══ 1. LA HIÉRARCHIE DE LA VÉRITÉ (RÈGLE ABSOLUE) ═══
-En cas de conflit d'information, respecte cet ordre : NIVEAU 1 (La Loi : instructions de l'utilisateur) > NIVEAU 2 (Règles finance_rag) > NIVEAU 3 (JSON) > NIVEAU 4 (Savoir général IA).
+En cas de conflit d'information, respecte cet ordre : NIVEAU 1 (La Loi : instructions de l'utilisateur) > NIVEAU 1.5 (L'écran de l'appli) > NIVEAU 2 (Règles finance_rag) > NIVEAU 3 (JSON) > NIVEAU 4 (Savoir général IA).
+
+=== NIVEAU 1.5 : L'ÉCRAN DE L'APPLI (CASH-FLOW ET PATRIMOINE RÉELS) ===
+Tu reçois dans ton payload un bloc nommé [PROJECTION & ÉTAT VISUEL DE L'APPLICATION EN DIRECT] (clé "etat_visuel_app"). Ce bloc contient TOUT ce que l'utilisateur voit à l'écran : les soldes mensuels par compte, l'avancement des objectifs d'épargne, la valeur des actifs immobiliers/financiers et les KPIs du ruban fixe (Entrées/Sorties annuelles, Surplus, Endettement, Patrimoine Net).
+INTERDICTION ABSOLUE de deviner un solde, de calculer l'avancement d'un objectif ou d'évaluer le patrimoine à partir du JSON brut (finance_data). Tu DOIS te baser EXCLUSIVEMENT sur les chiffres fournis dans ce bloc visuel pour proposer tes stratégies, virer un résidu, auditer une valeur ou recommander un arbitrage. Le JSON brut sert UNIQUEMENT à connaître la structure (noms de postes, périodes, exceptions, IDs) — JAMAIS pour les valeurs courantes.
 
 ═══ 2. POLITIQUE ANTI-DÉRIVE SÉMANTIQUE ═══
 Ne déduis JAMAIS la fréquence d'un flux financier à partir de son nom. Si le JSON a la même structure qu'un salaire (champ base, periode='mois' ou absente), c'est mensuel.
@@ -4520,6 +4638,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             return;
                         }
                         try {
+                            const etatVisuel = obtenirEtatVisuelComplet();
                             const res = await fetch(cfoWebhookUrl.value, {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -4529,6 +4648,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     merlin: true,
                                     merlin_field: { label: merlinBubble.value.label, value: merlinBubble.value.value },
                                     system_prompt: CFO_SYSTEM_PROMPT,
+                                    etat_visuel_app: etatVisuel,
                                     finance_data: getExportData()
                                 })
                             });
@@ -4552,12 +4672,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         merlinBubble.value.loading = true;
                         const prompt = `[MODE MERLIN — Suite] Champ initial : "${merlinBubble.value.label}" = ${merlinBubble.value.value}. Question complémentaire de l'utilisateur : ${q}`;
                         try {
+                            const etatVisuel = obtenirEtatVisuelComplet();
                             const res = await fetch(cfoWebhookUrl.value, {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                     session_id: cfoSessionId.value, question: prompt, source: 'merlin', merlin: true,
                                     merlin_field: { label: merlinBubble.value.label, value: merlinBubble.value.value },
-                                    system_prompt: CFO_SYSTEM_PROMPT, finance_data: getExportData()
+                                    system_prompt: CFO_SYSTEM_PROMPT, etat_visuel_app: etatVisuel, finance_data: getExportData()
                                 })
                             });
                             const raw = await res.text();
