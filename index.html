@@ -12,6 +12,8 @@
     <script async defer src="https://accounts.google.com/gsi/client"></script>
     <style>
         [v-cloak] { display: none !important; }
+        /* v18.00 : Blocage overflow horizontal global sur mobile */
+        html, body { max-width: 100%; overflow-x: hidden; }
         .custom-scroll::-webkit-scrollbar { width: 5px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
         .log-entry { animation: fadeIn 0.3s ease-out; border-left: 2px solid transparent; }
@@ -70,23 +72,26 @@
         <!-- v17.45 : Toast auto-backup -->
         <transition name="fade"><div v-if="autoBackupToast" class="fixed bottom-6 right-6 z-[9999] bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-black flex items-center gap-2 border border-emerald-500/40">💾 Auto-backup VPS réussi</div></transition>
 
-        <!-- v17.98 : Bouton flottant Baguette Magique MERLIN -->
+        <!-- v17.98 : Bouton flottant Baguette Magique MERLIN — v18.00 : responsive mobile -->
         <button @click="toggleMerlin"
             :title="merlinActive ? 'Désactiver Merlin (Echap)' : 'Activer Merlin — Audit IA d\'un champ'"
-            :class="['merlin-wand-btn fixed bottom-6 left-6 z-[9998] w-16 h-16 rounded-full text-3xl flex items-center justify-center border-2 transition-all hover:scale-110',
+            :class="['merlin-wand-btn fixed z-[9998] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110',
+                      'bottom-20 right-4 w-12 h-12 text-xl md:bottom-6 md:left-6 md:right-auto md:w-16 md:h-16 md:text-3xl',
                       merlinActive ? 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-purple-500/40']">
             🪄
         </button>
         <transition name="fade">
-            <div v-if="merlinActive && !merlinBubble.open" class="fixed bottom-24 left-6 z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[260px] backdrop-blur">
+            <div v-if="merlinActive && !merlinBubble.open" class="fixed bottom-36 right-4 md:bottom-24 md:left-6 md:right-auto z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[240px] backdrop-blur">
                 ✨ <b>Mode Merlin actif</b><br/>
-                <span class="text-purple-200/80 font-normal">Survole puis clique un chiffre, une carte ou un libellé pour l'auditer.</span>
+                <span class="text-purple-200/80 font-normal">Clique un chiffre pour l'auditer.</span>
             </div>
         </transition>
 
-        <!-- v17.98 : Bulle MERLIN — réponse IA contextuelle -->
+        <!-- v17.98 : Bulle MERLIN — réponse IA contextuelle — v18.00 : responsive mobile -->
         <transition name="fade">
-            <div v-if="merlinBubble.open" class="merlin-bubble fixed bottom-24 left-6 z-[9999] w-[min(440px,calc(100vw-3rem))] max-h-[70vh] bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white rounded-3xl shadow-2xl border border-purple-400/40 flex flex-col overflow-hidden">
+            <div v-if="merlinBubble.open" class="merlin-bubble fixed z-[9999] bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white rounded-3xl shadow-2xl border border-purple-400/40 flex flex-col overflow-hidden
+                bottom-20 left-2 right-2 max-h-[65vh]
+                md:bottom-24 md:left-6 md:right-auto md:w-[440px] md:max-h-[70vh]">
                 <div class="flex items-center justify-between px-5 py-3 border-b border-purple-500/30 bg-gradient-to-r from-fuchsia-700/40 to-purple-700/40">
                     <div class="flex items-center gap-2">
                         <span class="text-2xl">🪄</span>
@@ -255,32 +260,29 @@
                             </div>
                         </div>
                     </div>
-                    <div class="flex items-center gap-3 flex-wrap" title="Indique quelle part de votre épargne mensuelle est absorbée par le reste à charge de vos projets.">
-                        <!-- v17.99 : KPI Surplus Mensuel Base -->
-                        <div :class="['border rounded-xl px-3 py-2 min-w-[120px]', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
-                            <p class="text-[9px] font-black uppercase tracking-widest text-gray-500">💰 Surplus / mois</p>
-                            <p :class="['text-sm font-black', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
+                    <!-- v18.00 : KPIs ruban responsive — grid sur petits écrans -->
+                    <div class="grid grid-cols-2 lg:flex lg:flex-wrap gap-2 lg:gap-3 lg:items-center">
+                        <div :class="['border rounded-xl px-2 py-1.5 lg:px-3 lg:py-2', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
+                            <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">💰 Surplus /mois</p>
+                            <p :class="['text-xs lg:text-sm font-black', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
                         </div>
-                        <!-- v17.99 : KPI Mensualités Crédits + taux endettement -->
-                        <div class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 min-w-[120px]">
-                            <p class="text-[9px] font-black uppercase tracking-widest text-gray-500">🏦 Mensualités</p>
-                            <p class="text-sm font-black text-slate-700">{{ formatMAD(totalCreditsMensuels) }}</p>
-                            <p :class="['text-[9px] font-bold uppercase tracking-widest', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-600')]">{{ tauxEndettement.toFixed(1) }}% endettem.</p>
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 lg:px-3 lg:py-2">
+                            <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">🏦 Mensualités</p>
+                            <p class="text-xs lg:text-sm font-black text-slate-700">{{ formatMAD(totalCreditsMensuels) }}</p>
+                            <p :class="['text-[8px] font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-600')]">{{ tauxEndettement.toFixed(1) }}% endet.</p>
                         </div>
-                        <div class="bg-green-50 border border-green-200 rounded-xl px-3 py-2 min-w-[110px]">
-                            <p class="text-[9px] font-black text-green-600 uppercase tracking-widest">↑ Entrées {{anneeAffichage}}</p>
-                            <p class="text-sm font-black text-green-700">+{{ formatMAD(statsFluxAnnee.totalEntrees) }}</p>
+                        <div class="bg-green-50 border border-green-200 rounded-xl px-2 py-1.5 lg:px-3 lg:py-2">
+                            <p class="text-[8px] lg:text-[9px] font-black text-green-600 uppercase tracking-widest">↑ Entrées {{anneeAffichage}}</p>
+                            <p class="text-xs lg:text-sm font-black text-green-700">+{{ formatMAD(statsFluxAnnee.totalEntrees) }}</p>
                         </div>
-                        <div class="bg-red-50 border border-red-200 rounded-xl px-3 py-2 min-w-[110px]">
-                            <p class="text-[9px] font-black text-red-600 uppercase tracking-widest">↓ Sorties {{anneeAffichage}}</p>
-                            <p class="text-sm font-black text-red-700">-{{ formatMAD(statsFluxAnnee.totalSorties) }}</p>
+                        <div class="bg-red-50 border border-red-200 rounded-xl px-2 py-1.5 lg:px-3 lg:py-2">
+                            <p class="text-[8px] lg:text-[9px] font-black text-red-600 uppercase tracking-widest">↓ Sorties {{anneeAffichage}}</p>
+                            <p class="text-xs lg:text-sm font-black text-red-700">-{{ formatMAD(statsFluxAnnee.totalSorties) }}</p>
                         </div>
-                        <div :class="['border rounded-xl px-3 py-2 min-w-[170px]', statsFluxAnnee.impactSurplus > 0 ? (statsFluxAnnee.impactSurplus > 50 ? 'bg-red-50 border-red-300' : 'bg-orange-50 border-orange-300') : 'bg-emerald-50 border-emerald-300']">
-                            <p :class="['text-[9px] font-black uppercase tracking-widest', statsFluxAnnee.impactSurplus > 0 ? (statsFluxAnnee.impactSurplus > 50 ? 'text-red-600' : 'text-orange-600') : 'text-emerald-600']">Poids sur Surplus</p>
-                            <p v-if="statsFluxAnnee.impactSurplus > 0" :class="['text-sm font-black', statsFluxAnnee.impactSurplus > 50 ? 'text-red-700' : 'text-orange-700']">
-                                ⚠️ -{{ statsFluxAnnee.impactSurplus.toFixed(0) }}% du surplus mensuel
-                            </p>
-                            <p v-else class="text-sm font-black text-emerald-700">✅ Surplus préservé</p>
+                        <div :class="['border rounded-xl px-2 py-1.5 lg:px-3 lg:py-2 col-span-2 lg:col-span-1', statsFluxAnnee.impactSurplus > 0 ? (statsFluxAnnee.impactSurplus > 50 ? 'bg-red-50 border-red-300' : 'bg-orange-50 border-orange-300') : 'bg-emerald-50 border-emerald-300']">
+                            <p :class="['text-[8px] lg:text-[9px] font-black uppercase tracking-widest', statsFluxAnnee.impactSurplus > 0 ? (statsFluxAnnee.impactSurplus > 50 ? 'text-red-600' : 'text-orange-600') : 'text-emerald-600']">Poids sur Surplus</p>
+                            <p v-if="statsFluxAnnee.impactSurplus > 0" :class="['text-xs lg:text-sm font-black', statsFluxAnnee.impactSurplus > 50 ? 'text-red-700' : 'text-orange-700']">⚠️ -{{ statsFluxAnnee.impactSurplus.toFixed(0) }}% du surplus</p>
+                            <p v-else class="text-xs lg:text-sm font-black text-emerald-700">✅ Surplus préservé</p>
                         </div>
                     </div>
                 </div>
@@ -1013,9 +1015,11 @@
                                 <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm">Mois {{ moisNum }} - {{ nomDuMois(moisNum) }} {{ anneeAffichage }}</h3>
                                 <span v-if="totalMoisAffichage(moisNum) > 0" class="text-sm font-black text-red-600 bg-red-100 px-4 py-1.5 rounded-full shadow-inner">{{ formatMAD(totalMoisAffichage(moisNum)) }}</span>
                             </div>
-                            <div v-show="moisOuverts.includes(moisNum)" class="p-6 bg-white space-y-3">
+                            <div v-show="moisOuverts.includes(moisNum)" class="p-4 md:p-6 bg-white space-y-3">
                                 <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" class="bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
-                                    <div class="flex items-center gap-3 p-3">
+                                    <!-- v18.00 : overflow-x-auto pour éviter l'élargissement horizontal sur mobile -->
+                                    <div class="overflow-x-auto">
+                                    <div class="flex items-center gap-3 p-3 min-w-max md:min-w-0">
                                         <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
                                         <input type="number" v-model.number="depense.montant" @input="handleDataChange" :disabled="depense.parts && depense.parts.length > 0" :class="['w-24 text-right font-black bg-transparent outline-none', depense.parts && depense.parts.length ? 'text-gray-400' : (depense.montant < 0 ? 'text-green-600' : 'text-red-600')]"/>
                                         <span v-if="depense.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase">Injection Banque</span>
@@ -1033,6 +1037,7 @@
                                         <button v-if="!depense.parts || !depense.parts.length" @click="scinderLigneArr(depense)" class="text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg transition-colors border border-blue-200 text-xs font-bold" title="Scinder en sous-parties">✂️</button>
                                         <button @click="supprimerDepense(depense.id); handleDataChange()" class="text-red-400 hover:text-red-600 px-2 font-bold md:opacity-50 md:group-hover:opacity-100 transition-opacity text-lg">✕</button>
                                     </div>
+                                    </div><!-- /overflow-x-auto depense row -->
                                     <!-- v17.29 : Sous-parties chocs -->
                                     <div v-if="depense.parts && depense.parts.length > 0" class="mx-3 mb-3 ml-6 pl-3 border-l-2 border-slate-300 space-y-2">
                                         <div v-for="(part, pi) in depense.parts" :key="part.id" class="flex items-center gap-2 bg-white rounded-lg p-2 border border-slate-200">
@@ -2108,33 +2113,34 @@
                         <option v-for="a in anneesDisponibles" :key="a" :value="a">{{ a }}</option>
                     </select>
                 </div>
-                <!-- 3 KPI badges parité desktop : Entrées · Sorties · Poids Surplus -->
-                <div class="grid grid-cols-3 gap-1.5 mb-2">
-                    <div class="bg-green-50 border border-green-200 rounded-lg px-2 py-1.5 text-center">
-                        <p class="text-[8px] font-black uppercase tracking-widest text-green-600">↑ Entrées</p>
-                        <p class="text-[11px] font-black text-green-700 truncate">+{{ formatMAD(statsFluxAnnee.totalEntrees) }}</p>
+                <!-- v18.00 : KPIs grille 2x3 compacte — tous indicateurs visibles -->
+                <div class="grid grid-cols-3 gap-1.5 mb-1.5">
+                    <div :class="['rounded-lg px-2 py-1.5 text-center border', surplusMensuelBase >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300']">
+                        <p class="text-[7px] font-black uppercase tracking-widest text-gray-500">💰 Surplus</p>
+                        <p :class="['text-[10px] font-black truncate', surplusMensuelBase >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</p>
                     </div>
-                    <div class="bg-red-50 border border-red-200 rounded-lg px-2 py-1.5 text-center">
-                        <p class="text-[8px] font-black uppercase tracking-widest text-red-600">↓ Sorties</p>
-                        <p class="text-[11px] font-black text-red-700 truncate">-{{ formatMAD(statsFluxAnnee.totalSorties) }}</p>
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-center">
+                        <p class="text-[7px] font-black uppercase tracking-widest text-gray-500">🏦 Crédit</p>
+                        <p class="text-[10px] font-black text-slate-700 truncate">{{ formatMAD(totalCreditsMensuels) }}</p>
+                        <p :class="['text-[7px] font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-600')]">{{ tauxEndettement.toFixed(0) }}% end.</p>
                     </div>
                     <div :class="['rounded-lg px-2 py-1.5 text-center border', statsFluxAnnee.impactSurplus > 50 ? 'bg-red-50 border-red-300' : (statsFluxAnnee.impactSurplus > 0 ? 'bg-orange-50 border-orange-300' : 'bg-emerald-50 border-emerald-300')]">
-                        <p :class="['text-[8px] font-black uppercase tracking-widest', statsFluxAnnee.impactSurplus > 50 ? 'text-red-600' : (statsFluxAnnee.impactSurplus > 0 ? 'text-orange-600' : 'text-emerald-600')]">Poids Surp.</p>
-                        <p v-if="statsFluxAnnee.impactSurplus > 0" :class="['text-[11px] font-black', statsFluxAnnee.impactSurplus > 50 ? 'text-red-700' : 'text-orange-700']">⚠️ -{{ statsFluxAnnee.impactSurplus.toFixed(0) }}%</p>
-                        <p v-else class="text-[11px] font-black text-emerald-700">✅ OK</p>
+                        <p :class="['text-[7px] font-black uppercase tracking-widest', statsFluxAnnee.impactSurplus > 50 ? 'text-red-600' : (statsFluxAnnee.impactSurplus > 0 ? 'text-orange-600' : 'text-emerald-600')]">Poids</p>
+                        <p v-if="statsFluxAnnee.impactSurplus > 0" :class="['text-[10px] font-black', statsFluxAnnee.impactSurplus > 50 ? 'text-red-700' : 'text-orange-700']">⚠️ -{{ statsFluxAnnee.impactSurplus.toFixed(0) }}%</p>
+                        <p v-else class="text-[10px] font-black text-emerald-700">✅ OK</p>
                     </div>
-                </div>
-                <!-- Impact surplus + surplus mensuel (badges secondaires) -->
-                <div class="flex items-center gap-2 flex-wrap">
-                    <div :class="['flex items-center gap-1.5 rounded-lg px-2 py-1 border', statsFluxAnnee.impactSurplus > 70 ? 'bg-red-50 border-red-200' : (statsFluxAnnee.impactSurplus > 30 ? 'bg-orange-50 border-orange-200' : 'bg-emerald-50 border-emerald-200')]">
-                        <span class="text-[8px] font-black uppercase tracking-widest text-gray-500">Impact Flux</span>
-                        <span :class="['text-xs font-black', statsFluxAnnee.impactSurplus > 70 ? 'text-red-600' : (statsFluxAnnee.impactSurplus > 30 ? 'text-orange-600' : 'text-emerald-600')]">
-                            {{ statsFluxAnnee.impactSurplus > 0 ? statsFluxAnnee.impactSurplus.toFixed(0) + '%' : '✅' }}
-                        </span>
+                    <div class="bg-green-50 border border-green-200 rounded-lg px-2 py-1.5 text-center">
+                        <p class="text-[7px] font-black uppercase tracking-widest text-green-600">↑ Entrées</p>
+                        <p class="text-[10px] font-black text-green-700 truncate">+{{ formatMAD(statsFluxAnnee.totalEntrees) }}</p>
                     </div>
-                    <div :class="['flex items-center gap-1.5 rounded-lg px-2 py-1 border', surplusMensuelBase >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200']">
-                        <span class="text-[8px] font-black uppercase tracking-widest text-gray-500">Surplus /mois</span>
-                        <span :class="['text-xs font-black', surplusMensuelBase >= 0 ? 'text-green-700' : 'text-red-700']">{{ formatMAD(surplusMensuelBase) }}</span>
+                    <div class="bg-red-50 border border-red-200 rounded-lg px-2 py-1.5 text-center">
+                        <p class="text-[7px] font-black uppercase tracking-widest text-red-600">↓ Sorties</p>
+                        <p class="text-[10px] font-black text-red-700 truncate">-{{ formatMAD(statsFluxAnnee.totalSorties) }}</p>
+                    </div>
+                    <!-- v18.00 : Undo/Redo dans top bar mobile -->
+                    <div class="flex gap-1">
+                        <button @click="undo" :disabled="!canUndo" :class="['flex-1 flex items-center justify-center rounded-lg text-[10px] font-black border transition-all', canUndo ? 'bg-slate-700 text-white border-slate-600 active:bg-amber-600' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed']" title="Annuler">↩</button>
+                        <button @click="redo" :disabled="!canRedo" :class="['flex-1 flex items-center justify-center rounded-lg text-[10px] font-black border transition-all', canRedo ? 'bg-slate-700 text-white border-slate-600 active:bg-blue-600' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed']" title="Refaire">↪</button>
                     </div>
                 </div>
             </div>
@@ -3525,9 +3531,9 @@
                         </button>
                     </div>
                 </div>
-                <!-- Tableau : Mode Transactions -->
+                <!-- Tableau : Mode Transactions — v18.00 overflow-x-auto -->
                 <div v-if="!releveModeEvolution" class="flex-1 overflow-auto">
-                    <table v-if="releveCompte.length > 0" class="w-full text-sm">
+                    <table v-if="releveCompte.length > 0" class="w-full min-w-[500px] text-sm">
                         <thead class="bg-gray-50 sticky top-0 z-10">
                             <tr>
                                 <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Mois</th>
@@ -3604,7 +3610,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.99";
+                    const CURRENT_VERSION = "18.00";
                     const CHANGELOG = [
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
