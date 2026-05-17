@@ -42,12 +42,79 @@
         .cfo-section-wrap { margin-bottom: 0; }
         .cfo-section-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 8px; margin-bottom: 8px; }
         .cfo-section-header:hover { background: rgba(0,0,0,0.04); }
+        /* === v17.98 Merlin Magic Wand === */
+        body.merlin-active, body.merlin-active * { cursor: crosshair !important; }
+        body.merlin-active [data-merlin]:hover,
+        body.merlin-active .merlin-pickable:hover {
+            outline: 2px dashed #a855f7 !important;
+            outline-offset: 3px !important;
+            background: linear-gradient(90deg, rgba(168,85,247,0.12), rgba(236,72,153,0.12)) !important;
+            box-shadow: 0 0 18px rgba(168,85,247,0.55) !important;
+            border-radius: 6px;
+            transition: outline 0.1s, box-shadow 0.1s;
+        }
+        @keyframes merlinPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,0.6), 0 8px 30px rgba(168,85,247,0.4); }
+            50% { box-shadow: 0 0 0 12px rgba(168,85,247,0), 0 8px 30px rgba(236,72,153,0.6); }
+        }
+        .merlin-wand-btn { animation: merlinPulse 2.2s infinite; }
+        .merlin-bubble { animation: merlinFadeIn 0.35s cubic-bezier(.16,1,.3,1); }
+        @keyframes merlinFadeIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.92); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans md:overflow-hidden">
     <div id="app" class="min-h-screen md:h-screen w-full flex flex-col md:flex-row relative" v-cloak>
         <!-- v17.45 : Toast auto-backup -->
         <transition name="fade"><div v-if="autoBackupToast" class="fixed bottom-6 right-6 z-[9999] bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-black flex items-center gap-2 border border-emerald-500/40">💾 Auto-backup VPS réussi</div></transition>
+
+        <!-- v17.98 : Bouton flottant Baguette Magique MERLIN -->
+        <button @click="toggleMerlin"
+            :title="merlinActive ? 'Désactiver Merlin (Echap)' : 'Activer Merlin — Audit IA d\'un champ'"
+            :class="['merlin-wand-btn fixed bottom-6 left-6 z-[9998] w-16 h-16 rounded-full text-3xl flex items-center justify-center border-2 transition-all hover:scale-110',
+                      merlinActive ? 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-purple-500/40']">
+            🪄
+        </button>
+        <transition name="fade">
+            <div v-if="merlinActive && !merlinBubble.open" class="fixed bottom-24 left-6 z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[260px] backdrop-blur">
+                ✨ <b>Mode Merlin actif</b><br/>
+                <span class="text-purple-200/80 font-normal">Survole puis clique un chiffre, une carte ou un libellé pour l'auditer.</span>
+            </div>
+        </transition>
+
+        <!-- v17.98 : Bulle MERLIN — réponse IA contextuelle -->
+        <transition name="fade">
+            <div v-if="merlinBubble.open" class="merlin-bubble fixed bottom-24 left-6 z-[9999] w-[min(440px,calc(100vw-3rem))] max-h-[70vh] bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white rounded-3xl shadow-2xl border border-purple-400/40 flex flex-col overflow-hidden">
+                <div class="flex items-center justify-between px-5 py-3 border-b border-purple-500/30 bg-gradient-to-r from-fuchsia-700/40 to-purple-700/40">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl">🪄</span>
+                        <div>
+                            <div class="font-black text-sm tracking-wider uppercase text-fuchsia-200">Merlin — Audit Ciblé</div>
+                            <div class="text-[10px] text-purple-200/70 font-bold truncate max-w-[280px]">{{ merlinBubble.label }}</div>
+                        </div>
+                    </div>
+                    <button @click="closeMerlinBubble" class="text-purple-200 hover:text-white text-xl font-black w-8 h-8 rounded-full hover:bg-white/10 transition-colors">×</button>
+                </div>
+                <div class="px-5 py-3 bg-black/30 border-b border-purple-500/20 flex items-center justify-between text-xs">
+                    <span class="text-purple-200/80 font-bold uppercase tracking-widest">Valeur observée</span>
+                    <span class="font-black text-fuchsia-200 text-base">{{ merlinBubble.value }}</span>
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scroll p-5">
+                    <div v-if="merlinBubble.loading" class="flex items-center gap-3 text-purple-200">
+                        <div class="w-4 h-4 border-2 border-fuchsia-400 border-t-transparent rounded-full animate-spin"></div>
+                        <span class="text-sm font-bold">Merlin consulte les grimoires…</span>
+                    </div>
+                    <div v-else-if="merlinBubble.error" class="text-red-300 text-sm font-bold">{{ merlinBubble.error }}</div>
+                    <div v-else class="cfo-html text-sm text-purple-50" v-html="merlinBubble.html"></div>
+                </div>
+                <div v-if="!merlinBubble.loading && !merlinBubble.error" class="px-5 py-3 border-t border-purple-500/30 bg-black/20 flex gap-2">
+                    <input v-model="merlinBubble.followup" @keyup.enter="askMerlinFollowup" type="text" placeholder="Question complémentaire…" class="flex-1 bg-slate-800/60 text-white text-xs px-3 py-2 rounded-lg outline-none border border-purple-500/30 focus:border-fuchsia-400 placeholder-purple-300/40"/>
+                    <button @click="askMerlinFollowup" :disabled="!merlinBubble.followup.trim()" class="px-3 py-2 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white text-xs font-black rounded-lg uppercase tracking-widest disabled:opacity-40">➤</button>
+                </div>
+            </div>
+        </transition>
 
         <div v-if="!isMobile" class="w-full md:w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 shadow-2xl z-30 md:h-full md:overflow-y-auto custom-scroll border-r border-slate-800">
             <div>
@@ -3472,7 +3539,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "17.96";
+                    const CURRENT_VERSION = "17.98";
                     const CHANGELOG = [
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
                         { version: "17.42", date: "2026-05-15 — Relevé UI Refonte", changes: ["ONGLETS EN GRILLE : les boutons de comptes s'affichent en flex-wrap (pas de scroll horizontal caché). Chaque onglet est bien visible.", "VUE GLOBAL NETTOYÉE : les lignes 'SOLDE INITIAL' sont exclues de la vue globale (polluaient l'affichage). Visibles uniquement dans la vue par compte.", "COLONNE SOLDE PARTOUT : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.", "FILTRES EN HEADER : les sélecteurs année/mois sont déplacés dans le header à côté du titre pour un accès immédiat.", "MODAL ÉLARGI : max-w-5xl pour plus d'espace d'affichage des données."] },
@@ -3628,6 +3695,7 @@
                                     session_id: cfoSessionId.value,
                                     question: question,
                                     source: 'web',
+                                    system_prompt: CFO_SYSTEM_PROMPT,
                                     finance_data: getExportData()
                                 })
                             });
@@ -4049,6 +4117,164 @@
 
                     // v17.45 : Undo / Redo (max 10 snapshots)
                     const autoBackupToast = ref(false);
+
+                    // ═══ v17.98 : SYSTEM PROMPT CFO (envoyé avec chaque requête, n8n peut le récupérer dans body.system_prompt) ═══
+                    const CFO_SYSTEM_PROMPT = `Tu es le CFO personnel IA de Mohamed, responsable du pilotage budgétaire et stratégique du foyer (Maroc, devise DH). Ton rôle n'est pas seulement de cracher des chiffres, mais d'agir comme un véritable conseiller financier haut de gamme : tu dois être analytique, pédagogique, détaillé et force de proposition stratégique.
+
+═══ 1. LA HIÉRARCHIE DE LA VÉRITÉ (RÈGLE ABSOLUE) ═══
+En cas de conflit d'information, respecte cet ordre : NIVEAU 1 (La Loi : instructions de l'utilisateur) > NIVEAU 2 (Règles finance_rag) > NIVEAU 3 (JSON) > NIVEAU 4 (Savoir général IA).
+
+═══ 2. POLITIQUE ANTI-DÉRIVE SÉMANTIQUE ═══
+Ne déduis JAMAIS la fréquence d'un flux financier à partir de son nom. Si le JSON a la même structure qu'un salaire (champ base, periode='mois' ou absente), c'est mensuel.
+
+═══ 3. UTILISATION STRICTE DES OUTILS ═══
+• finance_rag : règle métier passée, ou avant de commenter loyer/studio/revenu.
+• propose_changes : UNIQUE outil pour simuler/modifier un poste.
+• committer : UNIQUEMENT si l'utilisateur répond "OUI" / "ok" / "valide" ET qu'une simulation a été présentée.
+• memory_writer : UNIQUEMENT sur formulation explicite ("retiens que…").
+
+═══ 4. RÈGLES MÉTIER : PROJET STUDIO & AIRBNB ═══
+Appelle finance_rag avec "stratégie studio exploitation". Si Airbnb :
+• RevenuNet = prix_nuit × jours_mois × taux_occupation × 0,825 − frais_fixes_mensuels
+• Scénarios : 65 % (basse) / 85 % (haute saison). Compare avec bail classique.
+
+═══ 5. WORKFLOW DE MODIFICATION (OBLIGATOIRE) ═══
+Tour 1 : Appelle propose_changes. Si pending_saved=true → présente le delta en HTML et termine EXACTEMENT par : « <br/><br/>Confirmez-vous ? Tapez OUI pour exécuter. »
+Tour 2 : Si "OUI", appelle committer avec { "confirmation": "OUI" }.
+
+═══ 6. FORMAT VISUEL ET QUALITÉ DE RENDU (CRITIQUE) ═══
+FORMAT HTML BRUT OBLIGATOIRE. (Pas de markdown). Ton texte doit être EXTRÊMEMENT AÉRÉ et VISUEL.
+Paragraphes : Utilise <p>...</p> et mets systématiquement DEUX sauts de ligne (<br/><br/>) entre chaque idée.
+Titres : Utilise <h3 style="color:#a855f7;font-weight:900;margin-top:14px">...</h3>
+Couleurs : Positifs en <span style="color:#16a34a;font-weight:800">[Chiffre]</span>, Négatifs en <span style="color:#dc2626;font-weight:800">[Chiffre]</span>.
+Listes : Utilise <ul> avec <li>.
+INTERDICTION DE RÉSUMER : DÉTAILLE, EXPLIQUE et ANALYSE en profondeur tes recommandations en 3 parties (1. Synthèse, 2. Analyse dynamique, 3. Recommandations).
+
+═══ 7. LE MODE "MERLIN" (BAGUETTE MAGIQUE) ═══
+Si le prompt indique que l'utilisateur pointe sur un champ spécifique avec la baguette magique, tu DOIS adopter le mode "Audit Merlin". Ne fais pas une analyse globale, concentre-toi uniquement sur ce champ.
+Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et couleurs mentionnées ci-dessus) :
+<h3>🔍 Définition</h3><p>...</p>
+<h3>🧮 Comment ce chiffre est calculé</h3><p>...</p>
+<h3>⚖️ Verdict & Diagnostic</h3><p>...</p>
+<h3>🚀 Pistes d'optimisation</h3><ul><li>...</li></ul>`;
+
+                    // ═══ v17.98 : MERLIN — Baguette Magique ═══
+                    const merlinActive = ref(false);
+                    const merlinBubble = ref({ open: false, label: '', value: '', html: '', loading: false, error: '', followup: '', _ctx: '' });
+
+                    const toggleMerlin = () => {
+                        merlinActive.value = !merlinActive.value;
+                        document.body.classList.toggle('merlin-active', merlinActive.value);
+                        if (!merlinActive.value) closeMerlinBubble();
+                    };
+                    const closeMerlinBubble = () => {
+                        merlinBubble.value = { open: false, label: '', value: '', html: '', loading: false, error: '', followup: '', _ctx: '' };
+                    };
+
+                    const _extractMerlinContext = (el) => {
+                        const text = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 200);
+                        const numMatch = text.match(/-?[\d\s.,]+(?:DH|dh| MAD| %|%)?/);
+                        const value = numMatch ? numMatch[0].trim() : text;
+                        let label = '';
+                        let cur = el;
+                        for (let i = 0; i < 5 && cur; i++) {
+                            const aria = cur.getAttribute && cur.getAttribute('aria-label');
+                            const dataM = cur.getAttribute && cur.getAttribute('data-merlin');
+                            if (dataM) { label = dataM; break; }
+                            if (aria) { label = aria; break; }
+                            cur = cur.parentElement;
+                        }
+                        if (!label) {
+                            let p = el.parentElement;
+                            for (let i = 0; i < 4 && p; i++) {
+                                const lab = p.querySelector('label, h1, h2, h3, h4, .text-xs, .uppercase');
+                                if (lab && lab !== el && (lab.textContent || '').trim()) {
+                                    label = lab.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
+                                    break;
+                                }
+                                p = p.parentElement;
+                            }
+                        }
+                        if (!label) label = text.slice(0, 60) || 'Champ non identifié';
+                        const onglet = (typeof activeTab !== 'undefined' && activeTab.value) || '';
+                        return { label, value, contexte: text, onglet };
+                    };
+
+                    const _merlinClickHandler = (e) => {
+                        if (!merlinActive.value) return;
+                        const el = e.target;
+                        if (!el || el.closest('.merlin-bubble') || el.closest('.merlin-wand-btn')) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const ctx = _extractMerlinContext(el);
+                        merlinBubble.value = {
+                            open: true, label: ctx.label, value: ctx.value, html: '', loading: true, error: '', followup: '',
+                            _ctx: `Onglet: ${ctx.onglet} · Contexte DOM: ${ctx.contexte}`
+                        };
+                        const prompt = `[MODE MERLIN — Audit ciblé d'un champ unique]\nL'utilisateur pointe avec la baguette magique sur le champ "${ctx.label}" qui vaut "${ctx.value}".\nOnglet actif : ${ctx.onglet}\nContexte DOM autour du champ : "${ctx.contexte}"\n\nDécris ce champ, explique précisément comment ce chiffre est calculé à partir des données JSON, critique cette valeur (est-elle saine, élevée, faible ?) et propose 2 à 4 pistes concrètes d'optimisation. Réponds en mode "Audit Merlin" (voir système prompt section 7).`;
+                        _consulterMerlin(prompt);
+                    };
+
+                    const _consulterMerlin = async (prompt) => {
+                        if (!cfoWebhookUrl.value) {
+                            merlinBubble.value.loading = false;
+                            merlinBubble.value.error = '⚠️ Configure d\'abord l\'URL du Webhook n8n dans l\'onglet CFO.';
+                            return;
+                        }
+                        try {
+                            const res = await fetch(cfoWebhookUrl.value, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    session_id: cfoSessionId.value,
+                                    question: prompt,
+                                    source: 'merlin',
+                                    merlin: true,
+                                    merlin_field: { label: merlinBubble.value.label, value: merlinBubble.value.value },
+                                    system_prompt: CFO_SYSTEM_PROMPT,
+                                    finance_data: getExportData()
+                                })
+                            });
+                            const raw = await res.text();
+                            let html = '';
+                            try { const j = JSON.parse(raw); html = j.html || j.output || j.response || j.message || raw; } catch (_) { html = raw; }
+                            merlinBubble.value.html = html;
+                        } catch (e) {
+                            merlinBubble.value.error = 'Erreur de connexion au CFO : ' + (e.message || e);
+                        } finally {
+                            merlinBubble.value.loading = false;
+                        }
+                    };
+
+                    const askMerlinFollowup = async () => {
+                        const q = (merlinBubble.value.followup || '').trim();
+                        if (!q || !cfoWebhookUrl.value) return;
+                        merlinBubble.value.followup = '';
+                        const prevHtml = merlinBubble.value.html;
+                        merlinBubble.value.html = prevHtml + '<hr class="my-3 border-purple-500/30"/><p class="text-fuchsia-200 font-bold">❓ ' + q.replace(/</g, '&lt;') + '</p>';
+                        merlinBubble.value.loading = true;
+                        const prompt = `[MODE MERLIN — Suite] Champ initial : "${merlinBubble.value.label}" = ${merlinBubble.value.value}. Question complémentaire de l'utilisateur : ${q}`;
+                        try {
+                            const res = await fetch(cfoWebhookUrl.value, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    session_id: cfoSessionId.value, question: prompt, source: 'merlin', merlin: true,
+                                    merlin_field: { label: merlinBubble.value.label, value: merlinBubble.value.value },
+                                    system_prompt: CFO_SYSTEM_PROMPT, finance_data: getExportData()
+                                })
+                            });
+                            const raw = await res.text();
+                            let html = '';
+                            try { const j = JSON.parse(raw); html = j.html || j.output || j.response || j.message || raw; } catch (_) { html = raw; }
+                            merlinBubble.value.html = merlinBubble.value.html + html;
+                        } catch (e) {
+                            merlinBubble.value.error = 'Erreur : ' + (e.message || e);
+                        } finally {
+                            merlinBubble.value.loading = false;
+                        }
+                    };
+
+                    document.addEventListener('click', _merlinClickHandler, true);
+                    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && merlinActive.value) toggleMerlin(); });
                     const _history = ref([]);
                     const _historyIdx = ref(-1);
                     let _isHistoryOp = false;
@@ -5939,7 +6165,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         comptesSelectOptions,
                         detailsComptesFinal, getCompteLabel, getCompteIcone,
                         getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
-                        canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast
+                        canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
+                        merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup
                     };
                 }
             });
