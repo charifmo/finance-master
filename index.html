@@ -4093,8 +4093,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "20.10";
+                    const CURRENT_VERSION = "20.20";
                     const CHANGELOG = [
+                        { version: "20.20", date: "2026-05-18 — Bridage CFO & Matrice enrichie", changes: ["MATRICE ENRICHIE (obtenirEtatVisuelComplet) : la boucle mensuelle détaille désormais chaque compte sur sa propre ligne (format 'NomCompte : X DH') avec annotation explicite '← A payé : NomDépense Montant' pour chaque dépense irrégulière prélevée sur ce compte. Les dépenses irrégulières sont regroupées par sourceCompte — la clé 'courant' est normalisée vers la clé physique cpt_<id> pour correspondre exactement aux entrées de detailsComptes.", "CFO NIVEAU 1.5 RÉCRIT (Lobotomie mathématique) : remplacement total de l'ancienne section par 3 RÈGLES ABSOLUES numérotées. Règle 1 : INTERDICTION FORMELLE de recalculer un solde — le moteur a déjà tout calculé. Règle 2 : ROUTAGE DES DÉPENSES — chaque dépense exceptionnelle est prélevée sur son compte spécifique (Dépenses Annuelles, Long Terme…) et NE touche pas le Compte Courant, avec exemple concret Voyage 37k. Règle 3 : SOURCE UNIQUE DE VÉRITÉ — le CFO doit lire la matrice, pas calculer. Le JSON brut reste interdit pour les valeurs courantes.", "HEADER MATRICE : ajout de la mention 'RÈGLE DE LECTURE : Ces soldes sont calculés par le moteur Vue.js. Ne recalcule JAMAIS par toi-même.' en tête de bloc pour contextualiser immédiatement."] },
                         { version: "20.10", date: "2026-05-18 — Synthèse Globale & Tooltips Net Worth", changes: ["SYNTHÈSE GLOBALE DU PATRIMOINE : nouveau panneau sombre '💎 SYNTHÈSE GLOBALE DU PATRIMOINE (NET WORTH)' positionné entre les actifs non-productifs et le module Sandbox. Fusionne tous les actifs (productifs + jouissance/foncier) en 3 KPIs : Valeur Actuelle Globale (bleu), Dette Restante Globale (rose), Patrimoine Net Global (vert/rouge).", "TOOLTIPS DE CALCUL AU SURVOL : chacune des 3 cartes KPI affiche un tooltip flottant sombre (group-hover Tailwind) révélant la décomposition mathématique — Productifs vs Jouissance/Foncier par ligne, total en bas. Le Patrimoine Net détaille les 4 composantes (+ Valeur productive, + Valeur jouissance, − Dettes productives, − Dettes jouissance).", "BARRE DE COMPOSITION : barre de progression bicolore (violet = productifs, amber = jouissance/foncier) indiquant visuellement le poids de chaque catégorie dans la valeur brute globale.", "COMPUTEDS GLOBAUX : 7 nouvelles computed — globalValeurProductifs, globalDetteProductifs, globalValeurJouissance, globalDetteJouissance, globalValeurTotale, globalDetteTotale, globalPatrimoineNet.", "CFO SYSTEM PROMPT ENRICHI : obtenirEtatVisuelComplet() inclut désormais les 5 lignes de synthèse globale (valeur/dette par catégorie + NET WORTH final) pour que l'IA CFO ait la vision exacte de la richesse nette de l'utilisateur, toutes dettes déduites."] },
                         { version: "20.00", date: "2026-05-18 — Refonte Patrimoine & Sandbox", changes: ["CLASSIFICATION DES ACTIFS : l'onglet Patrimoine sépare désormais visuellement les Actifs de Rendement (Productifs) — ROI/Revenus affichés — et le Patrimoine de Jouissance & Foncier (Non-Productifs) — concentré sur Valeur Actuelle, Crédit Restant et Apport. Plus aucun ROI ni revenu n'est imposé sur la résidence principale ou les terrains nus.", "FORMULAIRE NOUVEL ACTIF : remplacement du switch 'Actif productif/foncier' par un toggle clair 'Génère des revenus ?'. Quand décoché, les champs Revenus annuels + paramètres ROI/Crédit productif sont masqués ; à la place, on saisit Apport personnel et Crédit Restant en plus de la Valeur Actuelle.", "MODULE SANDBOX (🔮 Projections & Scénarios) : nouveau panneau dans Patrimoine, situé sous la situation réelle. Permet de simuler 5 à 10 ans d'événements virtuels (Achat actif, Vente actif, Remboursement anticipé) sur une copie isolée des données (deep clone). Affiche une timeline annuelle avec Solde Courant, Dette Totale et Patrimoine Net projetés.", "APPLIQUER CE SCÉNARIO : bouton ✅ qui injecte les événements virtuels dans le vrai state (création/suppression d'actifs, soldage de crédits), génère les années futures manquantes via ajouterAnnee, vide le brouillon et rafraîchit l'interface."] },
                         { version: "17.43", date: "2026-05-15 — Relevé v3 : Dédoublonnage + Évolution", changes: ["DÉDOUBLONNAGE ONGLETS : les objectifs épargne liés (linkedAccountId) sont exclus des onglets — le compte physique suffit. Les ep_ sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.", "BOUTON CALENDRIER : bouton 'Historique Comptes' ajouté sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.", "MODE ÉVOLUTION SOLDES : toggle 📈 Soldes / 📋 Détail — en mode Soldes, on ne voit que l'évolution mensuelle des balances de chaque compte sans les transactions individuelles.", "Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas."] },
@@ -4316,8 +4317,11 @@
                             lines.push('');
 
                             lines.push('[MATRICE DES COMPTES MOIS PAR MOIS (Moteur Cash-Flow) — Année ' + aNum + ']');
-                            lines.push('Soldes réels à la fin de chaque mois :');
+                            lines.push('RÈGLE DE LECTURE : Ces soldes sont calculés par le moteur Vue.js. Chaque dépense est DÉJÀ prélevée sur le BON compte. Ne recalcule JAMAIS par toi-même.');
                             const rowsAnnee = (bilanLignes.value || []).filter(b => Number(b.annee) === Number(aNum));
+                            // Clé du compte courant physique (pour mapper sourceCompte='courant')
+                            const _courantCpt = comptes.value.find(c => c.type === 'courant');
+                            const _courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : null;
                             if (rowsAnnee.length === 0) {
                                 lines.push('• (Aucune ligne bilan calculée pour cette année)');
                             } else {
@@ -4325,21 +4329,51 @@
                                     const m = nomDuMois(r.mois);
                                     const dc = r.detailsComptes || {};
                                     const de = r.detailsEpargne || {};
-                                    const partsC = Object.entries(dc).map(([k, v]) => getCompteLabel(k) + ' = ' + formatMAD(v));
+
+                                    // Grouper les dépenses irrégulières par compte source
+                                    const irregByKey = {};
+                                    if (Array.isArray(r.detailsIrreg)) {
+                                        r.detailsIrreg.forEach(d => {
+                                            const src = d.sourceCompte || 'courant';
+                                            // Normaliser 'courant' → clé physique cpt_X
+                                            const key = (src === 'courant' && _courantKey) ? _courantKey : src;
+                                            const nom = d.nom || '?';
+                                            const mt = Math.abs(Number(d.montantPaye || d.montant || 0));
+                                            if (mt === 0) return;
+                                            if (!irregByKey[key]) irregByKey[key] = [];
+                                            irregByKey[key].push(nom + ' ' + formatMAD(mt));
+                                        });
+                                    }
+
+                                    // Comptes physiques avec annotation dépenses
+                                    lines.push('  ' + m + ' :');
+                                    if (Object.keys(dc).length > 0) {
+                                        Object.entries(dc).forEach(([k, v]) => {
+                                            const lbl = getCompteLabel(k) || k;
+                                            const exps = irregByKey[k];
+                                            let entry = '    ' + lbl + ' : ' + formatMAD(v) + ' DH';
+                                            if (exps && exps.length) entry += '  ← A payé : ' + exps.join(' + ');
+                                            lines.push(entry);
+                                        });
+                                    } else {
+                                        let entry = '    Compte Courant : ' + formatMAD(r.soldeCourant || 0) + ' DH';
+                                        const expsC = _courantKey ? irregByKey[_courantKey] : null;
+                                        if (expsC && expsC.length) entry += '  ← A payé : ' + expsC.join(' + ');
+                                        lines.push(entry);
+                                    }
+                                    // Épargne non liée avec annotation
                                     const partsE = Object.entries(de)
                                         .filter(([k]) => !_epargneLinkedKeys.value.has(k))
                                         .map(([k, v]) => {
                                             const id = String(k).replace('ep_', '');
                                             const obj = epArrYear.find(o => String(o.id) === id);
                                             const lab = (obj && (obj.nom || obj.label)) || k;
-                                            return lab + ' = ' + formatMAD(v);
+                                            const exps = irregByKey[k];
+                                            let s = '    ' + lab + ' : ' + formatMAD(v) + ' DH';
+                                            if (exps && exps.length) s += '  ← A payé : ' + exps.join(' + ');
+                                            return s;
                                         });
-                                    let line = '• ' + m + ' : ';
-                                    if (partsC.length) line += partsC.join(' | ');
-                                    else line += 'Courant = ' + formatMAD(r.soldeCourant || 0);
-                                    if (partsE.length) line += '  ⟶ Épargne non liée : ' + partsE.join(' | ');
-                                    line += '  [Total patrimoine : ' + formatMAD((r.soldeCourant || 0) + (r.soldeEpargneProjete || 0)) + ']';
-                                    lines.push(line);
+                                    if (partsE.length) partsE.forEach(s => lines.push(s));
                                 });
                             }
                             lines.push('');
@@ -5024,9 +5058,19 @@
 ═══ 1. LA HIÉRARCHIE DE LA VÉRITÉ (RÈGLE ABSOLUE) ═══
 En cas de conflit d'information, respecte cet ordre : NIVEAU 1 (La Loi : instructions de l'utilisateur) > NIVEAU 1.5 (L'écran de l'appli) > NIVEAU 2 (Règles finance_rag) > NIVEAU 3 (JSON) > NIVEAU 4 (Savoir général IA).
 
-=== NIVEAU 1.5 : L'ÉCRAN DE L'APPLI (CASH-FLOW ET PATRIMOINE RÉELS) ===
-Tu reçois dans ton payload un bloc nommé [PROJECTION & ÉTAT VISUEL DE L'APPLICATION EN DIRECT] (clé "etat_visuel_app"). Ce bloc contient TOUT ce que l'utilisateur voit à l'écran : les soldes mensuels par compte, l'avancement des objectifs d'épargne, la valeur des actifs immobiliers/financiers et les KPIs du ruban fixe (Entrées/Sorties annuelles, Surplus, Endettement, Patrimoine Net).
-INTERDICTION ABSOLUE de deviner un solde, de calculer l'avancement d'un objectif ou d'évaluer le patrimoine à partir du JSON brut (finance_data). Tu DOIS te baser EXCLUSIVEMENT sur les chiffres fournis dans ce bloc visuel pour proposer tes stratégies, virer un résidu, auditer une valeur ou recommander un arbitrage. Le JSON brut sert UNIQUEMENT à connaître la structure (noms de postes, périodes, exceptions, IDs) — JAMAIS pour les valeurs courantes.
+=== NIVEAU 1.5 : LECTURE STRICTE DU CASH-FLOW (INTERDICTION DE RECALCULER) ===
+Tu reçois dans ton payload un bloc nommé [PROJECTION & ÉTAT VISUEL DE L'APPLICATION EN DIRECT] (clé "etat_visuel_app"). Ce bloc contient TOUT ce que l'utilisateur voit à l'écran : les soldes mensuels par compte, l'avancement des objectifs d'épargne, la valeur des actifs immobiliers/financiers et les KPIs du ruban fixe.
+
+RÈGLE ABSOLUE N°1 — INTERDICTION FORMELLE DE RECALCULER :
+Tu as l'INTERDICTION FORMELLE de faire des additions ou des soustractions pour déduire le solde futur d'un compte. Le moteur de l'application a DÉJÀ calculé l'impact de chaque dépense sur le BON compte. La matrice "[MATRICE DES COMPTES MOIS PAR MOIS]" que tu reçois est la vérité absolue et finale. Tu n'as rien à recalculer.
+
+RÈGLE ABSOLUE N°2 — ROUTAGE DES DÉPENSES :
+Chaque dépense exceptionnelle (Voyages, Achats importants, Flux irréguliers) est prélevée sur un compte SPÉCIFIQUE indiqué dans la matrice par la mention "← A payé : [Nom dépense] [Montant]". Ce compte peut être "Dépenses Annuelles", "Long Terme", "Fonds Urgence" — et NE TOUCHE PAS forcément le "Compte Courant".
+EXEMPLE CONCRET : Si la matrice indique "Dépenses Annuelles : 12 000 DH  ← A payé : Voyage Europe 37 000 DH", cela signifie que le Voyage a été prélevé sur Dépenses Annuelles, et que le Compte Courant est INTACT. Tu NE DOIS PAS soustraire 37 000 DH du Compte Courant.
+
+RÈGLE ABSOLUE N°3 — SOURCE UNIQUE DE VÉRITÉ :
+Si l'utilisateur demande "quel est le reliquat de mon Compte Courant en Juin ?", tu DOIS lire UNIQUEMENT la ligne "Compte Courant : X DH" du mois de Juin dans la matrice. Tu ne calcules pas. Tu lis. C'est tout.
+INTERDICTION ABSOLUE de deviner un solde, de calculer l'avancement d'un objectif ou d'évaluer le patrimoine à partir du JSON brut (finance_data). Le JSON brut sert UNIQUEMENT à connaître la structure (noms de postes, IDs) — JAMAIS pour les valeurs courantes.
 
 ═══ 2. POLITIQUE ANTI-DÉRIVE SÉMANTIQUE ═══
 Ne déduis JAMAIS la fréquence d'un flux financier à partir de son nom. Si le JSON a la même structure qu'un salaire (champ base, periode='mois' ou absente), c'est mensuel.

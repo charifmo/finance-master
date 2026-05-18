@@ -5,6 +5,23 @@ Format : [version] — date — description
 
 ---
 
+## [20.20] — 2026-05-18 — Bridage du CFO & Matrice enrichie par compte
+
+### Mission 1 : Matrice mensuelle enrichie (`obtenirEtatVisuelComplet`)
+- Chaque mois est maintenant formaté en **lignes séparées par compte** au lieu d'une ligne condensée.
+- Chaque compte affiche son solde suivi d'une **annotation explicite** `← A payé : NomDépense Montant` si une dépense irrégulière y a été prélevée ce mois.
+- La clé `sourceCompte='courant'` est **normalisée** vers la clé physique `cpt_<id>` pour correspondre exactement aux entrées de `detailsComptes`.
+- Résultat : le CFO voit explicitement `Dépenses Annuelles : 12 000 DH  ← A payé : Voyage Europe 37 000 DH` — et comprend que le Compte Courant est intact.
+- Header de bloc ajouté : `RÈGLE DE LECTURE : Ces soldes sont calculés par le moteur Vue.js. Ne recalcule JAMAIS par toi-même.`
+
+### Mission 2 : Lobotomie mathématique du CFO (`CFO_SYSTEM_PROMPT`)
+- **NIVEAU 1.5 entièrement réécrit** avec 3 règles absolues numérotées et agressives :
+  - **Règle 1** : INTERDICTION FORMELLE de recalculer — le moteur a déjà tout fait.
+  - **Règle 2** : ROUTAGE DES DÉPENSES — chaque dépense exceptionnelle est prélevée sur son compte spécifique (`Dépenses Annuelles`, `Long Terme`…), avec exemple concret Voyage 37k qui NE touche PAS le Compte Courant.
+  - **Règle 3** : SOURCE UNIQUE DE VÉRITÉ — le CFO lit la matrice, il ne calcule pas.
+
+---
+
 ## [20.10] — 2026-05-18 — Synthèse Globale du Patrimoine & Tooltips Net Worth
 
 ### Nouveau panneau : 💎 SYNTHÈSE GLOBALE (NET WORTH)
