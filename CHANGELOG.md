@@ -5,6 +5,20 @@ Format : [version] — date — description
 
 ---
 
+## [20.50] — 2026-05-18 — Fix critique : Alignement de l'extracteur CFO sur le computed state réel de l'UI
+
+### Problème
+`obtenirEtatVisuelComplet()` affichait des soldes faux pour le Compte Courant (ex : 48 009 DH au lieu de 11 027 DH). Le bug venait d'une divergence entre deux variables du moteur `bilan` computed :
+- `soldeCourant` (`curSolde`) — alimenté par le moteur cashflow → **valeur affichée par l'UI**
+- `detailsComptes[courantCptKey]` — synchronisé depuis le journal (v17.41) → **valeur envoyée au CFO (erronée)**
+
+### Fix
+Dans la boucle `Object.entries(detailsComptes)` de `obtenirEtatVisuelComplet()`, remplace `v` par `r.soldeCourant` dès que la clé correspond au compte courant (`k === _courantKey`). Les comptes non-courant continuent de lire `detailsComptes[k]`.
+
+Garantit que si l'UI affiche 11 027 DH, la matrice textuelle envoyée au CFO affiche exactement 11 027 DH.
+
+---
+
 ## [20.31] — 2026-05-18 — Hotfix : Rétablissement de la clé `finance_data` pour compatibilité backend
 
 ### Problème
