@@ -5,6 +5,29 @@ Format : [version] — date — description
 
 ---
 
+## [20.30] — 2026-05-18 — Refonte du JSON CFO, suppression des données brutes & payload pré-digéré
+
+### Mission 1 : `_buildPayloadCFO()` — Payload sanitisé
+Nouvelle fonction qui remplace l'envoi du state brut `getExportData()`. Elle construit un objet JSON structuré avec uniquement ce que l'IA a le droit de lire :
+- **`matrice_cash_flow_calculee`** : résultat d'`obtenirEtatVisuelComplet()` — soldes réels mois par mois
+- **`comptes_actuels`** : snapshot simple des soldes actuels
+- **`revenus_fixes` / `charges_fixes` / `charges_variables`** : labels + montants seulement (sans exceptions ni historique)
+- **`evenements_exceptionnels`** : chaque dépense irrégulière porte un champ `statut_comptable` = `"DÉJÀ DÉDUIT : Ce montant a été prélevé sur [NomCompte] par le moteur. INTERDICTION ABSOLUE de le resoustraire du Compte Courant."`
+- **`objectifs_epargne`** : nom + objectif + atteint + avancement %
+- **`patrimoine_net`** : synthèse globale (valeur totale, dette, net — sans détail actif par actif)
+- **`instruction_lecture`** : rappel en tête du payload de ne jamais recalculer
+
+### Mission 2 : Suppression du JSON brut dans les 3 appels fetch
+- `consulterCFO`, `_consulterMerlin`, `askMerlinFollowup` : plus de `finance_data: getExportData()` ni de `etat_visuel_app` séparé.
+- Remplacés par `donnees_cfo: _buildPayloadCFO()` — objet unique, propre et contrôlé.
+
+### Mission 3 : System prompt NIVEAU 1.5 mis à jour
+- Référence explicite à la clé `donnees_cfo` et ses sous-clés.
+- La clé `finance_data` déclarée explicitement inexistante.
+- Règle n°2 adaptée à `evenements_exceptionnels[].statut_comptable` avec exemple concret Voyage 37k.
+
+---
+
 ## [20.20] — 2026-05-18 — Bridage du CFO & Matrice enrichie par compte
 
 ### Mission 1 : Matrice mensuelle enrichie (`obtenirEtatVisuelComplet`)
