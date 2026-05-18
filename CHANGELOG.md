@@ -5,6 +5,67 @@ Format : [version] — date — description
 
 ---
 
+## [20.00] — 2026-05-18 — Refonte Patrimoine (Actifs Non-Productifs) & Module Sandbox
+
+### Onglet Patrimoine — Mission 1 : Classification des Actifs
+- **Séparation visuelle** : l'onglet Patrimoine sépare désormais les **📈 Actifs de Rendement (Productifs)** — Studio Airbnb, Local commercial, Bourse — et le **🏡 Patrimoine de Jouissance & Foncier (Non-Productifs)** — résidence principale, terrains nus.
+- **Productifs** : Revenus annuels, ROI, ROE et badge de rendement affichés (inchangé).
+- **Non-Productifs** : aucun revenu, aucun ROI imposé. Le tableau affiche désormais **Valeur Actuelle · Crédit Restant · Apport · Patrimoine Net** par actif, avec totaux globaux.
+- **Synthèse refondue** : 3 cards = Valeur Actuelle Totale (bleu) · Dette Restante (rose) · Patrimoine Net de Jouissance (vert) — disparition de la matrice pessimiste/optimiste imposée.
+
+### Formulaire « Nouvel Actif » — Toggle clair
+- L'ancien bouton "Actif productif / Actif foncier" est remplacé par un **toggle "💰 Génère des revenus ?"** (Oui / Non).
+- Si **Non** : les champs `Revenus annuels` et tous les paramètres de Crédit productif (Taux / Durée / Restantes) sont masqués. À la place, on saisit **Apport personnel + Crédit Restant** en plus de la Valeur Actuelle.
+- Aucun ROI n'est calculé ni affiché pour ce type d'actif.
+
+### Module 🔮 Projections & Scénarios (Sandbox) — Mission 2
+- Nouveau panneau dédié sous la situation réelle de l'onglet Patrimoine.
+- **Brouillon virtuel** : permet de simuler 5 à 10 ans sans toucher aux vraies données (deep clone de `donneesAnnuelles`, `masterAssets`, `comptes`).
+- **Formulaire Événement Virtuel** : Année / Mois / Type (`🛒 Achat actif`, `💸 Vente actif`, `🏦 Remboursement anticipé`) / Cible / Montant.
+- **Timeline projetée** : tableau annuel sur l'horizon choisi (1–20 ans) avec **Solde Courant · Dette Totale · Valeur Actifs · Patrimoine Net** + colonne événements de l'année.
+- **Hypothèse Surplus mensuel** paramétrable pour intégrer l'épargne récurrente dans la projection.
+
+### Validation du scénario — Mission 3
+- Bouton **✅ Appliquer ce scénario** dans le panneau Sandbox.
+- Au clic :
+  1. Génère les **années futures manquantes** dans `donneesAnnuelles` (clone de la dernière année connue, réinitialisation des `paye/montantPaye`).
+  2. Injecte les événements virtuels dans le vrai state : création/suppression d'actifs (`masterAssets`), soldage / réduction des crédits, débit/crédit du compte courant physique.
+  3. Vide le brouillon et déclenche `handleDataChange` + `forceUpdateCalculations` → l'interface est rafraîchie instantanément, persistance VPS automatique.
+- Confirmation explicite avant exécution. Action réversible via Undo.
+
+---
+
+## [17.43] — 2026-05-15 — Relevé v3 : Dédoublonnage + Évolution
+
+### Améliorations
+- **Dédoublonnage onglets** : les objectifs épargne liés (`linkedAccountId`) sont exclus des onglets — le compte physique suffit. Les `ep_` sans mouvement réel (juste SOLDE INITIAL) sont aussi masqués.
+- **Bouton Calendrier** : bouton "📋 Historique Comptes" sur la page Calendrier Pluriannuel pour ouvrir le relevé directement.
+- **Mode Évolution Soldes** : toggle `📈 Soldes / 📋 Détail` — en mode Soldes, seule l'évolution mensuelle des balances de chaque compte est affichée, sans les transactions individuelles.
+- Vue Global en mode Évolution : tableau mois × compte avec le solde projeté à chaque pas.
+
+---
+
+## [17.42] — 2026-05-15 — Relevé UI Refonte
+
+### Améliorations
+- **Onglets en grille** : les boutons de comptes s'affichent en `flex-wrap` — tous les onglets sont visibles sans scroll horizontal caché.
+- **Vue Global nettoyée** : les lignes `SOLDE INITIAL` sont exclues de la vue globale (visibles uniquement dans la vue par compte).
+- **Colonne Solde partout** : la colonne Solde est affichée sur toutes les vues (y compris Global) pour voir le solde après chaque transaction.
+- **Filtres dans le header** : les sélecteurs année/mois sont à côté du titre pour un accès immédiat.
+- **Modal élargi** : `max-w-5xl` pour plus d'espace.
+
+---
+
+## [17.41] — 2026-05-15 — Journal-Sync SSOT Courant
+
+### Corrections
+- **Fix définitif tooltip/relevé** : abandon de l'approche delta (`curSolde - before`) qui héritait le biais de `patrimoineLiquide` (somme de TOUS les comptes). Le delta était aussi incorrect quand l'auto-sweep était actif (delta = 0 car `curSolde` ne changeait pas, alors que le courant avait des opérations).
+- **JOURNAL-SYNC** : `soldesComptes[courantCptKey] = journal[courantCptKey].last.soldeApres`. Le journal chaîne `SOLDE INITIAL → crédits → débits` exactement comme le relevé. Le tooltip lit maintenant la même valeur que le relevé.
+- **Auto-Sweep logging** : quand le surplus est redirigé vers une épargne (`destSurplus`), un débit `Auto-Sweep surplus` est enregistré dans le journal courant. Le relevé affiche désormais cette opération.
+- Appliqué aux 2 blocs (isCurrentMonth + mois futurs). Aucune dépendance à `curSolde` pour le solde physique du courant.
+
+---
+
 ## [17.40] — 2026-05-15 — Delta Sync Courant
 
 ### Corrections
