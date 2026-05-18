@@ -5,6 +5,16 @@ Format : [version] — date — description
 
 ---
 
+## [20.31] — 2026-05-18 — Hotfix : Rétablissement de la clé `finance_data` pour compatibilité backend
+
+### Problème
+Après v20.30, le backend n8n (hardcodé sur la clé `finance_data`) ne trouvait plus les données et ignorait le payload sanitisé.
+
+### Fix
+Renommage de `donnees_cfo:` → `finance_data:` dans les 3 appels fetch (`consulterCFO`, `_consulterMerlin`, `askMerlinFollowup`). Le contenu envoyé reste le résultat de `_buildPayloadCFO()` — seule la clé change. Le system prompt n'est pas modifié.
+
+---
+
 ## [20.30] — 2026-05-18 — Refonte du JSON CFO, suppression des données brutes & payload pré-digéré
 
 ### Mission 1 : `_buildPayloadCFO()` — Payload sanitisé
