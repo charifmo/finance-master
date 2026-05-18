@@ -5,6 +5,28 @@ Format : [version] — date — description
 
 ---
 
+## [20.10] — 2026-05-18 — Synthèse Globale du Patrimoine & Tooltips Net Worth
+
+### Nouveau panneau : 💎 SYNTHÈSE GLOBALE (NET WORTH)
+- Grand panneau sombre positionné entre les actifs et le module Sandbox, fusionnant **tous les actifs** (productifs + jouissance/foncier).
+- **3 cartes KPI** :
+  - 📊 **Valeur Actuelle Globale** = Actifs productifs + Actifs jouissance/foncier
+  - 🏦 **Dette Restante Globale** = Crédits productifs + Crédits jouissance
+  - 💎 **Patrimoine Net Global** = Valeur Globale − Dette Globale (vert si positif, rouge si négatif)
+- **Barre de composition** bicolore (violet = productifs / amber = jouissance) indiquant le poids de chaque catégorie dans la valeur brute.
+
+### Tooltips de calcul au survol
+- Chaque carte KPI affiche un **tooltip flottant sombre** (`group-hover` Tailwind) au survol, révélant la décomposition ligne par ligne.
+- La carte **Patrimoine Net** affiche les 4 composantes : `+ Valeur productive`, `+ Valeur jouissance`, `− Dettes productives`, `− Dettes jouissance`, puis `= PATRIMOINE NET`.
+
+### 7 nouvelles computed properties
+`globalValeurProductifs`, `globalDetteProductifs`, `globalValeurJouissance`, `globalDetteJouissance`, `globalValeurTotale`, `globalDetteTotale`, `globalPatrimoineNet`
+
+### CFO System Prompt enrichi
+- `obtenirEtatVisuelComplet()` inclut désormais les 5 lignes de synthèse globale (valeur/dette par catégorie + NET WORTH final) transmises au CFO IA à chaque consultation.
+
+---
+
 ## [20.00] — 2026-05-18 — Refonte Patrimoine (Actifs Non-Productifs) & Module Sandbox
 
 ### Onglet Patrimoine — Mission 1 : Classification des Actifs
