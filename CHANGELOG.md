@@ -5,6 +5,21 @@ Format : [version] — date — description
 
 ---
 
+## [20.60] — 2026-05-19 — Fix critique : Noms de mois `undefined` et double suffixe `DH DH` dans la matrice CFO
+
+### Problème
+Dans `obtenirEtatVisuelComplet()`, deux bugs causaient une matrice illisible pour l'IA :
+
+1. **`undefined :` sur chaque en-tête de mois** — `r.mois` est déjà la chaîne `"Juin 2026"` (construite par le moteur bilan). L'appel `nomDuMois(r.mois)` passait cette chaîne à une fonction attendant un entier 1-12, qui retournait `undefined`. L'IA ne voyant aucun nom de mois, elle comptait les index — et décalait tous les soldes (la 6ème ligne = Octobre 48 009 DH était lue comme Juin).
+
+2. **`11 027 DH DH` sur chaque ligne de solde** — `formatMAD()` retourne déjà `"11 027 DH"`. Chaque ligne ajoutait manuellement `+ ' DH'` en suffixe.
+
+### Fix
+- Ligne `const m = r.mois` (suppression de l'appel `nomDuMois()` superflu)
+- Suppression des trois `+ ' DH'` dans les lignes de comptes, fallback courant et épargne
+
+---
+
 ## [20.51] — 2026-05-19 — Hotfix : Alignement de la matrice CFO sur comptesProjetes (source unique de vérité)
 
 ### Problème
