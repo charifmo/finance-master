@@ -5,17 +5,30 @@ Format : [version] — date — description
 
 ---
 
-## [20.50] — 2026-05-18 — Fix critique : Alignement de l'extracteur CFO sur le computed state réel de l'UI
+## [20.51] — 2026-05-19 — Hotfix : Alignement de la matrice CFO sur comptesProjetes (source unique de vérité)
+
+### Problème
+La v20.50 avait remplacé `detailsComptes[courantCptKey]` par `r.soldeCourant` pour le Compte Courant. Or `r.soldeCourant = curSolde` = solde liquide **total de tous les comptes** (valeur initiale `patrimoineLiquide` ~101 296 DH avant déductions mensuelles), pas le solde individuel du compte courant. Résultat : l'IA lisait 101 296 DH pour juin 2026 au lieu de 11 027 DH.
+
+La vraie source correcte est `detailsComptes['cpt_' + c.id]` itéré via `comptes.value` (même logique que le computed `comptesProjetes` "Architecture des Comptes / Voyage dans le temps"). La v20.50 itérait `Object.entries(dc)` avec `getCompteLabel(k)` — divergeant potentiellement du libellé et de la clé utilisés par `comptesProjetes`.
+
+### Fix
+Dans la boucle d'`obtenirEtatVisuelComplet()` (section `[MATRICE DES COMPTES MOIS PAR MOIS]`) :
+- Remplace `Object.entries(dc).forEach(([k, v]) => ...)` par une itération sur `comptes.value`
+- Pour chaque compte : `cptKey = 'cpt_' + c.id`, `lbl = c.label`, `solde = Math.round(dc[cptKey])`
+- Identique à `comptesProjetes` (ligne ~6933) — garantit que la matrice affiche **exactement** ce que l'utilisateur voit dans "Voyage dans le temps"
+
+---
+
+## [20.50] — 2026-05-18 — Fix critique : Alignement de l'extracteur CFO sur le computed state réel de l'UI *(remplacé par v20.51)*
 
 ### Problème
 `obtenirEtatVisuelComplet()` affichait des soldes faux pour le Compte Courant (ex : 48 009 DH au lieu de 11 027 DH). Le bug venait d'une divergence entre deux variables du moteur `bilan` computed :
-- `soldeCourant` (`curSolde`) — alimenté par le moteur cashflow → **valeur affichée par l'UI**
-- `detailsComptes[courantCptKey]` — synchronisé depuis le journal (v17.41) → **valeur envoyée au CFO (erronée)**
+- `soldeCourant` (`curSolde`) — alimenté par le moteur cashflow
+- `detailsComptes[courantCptKey]` — synchronisé depuis le journal (v17.41)
 
-### Fix
-Dans la boucle `Object.entries(detailsComptes)` de `obtenirEtatVisuelComplet()`, remplace `v` par `r.soldeCourant` dès que la clé correspond au compte courant (`k === _courantKey`). Les comptes non-courant continuent de lire `detailsComptes[k]`.
-
-Garantit que si l'UI affiche 11 027 DH, la matrice textuelle envoyée au CFO affiche exactement 11 027 DH.
+### Fix (invalidé)
+Remplacer `v` par `r.soldeCourant` pour la clé courant. Incorrect : `curSolde` = total liquide de TOUS les comptes, pas seulement le compte courant.
 
 ---
 

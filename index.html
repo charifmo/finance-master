@@ -4093,7 +4093,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "20.50";
+                    const CURRENT_VERSION = "20.51";
                     const CHANGELOG = [
                         { version: "20.30", date: "2026-05-18 — Refonte JSON CFO, suppression données brutes", changes: ["PAYLOAD SANITISÉ (_buildPayloadCFO) : création d'une fonction dédiée qui construit un objet JSON pré-digéré par le moteur Vue.js. Il contient : matrice_cash_flow_calculee (la matrice mensuelle), comptes_actuels (snapshot simple), revenus_fixes, charges_fixes, charges_variables (labels + montants — sans exceptions ni historique), evenements_exceptionnels (dépenses irrégulières avec statut_comptable 'DÉJÀ DÉDUIT'), objectifs_epargne (avancement %), patrimoine_net (synthèse globale).", "LOBOTOMIE DES CHOCS : chaque dépense irrégulière porte un champ statut_comptable = 'DÉJÀ DÉDUIT : Ce montant a été prélevé sur [NomCompte] par le moteur. INTERDICTION ABSOLUE de le resoustraire du Compte Courant.' Le LLM ne peut plus physiquement faire l'erreur.", "SUPPRESSION DU JSON BRUT : les 3 appels fetch (consulterCFO, _consulterMerlin, askMerlinFollowup) n'envoient plus finance_data: getExportData() ni etat_visuel_app séparé. Ils envoient uniquement donnees_cfo: _buildPayloadCFO().", "SYSTEM PROMPT MIS À JOUR : NIVEAU 1.5 réécrit pour référencer la clé 'donnees_cfo' et ses sous-clés exactes. La clé 'finance_data' est explicitement déclarée inexistante. Les 3 règles absolues adaptées au nouveau schéma (notamment l'exemple concret avec evenements_exceptionnels[].statut_comptable)."] },
                         { version: "20.20", date: "2026-05-18 — Bridage CFO & Matrice enrichie", changes: ["MATRICE ENRICHIE (obtenirEtatVisuelComplet) : la boucle mensuelle détaille désormais chaque compte sur sa propre ligne (format 'NomCompte : X DH') avec annotation explicite '← A payé : NomDépense Montant' pour chaque dépense irrégulière prélevée sur ce compte. Les dépenses irrégulières sont regroupées par sourceCompte — la clé 'courant' est normalisée vers la clé physique cpt_<id> pour correspondre exactement aux entrées de detailsComptes.", "CFO NIVEAU 1.5 RÉCRIT (Lobotomie mathématique) : remplacement total de l'ancienne section par 3 RÈGLES ABSOLUES numérotées. Règle 1 : INTERDICTION FORMELLE de recalculer un solde — le moteur a déjà tout calculé. Règle 2 : ROUTAGE DES DÉPENSES — chaque dépense exceptionnelle est prélevée sur son compte spécifique (Dépenses Annuelles, Long Terme…) et NE touche pas le Compte Courant, avec exemple concret Voyage 37k. Règle 3 : SOURCE UNIQUE DE VÉRITÉ — le CFO doit lire la matrice, pas calculer. Le JSON brut reste interdit pour les valeurs courantes.", "HEADER MATRICE : ajout de la mention 'RÈGLE DE LECTURE : Ces soldes sont calculés par le moteur Vue.js. Ne recalcule JAMAIS par toi-même.' en tête de bloc pour contextualiser immédiatement."] },
@@ -4347,15 +4347,19 @@
                                     }
 
                                     // Comptes physiques avec annotation dépenses
+                                    // v20.51 FIX : Itérer sur comptes.value exactement comme comptesProjetes
+                                    // (même source, même label c.label, même clé 'cpt_'+c.id, même Math.round)
+                                    // → garantit alignement pixel-perfect avec "Architecture des Comptes / Voyage dans le temps"
                                     lines.push('  ' + m + ' :');
-                                    if (Object.keys(dc).length > 0) {
-                                        Object.entries(dc).forEach(([k, v]) => {
-                                            const lbl = getCompteLabel(k) || k;
-                                            const exps = irregByKey[k];
-                                            // v20.50 FIX : detailsComptes[courantCptKey] provient du journal-sync
-                                            // (v17.41) et diverge de curSolde. L'UI affiche r.soldeCourant —
-                                            // on l'utilise ici pour que la matrice soit pixel-perfect avec l'écran.
-                                            const solde = (_courantKey && k === _courantKey) ? r.soldeCourant : v;
+                                    const _cptsList = comptes.value || [];
+                                    const _hasCpts = _cptsList.some(c => ('cpt_' + c.id) in dc);
+                                    if (_hasCpts) {
+                                        _cptsList.forEach(c => {
+                                            const cptKey = 'cpt_' + c.id;
+                                            if (!(cptKey in dc)) return;
+                                            const lbl = c.label || getCompteLabel(cptKey) || cptKey;
+                                            const solde = Math.round(dc[cptKey]);
+                                            const exps = irregByKey[cptKey];
                                             let entry = '    ' + lbl + ' : ' + formatMAD(solde) + ' DH';
                                             if (exps && exps.length) entry += '  ← A payé : ' + exps.join(' + ');
                                             lines.push(entry);
