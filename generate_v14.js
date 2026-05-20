@@ -49,6 +49,7 @@ RÈGLES :
 • Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.
 • category "compte" : agit sur les comptes bancaires du bilan. action "add" crée un compte (fournir "label" et "amount" pour le solde initial). action "modify" ajuste le solde d un compte (fournir "target" = label du compte et "amount" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).
 • category "objectif" : action "modify" pour AJOUTER des fonds à un objectif existant (fournir "target" = nom du projet, ex: "Paris", "Jlilou" ; "amount" = montant à AJOUTER à la valeur actuelle, donc INCREMENTAL). action "add" pour CRÉER un nouvel objectif (fournir "target" ou "label" = nom du nouvel objectif, "amount" = montant déjà épargné (current, peut être 0), "target_amount" = montant cible à atteindre (optionnel, défaut 10 000 DH)). Si "modify" est utilisé sur un objectif inexistant, il sera créé automatiquement (upsert).
+• category "epargne" : c'est un VIREMENT MENSUEL RÉCURRENT prélevé sur le compte source vers une cagnotte (différent de "objectif" qui est un Smart Goal). action "add" crée un objectif d'épargne mensuelle (fournir "label" ou "target" = nom, "amount" = montant mensuel de base en DH, "sourceCompte" optionnel = "courant" par défaut, "linkedAccountId" optionnel = id du compte de destination, "exceptions" optionnel = tableau de modulations [{moisDebut, moisFin, nouvelleValeur}] pour faire varier le montant selon les mois). Exemple modulation 90% reliquat : { action:"add", category:"epargne", target:"Épargne Reliquat 90%", amount:10491, years:[2026], exceptions:[{moisDebut:9, moisFin:12, nouvelleValeur:6151}] }. action "modify" met à jour le montant ou label. action "add_exception" sur une épargne EXISTANTE (target = nom) avec exception_start/exception_end/exception_value pour ajouter une modulation après coup. action "remove_exception" avec exception_id pour supprimer une modulation. PRÉFÉRER les exceptions INLINE dans "add" pour éviter le problème de résolution batch (l'épargne n'est résolue qu'après création).
 • category "actif" : action "modify" pour tout actif patrimonial (productif OU foncier — source unique v17). Fournir "target" = nom de l actif. Pour un actif productif : "amount" = capital investi (prix d achat, remplace). Champ "valeur_actuelle" = valeur marchande estimée actuelle (optionnel, déclenche calcul plus-value latente). Champs optionnels dette/levier : "taux_credit", "annees_total", "annees_restantes", "apport_personnel" (mise de fonds initiale en DH), "montant_credit" (capital emprunté en DH). Ces champs ne sont mis à jour que si fournis. Pour un actif foncier : "sub_target" = scénario parmi 'conservateur' | 'pessimiste' | 'optimiste' et "amount" = NOUVELLE VALORISATION. Si "sub_target" fourni, seul le scénario est mis à jour (conservateur→value, pessimiste→val_pessimiste, optimiste→val_optimiste). Champ "valeur_actuelle" aussi applicable aux fonciers. Exemple actif productif : { action:"modify", category:"actif", target:"Studio Airbnb", amount:450000, valeur_actuelle:580000, apport_personnel:150000, montant_credit:300000 }. Exemple foncier : { action:"modify", category:"actif", target:"Foncier Nord", sub_target:"optimiste", amount:90000000 }.`;
 
 // ── 3. JS code du Intent Compiler ──────────────────────
@@ -129,7 +130,9 @@ catch (e) {
   catch (e2) { return JSON.stringify({ error: 'Contexte introuvable (Build Agent Input / Normalize Input)' }); }
 }
 const session_id = normalized.session_id;
-const financeData = normalized.finance_data ? JSON.parse(JSON.stringify(normalized.finance_data)) : null;
+// v20.80 : prefer finance_data_raw (full VPS JSON with donneesAnnuelles) over sanitized payload v20.31
+const _rawSrcIntent = normalized.finance_data_raw || normalized.finance_data;
+const financeData = _rawSrcIntent ? JSON.parse(JSON.stringify(_rawSrcIntent)) : null;
 if (!financeData) return JSON.stringify({ error: 'finance_data absent. Recharge l\\'interface web.' });
 
 // ════════════════════════════════════════════════════════
@@ -183,10 +186,12 @@ function sanitizeFinanceData(fd) {
       if (o.label == null && o.nom) o.label = String(o.nom);
       r.variables += purgeKeys(o, SYN_NUM_CHARGE) + purgeKeys(o, SYN_LBL);
     }
-    for (const k in (y.epargne || {})) {
-      const o = y.epargne[k]; if (!o) continue;
+    // v20.90 : epargne peut etre array (Vue.js v17.99) OU legacy object — itere les deux
+    const _epPool = Array.isArray(y.epargne) ? y.epargne.filter(Boolean) : Object.values(y.epargne || {}).filter(Boolean);
+    for (const o of _epPool) {
       if (o.valeur == null) { const rv = pickNum(o, 'montant', 'value', 'amount'); if (rv !== null) o.valeur = rv; }
       if (o.label == null && o.nom) o.label = String(o.nom);
+      if (o.nom == null && o.label) o.nom = String(o.label);
       r.epargne += purgeKeys(o, SYN_NUM_CHARGE) + purgeKeys(o, SYN_LBL);
     }
     for (const d of (y.depensesIrregulieres || [])) {
@@ -243,12 +248,16 @@ function resolveEntity(target, category, fd) {
   for (const yr in fd.donneesAnnuelles) {
     const y = fd.donneesAnnuelles[yr]; if (!y) continue;
     for (const cat of catKeys) {
-      const pool = y[POOL_MAP[cat]] || {};
+      const rawPool = y[POOL_MAP[cat]] || {};
+      // v20.90 : epargne v17.99 = array d'objets {id, nom, ...} → cle technique = 'ep_'+id
+      const pool = Array.isArray(rawPool)
+        ? Object.fromEntries(rawPool.filter(Boolean).map(item => ['ep_' + (item.id || ''), item]))
+        : rawPool;
       for (const key in pool) {
         const dk = cat + ':' + key;
         if (seen.has(dk)) continue; seen.add(dk);
         const item = pool[key];
-        const lbl = item.label || key;
+        const lbl = item.label || item.nom || key;
         const normL = normStr(lbl), normK = normStr(key);
         const dist = Math.min(levenshtein(normT, normL), levenshtein(normT, normK));
         const contains = normL.includes(normT) || normK.includes(normT) || normT.includes(normL) || normT.includes(normK);
@@ -358,12 +367,14 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
       switch (resolvedCat) {
         case 'revenu':      return [{ type: 'add_revenu_exception',     key: resolvedKey, moisDebut: exception_start, moisFin: exception_end, nouvelleValeur: exception_value }];
         case 'charge_fixe': return [{ type: 'add_charge_fixe_exception',key: resolvedKey, moisDebut: exception_start, moisFin: exception_end, nouvelleValeur: exception_value }];
+        case 'epargne':     return [{ type: 'add_epargne_exception',    key: resolvedKey || target, moisDebut: exception_start, moisFin: exception_end, nouvelleValeur: exception_value }];
         default: return null;
       }
     case 'remove_exception':
       switch (resolvedCat) {
         case 'revenu':      return [{ type: 'remove_revenu_exception',     key: resolvedKey, id: exception_id }];
         case 'charge_fixe': return [{ type: 'remove_charge_fixe_exception',key: resolvedKey, id: exception_id }];
+        case 'epargne':     return [{ type: 'remove_epargne_exception',    key: resolvedKey || target, id: exception_id }];
         default: return null;
       }
     case 'update_one_off':
@@ -564,35 +575,119 @@ function applyOp(fd, op, anneeTarget) {
         writeCharge(t, v, lbl); log.key=op.key; log.changes=ch; break;
       }
       // ── ÉPARGNE ────────────────────────────────────────
+      // ── ÉPARGNES v20.90 : Schema ARRAY d'objets {id, nom, label, valeur, sourceCompte, linkedAccountId, exceptions[], showExceptions} aligné Vue.js v17.99 ──
+      // Helper de migration legacy object → array (idempotent)
+      // -- LE BLOC suivant utilise une fonction locale dans chaque case pour rester compatible avec n8n typeVersion 1.2 (pas de hoisting global) --
       case 'set_epargne': {
-        if (!y || !y.epargne || !y.epargne[op.key]) { log.status='skip'; log.reason='clé absente'; break; }
+        if (!y){log.status='skip';log.reason='année absente';break;}
+        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));
+        if (!Array.isArray(y.epargne) || !y.epargne.length){log.status='skip';log.reason='aucune epargne';break;}
+        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();
+        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));
+        if (!ep){log.status='skip';log.reason='epargne introuvable: '+op.key;break;}
         const v=pickNum(op,'valeur','montant','value','amount');
         if (v===null){log.status='error';log.reason='valeur manquante';break;}
-        const old=y.epargne[op.key].valeur; writeEpargne(y.epargne[op.key],v,null);
-        log.key=op.key;log.avant=old;log.apres=v;break;
+        const old=ep.valeur; ep.valeur=v;
+        log.cible=ep.nom||ep.label;log.avant=old;log.apres=v;break;
       }
       case 'add_epargne': {
+        // v20.90 : Création au format ARRAY (était objet → invisible dans surplusParMois et selects)
         if (!y){log.status='skip';log.reason='année absente';break;}
-        if (!y.epargne) y.epargne={};
-        if (y.epargne[op.key]){log.status='skip';log.reason='clé existe déjà';break;}
-        const v=pickNum(op,'valeur','montant','value','amount')??0;
-        const lbl=pickStr(op,'label','nom')||op.key;
-        y.epargne[op.key]={label:lbl,valeur:v};
-        log.key=op.key;log.created=true;log.valeur=v;break;
+        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));
+        if (!Array.isArray(y.epargne)) y.epargne = [];
+        const v = pickNum(op,'valeur','montant','value','amount') ?? 0;
+        const lbl = pickStr(op,'label','nom') || op.key || 'Nouvel objectif';
+        // Anti-doublon par nom normalisé
+        const normLbl = String(lbl).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();
+        const existing = y.epargne.find(e => e && String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim() === normLbl);
+        if (existing){log.status='skip';log.reason='Objectif epargne deja existant: '+lbl;break;}
+        const newId = Date.now() + Math.floor(Math.random()*1000);
+        const newEp = {
+          id: newId,
+          nom: lbl,
+          label: lbl,
+          valeur: v,
+          sourceCompte: pickStr(op,'sourceCompte') || 'courant',
+          linkedAccountId: (op.linkedAccountId !== undefined && op.linkedAccountId !== null) ? op.linkedAccountId : null,
+          exceptions: [],
+          showExceptions: false
+        };
+        // v20.90 : Support des exceptions inline { exceptions: [{moisDebut, moisFin, nouvelleValeur}] }
+        if (Array.isArray(op.exceptions)) {
+          for (const e of op.exceptions) {
+            if (!e) continue;
+            const mD = Number(e.moisDebut !== undefined ? e.moisDebut : (e.month_start !== undefined ? e.month_start : e.exception_start));
+            const mF = Number(e.moisFin !== undefined ? e.moisFin : (e.month_end !== undefined ? e.month_end : e.exception_end));
+            const nv = Number(e.nouvelleValeur !== undefined ? e.nouvelleValeur : (e.value !== undefined ? e.value : e.exception_value));
+            if (mD>=1 && mD<=12 && mF>=mD && mF<=12 && Number.isFinite(nv)) {
+              newEp.exceptions.push({id: Date.now() + Math.floor(Math.random()*10000), moisDebut: mD, moisFin: mF, nouvelleValeur: nv});
+              newEp.showExceptions = true;
+            }
+          }
+        }
+        y.epargne.push(newEp);
+        // Initialise le solde initial de l'objectif (comme addObjectifEpargne dans Vue.js)
+        if (!financeData.soldesInitiaux) financeData.soldesInitiaux = {};
+        if (financeData.soldesInitiaux['ep_'+newId] === undefined) financeData.soldesInitiaux['ep_'+newId] = 0;
+        log.id = newId; log.key = 'ep_'+newId; log.cible = lbl; log.created = true; log.valeur = v;
+        if (newEp.exceptions.length) log.exceptions_count = newEp.exceptions.length;
+        break;
       }
       case 'remove_epargne': {
-        if (!y||!y.epargne||!y.epargne[op.key]){log.status='skip';log.reason='clé absente';break;}
-        delete y.epargne[op.key];log.key=op.key;log.removed=true;break;
+        if (!y){log.status='skip';log.reason='année absente';break;}
+        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));
+        if (!Array.isArray(y.epargne)){log.status='skip';log.reason='aucune epargne';break;}
+        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();
+        const idx=y.epargne.findIndex(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));
+        if (idx===-1){log.status='skip';log.reason='epargne introuvable: '+op.key;break;}
+        const removed=y.epargne[idx]; y.epargne.splice(idx,1);
+        log.cible=removed.nom||removed.label;log.removed=true;break;
       }
       case 'update_epargne': {
-        if (!y||!y.epargne||!y.epargne[op.key]){log.status='skip';log.reason='clé absente';break;}
+        if (!y){log.status='skip';log.reason='année absente';break;}
+        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));
+        if (!Array.isArray(y.epargne) || !y.epargne.length){log.status='skip';log.reason='aucune epargne';break;}
+        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();
+        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));
+        if (!ep){log.status='skip';log.reason='epargne introuvable: '+op.key;break;}
         const v=pickNum(op,'valeur','montant','value','amount');
         const lbl=pickStr(op,'label','nom');
-        const t=y.epargne[op.key]; const ch={};
-        if (v!==null) ch.valeur={avant:t.valeur,apres:v};
-        if (lbl!==null) ch.label={avant:t.label,apres:lbl};
+        const ch={};
+        if (v!==null){ ch.valeur={avant:ep.valeur,apres:v}; ep.valeur=v; }
+        if (lbl!==null){ ch.label={avant:ep.nom||ep.label,apres:lbl}; ep.nom=lbl; ep.label=lbl; }
         if (!Object.keys(ch).length){log.status='error';log.reason='aucun champ fourni';break;}
-        writeEpargne(t,v,lbl);log.key=op.key;log.changes=ch;break;
+        log.cible=ep.nom||ep.label;log.changes=ch;break;
+      }
+      case 'add_epargne_exception': {
+        // v20.90 : Modulation mensuelle d'une epargne (Vue.js v17.99 lignes 6477/6631 appliquent moisDebut<=mNum<=moisFin)
+        if (!y){log.status='error';log.reason='année absente';break;}
+        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));
+        if (!Array.isArray(y.epargne) || !y.epargne.length){log.status='error';log.reason='Aucune epargne dans cette annee — cree-la d abord avec action=add category=epargne';break;}
+        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();
+        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));
+        if (!ep){log.status='error';log.reason='Epargne introuvable: '+op.key;break;}
+        const mD=Number(op.moisDebut); const mF=Number(op.moisFin); const nv=Number(op.nouvelleValeur);
+        if (!(mD>=1 && mD<=12)){log.status='error';log.reason='moisDebut invalide (1-12 requis)';break;}
+        if (!(mF>=mD && mF<=12)){log.status='error';log.reason='moisFin invalide (>=moisDebut, <=12)';break;}
+        if (!Number.isFinite(nv)){log.status='error';log.reason='nouvelleValeur manquante ou invalide';break;}
+        if (!Array.isArray(ep.exceptions)) ep.exceptions=[];
+        const xid=Date.now()+Math.floor(Math.random()*1000);
+        ep.exceptions.push({id:xid, moisDebut:mD, moisFin:mF, nouvelleValeur:nv});
+        ep.showExceptions=true;
+        log.cible=ep.nom||ep.label; log.id=xid; log.exception={moisDebut:mD,moisFin:mF,nouvelleValeur:nv}; break;
+      }
+      case 'remove_epargne_exception': {
+        if (!y){log.status='error';log.reason='année absente';break;}
+        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));
+        if (!Array.isArray(y.epargne)){log.status='error';log.reason='aucune epargne';break;}
+        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();
+        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));
+        if (!ep || !Array.isArray(ep.exceptions)){log.status='error';log.reason='epargne ou exceptions introuvable';break;}
+        const idx=ep.exceptions.findIndex(x=>String(x.id)===String(op.id));
+        if (idx===-1){log.status='error';log.reason='exception id introuvable: '+op.id;break;}
+        ep.exceptions.splice(idx,1);
+        if (!ep.exceptions.length) ep.showExceptions=false;
+        log.cible=ep.nom||ep.label; log.removed_id=op.id; break;
       }
       // ── DÉPENSES PONCTUELLES ──────────────────────────
       case 'add_depense_ponctuelle': {
@@ -895,16 +990,26 @@ En cas de conflit d'information, respecte cet ordre :
   • NIVEAU 3 (La Donnée Brute)   : le fichier JSON (CONTEXTE FINANCIER).
   • NIVEAU 4 (Dernier Recours)   : ton savoir général d'IA. À utiliser pour conseiller, JAMAIS pour contredire les niveaux 1, 2 et 3.
 
+SYSTÈME D'INSPECTION (FINANCE_RAG) — CIBLÉ :
+Appelle finance_rag UNIQUEMENT pour :
+  1. Toute question sur le studio / loyer / revenu locatif (§4 obligatoire).
+  2. Une référence explicite à une règle ou directive mémorisée (ex : "selon ma règle", "retrouve ma directive sur X").
+  3. Une ambiguïté métier NON résolue par le CONTEXTE FINANCIER JSON.
+NE PAS appeler finance_rag pour : lecture directe du JSON (soldes, surplus, calcul simple depuis la matrice), création ou modification directe via propose_changes. Ces cas n'ont PAS besoin de finance_rag — 1 itération économisée = 1 tâche complète en plus.
+
 ═══ 2. POLITIQUE ANTI-DÉRIVE SÉMANTIQUE ═══
 Ne déduis JAMAIS la fréquence d'un flux financier à partir de son nom (ex: "Bonification", "Prime", "Allocation"). Si le JSON a la même structure qu'un salaire (champ base, periode='mois' ou absente), c'est mensuel. Si ce n'est pas écrit explicitement "annuel", c'est mensuel. Aucune interprétation libre du label.
 
-═══ 3. UTILISATION STRICTE DES OUTILS ═══
-  • finance_rag     → règle métier passée, OU SYSTÉMATIQUEMENT avant de commenter loyer/studio/revenu locatif.
-  • propose_changes → UNIQUE outil pour SIMULER ou MODIFIER un poste budgétaire.
-  • committer       → UNIQUEMENT si l'utilisateur répond "OUI" / "ok" / "valide" / "go" ET qu'une simulation a été présentée au tour précédent.
-  • memory_writer   → UNIQUEMENT sur formulation explicite : "retiens que…", "mémorise…", "souviens-toi que…".
+═══ 3. ROUTAGE DES OUTILS — PILIER 5 ═══
+  • finance_rag     → INSPECTION CIBLÉE (cf. §1). NE PAS appeler pour lecture directe du JSON.
+  • propose_changes → UNIQUE outil de simulation budgétaire. Toute modification passe par lui.
+  • committer       → Validation finale UNIQUEMENT. Si l'utilisateur répond "OUI" / "ok" / "valide" / "go" ET qu'une simulation a été présentée au tour précédent.
+  • memory_writer   → Sur déclencheur explicite uniquement : "retiens que…", "mémorise…", "souviens-toi que…".
+  • web_search      → Fallback pour données externes uniquement (cf. §7).
 
 Pour tout le reste (analyse, diagnostic, projection, calcul) : lis directement le CONTEXTE FINANCIER JSON. Aucun outil.
+
+RÈGLE ABSOLUE : Après CHAQUE appel d'outil, tu DOIS rédiger une réponse textuelle détaillée. Ne renvoie JAMAIS une réponse vide ni un simple tool call sans explication.
 
 ═══ 4. RÈGLES MÉTIER : PROJET STUDIO & AIRBNB ═══
 AVANT de commenter le studio / loyer / revenu locatif : appelle finance_rag avec "stratégie studio exploitation" ET "directive revenu locatif".
@@ -948,6 +1053,31 @@ Analyses denses et 3+ recommandations chiffrées par tour, HTML brut conforme à
 
 ═══ 7. TRANSPARENCE DE LA RECHERCHE WEB ═══
 Outil disponible : web_search. Utilise cet outil UNIQUEMENT en Fallback (quand les niveaux 1-3 de la Hiérarchie de la Vérité ne suffisent pas). Si tu utilises le web, déclare-le explicitement : « <b>Source : Recherche Internet.</b> » avant de citer le résultat.
+
+═══ 7.5. ÉPARGNES RÉCURRENTES MODULÉES (v20.90) ═══
+Pour une épargne mensuelle qui varie selon les mois (ex: "90% du reliquat" qui change de juin à août vs septembre à décembre), utilise category="epargne" avec un tableau "exceptions" INLINE :
+
+Format CORRECT (un seul appel propose_changes) :
+{
+  "changes": [{
+    "action": "add",
+    "category": "epargne",
+    "target": "Épargne Reliquat 90%",
+    "amount": 10491,
+    "years": [2026],
+    "sourceCompte": "courant",
+    "exceptions": [
+      { "moisDebut": 9, "moisFin": 12, "nouvelleValeur": 6151 }
+    ]
+  }]
+}
+
+RÈGLES :
+  • Le champ "amount" = montant de BASE qui s'applique aux mois SANS exception (ex: 10491 pour juin-août car aucune exception ne couvre ces mois).
+  • Le tableau "exceptions" couvre les mois où le montant DIFFÈRE de la base. Chaque exception = { moisDebut (1-12), moisFin (>=moisDebut, <=12), nouvelleValeur (DH/mois) }.
+  • NE FAIS JAMAIS plusieurs "add" séparés pour la même épargne (créerait des doublons). UN SEUL "add" avec toutes les exceptions inline.
+  • Pour récupérer le surplus mensuel réel, lis la matrice "Compte Courant" du CONTEXTE FINANCIER — chaque ligne contient déjà l'excédent net (ex: Juin = +11657 DH, Septembre = +6834 DH).
+  • Différence avec "objectif" : "epargne" = virement mensuel récurrent affiché dans la matrice cashflow. "objectif" = Smart Goal (cagnotte cumulative target/current) dans le tab Wealth.
 
 ═══ 8. GESTION DES COMPTES BANCAIRES (BILAN) ═══
 Tu peux créer et modifier les comptes bancaires de l utilisateur via propose_changes avec category="compte".
@@ -1041,6 +1171,8 @@ j.nodes.push(tavilyNode);
 const agentNode = j.nodes.find(n => n.id === 'node-agent');
 if (!agentNode) { console.error('ERREUR : nœud node-agent introuvable'); process.exit(1); }
 agentNode.parameters.options.systemMessage = NEW_SYSTEM_PROMPT;
+// v20.90 : Plafond d'iterations LangChain — couvre finance_rag + propose_changes + retry + reponse (typique 4-6 iter, marge x3)
+agentNode.parameters.options.maxIterations = 20;
 
 // ── 7. Mise à jour des connexions ──────────────────────
 // Déconnecte Budget Engine (gardé dans le workflow pour rollback, mais dormant)
