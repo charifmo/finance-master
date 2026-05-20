@@ -1174,6 +1174,18 @@ agentNode.parameters.options.systemMessage = NEW_SYSTEM_PROMPT;
 // v20.90 : Plafond d'iterations LangChain — couvre finance_rag + propose_changes + retry + reponse (typique 4-6 iter, marge x3)
 agentNode.parameters.options.maxIterations = 20;
 
+// v20.91 : Config Gemini 2.5 Pro — fix "Cannot read properties of undefined (reading 'parts')"
+// Le mode "thinking" du modele consomme silencieusement le budget de sortie avant de
+// produire la reponse finale. Avec 16384, le thinking peut TOUT consommer -> reponse vide
+// -> candidates[0].content.parts undefined -> crash LangChain.
+const llmNode = j.nodes.find(n => n.id === 'node-llm');
+if (llmNode) {
+  if (!llmNode.parameters.options) llmNode.parameters.options = {};
+  llmNode.parameters.options.maxOutputTokens = 65536;   // Max Gemini 2.5 Pro
+  llmNode.parameters.options.thinkingBudget = 8192;     // Cap thinking — reste 57K pour la reponse
+  if (llmNode.parameters.options.temperature === undefined) llmNode.parameters.options.temperature = 0.2;
+}
+
 // ── 7. Mise à jour des connexions ──────────────────────
 // Déconnecte Budget Engine (gardé dans le workflow pour rollback, mais dormant)
 delete j.connections['Tool: Budget Engine'];
