@@ -48,7 +48,7 @@ RÈGLES :
 • Si clarifications_needed non vide : pose les questions à l utilisateur, n invente PAS de réponse.
 • Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.
 • category "compte" : agit sur les comptes bancaires du bilan. action "add" crée un compte (fournir "label" et "amount" pour le solde initial). action "modify" ajuste le solde d un compte (fournir "target" = label du compte et "amount" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).
-• category "objectif" : action "modify" pour AJOUTER des fonds à un objectif financier (fournir "target" = nom du projet, ex: "Paris", "Jlilou" ; "amount" = montant à AJOUTER à la valeur actuelle, donc INCREMENTAL).
+• category "objectif" : action "modify" pour AJOUTER des fonds à un objectif existant (fournir "target" = nom du projet, ex: "Paris", "Jlilou" ; "amount" = montant à AJOUTER à la valeur actuelle, donc INCREMENTAL). action "add" pour CRÉER un nouvel objectif (fournir "target" ou "label" = nom du nouvel objectif, "amount" = montant déjà épargné (current, peut être 0), "target_amount" = montant cible à atteindre (optionnel, défaut 10 000 DH)). Si "modify" est utilisé sur un objectif inexistant, il sera créé automatiquement (upsert).
 • category "actif" : action "modify" pour tout actif patrimonial (productif OU foncier — source unique v17). Fournir "target" = nom de l actif. Pour un actif productif : "amount" = capital investi (prix d achat, remplace). Champ "valeur_actuelle" = valeur marchande estimée actuelle (optionnel, déclenche calcul plus-value latente). Champs optionnels dette/levier : "taux_credit", "annees_total", "annees_restantes", "apport_personnel" (mise de fonds initiale en DH), "montant_credit" (capital emprunté en DH). Ces champs ne sont mis à jour que si fournis. Pour un actif foncier : "sub_target" = scénario parmi 'conservateur' | 'pessimiste' | 'optimiste' et "amount" = NOUVELLE VALORISATION. Si "sub_target" fourni, seul le scénario est mis à jour (conservateur→value, pessimiste→val_pessimiste, optimiste→val_optimiste). Champ "valeur_actuelle" aussi applicable aux fonciers. Exemple actif productif : { action:"modify", category:"actif", target:"Studio Airbnb", amount:450000, valeur_actuelle:580000, apport_personnel:150000, montant_credit:300000 }. Exemple foncier : { action:"modify", category:"actif", target:"Foncier Nord", sub_target:"optimiste", amount:90000000 }.`;
 
 // ── 3. JS code du Intent Compiler ──────────────────────
@@ -334,6 +334,7 @@ function buildOps(change, resolvedKey, resolvedCat, annee) {
         case 'epargne':         return [{ type: 'add_epargne',        key: baseKey, label: newLabel || target, valeur: amt || 0 }];
         case 'depense_ponctuelle': return [{ type: 'add_depense_ponctuelle', annee, mois: month || 1, nom: newLabel || target, montant: amt || 0 }];
         case 'compte':         return [{ type: 'create_compte', label: newLabel || target, montant: amt || 0 }];
+        case 'objectif':       return [{ type: 'create_objectif', name: newLabel || target, current: amt || 0, target_amount: change.target_amount || 0 }];
         default: return null;
       }
     case 'remove':
@@ -681,13 +682,40 @@ function applyOp(fd, op, anneeTarget) {
       }
       // ── WEALTH : OBJECTIFS & ACTIFS (top-level fd.*) ───
       case 'update_objectif': {
-        if (!Array.isArray(fd.wealthGoals) || !fd.wealthGoals.length) { log.status='error'; log.reason='Aucun objectif existant'; break; }
+        if (!Array.isArray(fd.wealthGoals)) fd.wealthGoals = [];
         const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
         const goal = fd.wealthGoals.find(x => String(x.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));
-        if (!goal) { log.status='error'; log.reason='Objectif introuvable: '+op.key; break; }
+        if (!goal) {
+          // Upsert : objectif introuvable → création automatique (même comportement que create_objectif)
+          const newGoal = { name: String(op.key || 'Nouvel objectif'), target: 10000, current: Number(op.montant) || 0 };
+          fd.wealthGoals.push(newGoal);
+          log.status='success'; log.action='Upsert objectif (creation auto)'; log.cible=newGoal.name; log.target=newGoal.target; log.current=newGoal.current; break;
+        }
         const oldVal = Number(goal.current) || 0;
         goal.current = oldVal + (Number(op.montant) || 0);
         log.status='success'; log.action='Mise a jour objectif (incremental)'; log.cible=goal.name; log.avant=oldVal; log.apres=goal.current; break;
+      }
+      case 'create_objectif': {
+        // v20.70 : Création d'un nouveau Smart Goal (wealthGoals[])
+        // Schéma Vue.js attendu : { name, target, current }
+        if (!Array.isArray(fd.wealthGoals)) fd.wealthGoals = [];
+        const goalName = String(op.name || 'Nouvel objectif').trim();
+        // Éviter les doublons exacts (même nom normalisé)
+        const normNew = goalName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+        const exists = fd.wealthGoals.find(x => String(x.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim() === normNew);
+        if (exists) {
+          // Objectif déjà existant : on incrémente current au lieu de dupliquer
+          const oldVal = Number(exists.current) || 0;
+          exists.current = oldVal + (Number(op.current) || 0);
+          log.status='success'; log.action='Objectif existant — current incremente'; log.cible=exists.name; log.avant=oldVal; log.apres=exists.current; break;
+        }
+        const newGoal = {
+          name: goalName,
+          target: Number(op.target_amount) > 0 ? Number(op.target_amount) : 10000,
+          current: Number(op.current) || 0
+        };
+        fd.wealthGoals.push(newGoal);
+        log.status='success'; log.action='Creation objectif'; log.cible=newGoal.name; log.target=newGoal.target; log.current=newGoal.current; break;
       }
       // ── MASTER ASSET ENGINE v17.0 (unifié productif + foncier) ──
       case 'update_master_asset':
