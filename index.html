@@ -4093,7 +4093,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "20.92";
+                    const CURRENT_VERSION = "20.93";
                     const CHANGELOG = [
                         { version: "20.30", date: "2026-05-18 — Refonte JSON CFO, suppression données brutes", changes: ["PAYLOAD SANITISÉ (_buildPayloadCFO) : création d'une fonction dédiée qui construit un objet JSON pré-digéré par le moteur Vue.js. Il contient : matrice_cash_flow_calculee (la matrice mensuelle), comptes_actuels (snapshot simple), revenus_fixes, charges_fixes, charges_variables (labels + montants — sans exceptions ni historique), evenements_exceptionnels (dépenses irrégulières avec statut_comptable 'DÉJÀ DÉDUIT'), objectifs_epargne (avancement %), patrimoine_net (synthèse globale).", "LOBOTOMIE DES CHOCS : chaque dépense irrégulière porte un champ statut_comptable = 'DÉJÀ DÉDUIT : Ce montant a été prélevé sur [NomCompte] par le moteur. INTERDICTION ABSOLUE de le resoustraire du Compte Courant.' Le LLM ne peut plus physiquement faire l'erreur.", "SUPPRESSION DU JSON BRUT : les 3 appels fetch (consulterCFO, _consulterMerlin, askMerlinFollowup) n'envoient plus finance_data: getExportData() ni etat_visuel_app séparé. Ils envoient uniquement donnees_cfo: _buildPayloadCFO().", "SYSTEM PROMPT MIS À JOUR : NIVEAU 1.5 réécrit pour référencer la clé 'donnees_cfo' et ses sous-clés exactes. La clé 'finance_data' est explicitement déclarée inexistante. Les 3 règles absolues adaptées au nouveau schéma (notamment l'exemple concret avec evenements_exceptionnels[].statut_comptable)."] },
                         { version: "20.20", date: "2026-05-18 — Bridage CFO & Matrice enrichie", changes: ["MATRICE ENRICHIE (obtenirEtatVisuelComplet) : la boucle mensuelle détaille désormais chaque compte sur sa propre ligne (format 'NomCompte : X DH') avec annotation explicite '← A payé : NomDépense Montant' pour chaque dépense irrégulière prélevée sur ce compte. Les dépenses irrégulières sont regroupées par sourceCompte — la clé 'courant' est normalisée vers la clé physique cpt_<id> pour correspondre exactement aux entrées de detailsComptes.", "CFO NIVEAU 1.5 RÉCRIT (Lobotomie mathématique) : remplacement total de l'ancienne section par 3 RÈGLES ABSOLUES numérotées. Règle 1 : INTERDICTION FORMELLE de recalculer un solde — le moteur a déjà tout calculé. Règle 2 : ROUTAGE DES DÉPENSES — chaque dépense exceptionnelle est prélevée sur son compte spécifique (Dépenses Annuelles, Long Terme…) et NE touche pas le Compte Courant, avec exemple concret Voyage 37k. Règle 3 : SOURCE UNIQUE DE VÉRITÉ — le CFO doit lire la matrice, pas calculer. Le JSON brut reste interdit pour les valeurs courantes.", "HEADER MATRICE : ajout de la mention 'RÈGLE DE LECTURE : Ces soldes sont calculés par le moteur Vue.js. Ne recalcule JAMAIS par toi-même.' en tête de bloc pour contextualiser immédiatement."] },
@@ -6470,6 +6470,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const epargneParCompte = {};
                             let epCourant = 0;
                             const epSourceParCompte = {}; // { 'cpt_xxx': amount } pour les sources non-courant
+                            const _pendingEpLogs = []; // v20.93 : différé — émis après revenus pour éviter solde négatif
                             epArrMois.forEach(ep => {
                                 const k = 'ep_' + ep.id;
                                 let amt = Number(ep.valeur || 0);
@@ -6486,8 +6487,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const destCle = ep.linkedAccountId ? 'cpt_' + ep.linkedAccountId : k;
                                     const destLabel = ep.linkedAccountId ? getCompteLabel('cpt_' + ep.linkedAccountId) : (ep.nom || k);
                                     const srcLabel = src === 'courant' ? 'Compte Courant' : getCompteLabel(src);
-                                    _log(src, mNum, aNum, 'Virement vers ' + destLabel, amt, 'debit');
-                                    _log(destCle, mNum, aNum, 'Virement depuis ' + srcLabel, amt, 'credit');
+                                    // v20.93 : différé — sera émis après revenus
+                                    _pendingEpLogs.push([src, mNum, aNum, 'Virement vers ' + destLabel, amt, 'debit']);
+                                    _pendingEpLogs.push([destCle, mNum, aNum, 'Virement depuis ' + srcLabel, amt, 'credit']);
                                 }
                             });
                             let entreesAppliquees = 0; let solde_fin = 0;
@@ -6542,6 +6544,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 } else {
                                     _log('courant', mNum, aNum, 'Revenus (Déjà perçus)', 0, 'credit');
                                 }
+                                // v20.93 : Virement épargne APRÈS revenus (évite solde négatif dans relevé)
+                                _pendingEpLogs.forEach(a => _log(...a));
 
                                 // v17.36 : ═══ CHARGES FIXES — Restant à payer avec routage ═══
                                 let fRestCourant = 0;
@@ -6709,6 +6713,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 // v17.36 : Logs théoriques pour mois futurs
                                 if (revCourant > 0) _log('courant', mNum, aNum, 'Revenus courant', revCourant, 'credit');
                                 Object.entries(revParCompte).forEach(([dest, amt]) => { if (amt > 0) _log(dest, mNum, aNum, 'Revenus versés', amt, 'credit'); });
+                                // v20.93 : Virement épargne APRÈS revenus (évite solde négatif dans relevé)
+                                _pendingEpLogs.forEach(a => _log(...a));
                                 if (fixCourant > 0) _log('courant', mNum, aNum, 'Charges fixes', fixCourant, 'debit');
                                 Object.entries(fixParCompte).forEach(([src, amt]) => { if (amt > 0) _log(src, mNum, aNum, 'Charges fixes', amt, 'debit'); });
                                 if (varCourant > 0) _log('courant', mNum, aNum, 'Charges variables', varCourant, 'debit');
