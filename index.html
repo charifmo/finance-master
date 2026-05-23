@@ -321,7 +321,7 @@
                         <div class="cfo-collapsible-body">
                     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Surplus Mensuel Base</p>
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Reste à vivre moyen</p>
                             <h3 :class="['text-2xl lg:text-3xl font-black mt-2', surplusMensuelBase >= 0 ? 'text-green-600' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</h3>
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
@@ -494,7 +494,7 @@
                             <p class="text-sm text-gray-500 mt-1">Chaque année possède ses propres salaires et charges.</p>
                         </div>
                         <div class="bg-gray-900 text-white p-4 rounded-2xl shadow-lg border border-gray-700 text-right">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Reste à Vivre Base {{anneeAffichage}}</p>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Reste à vivre moyen {{anneeAffichage}}</p>
                             <p :class="['text-3xl font-black tracking-tighter', surplusMensuelBase > 0 ? 'text-green-400' : 'text-red-400']">{{ formatMAD(surplusMensuelBase) }}</p>
                         </div>
                     </div>
@@ -3237,7 +3237,7 @@
 
                     <!-- HEADER : Reste à vivre base (en évidence) -->
                     <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-lg border border-gray-700 text-center mb-4">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Reste à Vivre Base {{ anneeAffichage }}</p>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Reste à vivre moyen {{ anneeAffichage }}</p>
                         <p :class="['text-4xl font-black tracking-tighter', surplusMensuelBase > 0 ? 'text-green-400' : 'text-red-400']">{{ formatMAD(surplusMensuelBase) }}</p>
                         <div class="mt-3 pt-3 border-t border-white/10 grid grid-cols-3 gap-2 text-[9px] font-black uppercase tracking-widest">
                             <div><p class="text-gray-500">Rev.</p><p class="text-green-300 text-xs">{{ formatMAD(totalRevenusBase) }}</p></div>
@@ -3983,14 +3983,18 @@
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-base font-black uppercase tracking-wide text-gray-800">📋 Relevé de Comptes</h3>
                         <div class="flex items-center gap-2">
-                            <select v-model.number="releveAnneeFiltre" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-blue-500 cursor-pointer">
-                                <option :value="0">Toutes années</option>
-                                <option v-for="a in releveAnneesDisponibles" :key="a" :value="a">{{ a }}</option>
-                            </select>
-                            <select v-model.number="releveMoisFiltre" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-blue-500 cursor-pointer">
-                                <option :value="0">Tous mois</option>
-                                <option v-for="m in releveMoisDisponibles" :key="m.num" :value="m.num">{{ m.nom }}</option>
-                            </select>
+                            <div class="flex items-center gap-1">
+                                <select multiple v-model="releveAnneesFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[68px]">
+                                    <option v-for="a in releveAnneesDisponibles" :key="a" :value="a">{{ a }}</option>
+                                </select>
+                                <button @click="releveAnneesFiltres = []" :class="releveAnneesFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap" title="Toutes les années">Tout</button>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <select multiple v-model="releveMoisFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[80px]">
+                                    <option v-for="m in releveMoisDisponibles" :key="m.num" :value="m.num">{{ m.nom }}</option>
+                                </select>
+                                <button @click="releveMoisFiltres = []" :class="releveMoisFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap" title="Tous les mois">Tout</button>
+                            </div>
                             <!-- Toggle Transactions / Évolution -->
                             <button @click="releveModeEvolution = !releveModeEvolution"
                                 :class="releveModeEvolution ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
@@ -4002,13 +4006,13 @@
                     </div>
                     <!-- Onglets en grille wrap -->
                     <div class="flex flex-wrap gap-1.5">
-                        <button @click="releveOnglet = '__global__'"
-                            :class="releveOnglet === '__global__' ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                        <button @click="releveComptesFiltres = []"
+                            :class="releveComptesFiltres.length === 0 ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
                             class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all">
                             🌐 Global
                         </button>
-                        <button v-for="tab in releveOnglets" :key="tab.key" @click="releveOnglet = tab.key"
-                            :class="releveOnglet === tab.key ? (tab.type === 'cpt' ? 'bg-blue-600 text-white ring-2 ring-blue-300' : 'bg-purple-600 text-white ring-2 ring-purple-300') : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                        <button v-for="tab in releveOnglets" :key="tab.key" @click="toggleReleveCompte(tab.key)"
+                            :class="releveComptesFiltres.includes(tab.key) ? (tab.type === 'cpt' ? 'bg-blue-600 text-white ring-2 ring-blue-300' : 'bg-purple-600 text-white ring-2 ring-purple-300') : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
                             class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all">
                             {{ tab.icon }} {{ tab.label }}
                         </button>
@@ -4020,7 +4024,7 @@
                         <thead class="bg-gray-50 sticky top-0 z-10">
                             <tr>
                                 <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Mois</th>
-                                <th v-if="releveOnglet === '__global__'" class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
+                                <th v-if="releveShowCompte" class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
                                 <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Libellé</th>
                                 <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Débit</th>
                                 <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Crédit</th>
@@ -4031,7 +4035,7 @@
                             <tr v-for="(e, i) in releveCompteGrouped" :key="i"
                                 :class="[e.type === 'initial' ? 'border-b-2 border-blue-300 bg-blue-50' : (e._gMois % 2 === 0 ? 'border-b border-gray-100 hover:bg-white bg-white' : 'border-b border-indigo-100 bg-indigo-50/60 hover:bg-indigo-100/60'), e._isNewMonth && e.type !== 'initial' ? 'border-t-2 border-indigo-300' : '']">
                                 <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
-                                <td v-if="releveOnglet === '__global__'" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">{{ e._compteLabel }}</td>
+                                <td v-if="releveShowCompte" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">{{ e._compteLabel }}</td>
                                 <td class="p-2 text-xs" :class="e.type === 'initial' ? 'font-black text-blue-700 uppercase tracking-wider' : 'text-gray-700'">{{ e.libelle }}</td>
                                 <td class="p-2 text-right font-bold text-red-500 text-xs">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
                                 <td class="p-2 text-right font-bold text-green-600 text-xs">{{ e.type === 'credit' ? formatMAD(e.montant) : (e.type === 'initial' && e.montant ? formatMAD(e.montant) : '') }}</td>
@@ -4047,7 +4051,7 @@
                         <thead class="bg-emerald-50 sticky top-0 z-10">
                             <tr>
                                 <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Mois</th>
-                                <th v-if="releveOnglet === '__global__'" class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
+                                <th v-if="releveShowCompte" class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
                                 <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-emerald-600">Solde</th>
                             </tr>
                         </thead>
@@ -4055,7 +4059,7 @@
                             <tr v-for="(e, i) in releveEvolution" :key="i"
                                 :class="[e._gMois % 2 === 0 ? 'border-b border-gray-100 bg-white hover:bg-emerald-50/40' : 'border-b border-emerald-100 bg-emerald-50/50 hover:bg-emerald-100/60', e._isNewMonth ? 'border-t-2 border-emerald-300' : '']">
                                 <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
-                                <td v-if="releveOnglet === '__global__'" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">
+                                <td v-if="releveShowCompte" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">
                                     {{ e._compteIcon }} {{ e._compteLabel }}
                                 </td>
                                 <td class="p-2 text-right font-black text-sm" :class="e.solde < 0 ? 'text-red-600' : 'text-emerald-700'">{{ formatMAD(e.solde) }}</td>
@@ -5892,10 +5896,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return item.parts.reduce((s, p) => s + Number(p[valField] || 0), 0);
                     };
 
-                    // v17.43 : Relevé de compte — onglets multi-comptes + global + filtre mois/année + mode évolution
-                    const releveOnglet = ref(null);
-                    const releveMoisFiltre = ref(0);
-                    const releveAnneeFiltre = ref(0);
+                    // v17.43 / v20.94 : Relevé de compte — multi-comptes, multi-mois, multi-années
+                    const releveComptesFiltres = ref([]); // vide = tous les comptes (global)
+                    const releveMoisFiltres = ref([]); // vide = tous les mois
+                    const releveAnneesFiltres = ref([]); // vide = toutes les années
                     const releveModeEvolution = ref(false); // true = n'afficher que l'évolution des soldes
                     const releveOnglets = computed(() => {
                         const j = bilanJournal.value;
@@ -5914,17 +5918,24 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
                         return tabs;
                     });
+                    const isGlobalView = computed(() => releveComptesFiltres.value.length === 0);
+                    const releveShowCompte = computed(() => releveComptesFiltres.value.length !== 1);
+                    const toggleReleveCompte = (key) => {
+                        const idx = releveComptesFiltres.value.indexOf(key);
+                        if (idx >= 0) releveComptesFiltres.value.splice(idx, 1);
+                        else releveComptesFiltres.value.push(key);
+                    };
                     const ouvrirReleve = (compteKey) => {
                         compteReleve.value = compteKey;
-                        releveOnglet.value = compteKey;
-                        releveMoisFiltre.value = 0;
-                        releveAnneeFiltre.value = 0;
+                        releveComptesFiltres.value = compteKey ? [compteKey] : [];
+                        releveMoisFiltres.value = [];
+                        releveAnneesFiltres.value = [];
                         showReleveModal.value = true;
                     };
                     const fermerReleve = () => {
                         showReleveModal.value = false;
                         compteReleve.value = null;
-                        releveOnglet.value = null;
+                        releveComptesFiltres.value = [];
                     };
                     // v17.41 : Années et mois disponibles dans le journal (pour les selects de filtre)
                     const releveAnneesDisponibles = computed(() => {
@@ -5941,37 +5952,46 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
                     const releveCompte = computed(() => {
                         const j = bilanJournal.value;
-                        const tab = releveOnglet.value;
-                        if (!tab) return [];
+                        if (!j || Object.keys(j).length === 0) return [];
+                        const comptesFiltres = releveComptesFiltres.value;
                         const moisNoms = { 'Janvier':1,'Février':2,'Mars':3,'Avril':4,'Mai':5,'Juin':6,'Juillet':7,'Août':8,'Septembre':9,'Octobre':10,'Novembre':11,'Décembre':12 };
+                        const aFs = releveAnneesFiltres.value;
+                        const mFs = releveMoisFiltres.value;
+                        const isGlobal = isGlobalView.value; // true quand 0 comptes sélectionnés
                         let entries = [];
-                        if (tab === '__global__') {
-                            // v17.42 : Fusionner tous les comptes — EXCLURE les SOLDE INITIAL (pollution)
-                            Object.entries(j).forEach(([key, arr]) => {
+                        if (isGlobal || comptesFiltres.length > 1) {
+                            // Vue multi-comptes : fusionner les comptes sélectionnés (ou tous si global), sans SOLDE INITIAL
+                            const keysToShow = isGlobal ? Object.keys(j) : comptesFiltres;
+                            keysToShow.forEach(key => {
+                                const arr = j[key] || [];
                                 const label = key.startsWith('cpt_') ? getCompteLabel(key) : (key.startsWith('ep_') ? getEpargneLabel(key) : key);
                                 arr.forEach(e => {
-                                    if (e.type === 'initial') return; // Skip SOLDE INITIAL en vue globale
+                                    if (e.type === 'initial') return;
                                     entries.push({ ...e, _compteKey: key, _compteLabel: label });
                                 });
                             });
-                            // Trier par date (année + mois)
                             entries.sort((a, b) => {
-                                const pA = a.mois.split(' '), pB = b.mois.split(' ');
+                                const pA = (a.mois || '').split(' '), pB = (b.mois || '').split(' ');
                                 const yA = Number(pA[1]) || 0, yB = Number(pB[1]) || 0;
                                 if (yA !== yB) return yA - yB;
                                 return (moisNoms[pA[0]] || 0) - (moisNoms[pB[0]] || 0);
                             });
-                        } else {
+                            if (aFs.length || mFs.length) {
+                                entries = entries.filter(e => {
+                                    if (!e.mois || e.mois === '—') return false;
+                                    const parts = e.mois.split(' ');
+                                    const eAnnee = Number(parts[1]) || 0;
+                                    const eMois = moisNoms[parts[0]] || 0;
+                                    if (aFs.length && !aFs.includes(eAnnee)) return false;
+                                    if (mFs.length && !mFs.includes(eMois)) return false;
+                                    return true;
+                                });
+                            }
+                        } else if (comptesFiltres.length === 1) {
+                            // Vue compte unique : solde d'ouverture dynamique (v20.61)
+                            const tab = comptesFiltres[0];
                             entries = (j[tab] || []).map(e => ({ ...e, _compteKey: tab, _compteLabel: '' }));
-                        }
-                        // Filtrer par année et mois
-                        const aF = releveAnneeFiltre.value;
-                        const mF = releveMoisFiltre.value;
-                        if (aF || mF) {
-                            if (tab !== '__global__') {
-                                // v20.61 : Solde d'ouverture dynamique = soldeApres du DERNIER mouvement
-                                // AVANT le mois filtré (pas le solde physique initial figé à c.solde).
-                                // Ex: si on filtre Juin 2026, le SOLDE INITIAL doit être le closing de Mai 2026.
+                            if (aFs.length || mFs.length) {
                                 let openingSolde = 0;
                                 const fullArr = j[tab] || [];
                                 for (let i = 0; i < fullArr.length; i++) {
@@ -5981,33 +6001,20 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const parts = e.mois.split(' ');
                                     const eAnnee = Number(parts[1]) || 0;
                                     const eMois = moisNoms[parts[0]] || 0;
-                                    // Dès qu'on atteint le mois cible, on s'arrête
-                                    if ((!aF || eAnnee === aF) && (!mF || eMois === mF)) break;
-                                    openingSolde = e.soldeApres; // Mise à jour tant qu'on est avant le mois cible
+                                    if ((!aFs.length || aFs.includes(eAnnee)) && (!mFs.length || mFs.includes(eMois))) break;
+                                    openingSolde = e.soldeApres;
                                 }
-                                entries = entries.filter(e => {
-                                    if (e.type === 'initial') return false; // Remplacé par openingSolde dynamique
-                                    if (!e.mois || e.mois === '—') return false;
-                                    const parts = e.mois.split(' ');
-                                    const eAnnee = Number(parts[1]) || 0;
-                                    const eMois = moisNoms[parts[0]] || 0;
-                                    if (aF && eAnnee !== aF) return false;
-                                    if (mF && eMois !== mF) return false;
-                                    return true;
-                                });
-                                // Injecter le solde d'ouverture calculé en tête de liste
-                                entries.unshift({ mois: '—', libelle: 'SOLDE INITIAL', montant: openingSolde, type: 'initial', soldeApres: openingSolde, _compteKey: tab, _compteLabel: '' });
-                            } else {
                                 entries = entries.filter(e => {
                                     if (e.type === 'initial') return false;
                                     if (!e.mois || e.mois === '—') return false;
                                     const parts = e.mois.split(' ');
                                     const eAnnee = Number(parts[1]) || 0;
                                     const eMois = moisNoms[parts[0]] || 0;
-                                    if (aF && eAnnee !== aF) return false;
-                                    if (mF && eMois !== mF) return false;
+                                    if (aFs.length && !aFs.includes(eAnnee)) return false;
+                                    if (mFs.length && !mFs.includes(eMois)) return false;
                                     return true;
                                 });
+                                entries.unshift({ mois: '—', libelle: 'SOLDE INITIAL', montant: openingSolde, type: 'initial', soldeApres: openingSolde, _compteKey: tab, _compteLabel: '' });
                             }
                         }
                         return entries;
@@ -6021,37 +6028,36 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
                     });
                     const releveCompteLabel = computed(() => {
-                        const tab = releveOnglet.value;
-                        if (!tab) return '';
-                        if (tab === '__global__') return '🌐 Tous les comptes';
-                        if (tab.startsWith('cpt_')) return getCompteLabel(tab);
-                        if (tab.startsWith('ep_')) return '🎯 ' + getEpargneLabel(tab);
-                        return tab;
+                        const filtres = releveComptesFiltres.value;
+                        if (filtres.length === 0) return '🌐 Tous les comptes';
+                        if (filtres.length === 1) {
+                            const tab = filtres[0];
+                            if (tab.startsWith('cpt_')) return getCompteLabel(tab);
+                            if (tab.startsWith('ep_')) return '🎯 ' + getEpargneLabel(tab);
+                            return tab;
+                        }
+                        return `${filtres.length} comptes sélectionnés`;
                     });
-                    // v17.43 : Mode Évolution — snapshot des soldes par mois (depuis bilanLignes)
+                    // v17.43 / v20.94 : Mode Évolution — snapshot des soldes par mois (multi-comptes)
                     const releveEvolution = computed(() => {
                         const lignes = bilanLignes.value;
                         if (!lignes || lignes.length === 0) return [];
-                        const tab = releveOnglet.value;
-                        const aF = releveAnneeFiltre.value;
-                        const mF = releveMoisFiltre.value;
+                        const aFs = releveAnneesFiltres.value;
+                        const mFs = releveMoisFiltres.value;
                         const onglets = releveOnglets.value;
+                        const comptesFiltres = releveComptesFiltres.value;
+                        const tabsToShow = isGlobalView.value ? onglets : onglets.filter(t => comptesFiltres.includes(t.key));
                         const rows = [];
                         let gIdx = -1, lastMois = null;
                         lignes.forEach(row => {
-                            if (aF && Number(row.annee) !== aF) return;
-                            if (mF && Number(row.numMois) !== mF) return;
+                            if (aFs.length && !aFs.includes(Number(row.annee))) return;
+                            if (mFs.length && !mFs.includes(Number(row.numMois))) return;
                             const isNewMoisGroup = row.mois !== lastMois;
                             if (isNewMoisGroup) { lastMois = row.mois; gIdx++; }
-                            if (tab === '__global__') {
-                                onglets.forEach((t, ti) => {
-                                    const val = t.type === 'cpt' ? ((row.detailsComptes || {})[t.key] || 0) : ((row.detailsEpargne || {})[t.key] || 0);
-                                    rows.push({ mois: row.mois, _compteLabel: t.label, _compteIcon: t.icon, _compteKey: t.key, solde: val, _gMois: gIdx, _isNewMonth: isNewMoisGroup && ti === 0 });
-                                });
-                            } else {
-                                const val = tab.startsWith('cpt_') ? ((row.detailsComptes || {})[tab] || 0) : ((row.detailsEpargne || {})[tab] || 0);
-                                rows.push({ mois: row.mois, solde: val, _gMois: gIdx, _isNewMonth: isNewMoisGroup });
-                            }
+                            tabsToShow.forEach((t, ti) => {
+                                const val = t.type === 'cpt' ? ((row.detailsComptes || {})[t.key] || 0) : ((row.detailsEpargne || {})[t.key] || 0);
+                                rows.push({ mois: row.mois, _compteLabel: t.label, _compteIcon: t.icon, _compteKey: t.key, solde: val, _gMois: gIdx, _isNewMonth: isNewMoisGroup && ti === 0 });
+                            });
                         });
                         return rows;
                     });
@@ -6136,7 +6142,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (Array.isArray(ep)) return ep.reduce((sum, obj) => sum + Number(obj.valeur || 0), 0);
                         return Object.values(ep || {}).reduce((sum, item) => sum + Number((item || {}).valeur || 0), 0);
                     });
-                    const surplusMensuelBase = computed(() => totalRevenusBase.value - totalFixes.value - totalVariables.value - totalEpargne.value);
+                    const surplusMensuelBase = computed(() => {
+                        const arr = surplusParMois.value;
+                        if (!arr.length) return 0;
+                        return arr.reduce((s, r) => s + r.surplus, 0) / arr.length;
+                    });
 
                     // v18.40 : Surplus réel mois par mois avec toutes les exceptions appliquées
                     const surplusParMois = computed(() => {
@@ -7315,7 +7325,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, surplusParMois, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveOnglet, releveOnglets, releveMoisFiltre, releveAnneeFiltre, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, 
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
