@@ -286,10 +286,27 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 lg:px-3 lg:py-2">
-                            <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">🏦 Mensualités</p>
-                            <p class="text-xs lg:text-sm font-black text-slate-700">{{ formatMAD(totalCreditsMensuels) }}</p>
-                            <p :class="['text-[8px] font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-600')]">{{ tauxEndettement.toFixed(1) }}% endet.</p>
+                        <div class="relative" @mouseenter="showCreditsTooltip = true" @mouseleave="showCreditsTooltip = false" @click.stop="showCreditsTooltip = !showCreditsTooltip">
+                            <div class="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 lg:px-3 lg:py-2 cursor-pointer select-none">
+                                <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">🏦 Mensualités ⓘ</p>
+                                <p class="text-xs lg:text-sm font-black text-slate-700">{{ formatMAD(totalCreditsMensuels) }}</p>
+                                <p :class="['text-[8px] font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-600')]">{{ tauxEndettement.toFixed(1) }}% endet.</p>
+                            </div>
+                            <div v-if="showCreditsTooltip" class="absolute left-0 top-full mt-2 z-[300] w-64 bg-gray-950 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden" @click.stop>
+                                <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">🏦 Crédits — {{ nomDuMois(soldesInitiaux.moisActuel) }}</p>
+                                    <button @click.stop="showCreditsTooltip = false" class="text-gray-500 hover:text-gray-300 text-xs font-black px-1">✕</button>
+                                </div>
+                                <div class="p-2">
+                                    <div v-for="c in creditsDetailMois" :key="c.label" class="flex justify-between items-center px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors">
+                                        <span class="text-[10px] font-bold" :class="c.actif ? 'text-gray-300' : 'text-gray-500'">{{ c.label }}</span>
+                                        <span class="text-[11px] font-black tabular-nums" :class="c.actif ? 'text-blue-400' : 'text-gray-600 line-through'">{{ c.actif ? formatMAD(c.montant) : '0 DH' }}</span>
+                                    </div>
+                                </div>
+                                <div v-if="creditsPaliers" class="px-3 py-2 border-t border-gray-800 bg-gray-900/50">
+                                    <p class="text-[8px] text-gray-400 font-bold text-center leading-relaxed">{{ creditsPaliers }}</p>
+                                </div>
+                            </div>
                         </div>
                         <div class="bg-green-50 border border-green-200 rounded-xl px-2 py-1.5 lg:px-3 lg:py-2">
                             <p class="text-[8px] lg:text-[9px] font-black text-green-600 uppercase tracking-widest">↑ Entrées {{anneeAffichage}}</p>
@@ -324,10 +341,22 @@
                             <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Reste à vivre moyen</p>
                             <h3 :class="['text-2xl lg:text-3xl font-black mt-2', surplusMensuelBase >= 0 ? 'text-green-600' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</h3>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Mensualités Crédits</p>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center relative" @mouseenter="showCreditsTooltip = true" @mouseleave="showCreditsTooltip = false">
+                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Mensualités Crédits ⓘ</p>
                             <h3 class="text-2xl lg:text-3xl font-black mt-2 text-gray-800">{{ formatMAD(totalCreditsMensuels) }}</h3>
                             <p :class="['text-[10px] mt-1 font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-500')]">Endettement : {{ tauxEndettement.toFixed(1) }} %</p>
+                            <p v-if="creditsPaliers" class="text-[9px] text-gray-400 mt-2 font-bold leading-relaxed">{{ creditsPaliers }}</p>
+                            <div v-if="showCreditsTooltip" class="absolute left-0 top-full mt-1 z-[200] w-64 bg-gray-950 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
+                                <div class="px-3 py-2 border-b border-gray-800">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">🏦 Crédits — {{ nomDuMois(soldesInitiaux.moisActuel) }}</p>
+                                </div>
+                                <div class="p-2">
+                                    <div v-for="c in creditsDetailMois" :key="c.label" class="flex justify-between items-center px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors">
+                                        <span class="text-[10px] font-bold" :class="c.actif ? 'text-gray-300' : 'text-gray-500'">{{ c.label }}</span>
+                                        <span class="text-[11px] font-black tabular-nums" :class="c.actif ? 'text-blue-400' : 'text-gray-600 line-through'">{{ c.actif ? formatMAD(c.montant) : '0 DH' }}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-emerald-200 flex flex-col justify-center relative group">
                             <p class="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1">
@@ -6215,7 +6244,69 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return { prixTotal: prixHT, restePromoteur: resteP, capitalEmprunte: cap, mensualite: mens, totalMensuel: mens + assur, coutTotalCredit: (mens*n)-cap, cashRequis: cashReq, cashRestant: (Number(p.epargneDispo)||0)+s-cashReq, surplus: s };
                     });
                     
-                    const totalCreditsMensuels = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? (Number((d.chargesFixes?.creditImmo || {}).valeur)||0) + (Number((d.chargesFixes?.creditStudio || {}).valeur)||0) : 0; });
+                    // v20.96 : mensualités chronologiques — exceptions appliquées pour moisActuel
+                    const totalCreditsMensuels = computed(() => {
+                        calculationTick.value;
+                        const d = donneesAnnuelles.value[anneeAffichage.value];
+                        if (!d) return 0;
+                        const mNum = Number((soldesInitiaux.value || {}).moisActuel || 1);
+                        return Object.entries(d.chargesFixes || {})
+                            .filter(([k]) => k.startsWith('credit'))
+                            .reduce((sum, [, item]) => {
+                                let v = Number(item?.valeur || 0);
+                                (item?.exceptions || []).forEach(e => {
+                                    if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0);
+                                });
+                                return sum + v;
+                            }, 0);
+                    });
+                    const creditsDetailMois = computed(() => {
+                        calculationTick.value;
+                        const d = donneesAnnuelles.value[anneeAffichage.value];
+                        if (!d) return [];
+                        const mNum = Number((soldesInitiaux.value || {}).moisActuel || 1);
+                        return Object.entries(d.chargesFixes || {})
+                            .filter(([k]) => k.startsWith('credit'))
+                            .map(([key, item]) => {
+                                let v = Number(item?.valeur || 0);
+                                (item?.exceptions || []).forEach(e => {
+                                    if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0);
+                                });
+                                return { label: item?.label || key, montant: v, actif: v > 0 };
+                            });
+                    });
+                    const creditsPaliers = computed(() => {
+                        calculationTick.value;
+                        const d = donneesAnnuelles.value[anneeAffichage.value];
+                        if (!d) return '';
+                        const moisAbbr = ['','Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
+                        const totaux = Array.from({ length: 12 }, (_, i) => {
+                            const mNum = i + 1;
+                            return Object.entries(d.chargesFixes || {})
+                                .filter(([k]) => k.startsWith('credit'))
+                                .reduce((sum, [, item]) => {
+                                    let v = Number(item?.valeur || 0);
+                                    (item?.exceptions || []).forEach(e => {
+                                        if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0);
+                                    });
+                                    return sum + v;
+                                }, 0);
+                        });
+                        const paliers = [];
+                        let start = 0;
+                        for (let i = 1; i <= 12; i++) {
+                            if (i === 12 || totaux[i] !== totaux[start]) {
+                                paliers.push({ start: start + 1, end: i, montant: totaux[start] });
+                                start = i;
+                            }
+                        }
+                        if (paliers.length <= 1) return '';
+                        return paliers.map(p => {
+                            const range = p.start === p.end ? moisAbbr[p.start] : `${moisAbbr[p.start]}–${moisAbbr[p.end]}`;
+                            return `${range} : ${formatMAD(p.montant)}`;
+                        }).join(' | ');
+                    });
+                    const showCreditsTooltip = ref(false);
                     const tauxEndettement = computed(() => totalRevenusBase.value===0?0:(totalCreditsMensuels.value/totalRevenusBase.value)*100);
                     // v17.21 : appliquer mensualité + injecter cash requis dans les chocs
                     const appliquerMensualiteStudio = () => {
@@ -7321,7 +7412,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         activeTab, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio, 
                         surplusMensuelBase, surplusParMois, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
-                        budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
+                        budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
                         cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
