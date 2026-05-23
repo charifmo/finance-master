@@ -282,7 +282,7 @@
                                     </div>
                                 </div>
                                 <div class="px-3 py-2 border-t border-gray-800 bg-gray-900/50">
-                                    <p class="text-[8px] text-gray-500 font-bold uppercase tracking-widest text-center">Revenus – Fixes – Variables – Épargne (exceptions incluses)</p>
+                                    <p class="text-[8px] text-gray-500 font-bold uppercase tracking-widest text-center">Revenus – Fixes – Variables (épargne exclue : réallocation patrimoniale)</p>
                                 </div>
                             </div>
                         </div>
@@ -6148,7 +6148,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return arr.reduce((s, r) => s + r.surplus, 0) / arr.length;
                     });
 
-                    // v18.40 : Surplus réel mois par mois avec toutes les exceptions appliquées
+                    // v18.40 / v20.95 : Surplus BRUT mois par mois (exceptions incluses, épargne exclue)
+                    // L'épargne est une réallocation patrimoniale, pas une charge consommée.
+                    // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
                     const surplusParMois = computed(() => {
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
@@ -6173,14 +6175,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 (c?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
                                 vari += v;
                             });
-                            const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
-                            let ep = 0;
-                            epArr.forEach(obj => {
-                                let v = Number(obj.valeur || 0);
-                                (obj.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                ep += v;
-                            });
-                            return { mNum, surplus: rev - fix - vari - ep };
+                            return { mNum, surplus: rev - fix - vari };
                         });
                     });
                     const showSurplusTooltip = ref(false);
