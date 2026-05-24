@@ -462,80 +462,112 @@
                         </div><!-- /cfo-collapsible-body evolution -->
                     </div><!-- /dash-evolution -->
 
-                    <div data-cfo-collapse="dash-simulation" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8">
-                        <div class="cfo-collapse-header px-6 py-4 bg-gray-100 font-bold text-gray-800 flex justify-between items-center">
-                            <span>Simulation du Cash Global Pluriannuelle</span>
+                    <!-- ── v21.20 : JOURNAL DES FLUX INLINE (remplace la simulation) ── -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8">
+                        <div class="px-6 py-4 bg-gradient-to-r from-gray-50 to-indigo-50 flex justify-between items-center cursor-pointer select-none border-b border-gray-100"
+                             @click="showInlineReleve = !showInlineReleve">
                             <div class="flex items-center gap-3">
-                                <span class="text-[9px] bg-slate-800 text-white px-2 py-1 rounded uppercase tracking-widest">Time Engine</span>
-                                <span class="cfo-chevron text-gray-500 text-sm">▼</span>
+                                <span class="font-black text-gray-800 text-sm">📋 Journal des Flux — Relevé de Comptes</span>
+                                <span class="text-[9px] bg-indigo-600 text-white px-2 py-1 rounded-full uppercase tracking-widest font-black">Grand Livre</span>
+                                <span v-if="releveComptesFiltres.length" class="text-[9px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-black">{{ releveComptesFiltres.length }} compte{{ releveComptesFiltres.length > 1 ? 's' : '' }} sélectionné{{ releveComptesFiltres.length > 1 ? 's' : '' }}</span>
+                            </div>
+                            <span :class="['font-black text-gray-500 text-base transition-transform duration-200', showInlineReleve ? 'rotate-180' : '']">▼</span>
+                        </div>
+
+                        <div v-show="showInlineReleve">
+                            <!-- Barre de filtres -->
+                            <div class="p-4 pb-3 border-b bg-white">
+                                <div class="flex flex-wrap items-center gap-3 mb-3">
+                                    <div class="flex items-center gap-1">
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-400 mr-1">Années</label>
+                                        <select multiple v-model="releveAnneesFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[68px]">
+                                            <option v-for="a in releveAnneesDisponibles" :key="a" :value="a">{{ a }}</option>
+                                        </select>
+                                        <button @click.stop="releveAnneesFiltres = []" :class="releveAnneesFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap">Tout</button>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-400 mr-1">Mois</label>
+                                        <select multiple v-model="releveMoisFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[80px]">
+                                            <option v-for="m in releveMoisDisponibles" :key="m.num" :value="m.num">{{ m.nom }}</option>
+                                        </select>
+                                        <button @click.stop="releveMoisFiltres = []" :class="releveMoisFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap">Tout</button>
+                                    </div>
+                                    <button @click.stop="releveModeEvolution = !releveModeEvolution"
+                                        :class="releveModeEvolution ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                                        class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border border-gray-200">
+                                        {{ releveModeEvolution ? '📈 Soldes' : '📋 Détail' }}
+                                    </button>
+                                    <span class="ml-auto text-[9px] font-bold text-gray-400 uppercase tracking-widest">{{ releveCompte.length }} ligne{{ releveCompte.length > 1 ? 's' : '' }}</span>
+                                </div>
+                                <!-- Pills comptes -->
+                                <div class="flex flex-wrap gap-1.5">
+                                    <button @click.stop="releveComptesFiltres = []"
+                                        :class="releveComptesFiltres.length === 0 ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                                        class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all">
+                                        🌐 Global
+                                    </button>
+                                    <button v-for="tab in releveOnglets" :key="tab.key" @click.stop="toggleReleveCompte(tab.key)"
+                                        :class="releveComptesFiltres.includes(tab.key) ? (tab.type === 'cpt' ? 'bg-blue-600 text-white ring-2 ring-blue-300' : 'bg-purple-600 text-white ring-2 ring-purple-300') : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                                        class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all">
+                                        {{ tab.icon }} {{ tab.label }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Tableau : Mode Transactions -->
+                            <div v-if="!releveModeEvolution" class="overflow-auto max-h-[600px] custom-scroll">
+                                <table v-if="releveCompte.length > 0" class="w-full min-w-[500px] text-sm">
+                                    <thead class="bg-gray-50 sticky top-0 z-10">
+                                        <tr>
+                                            <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Mois</th>
+                                            <th v-if="releveShowCompte" class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
+                                            <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Libellé</th>
+                                            <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-red-500">Débit</th>
+                                            <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-green-600">Crédit</th>
+                                            <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Solde</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(e, i) in releveCompteGrouped" :key="i"
+                                            :class="[e.type === 'initial' ? 'border-b-2 border-blue-300 bg-blue-50' : (e._gMois % 2 === 0 ? 'border-b border-gray-100 hover:bg-white bg-white' : 'border-b border-indigo-100 bg-indigo-50/60 hover:bg-indigo-100/60'), e._isNewMonth && e.type !== 'initial' ? 'border-t-2 border-indigo-300' : '']">
+                                            <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
+                                            <td v-if="releveShowCompte" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">{{ e._compteLabel }}</td>
+                                            <td class="p-2 text-xs" :class="e.type === 'initial' ? 'font-black text-blue-700 uppercase tracking-wider' : 'text-gray-700'">{{ e.libelle }}</td>
+                                            <td class="p-2 text-right font-bold text-red-500 text-xs tabular-nums">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
+                                            <td class="p-2 text-right font-bold text-green-600 text-xs tabular-nums">{{ e.type === 'credit' ? formatMAD(e.montant) : (e.type === 'initial' && e.montant ? formatMAD(e.montant) : '') }}</td>
+                                            <td class="p-2 text-right font-black text-xs tabular-nums" :class="e.type === 'initial' ? 'text-blue-700' : (e.soldeApres < 0 ? 'text-red-600' : 'text-gray-800')">{{ formatMAD(e.soldeApres) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p v-else class="text-center text-gray-400 py-12 font-bold text-sm">Aucun mouvement enregistré.</p>
+                            </div>
+
+                            <!-- Tableau : Mode Évolution des Soldes -->
+                            <div v-else class="overflow-auto max-h-[600px] custom-scroll">
+                                <table v-if="releveEvolution.length > 0" class="w-full text-sm">
+                                    <thead class="bg-emerald-50 sticky top-0 z-10">
+                                        <tr>
+                                            <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Mois</th>
+                                            <th v-if="releveShowCompte" class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
+                                            <th class="p-2 text-right font-black text-[10px] uppercase tracking-widest text-emerald-600">Solde</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(e, i) in releveEvolution" :key="i"
+                                            :class="[e._gMois % 2 === 0 ? 'border-b border-gray-100 bg-white hover:bg-emerald-50/40' : 'border-b border-emerald-100 bg-emerald-50/50 hover:bg-emerald-100/60', e._isNewMonth ? 'border-t-2 border-emerald-300' : '']">
+                                            <td class="p-2 font-bold text-gray-600 whitespace-nowrap text-xs">{{ e.mois }}</td>
+                                            <td v-if="releveShowCompte" class="p-2 text-xs font-bold whitespace-nowrap" :class="e._compteKey && e._compteKey.startsWith('ep_') ? 'text-purple-600' : 'text-blue-600'">{{ e._compteIcon }} {{ e._compteLabel }}</td>
+                                            <td class="p-2 text-right font-black text-sm tabular-nums" :class="e.solde < 0 ? 'text-red-600' : 'text-emerald-700'">{{ formatMAD(e.solde) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p v-else class="text-center text-gray-400 py-12 font-bold text-sm">Aucune donnée de projection.</p>
                             </div>
                         </div>
-                        <div class="cfo-collapsible-body">
-                        <div class="overflow-x-auto max-h-[600px] custom-scroll">
-                            <table class="w-full text-left text-sm">
-                                <thead class="bg-gray-50 text-gray-600 text-[10px] font-black uppercase tracking-wider sticky top-0 shadow-sm z-10">
-                                    <tr>
-                                        <th class="p-4 whitespace-nowrap">Période</th>
-                                        <th class="p-4 text-right text-blue-600 whitespace-nowrap">Budget Entrées</th>
-                                        <th class="p-4 text-right text-red-500 whitespace-nowrap">Flux Exceptionnels (Net)</th>
-                                        <th class="p-4">Détail Flux Exceptionnels</th>
-                                        <th class="p-4 text-right font-black bg-blue-50 text-blue-900 whitespace-nowrap">{{ (soldesInitiaux.decalagePaie !== false) ? 'Solde (Avant Paie)' : 'Compte Courant' }}</th>
-                                        <th class="p-4 text-right text-purple-600 whitespace-nowrap">Total Épargne</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    <tr class="bg-blue-50/30 font-medium">
-                                        <td class="p-4 text-blue-800 font-bold italic">Aujourd'hui (Saisie Base)</td>
-                                        <td class="p-4 text-right">-</td>
-                                        <td class="p-4 text-right">-</td>
-                                        <td class="p-4">-</td>
-                                        <td class="p-4 text-right font-black text-lg text-blue-900">{{ formatMAD(patrimoineLiquide) }}</td>
-                                        <td class="p-4 text-right text-purple-600">{{ formatMAD(0) }}</td><!-- v17.14 : cumulEpargne part de 0 — aucune épargne générée avant la projection -->
-                                    </tr>
-                                    <tr v-for="(row, idx) in bilanLignes" :key="idx" :class="['transition-colors', row.numMois === 1 && !row.isCurrent ? 'border-t-4 border-slate-300 bg-slate-50' : 'hover:bg-gray-50']">
-                                        <td class="p-4 font-bold whitespace-nowrap">
-                                            <div class="flex items-center gap-2">
-                                                {{ row.mois }}
-                                                <span v-if="row.isCurrent" class="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded uppercase font-black tracking-widest">Actuel</span>
-                                            </div>
-                                        </td>
-                                        <td class="p-4 text-right whitespace-nowrap">
-                                            <span :class="['font-bold', row.revenusAppliques >= 0 ? 'text-green-600' : 'text-red-600']">{{ row.revenusAppliques > 0 ? '+' : '' }}{{ formatMAD(row.revenusAppliques) }}</span>
-                                            <div v-if="row.isCurrent && (soldesInitiaux.decalagePaie !== false)" class="text-[9px] text-gray-500 font-bold mt-1 uppercase tracking-widest">Ds Solde Init.</div>
-                                            <div v-if="row.isException" class="text-[9px] text-orange-500 font-bold mt-1 uppercase tracking-widest">Exception Active</div>
-                                        </td>
-                                        <td :class="['p-4 text-right font-bold whitespace-nowrap', row.sortiesExceptionnelles < 0 ? 'text-green-600' : 'text-red-500']">
-                                            <template v-if="row.sortiesExceptionnelles < 0">
-                                                +{{ formatMAD(Math.abs(row.sortiesExceptionnelles)) }}
-                                                <div class="text-[8px] text-green-500 uppercase tracking-widest mt-1">Injection Banque</div>
-                                            </template>
-                                            <template v-else-if="row.sortiesExceptionnelles > 0">
-                                                -{{ formatMAD(row.sortiesExceptionnelles) }}
-                                            </template>
-                                            <template v-else>-</template>
-                                        </td>
-                                        <td class="p-4 text-[11px] font-medium align-top whitespace-normal min-w-[250px]">
-                                            <template v-if="Array.isArray(row.detailsIrreg) && row.detailsIrreg.length > 0">
-                                                <div v-for="choc in row.detailsIrreg" :key="choc.id" class="flex items-start gap-2 mb-1 last:mb-0 flex-wrap">
-                                                    <span v-if="choc.montant < 0" class="text-green-600 font-black whitespace-nowrap shrink-0">+{{ formatMAD(Math.abs(choc.montant)) }}</span>
-                                                    <span v-else class="text-red-500 font-bold whitespace-nowrap shrink-0">-{{ formatMAD(choc.montant) }}</span>
-                                                    <span class="text-gray-600 break-words">{{ choc.nom }}</span>
-                                                    <span v-if="choc.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase tracking-widest shrink-0">Injection Banque</span>
-                                                </div>
-                                            </template>
-                                            <template v-else>
-                                                <span class="text-gray-400">-</span>
-                                            </template>
-                                        </td>
-                                        <td :class="['p-4 text-right font-black text-lg border-l border-gray-100 whitespace-nowrap', row.soldeCourant < 0 ? 'text-red-600 bg-red-50 animate-pulse' : 'text-gray-800']">{{ formatMAD(row.soldeCourant) }}<span v-if="row.soldeCourant < 0" class="block text-[8px] text-red-500 font-bold uppercase tracking-widest mt-0.5">⚠️ Déficit</span></td>
-                                        <td class="p-4 text-right text-purple-600 font-bold whitespace-nowrap">{{ formatMAD(row.soldeEpargneProjete) }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        </div><!-- /cfo-collapsible-body simulation -->
-                    </div><!-- /dash-simulation -->
-                </div>
+                    </div><!-- /inline-journal -->
+
+                <!-- Simulation pluriannuelle supprimée en v21.20 — remplacée par le Journal des Flux inline ci-dessus -->
+                <!-- bilanLignes reste calculé (utilisé par lineChartConfig) -->
 
                 <div v-if="activeTab === 'parametres'" class="max-w-4xl mx-auto space-y-6">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-4 mb-8 gap-4">
@@ -6490,6 +6522,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
                     const showSurplusTooltip = ref(false);
                     const showPoidsTooltip = ref(false);
+                    const showInlineReleve = ref(false);
 
                     const statsFluxAnnee = computed(() => {
                         calculationTick.value;
@@ -7940,7 +7973,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
-                        showPoidsTooltip,
+                        showPoidsTooltip, showInlineReleve,
                         configAssurances, assurNewAssureur, assurNewBenef, assurNewType, addAssuranceAssureur, removeAssuranceAssureur, addAssuranceBeneficiaire, removeAssuranceBeneficiaire, addAssuranceType, removeAssuranceType,
                         assurancesTracker, assurancesStats, newAssurance, showAssuranceForm, editingAssuranceId, editAssurance, annulerEditionAssurance, ajouterAssurance, toggleAssuranceRembourse, supprimerAssurance, onAssuranceMontantInput, onAssuranceDateDepotChange,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
