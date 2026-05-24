@@ -4943,7 +4943,7 @@
                         };
 
                         return {
-                            soldesInitiaux: { courant: 125000, urgence: 0, lt: 0, bourse: 0, moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), salaireRecu: false, semainesRestantes: 3, decalagePaie: true, destinationSurplus: 'courant' },
+                            soldesInitiaux: { courant: 125000, urgence: 0, lt: 0, bourse: 0, moisActuel: new Date().getMonth() + 1, anneeActuelle: new Date().getFullYear(), salaireRecu: false, semainesRestantes: 3, decalagePaie: true, destinationSurplus: 'courant', categories: [] /* v22 P1 : référentiel stable */ },
                             donneesAnnuelles: {
                                 2026: {
                                     revenus: { 
@@ -5732,6 +5732,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                     const handleDataChange = () => {
                         _saveSnapshot();
+                        // v22.00 P1 : propage les renommages d'items vers le registre catégories
+                        // (syncCategoriesLabels est défini plus bas — guard d'existence pour l'init bootstrap)
+                        if (typeof syncCategoriesLabels === 'function') { try { syncCategoriesLabels(); } catch(e) {} }
                         forceUpdateCalculations();
                         serverSyncStatus.value = 'modified';
                         if (syncStatus.value === 'synced') syncStatus.value = 'modified';
@@ -5943,6 +5946,138 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return data;
                     };
 
+                    // ── v22.00 P1 : RÉFÉRENTIEL CATÉGORIES (Dual-Mode foundation) ──
+                    // Génère/maintient un registre stable d'IDs catégorie pour permettre la comparaison
+                    // Prévisionnel ↔ Réalisé sans casser sur les renommages futurs.
+                    // Idempotente : ne touche rien si déjà migré, ne duplique jamais.
+                    const _slugCat = (s) => {
+                        return String(s == null ? '' : s).toLowerCase()
+                            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                            .replace(/[^a-z0-9]+/g, '_')
+                            .replace(/^_+|_+$/g, '').slice(0, 32) || 'x';
+                    };
+
+                    const migrateCategoriesV22 = () => {
+                        try {
+                            if (!soldesInitiaux.value) return;
+                            if (!Array.isArray(soldesInitiaux.value.categories)) {
+                                soldesInitiaux.value.categories = [];
+                            }
+                            const reg = soldesInitiaux.value.categories;
+                            const byId = new Map(reg.map(c => [c.id, c]));
+                            let touched = false;
+
+                            const upsert = (cat) => {
+                                const existing = byId.get(cat.id);
+                                if (existing) {
+                                    if (cat.label && existing.label !== cat.label) { existing.label = cat.label; touched = true; }
+                                    if (cat.parent !== undefined && existing.parent !== cat.parent) { existing.parent = cat.parent; touched = true; }
+                                    if (cat.type && existing.type !== cat.type) { existing.type = cat.type; touched = true; }
+                                    return existing;
+                                }
+                                const nu = Object.assign({ archive: false, dateCreation: new Date().toISOString() }, cat);
+                                reg.push(nu);
+                                byId.set(nu.id, nu);
+                                touched = true;
+                                return nu;
+                            };
+
+                            const tagItem = (item, catId) => {
+                                if (!item) return;
+                                if (item.categorieId !== catId) { item.categorieId = catId; touched = true; }
+                            };
+
+                            Object.entries(donneesAnnuelles.value || {}).forEach(([yearKey, d]) => {
+                                if (!d || typeof d !== 'object') return;
+
+                                // ─ Revenus ─
+                                Object.entries(d.revenus || {}).forEach(([key, item]) => {
+                                    if (!item || typeof item !== 'object') return;
+                                    const id = 'cat_rv_' + _slugCat(key);
+                                    upsert({ id, label: item.label || key, type: 'revenu', parent: null });
+                                    tagItem(item, id);
+                                    // Sous-parts éventuelles
+                                    (item.parts || []).forEach((p, i) => {
+                                        if (!p) return;
+                                        const pid = id + '__p' + _slugCat(p.label || ('part_' + i));
+                                        upsert({ id: pid, label: p.label || 'Part', type: 'revenu_part', parent: id });
+                                        tagItem(p, pid);
+                                    });
+                                });
+
+                                // ─ Charges fixes ─
+                                Object.entries(d.chargesFixes || {}).forEach(([key, item]) => {
+                                    if (!item || typeof item !== 'object') return;
+                                    const id = 'cat_cf_' + _slugCat(key);
+                                    upsert({ id, label: item.label || key, type: 'charge_fixe', parent: null });
+                                    tagItem(item, id);
+                                    (item.parts || []).forEach((p, i) => {
+                                        if (!p) return;
+                                        const pid = id + '__p' + _slugCat(p.label || ('part_' + i));
+                                        upsert({ id: pid, label: p.label || 'Part', type: 'charge_fixe_part', parent: id });
+                                        tagItem(p, pid);
+                                    });
+                                });
+
+                                // ─ Charges variables + détails ─
+                                Object.entries(d.chargesVariables || {}).forEach(([key, item]) => {
+                                    if (!item || typeof item !== 'object') return;
+                                    const parentId = 'cat_cv_' + _slugCat(key);
+                                    upsert({ id: parentId, label: item.label || key, type: 'charge_variable', parent: null });
+                                    tagItem(item, parentId);
+                                    (item.parts || []).forEach((p, i) => {
+                                        if (!p) return;
+                                        const pid = parentId + '__p' + _slugCat(p.label || ('part_' + i));
+                                        upsert({ id: pid, label: p.label || 'Part', type: 'charge_variable_part', parent: parentId });
+                                        tagItem(p, pid);
+                                    });
+                                    (item.details || []).forEach((det, i) => {
+                                        if (!det) return;
+                                        const detId = parentId + '__d' + _slugCat(det.nom || ('detail_' + i));
+                                        upsert({ id: detId, label: det.nom || ('Détail ' + (i + 1)), type: 'charge_variable_detail', parent: parentId });
+                                        tagItem(det, detId);
+                                    });
+                                });
+
+                                // ─ Épargne ─
+                                (d.epargne || []).forEach((ep, i) => {
+                                    if (!ep) return;
+                                    const id = 'cat_ep_' + _slugCat(ep.nom || ('epargne_' + i));
+                                    upsert({ id, label: ep.nom || ('Épargne ' + (i + 1)), type: 'epargne', parent: null });
+                                    tagItem(ep, id);
+                                });
+
+                                // ─ Dépenses irrégulières : pas d'auto-catégorisation (one-shot),
+                                //   mais on garantit qu'elles ont au minimum un fallback exploitable par la P3.
+                                (d.depensesIrregulieres || []).forEach(dep => {
+                                    if (!dep || dep.categorieId) return;
+                                    // Si lié à une assurance, on lui donne une catégorie dédiée
+                                    if (dep.sourceAssurance) {
+                                        tagItem(dep, 'cat_irr_assurance');
+                                    } else if (Number(dep.montant) < 0) {
+                                        tagItem(dep, 'cat_irr_revenu_exceptionnel');
+                                    } else {
+                                        tagItem(dep, 'cat_irr_depense_exceptionnelle');
+                                    }
+                                });
+                            });
+
+                            // Catégories système (toujours présentes)
+                            upsert({ id: 'cat_irr_assurance',                 label: 'Remboursement assurance',   type: 'irreguliere', parent: null });
+                            upsert({ id: 'cat_irr_revenu_exceptionnel',      label: 'Revenu exceptionnel',       type: 'irreguliere', parent: null });
+                            upsert({ id: 'cat_irr_depense_exceptionnelle',   label: 'Dépense exceptionnelle',    type: 'irreguliere', parent: null });
+                            upsert({ id: 'cat_misc',                          label: 'Non catégorisé',            type: 'autre',       parent: null });
+
+                            if (touched) {
+                                addLog('🏷️  Référentiel catégories migré : ' + reg.length + ' catégories indexées.', 'success');
+                            }
+                            return touched;
+                        } catch (err) {
+                            addLog('⚠️  Migration catégories : ' + err.message, 'warn');
+                            return false;
+                        }
+                    };
+
                     const executerImportFusion = (data) => {
                         _importInProgress.value = true; // v17.8 : empêche le watcher de déclencher "Modifié" pendant le chargement
                         try {
@@ -6070,6 +6205,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 parametres.value.anneeActuelle = _now.getFullYear();
                             }
                             anneeAffichage.value = _now.getFullYear();
+                            // v22.00 P1 : migration référentiel catégories (idempotente, post-hydratation)
+                            migrateCategoriesV22();
                             forceUpdateCalculations();
                             // v17.8 : reset du flag après que Vue a flushed ses watchers asynchrones
                             setTimeout(() => { _importInProgress.value = false; }, 200);
@@ -6109,6 +6246,52 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         () => soldesInitiaux.value.bourse,
                     ], () => handleDataChange());
 
+                    // ── v22.00 P1 : helpers référentiel catégories ──
+                    const categoriesById = computed(() => {
+                        const map = new Map();
+                        (soldesInitiaux.value.categories || []).forEach(c => { if (c && c.id) map.set(c.id, c); });
+                        return map;
+                    });
+                    const getCategorieLabel = (id) => {
+                        if (!id) return '';
+                        const c = categoriesById.value.get(id);
+                        return c ? c.label : '';
+                    };
+                    const categoriesParType = computed(() => {
+                        const groups = { revenu: [], revenu_part: [], charge_fixe: [], charge_fixe_part: [], charge_variable: [], charge_variable_part: [], charge_variable_detail: [], epargne: [], irreguliere: [], autre: [] };
+                        (soldesInitiaux.value.categories || []).forEach(c => {
+                            if (!c || c.archive) return;
+                            if (groups[c.type]) groups[c.type].push(c);
+                            else groups.autre.push(c);
+                        });
+                        return groups;
+                    });
+                    // Sync label registre ← label item, déclenché à chaque save (debounced)
+                    const syncCategoriesLabels = () => {
+                        if (!Array.isArray(soldesInitiaux.value.categories)) return;
+                        const byId = categoriesById.value;
+                        let changed = false;
+                        const sync = (item, fieldLabel = 'label') => {
+                            if (!item || !item.categorieId) return;
+                            const cat = byId.get(item.categorieId);
+                            if (!cat) return;
+                            const newLabel = item[fieldLabel];
+                            if (newLabel && cat.label !== newLabel) { cat.label = newLabel; changed = true; }
+                        };
+                        Object.values(donneesAnnuelles.value || {}).forEach(d => {
+                            if (!d) return;
+                            Object.values(d.revenus || {}).forEach(item => { sync(item); (item.parts || []).forEach(p => sync(p)); });
+                            Object.values(d.chargesFixes || {}).forEach(item => { sync(item); (item.parts || []).forEach(p => sync(p)); });
+                            Object.values(d.chargesVariables || {}).forEach(item => {
+                                sync(item);
+                                (item.parts || []).forEach(p => sync(p));
+                                (item.details || []).forEach(det => sync(det, 'nom'));
+                            });
+                            (d.epargne || []).forEach(ep => sync(ep, 'nom'));
+                        });
+                        return changed;
+                    };
+
                     const nomDuMois = (m) => ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'][m];
                     const formatMAD = (v) => new Intl.NumberFormat('fr-FR').format(Math.round(Number(v) || 0)) + ' DH';
                     // v17.21 : résout le nom d'un compte épargne depuis sa clé ep_<id>
@@ -6128,7 +6311,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
                     const totalMoisAffichage = (m) => getDepensesMois(m, anneeAffichage.value).reduce((sum, d) => sum + (Number(d.montant) || 0), 0);
                     
-                    const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant' }); handleDataChange(); };
+                    const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' }); handleDataChange(); };
                     const supprimerDepense = (id) => { if(donneesAnnuelles.value[anneeAffichage.value]) donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres = donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres.filter(d => d.id !== id); handleDataChange(); };
                     // v17.96 : Virements internes CRUD
                     const getVirementsMois = (m, a) => (donneesAnnuelles.value[a]?.virementsInternes || []).filter(v => v.mois === m);
@@ -6157,21 +6340,27 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const yr = anneeAffichage.value;
                         if (!donneesAnnuelles.value[yr]) return;
                         const id = 'rev_' + Date.now();
-                        donneesAnnuelles.value[yr].revenus[id] = { label: 'Nouveau revenu', base: 0, destinationCompte: 'courant', exceptions: [] };
+                        const catId = 'cat_rv_' + _slugCat(id);
+                        donneesAnnuelles.value[yr].revenus[id] = { label: 'Nouveau revenu', base: 0, destinationCompte: 'courant', exceptions: [], categorieId: catId };
+                        migrateCategoriesV22(); // ré-indexe la nouvelle entrée dans le registre
                         handleDataChange();
                     };
                     const ajouterChargeFixe = () => {
                         const yr = anneeAffichage.value;
                         if (!donneesAnnuelles.value[yr]) return;
                         const id = 'fix_' + Date.now();
-                        donneesAnnuelles.value[yr].chargesFixes[id] = { label: 'Nouvelle charge fixe', valeur: 0, sourceCompte: 'courant', exceptions: [] };
+                        const catId = 'cat_cf_' + _slugCat(id);
+                        donneesAnnuelles.value[yr].chargesFixes[id] = { label: 'Nouvelle charge fixe', valeur: 0, sourceCompte: 'courant', exceptions: [], categorieId: catId };
+                        migrateCategoriesV22();
                         handleDataChange();
                     };
                     const ajouterChargeVariable = () => {
                         const yr = anneeAffichage.value;
                         if (!donneesAnnuelles.value[yr]) return;
                         const id = 'var_' + Date.now();
-                        donneesAnnuelles.value[yr].chargesVariables[id] = { label: 'Nouvelle charge variable', valeur: 0, periode: 'mois', sourceCompte: 'courant' };
+                        const catId = 'cat_cv_' + _slugCat(id);
+                        donneesAnnuelles.value[yr].chargesVariables[id] = { label: 'Nouvelle charge variable', valeur: 0, periode: 'mois', sourceCompte: 'courant', categorieId: catId };
+                        migrateCategoriesV22();
                         handleDataChange();
                     };
 
@@ -7931,6 +8120,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 const text = await res.text();
                                 if(!text || text.trim()==="") {
                                     addLog("Fichier vide. Chargement de vos données récupérées.", "warn");
+                                    migrateCategoriesV22(); // v22.00 P1 : init référentiel sur défaut
                                     handleDataChange(); // Force un recalcul avec les données de secours
                                     return;
                                 }
@@ -7941,9 +8131,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 addLog("Structure distante synchronisée.", 'success');
                             } else {
                                 addLog("Aucun fichier distant trouvé.", 'warn');
+                                migrateCategoriesV22(); // v22.00 P1 : init référentiel sur défaut
                                 serverSyncStatus.value = 'synced';
                             }
-                        } catch (e) { addLog("Mode hors-ligne local activé.", 'warn'); }
+                        } catch (e) { addLog("Mode hors-ligne local activé.", 'warn'); migrateCategoriesV22(); /* v22.00 P1 */ }
 
                         // v17.96 : Auto-backup VPS — délai configurable via parametres.backupIntervalMinutes
                         let _backupTimer = null;
@@ -7974,6 +8165,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip, showInlineReleve,
+                        // v22.00 P1 : référentiel catégories (Dual-Mode foundation)
+                        categoriesById, getCategorieLabel, categoriesParType, migrateCategoriesV22,
                         configAssurances, assurNewAssureur, assurNewBenef, assurNewType, addAssuranceAssureur, removeAssuranceAssureur, addAssuranceBeneficiaire, removeAssuranceBeneficiaire, addAssuranceType, removeAssuranceType,
                         assurancesTracker, assurancesStats, newAssurance, showAssuranceForm, editingAssuranceId, editAssurance, annulerEditionAssurance, ajouterAssurance, toggleAssuranceRembourse, supprimerAssurance, onAssuranceMontantInput, onAssuranceDateDepotChange,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
