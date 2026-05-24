@@ -1086,34 +1086,50 @@
                             <div class="cfo-collapsible-body p-4 space-y-4">
 
                                 <!-- KPIs résumé -->
-                                <div class="grid grid-cols-3 gap-3">
+                                <div class="grid grid-cols-4 gap-3">
                                     <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
-                                        <p class="text-[8px] font-black uppercase tracking-widest text-gray-400">Total Cotisations</p>
+                                        <p class="text-[8px] font-black uppercase tracking-widest text-gray-400">Total Dépenses</p>
                                         <p class="text-base font-black text-gray-800 mt-1">{{ formatMAD(assurancesStats.total) }}</p>
                                     </div>
+                                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+                                        <p class="text-[8px] font-black uppercase tracking-widest text-blue-600">💰 À recouvrer</p>
+                                        <p class="text-base font-black text-blue-700 mt-1">{{ formatMAD(assurancesStats.totalAttendu) }}</p>
+                                        <p class="text-[8px] text-blue-400 font-bold">remb. attendus</p>
+                                    </div>
                                     <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-                                        <p class="text-[8px] font-black uppercase tracking-widest text-green-600">✅ Remboursé</p>
+                                        <p class="text-[8px] font-black uppercase tracking-widest text-green-600">✅ Déclaré</p>
                                         <p class="text-base font-black text-green-700 mt-1">{{ formatMAD(assurancesStats.totalRembourse) }}</p>
+                                        <p class="text-[8px] text-green-400 font-bold">flux injectés</p>
                                     </div>
                                     <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
-                                        <p class="text-[8px] font-black uppercase tracking-widest text-orange-600">⏳ En attente</p>
+                                        <p class="text-[8px] font-black uppercase tracking-widest text-orange-600">⏳ Non déclaré</p>
                                         <p class="text-base font-black text-orange-700 mt-1">{{ formatMAD(assurancesStats.enAttente) }}</p>
+                                        <p class="text-[8px] text-orange-400 font-bold">coût net restant</p>
                                     </div>
                                 </div>
 
                                 <!-- Bouton ajouter -->
                                 <div class="flex justify-end">
-                                    <button @click="showAssuranceForm = !showAssuranceForm"
+                                    <button @click="annulerEditionAssurance(); showAssuranceForm = !showAssuranceForm"
                                         class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-sm transition-all">
                                         {{ showAssuranceForm ? '✕ Annuler' : '+ Ajouter une assurance' }}
                                     </button>
                                 </div>
 
-                                <!-- Formulaire ajout — v21.00 : saisie rapide + config dynamique -->
+                                <!-- Formulaire ajout/édition — v21.10 -->
                                 <div v-if="showAssuranceForm" class="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-blue-600">⚡ Nouvelle assurance — Wafa Assurance</p>
-                                    <!-- Ligne 1 : Type | Mot-clé | Bénéficiaire | Montant | Remb. -->
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-blue-600">{{ editingAssuranceId ? '✏️ Modifier l\'assurance' : '⚡ Nouvelle assurance' }}</p>
+                                        <button @click="annulerEditionAssurance" class="text-gray-400 hover:text-red-500 font-black text-lg leading-none transition-colors">×</button>
+                                    </div>
+                                    <!-- Ligne 1 : Assureur | Type | Mot-clé | Bénéficiaire | Compte cible -->
                                     <div class="grid grid-cols-5 gap-2">
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Assureur</label>
+                                            <select v-model="newAssurance.assureur" class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors cursor-pointer">
+                                                <option v-for="a in configAssurances.assureurs" :key="a">{{ a }}</option>
+                                            </select>
+                                        </div>
                                         <div>
                                             <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Type</label>
                                             <select v-model="newAssurance.type" class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors cursor-pointer">
@@ -1121,8 +1137,8 @@
                                             </select>
                                         </div>
                                         <div>
-                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Mot-clé <span class="text-gray-300 normal-case font-normal">optionnel</span></label>
-                                            <input v-model="newAssurance.libelle" type="text" placeholder="ex: Dermato, Pneu..." class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors"/>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Mot-clé <span class="text-gray-400 normal-case font-normal">opt.</span></label>
+                                            <input v-model="newAssurance.libelle" type="text" placeholder="Dermato, Pneu..." class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors"/>
                                         </div>
                                         <div>
                                             <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Bénéficiaire</label>
@@ -1131,32 +1147,39 @@
                                             </select>
                                         </div>
                                         <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Compte cible</label>
+                                            <select v-model="newAssurance.compteDepot" class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors cursor-pointer">
+                                                <option value="">— défaut config —</option>
+                                                <option v-for="c in comptes" :key="'cpt_'+c.id" :value="'cpt_'+c.id">{{ c.label }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <!-- Ligne 2 : Montant | Remb. | Date dépôt | Date prévue | Notes -->
+                                    <div class="grid grid-cols-5 gap-2">
+                                        <div>
                                             <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Dépense (DH) *</label>
                                             <input v-model.number="newAssurance.montant" @input="onAssuranceMontantInput" type="number" placeholder="0" class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors text-right"/>
                                         </div>
                                         <div>
-                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Remb. attendu <span class="text-blue-400 normal-case font-normal">80%</span></label>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Remb. attendu <span class="text-blue-400 font-normal">80%</span></label>
                                             <input v-model.number="newAssurance.montantRembourse" type="number" placeholder="0" class="w-full bg-white border border-blue-300 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors text-right text-blue-700"/>
                                         </div>
-                                    </div>
-                                    <!-- Ligne 2 : Date dépôt | Date remb. prévue | Notes -->
-                                    <div class="grid grid-cols-4 gap-2">
                                         <div>
                                             <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Date de dépôt</label>
                                             <input v-model="newAssurance.dateDepot" @change="onAssuranceDateDepotChange" type="date" class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors"/>
                                         </div>
                                         <div>
-                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Remb. prévue <span class="text-blue-400 normal-case font-normal">+{{ configAssurances.delai_remboursement_jours }}j</span></label>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Remb. prévue <span class="text-blue-400 font-normal">+{{ configAssurances.delai_remboursement_jours }}j</span></label>
                                             <input v-model="newAssurance.dateRemboursement" type="date" class="w-full bg-white border border-blue-300 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors text-blue-700"/>
                                         </div>
-                                        <div class="col-span-2">
-                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Notes (optionnel)</label>
-                                            <input v-model="newAssurance.description" type="text" placeholder="Numéro de police, actes joints..." class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors"/>
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Notes</label>
+                                            <input v-model="newAssurance.description" type="text" placeholder="N° police, actes..." class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-blue-500 transition-colors"/>
                                         </div>
                                     </div>
                                     <div class="flex justify-end">
                                         <button @click="ajouterAssurance" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-sm transition-all">
-                                            ✓ Enregistrer
+                                            {{ editingAssuranceId ? '✓ Mettre à jour' : '✓ Enregistrer' }}
                                         </button>
                                     </div>
                                 </div>
@@ -1170,19 +1193,20 @@
                                 <div v-else class="space-y-2">
                                     <div v-for="item in assurancesTracker" :key="item.id"
                                         :class="['flex items-start gap-3 p-3 rounded-xl border transition-all', item.remboursement ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:border-blue-200']">
-                                        <!-- Toggle remboursé -->
+                                        <!-- Toggle déclaré -->
                                         <button @click="toggleAssuranceRembourse(item)"
                                             :class="['flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center font-black text-sm transition-all shadow-sm', item.remboursement ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-blue-100 hover:text-blue-600']"
-                                            :title="item.remboursement ? 'Marquer comme non remboursé' : 'Marquer comme remboursé'">
+                                            :title="item.remboursement ? 'Annuler la déclaration (retire du cash-flow)' : 'Déclarer le remboursement (injecte dans cash-flow)'">
                                             {{ item.remboursement ? '✓' : '○' }}
                                         </button>
                                         <!-- Contenu -->
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center gap-2 flex-wrap">
+                                                <span v-if="item.assureur" class="text-[9px] font-black px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">{{ item.assureur }}</span>
                                                 <span :class="['text-sm font-black', item.remboursement ? 'text-green-800' : 'text-gray-800']">{{ item.type || item.nom }}</span>
                                                 <span v-if="item.libelle" class="text-[10px] font-bold px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full italic">{{ item.libelle }}</span>
                                                 <span v-if="item.beneficiaire" class="text-[9px] font-bold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">{{ item.beneficiaire }}</span>
-                                                <span v-if="item.remboursement" class="text-[9px] font-black px-2 py-0.5 bg-green-200 text-green-800 rounded-full uppercase tracking-widest">✓ Remboursé</span>
+                                                <span v-if="item.remboursement" class="text-[9px] font-black px-2 py-0.5 bg-green-200 text-green-800 rounded-full uppercase tracking-widest">📋 Déclaré</span>
                                                 <span v-else class="text-[9px] font-bold px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">⏳ En attente</span>
                                             </div>
                                             <div class="flex items-center gap-3 mt-1 flex-wrap">
@@ -1190,8 +1214,11 @@
                                                 <span v-if="item.montantRembourse" :class="['text-xs font-bold', item.remboursement ? 'text-green-600' : 'text-blue-500']">↩ {{ formatMAD(item.montantRembourse) }}</span>
                                                 <span v-if="item.dateDepot" class="text-[9px] text-gray-400 font-bold">📋 {{ item.dateDepot }}{{ item.dateRemboursement ? ' → 💸 ' + item.dateRemboursement : '' }}</span>
                                             </div>
+                                            <p v-if="item.remboursement" class="text-[9px] text-green-600 font-bold mt-0.5">✔ Flux injecté dans les Flux Exceptionnels — à confirmer manuellement quand reçu</p>
                                             <p v-if="item.description" class="text-[10px] text-gray-400 mt-0.5 italic">{{ item.description }}</p>
                                         </div>
+                                        <!-- Éditer -->
+                                        <button @click="editAssurance(item)" class="flex-shrink-0 text-gray-400 hover:text-blue-600 font-black text-sm transition-colors px-1" title="Modifier">✏️</button>
                                         <!-- Supprimer -->
                                         <button @click="supprimerAssurance(item.id)" class="flex-shrink-0 text-gray-300 hover:text-red-500 font-black text-lg transition-colors leading-none" title="Supprimer">×</button>
                                     </div>
@@ -2495,6 +2522,21 @@
                     <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                         <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">🛡️ Configuration Assurances (Wafa)</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <!-- Assureurs -->
+                            <div>
+                                <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Assureurs</label>
+                                <div class="flex flex-wrap gap-2 mb-3">
+                                    <span v-for="(a, i) in configAssurances.assureurs" :key="a"
+                                        class="flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-[10px] font-black">
+                                        {{ a }}
+                                        <button @click="removeAssuranceAssureur(i)" class="text-indigo-400 hover:text-red-500 font-black leading-none">×</button>
+                                    </span>
+                                </div>
+                                <div class="flex gap-2">
+                                    <input v-model="assurNewAssureur" @keydown.enter="addAssuranceAssureur" type="text" placeholder="Ex : AXA, CNOPS..." class="flex-1 p-2 border-2 border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-500"/>
+                                    <button @click="addAssuranceAssureur" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-black hover:bg-indigo-700">+ Ajouter</button>
+                                </div>
+                            </div>
                             <!-- Bénéficiaires -->
                             <div>
                                 <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Bénéficiaires</label>
@@ -6562,12 +6604,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const tauxEndettement = computed(() => totalRevenusBase.value===0?0:(totalCreditsMensuels.value/totalRevenusBase.value)*100);
 
                     // ═══════════════════════════════════════════════════════
-                    // v21.00 — TRACKER ASSURANCES — Config + Cash-Flow câblé
+                    // v21.10 — TRACKER ASSURANCES — Architecture complète
                     // ═══════════════════════════════════════════════════════
 
                     // ── Config globale (stockée dans soldesInitiaux) ──────
                     const configAssurances = computed(() => {
                         const defaults = {
+                            assureurs: ['Wafa Assurance', 'Sanlam'],
                             beneficiaires: ['Moi', 'Ma femme', 'Mon fils'],
                             types: ['Santé', 'Voiture', 'Immo'],
                             delai_remboursement_jours: 10,
@@ -6575,6 +6618,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         };
                         if (!soldesInitiaux.value.config_assurances) soldesInitiaux.value.config_assurances = JSON.parse(JSON.stringify(defaults));
                         const c = soldesInitiaux.value.config_assurances;
+                        if (!Array.isArray(c.assureurs)) c.assureurs = defaults.assureurs;
                         if (!Array.isArray(c.beneficiaires)) c.beneficiaires = defaults.beneficiaires;
                         if (!Array.isArray(c.types)) c.types = defaults.types;
                         if (!c.delai_remboursement_jours) c.delai_remboursement_jours = defaults.delai_remboursement_jours;
@@ -6582,9 +6626,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return c;
                     });
 
-                    // ── Gestion config : bénéficiaires & types ───────────
+                    // ── Gestion config : assureurs, bénéficiaires, types ──
+                    const assurNewAssureur = ref('');
                     const assurNewBenef = ref('');
                     const assurNewType = ref('');
+                    const addAssuranceAssureur = () => {
+                        const n = assurNewAssureur.value.trim();
+                        if (!n || configAssurances.value.assureurs.includes(n)) return;
+                        configAssurances.value.assureurs.push(n);
+                        assurNewAssureur.value = '';
+                        handleDataChange();
+                    };
+                    const removeAssuranceAssureur = (i) => { configAssurances.value.assureurs.splice(i, 1); handleDataChange(); };
                     const addAssuranceBeneficiaire = () => {
                         const n = assurNewBenef.value.trim();
                         if (!n || configAssurances.value.beneficiaires.includes(n)) return;
@@ -6604,28 +6657,44 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                     // ── Helpers date ──────────────────────────────────────
                     const showAssuranceForm = ref(false);
+                    const editingAssuranceId = ref(null); // null = création, sinon = id en cours d'édition
                     const _assurToday = () => new Date().toISOString().slice(0, 10);
                     const _assurPlusJours = (s, n) => { if (!s) return ''; const d = new Date(s); d.setDate(d.getDate() + (n || 10)); return d.toISOString().slice(0, 10); };
                     const _newAssurDefault = () => {
                         const t = _assurToday();
                         const cfg = configAssurances.value;
-                        return { type: cfg.types[0] || 'Santé', beneficiaire: cfg.beneficiaires[0] || 'Moi', libelle: '', montant: 0, montantRembourse: 0, dateDepot: t, dateRemboursement: _assurPlusJours(t, cfg.delai_remboursement_jours), description: '' };
+                        return {
+                            assureur: cfg.assureurs[0] || 'Wafa Assurance',
+                            type: cfg.types[0] || 'Santé',
+                            beneficiaire: cfg.beneficiaires[0] || 'Moi',
+                            libelle: '', montant: 0, montantRembourse: 0,
+                            dateDepot: t,
+                            dateRemboursement: _assurPlusJours(t, cfg.delai_remboursement_jours),
+                            compteDepot: cfg.compte_depot_defaut || '',
+                            description: ''
+                        };
                     };
                     const newAssurance = ref(_newAssurDefault());
                     const onAssuranceMontantInput = () => { newAssurance.value.montantRembourse = Math.round((newAssurance.value.montant || 0) * 0.8); };
                     const onAssuranceDateDepotChange = () => { newAssurance.value.dateRemboursement = _assurPlusJours(newAssurance.value.dateDepot, configAssurances.value.delai_remboursement_jours); };
 
-                    // ── Données ───────────────────────────────────────────
+                    // ── Données (triées : en-attente d'abord) ────────────
                     const assurancesTracker = computed(() => {
                         const arr = soldesInitiaux.value.assurances_tracker;
-                        return Array.isArray(arr) ? arr : [];
+                        if (!Array.isArray(arr)) return [];
+                        return [...arr].sort((a, b) => {
+                            if (a.remboursement === b.remboursement) return (b.dateCreation || '') > (a.dateCreation || '') ? 1 : -1;
+                            return a.remboursement ? 1 : -1; // non-remboursé en premier
+                        });
                     });
 
                     const assurancesStats = computed(() => {
-                        const items = assurancesTracker.value;
+                        const arr = soldesInitiaux.value.assurances_tracker;
+                        const items = Array.isArray(arr) ? arr : [];
                         const total = items.reduce((s, i) => s + Number(i.montant || 0), 0);
                         const totalRembourse = items.filter(i => i.remboursement).reduce((s, i) => s + Number(i.montantRembourse || i.montant || 0), 0);
                         const enAttente = items.filter(i => !i.remboursement).reduce((s, i) => s + Number(i.montant || 0), 0);
+                        const totalAttendu = items.filter(i => !i.remboursement).reduce((s, i) => s + Number(i.montantRembourse || i.montant || 0), 0);
                         const byBenef = {};
                         items.forEach(i => {
                             const b = i.beneficiaire || 'Autre';
@@ -6633,36 +6702,81 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             byBenef[b].count++;
                             byBenef[b].total += Number(i.montant || 0);
                         });
-                        return { total, totalRembourse, enAttente, byBenef, count: items.length };
+                        return { total, totalRembourse, enAttente, totalAttendu, byBenef, count: items.length };
                     });
 
-                    // ── CRUD ─────────────────────────────────────────────
+                    // ── CRUD — Création + Mode Édition ───────────────────
+                    const editAssurance = (item) => {
+                        const cfg = configAssurances.value;
+                        newAssurance.value = {
+                            assureur: item.assureur || cfg.assureurs[0] || '',
+                            type: item.type || cfg.types[0] || '',
+                            beneficiaire: item.beneficiaire || cfg.beneficiaires[0] || '',
+                            libelle: item.libelle || '',
+                            montant: Number(item.montant || 0),
+                            montantRembourse: Number(item.montantRembourse || 0),
+                            dateDepot: item.dateDepot || _assurToday(),
+                            dateRemboursement: item.dateRemboursement || '',
+                            compteDepot: item.compteDepot || cfg.compte_depot_defaut || '',
+                            description: item.description || ''
+                        };
+                        editingAssuranceId.value = item.id;
+                        showAssuranceForm.value = true;
+                    };
+
+                    const annulerEditionAssurance = () => {
+                        editingAssuranceId.value = null;
+                        newAssurance.value = _newAssurDefault();
+                        showAssuranceForm.value = false;
+                    };
+
                     const ajouterAssurance = () => {
                         const a = newAssurance.value;
                         if (!a.montant) return;
                         if (!Array.isArray(soldesInitiaux.value.assurances_tracker)) soldesInitiaux.value.assurances_tracker = [];
-                        const id = 'assur_' + Date.now();
-                        soldesInitiaux.value.assurances_tracker.push({
-                            id, type: a.type, nom: a.type, libelle: (a.libelle || '').trim(),
-                            beneficiaire: a.beneficiaire,
-                            montant: Number(a.montant), montantRembourse: Number(a.montantRembourse || 0),
-                            dateDepot: a.dateDepot, dateRemboursement: a.dateRemboursement,
-                            description: a.description.trim(), remboursement: false,
-                            dateCreation: _assurToday()
-                        });
+
+                        if (editingAssuranceId.value) {
+                            // ── Mode Édition : mise à jour en place ──
+                            const idx = soldesInitiaux.value.assurances_tracker.findIndex(i => i.id === editingAssuranceId.value);
+                            if (idx !== -1) {
+                                const existing = soldesInitiaux.value.assurances_tracker[idx];
+                                Object.assign(existing, {
+                                    assureur: a.assureur, type: a.type, nom: a.type,
+                                    libelle: (a.libelle || '').trim(), beneficiaire: a.beneficiaire,
+                                    montant: Number(a.montant), montantRembourse: Number(a.montantRembourse || 0),
+                                    dateDepot: a.dateDepot, dateRemboursement: a.dateRemboursement,
+                                    compteDepot: a.compteDepot || '', description: a.description.trim()
+                                });
+                                // Resync le flux cash-flow si déjà déclaré
+                                if (existing.remboursement) {
+                                    _syncAssuranceCashflow(existing);
+                                }
+                            }
+                            editingAssuranceId.value = null;
+                        } else {
+                            // ── Mode Création ──
+                            const id = 'assur_' + Date.now();
+                            soldesInitiaux.value.assurances_tracker.push({
+                                id, assureur: a.assureur, type: a.type, nom: a.type,
+                                libelle: (a.libelle || '').trim(), beneficiaire: a.beneficiaire,
+                                montant: Number(a.montant), montantRembourse: Number(a.montantRembourse || 0),
+                                dateDepot: a.dateDepot, dateRemboursement: a.dateRemboursement,
+                                compteDepot: a.compteDepot || '',
+                                description: a.description.trim(), remboursement: false,
+                                dateCreation: _assurToday()
+                            });
+                        }
                         newAssurance.value = _newAssurDefault();
                         showAssuranceForm.value = false;
                         handleDataChange();
                     };
 
-                    // ── Câblage Cash-Flow (v21.00) ────────────────────────
-                    // Règle : si remboursement=true, injecter montantRembourse comme
-                    // flux négatif (entrée d'argent) dans le mois/année de dateRemboursement,
-                    // sur le compte défini dans config_assurances.compte_depot_defaut.
-                    const toggleAssuranceRembourse = (item) => {
-                        item.remboursement = !item.remboursement;
-                        const cfgCompte = configAssurances.value.compte_depot_defaut || '';
-                        // Déterminer mois + année depuis dateRemboursement
+                    // ── Câblage Cash-Flow (v21.10 — CORRIGÉ) ─────────────
+                    // BUG v21.00 corrigé : paye: true court-circuitait _chocEffectif
+                    // Solution : paye: false → moteur inclut le flux comme revenu planifié
+                    // L'utilisateur coche manuellement dans Flux Exceptionnels quand reçu
+                    const _syncAssuranceCashflow = (item) => {
+                        const compteDepot = item.compteDepot || configAssurances.value.compte_depot_defaut || '';
                         let remYear = Number(soldesInitiaux.value.anneeActuelle);
                         let remMois = new Date().getMonth() + 1;
                         if (item.dateRemboursement) {
@@ -6670,30 +6784,40 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             remYear = dr.getFullYear();
                             remMois = dr.getMonth() + 1;
                         }
-                        // Si l'année cible n'existe pas, retomber sur l'année courante
                         if (!donneesAnnuelles.value[remYear]) remYear = Number(soldesInitiaux.value.anneeActuelle);
+                        // Supprimer l'ancienne entrée (toutes années)
+                        Object.values(donneesAnnuelles.value).forEach(d => {
+                            if (!Array.isArray(d.depensesIrregulieres)) return;
+                            const fi = d.depensesIrregulieres.findIndex(x => x.sourceAssurance === item.id);
+                            if (fi !== -1) d.depensesIrregulieres.splice(fi, 1);
+                        });
                         const d = donneesAnnuelles.value[remYear];
-                        if (d) {
-                            if (!Array.isArray(d.depensesIrregulieres)) d.depensesIrregulieres = [];
-                            const refId = item.id;
-                            const idx = d.depensesIrregulieres.findIndex(x => x.sourceAssurance === refId);
-                            if (item.remboursement) {
-                                if (idx === -1) {
-                                    const label = (item.type || item.nom || '') + (item.libelle ? ' – ' + item.libelle : '') + ' (' + (item.beneficiaire || '') + ')';
-                                    d.depensesIrregulieres.push({
-                                        id: 'cashf_' + Date.now(),
-                                        nom: '🛡️ Remb. ' + label,
-                                        montant: -(Number(item.montantRembourse || item.montant || 0)),
-                                        mois: remMois, annee: remYear,
-                                        paye: true,
-                                        montantPaye: Number(item.montantRembourse || item.montant || 0),
-                                        sourceCompte: cfgCompte,
-                                        sourceAssurance: refId
-                                    });
-                                }
-                            } else {
-                                if (idx !== -1) d.depensesIrregulieres.splice(idx, 1);
-                            }
+                        if (!d) return;
+                        if (!Array.isArray(d.depensesIrregulieres)) d.depensesIrregulieres = [];
+                        const assurLabel = (item.assureur || '') + (item.type ? ' ' + item.type : '') + (item.libelle ? ' – ' + item.libelle : '') + ' (' + (item.beneficiaire || '') + ')';
+                        d.depensesIrregulieres.push({
+                            id: 'cashf_' + Date.now(),
+                            nom: '🛡️ ' + assurLabel,
+                            montant: -(Number(item.montantRembourse || item.montant || 0)),
+                            mois: remMois, annee: remYear,
+                            paye: false,      // ← CRITIQUE : false pour que _chocEffectif l'inclue
+                            montantPaye: 0,
+                            sourceCompte: compteDepot,
+                            sourceAssurance: item.id
+                        });
+                    };
+
+                    const toggleAssuranceRembourse = (item) => {
+                        item.remboursement = !item.remboursement;
+                        if (item.remboursement) {
+                            _syncAssuranceCashflow(item);
+                        } else {
+                            // Retirer le flux cash-flow de toutes les années
+                            Object.values(donneesAnnuelles.value).forEach(d => {
+                                if (!Array.isArray(d.depensesIrregulieres)) return;
+                                const fi = d.depensesIrregulieres.findIndex(x => x.sourceAssurance === item.id);
+                                if (fi !== -1) d.depensesIrregulieres.splice(fi, 1);
+                            });
                         }
                         handleDataChange();
                     };
@@ -6704,7 +6828,6 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!Array.isArray(arr)) return;
                         const idx = arr.findIndex(i => i.id === id);
                         if (idx !== -1) arr.splice(idx, 1);
-                        // Nettoyer tous les flux cash-flow liés
                         Object.values(donneesAnnuelles.value).forEach(d => {
                             if (!Array.isArray(d.depensesIrregulieres)) return;
                             const fi = d.depensesIrregulieres.findIndex(x => x.sourceAssurance === id);
@@ -7818,8 +7941,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip,
-                        configAssurances, assurNewBenef, assurNewType, addAssuranceBeneficiaire, removeAssuranceBeneficiaire, addAssuranceType, removeAssuranceType,
-                        assurancesTracker, assurancesStats, newAssurance, showAssuranceForm, ajouterAssurance, toggleAssuranceRembourse, supprimerAssurance, onAssuranceMontantInput, onAssuranceDateDepotChange,
+                        configAssurances, assurNewAssureur, assurNewBenef, assurNewType, addAssuranceAssureur, removeAssuranceAssureur, addAssuranceBeneficiaire, removeAssuranceBeneficiaire, addAssuranceType, removeAssuranceType,
+                        assurancesTracker, assurancesStats, newAssurance, showAssuranceForm, editingAssuranceId, editAssurance, annulerEditionAssurance, ajouterAssurance, toggleAssuranceRembourse, supprimerAssurance, onAssuranceMontantInput, onAssuranceDateDepotChange,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
                         cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
