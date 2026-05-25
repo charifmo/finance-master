@@ -4975,25 +4975,8 @@
 
                     // MOTEUR MULTI-ANNEES
                     const anneeAffichage = ref(2026);
-                    // ═══ v22.00 P2 — Garde-fou anneeAffichage ═══
-                    // Si l'année affichée n'existe pas dans donneesAnnuelles, snap sur une année valide
-                    // (priorité : soldesInitiaux.anneeActuelle, sinon première année dispo).
-                    // Évite le bug "tout le contenu vide" quand anneeAffichage pointe sur une année absente.
-                    const _snapAnneeAffichage = () => {
-                        const da = donneesAnnuelles.value || {};
-                        const cur = anneeAffichage.value;
-                        if (da[cur]) return;
-                        const target = (soldesInitiaux.value && da[soldesInitiaux.value.anneeActuelle])
-                            ? soldesInitiaux.value.anneeActuelle
-                            : Number(Object.keys(da)[0]);
-                        if (target && da[target]) {
-                            console.warn('[v22.00 P2] anneeAffichage', cur, 'absente -> snap sur', target);
-                            anneeAffichage.value = target;
-                        } else {
-                            console.error('[v22.00 P2] donneesAnnuelles vide ou anneeAffichage invalide. Clés dispo:', Object.keys(da));
-                        }
-                    };
-                    watch([donneesAnnuelles, anneeAffichage], _snapAnneeAffichage, { deep: false, immediate: false });
+                    // ═══ v22.00 P2 — Garde-fou anneeAffichage : watcher enregistré PLUS BAS,
+                    // après la définition de donneesAnnuelles (cf. ligne ~5067) pour éviter le TDZ.
 
                     // === v13.1 : Sélecteur d'horizon de projection ===
                     const anneeCibleProjection = ref(Number(localStorage.getItem('annee_cible_projection')) || 2029);
@@ -5065,6 +5048,27 @@
                     const state = getDefaultState();
                     const soldesInitiaux = ref(state.soldesInitiaux);
                     const donneesAnnuelles = ref(state.donneesAnnuelles);
+
+                    // ═══ v22.00 P2 — Garde-fou anneeAffichage ═══
+                    // Snap automatique sur une année qui existe vraiment dans donneesAnnuelles.
+                    // Évite le bug "tout le contenu vide" quand anneeAffichage pointe sur une année absente.
+                    const _snapAnneeAffichage = () => {
+                        try {
+                            const da = donneesAnnuelles.value || {};
+                            const cur = anneeAffichage.value;
+                            if (da[cur]) return;
+                            const fallbackKey = (soldesInitiaux.value && da[soldesInitiaux.value.anneeActuelle])
+                                ? soldesInitiaux.value.anneeActuelle
+                                : Number(Object.keys(da)[0]);
+                            if (fallbackKey && da[fallbackKey]) {
+                                console.warn('[v22.00 P2] anneeAffichage', cur, '-> snap sur', fallbackKey);
+                                anneeAffichage.value = fallbackKey;
+                            } else {
+                                console.error('[v22.00 P2] donneesAnnuelles vide ou clés invalides. Dispo:', Object.keys(da));
+                            }
+                        } catch (e) { console.error('[v22.00 P2] snap error', e); }
+                    };
+                    watch([donneesAnnuelles, anneeAffichage], _snapAnneeAffichage, { deep: false, immediate: false });
 
                     // ── v16.2 : Arbitrage Simulator ──────────────────────
                     const arbitrageCash = ref(100000);
