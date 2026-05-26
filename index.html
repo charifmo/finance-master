@@ -2443,17 +2443,143 @@
                     </div>
                 </div>
 
-                <!-- ═══ v22.00 P2 — PLACEHOLDERS MODE RÉALISÉ ═══ -->
-                <div v-if="appMode === 'reel' && activeTab === 'saisie'" class="max-w-4xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">✍️ Saisie des Transactions Réelles</h2>
-                    <div class="p-12 text-center text-slate-400 italic border-2 border-dashed border-slate-300 rounded-2xl bg-white">
-                        En construction — Phase 3.<br/>
-                        <span class="text-xs">La saisie se fait pour l'instant via le bot Telegram (commande naturelle ex: "J'ai payé 400 DH chez Carrefour").</span>
+                <!-- ═══ v22.00 P3 — SAISIE TRANSACTIONS RÉELLES ═══ -->
+                <div v-if="appMode === 'reel' && activeTab === 'saisie'" class="max-w-5xl mx-auto space-y-6">
+                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 flex items-center justify-between">
+                        <span class="flex items-center gap-3">✍️ Saisie des Transactions Réelles</span>
+                        <span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full">{{ transactionsReellesTriees.length }} transaction(s) — {{ anneeAffichage }}</span>
+                    </h2>
+
+                    <!-- Barre Spotlight -->
+                    <div class="bg-white rounded-2xl shadow-sm border-2 border-emerald-200 p-5">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-3">⚡ Saisie ultra-rapide</p>
+                        <div class="flex gap-3">
+                            <input v-model="saisieRapide" @keyup.enter="validerSaisieRapide" type="text"
+                                   placeholder='Ex: "400 courses" ou "1200 essence"'
+                                   class="flex-1 px-5 py-4 text-lg font-bold border-2 border-gray-200 rounded-xl outline-none focus:border-emerald-500 bg-gray-50" />
+                            <button @click="validerSaisieRapide" :disabled="!saisieRapide.trim()"
+                                    :class="[saisieRapide.trim() ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md' : 'bg-gray-200 text-gray-400 cursor-not-allowed', 'px-6 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-colors']">
+                                ✓ Valider
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-2 italic">💡 Format : montant en premier, puis libellé. La catégorie est devinée automatiquement (sinon "Misc").</p>
+                    </div>
+
+                    <!-- Compte par défaut -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 flex items-center gap-3">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">Compte par défaut :</span>
+                        <select v-model="saisieCompteDefaut" class="px-3 py-2 rounded-lg border-2 border-gray-200 font-bold text-sm outline-none focus:border-emerald-500 bg-gray-50">
+                            <option v-for="c in comptes" :key="c.id" :value="c.id">{{ c.label }}</option>
+                        </select>
+                    </div>
+
+                    <!-- Journal -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-100 bg-slate-50 flex items-center justify-between">
+                            <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm">📋 Journal des transactions</h3>
+                            <span class="text-[10px] text-gray-400 font-bold">Plus récent → plus ancien</span>
+                        </div>
+                        <div v-if="transactionsReellesTriees.length === 0" class="p-12 text-center text-gray-400 italic">
+                            Aucune transaction enregistrée pour {{ anneeAffichage }}.<br/>
+                            <span class="text-xs">Utilisez la barre de saisie rapide ou le bot Telegram.</span>
+                        </div>
+                        <table v-else class="w-full text-sm">
+                            <thead class="bg-gray-50 sticky top-0 z-10">
+                                <tr>
+                                    <th class="p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Date</th>
+                                    <th class="p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Catégorie</th>
+                                    <th class="p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Libellé</th>
+                                    <th class="p-3 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Montant</th>
+                                    <th class="p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Compte</th>
+                                    <th class="p-3 text-center font-black text-[10px] uppercase tracking-widest text-gray-500">Source</th>
+                                    <th class="p-3 w-12"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="tx in transactionsReellesTriees" :key="tx.id" class="border-b border-gray-100 hover:bg-emerald-50/40 transition-colors">
+                                    <td class="p-3 font-bold text-gray-600 whitespace-nowrap text-xs tabular-nums">{{ tx.date }}</td>
+                                    <td class="p-3 text-xs font-bold text-blue-700">{{ getCategorieLabel(tx.categorieId) || '(Hors budget)' }}</td>
+                                    <td class="p-3 text-gray-800">{{ tx.libelle }}</td>
+                                    <td class="p-3 text-right font-black text-red-600 tabular-nums">-{{ formatMAD(tx.montant) }}</td>
+                                    <td class="p-3 text-xs text-gray-600">{{ (comptes.find(c => c.id === tx.compteId) || {}).label || '—' }}</td>
+                                    <td class="p-3 text-center">
+                                        <span :class="tx.source === 'telegram' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'" class="text-[9px] px-2 py-0.5 rounded font-black uppercase">{{ tx.source || 'manuel' }}</span>
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        <button @click="supprimerTransactionReelle(tx.id)" class="text-gray-400 hover:text-red-600 text-lg font-black" title="Supprimer">×</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <div v-if="appMode === 'reel' && activeTab === 'controle'" class="max-w-4xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">🔍 Contrôle Budget vs Réel</h2>
-                    <div class="p-12 text-center text-slate-400 italic border-2 border-dashed border-slate-300 rounded-2xl bg-white">En construction.</div>
+
+                <!-- ═══ v22.00 P4 — CONTRÔLE BUDGET vs RÉEL ═══ -->
+                <div v-if="appMode === 'reel' && activeTab === 'controle'" class="max-w-6xl mx-auto space-y-6">
+                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 flex items-center justify-between">
+                        <span>🔍 Contrôle Budget vs Réel</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">Mois :</span>
+                            <select v-model.number="moisControle" class="px-3 py-2 rounded-lg border-2 border-gray-200 font-bold text-sm outline-none focus:border-emerald-500">
+                                <option v-for="m in 12" :key="m" :value="m">{{ nomDuMois(m) }}</option>
+                            </select>
+                        </div>
+                    </h2>
+
+                    <!-- Totaux du mois -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-2">📋 Budget Prévu</p>
+                            <p class="text-2xl font-black text-blue-900 tabular-nums">{{ formatMAD(controleTotaux.budget) }}</p>
+                        </div>
+                        <div class="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-2">✓ Réalisé</p>
+                            <p class="text-2xl font-black text-emerald-900 tabular-nums">{{ formatMAD(controleTotaux.realise) }}</p>
+                        </div>
+                        <div :class="controleTotaux.ecart >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300'" class="border-2 rounded-2xl p-5">
+                            <p :class="controleTotaux.ecart >= 0 ? 'text-emerald-700' : 'text-red-700'" class="text-[10px] font-black uppercase tracking-widest mb-2">📊 Écart (Prévu − Réalisé)</p>
+                            <p :class="controleTotaux.ecart >= 0 ? 'text-emerald-900' : 'text-red-900'" class="text-2xl font-black tabular-nums">{{ controleTotaux.ecart >= 0 ? '+' : '' }}{{ formatMAD(controleTotaux.ecart) }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Tableau par catégorie -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-100 bg-slate-50">
+                            <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm">📊 Par catégorie — {{ nomDuMois(moisControle) }} {{ anneeAffichage }}</h3>
+                        </div>
+                        <div v-if="controleBudgetVsReel.length === 0" class="p-12 text-center text-gray-400 italic">
+                            Aucune donnée à afficher pour ce mois.
+                        </div>
+                        <table v-else class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Catégorie</th>
+                                    <th class="p-3 text-right font-black text-[10px] uppercase tracking-widest text-blue-600">Prévu</th>
+                                    <th class="p-3 text-right font-black text-[10px] uppercase tracking-widest text-emerald-600">Réalisé</th>
+                                    <th class="p-3 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Écart</th>
+                                    <th class="p-3 text-center font-black text-[10px] uppercase tracking-widest text-gray-500 w-72">Progression</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="b in controleBudgetVsReel" :key="b.categorieId" class="border-b border-gray-100 hover:bg-gray-50/60">
+                                    <td class="p-3 font-bold text-gray-800 text-xs">{{ b.label }}</td>
+                                    <td class="p-3 text-right font-black text-blue-700 tabular-nums">{{ formatMAD(b.budget) }}</td>
+                                    <td class="p-3 text-right font-black text-emerald-700 tabular-nums">{{ formatMAD(b.realise) }}</td>
+                                    <td class="p-3 text-right font-black tabular-nums" :class="b.ecart >= 0 ? 'text-emerald-600' : 'text-red-600'">{{ b.ecart >= 0 ? '+' : '' }}{{ formatMAD(b.ecart) }}</td>
+                                    <td class="p-3">
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                                <div :class="b.pct > 100 ? 'bg-red-500' : (b.pct > 80 ? 'bg-orange-400' : 'bg-emerald-500')"
+                                                     class="h-full rounded-full transition-all"
+                                                     :style="{ width: Math.min(100, b.pct) + '%' }"></div>
+                                            </div>
+                                            <span class="text-[10px] font-black w-12 text-right" :class="b.pct > 100 ? 'text-red-600' : 'text-gray-600'">{{ b.pct }}%</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 <div v-if="appMode === 'reel' && activeTab === 'tresorerie'" class="max-w-4xl mx-auto space-y-6">
                     <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">💰 Trésorerie Réelle</h2>
@@ -4578,6 +4704,167 @@
                             }
                         }
                     };
+
+                    // ═══════════════════════════════════════════════════════════════
+                    // v22.00 P3 — SAISIE TRANSACTIONS RÉELLES
+                    // ═══════════════════════════════════════════════════════════════
+                    const saisieRapide = ref('');
+                    const saisieCompteDefaut = ref(null); // initialisé par watch comptes
+
+                    // Parse "400 courses" → { montant: 400, libelle: "courses" }
+                    const _parseSaisieRapide = (txt) => {
+                        const s = String(txt || '').trim();
+                        if (!s) return null;
+                        const m = s.match(/(-?\d+(?:[.,]\d+)?)/);
+                        if (!m) return null;
+                        const montant = parseFloat(m[1].replace(',', '.'));
+                        if (!montant || montant <= 0) return null;
+                        const libelle = s.replace(m[0], '').trim() || 'Sans libellé';
+                        return { montant, libelle };
+                    };
+
+                    // Devine la catégorieId par match approximatif de label
+                    const _guessCategorieId = (libelle) => {
+                        const target = String(libelle || '').toLowerCase().trim();
+                        if (!target) return 'cat_misc';
+                        const cats = (soldesInitiaux.value.categories || []).filter(c => c && !c.archive);
+                        // 1. Match exact
+                        for (const c of cats) {
+                            if (String(c.label).toLowerCase() === target) return c.id;
+                        }
+                        // 2. Match par inclusion (target contient le label, ou inverse)
+                        for (const c of cats) {
+                            const lab = String(c.label).toLowerCase().trim();
+                            if (!lab) continue;
+                            if (target.includes(lab) || lab.includes(target)) return c.id;
+                        }
+                        return 'cat_misc';
+                    };
+
+                    const ajouterTransactionReelle = (data) => {
+                        const a = anneeAffichage.value;
+                        if (!donneesAnnuelles.value[a]) return;
+                        if (!Array.isArray(donneesAnnuelles.value[a].transactionsReelles)) {
+                            donneesAnnuelles.value[a].transactionsReelles = [];
+                        }
+                        const today = new Date();
+                        const tx = {
+                            id: Date.now() + Math.floor(Math.random() * 1000),
+                            date: data.date || today.toISOString().slice(0, 10),
+                            mois: data.mois || (today.getMonth() + 1),
+                            libelle: String(data.libelle || 'Sans libellé').trim(),
+                            montant: Number(data.montant) || 0,
+                            categorieId: data.categorieId || 'cat_misc',
+                            compteId: data.compteId || saisieCompteDefaut.value,
+                            source: data.source || 'manuel',
+                        };
+                        donneesAnnuelles.value[a].transactionsReelles.push(tx);
+                        handleDataChange();
+                    };
+
+                    const validerSaisieRapide = () => {
+                        const parsed = _parseSaisieRapide(saisieRapide.value);
+                        if (!parsed) return;
+                        ajouterTransactionReelle({
+                            libelle: parsed.libelle,
+                            montant: parsed.montant,
+                            categorieId: _guessCategorieId(parsed.libelle),
+                        });
+                        saisieRapide.value = '';
+                    };
+
+                    const supprimerTransactionReelle = (id) => {
+                        const a = anneeAffichage.value;
+                        if (!donneesAnnuelles.value[a]) return;
+                        donneesAnnuelles.value[a].transactionsReelles =
+                            (donneesAnnuelles.value[a].transactionsReelles || []).filter(t => t.id !== id);
+                        handleDataChange();
+                    };
+
+                    const transactionsReellesTriees = computed(() => {
+                        const a = anneeAffichage.value;
+                        const arr = (donneesAnnuelles.value[a]?.transactionsReelles || []).slice();
+                        return arr.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+                    });
+
+                    // ═══════════════════════════════════════════════════════════════
+                    // v22.00 P4 — CONTRÔLE BUDGET vs RÉALISÉ
+                    // ═══════════════════════════════════════════════════════════════
+                    const moisControle = ref(new Date().getMonth() + 1);
+
+                    const controleBudgetVsReel = computed(() => {
+                        const a = anneeAffichage.value;
+                        const m = moisControle.value;
+                        const d = donneesAnnuelles.value[a];
+                        if (!d) return [];
+
+                        const rows = {}; // categorieId -> { categorieId, label, type, budget, realise }
+                        const add = (catId, label, type, montant) => {
+                            const id = catId || 'cat_misc';
+                            if (!rows[id]) rows[id] = { categorieId: id, label: getCategorieLabel(id) || label || '(Sans cat.)', type, budget: 0, realise: 0 };
+                            rows[id].budget += Number(montant) || 0;
+                        };
+
+                        // Charges fixes : dueFixe (gère exceptions)
+                        Object.values(d.chargesFixes || {}).forEach(f => {
+                            if (!f) return;
+                            add(f.categorieId, f.label, 'charge_fixe', getDueFixe(f, a));
+                        });
+
+                        // Charges variables : par détail si présents, sinon valeur globale
+                        Object.values(d.chargesVariables || {}).forEach(cv => {
+                            if (!cv) return;
+                            if (Array.isArray(cv.details) && cv.details.length) {
+                                cv.details.forEach(det => add(det.categorieId || cv.categorieId, det.nom, 'charge_variable_detail', det.montant));
+                            } else if (cv.periode === 'mois' || !cv.periode) {
+                                add(cv.categorieId, cv.label, 'charge_variable', cv.valeur);
+                            } else if (cv.periode === 'semaine') {
+                                add(cv.categorieId, cv.label, 'charge_variable', Number(cv.valeur || 0) * 4.3);
+                            }
+                        });
+
+                        // Épargne
+                        (d.epargne || []).forEach(ep => {
+                            if (!ep) return;
+                            add(ep.categorieId, ep.nom, 'epargne', ep.montant);
+                        });
+
+                        // Dépenses irrégulières prévues sur ce mois
+                        (d.depensesIrregulieres || []).filter(x => Number(x.mois) === m).forEach(dep => {
+                            add(dep.categorieId || 'cat_irr_depense_exceptionnelle', dep.nom, 'irreguliere', dep.montant);
+                        });
+
+                        // Réalisé : transactionsReelles du mois
+                        (d.transactionsReelles || []).filter(t => Number(t.mois) === m).forEach(t => {
+                            const id = t.categorieId || 'cat_misc';
+                            if (!rows[id]) rows[id] = { categorieId: id, label: getCategorieLabel(id) || '(Hors budget)', type: 'autre', budget: 0, realise: 0 };
+                            rows[id].realise += Number(t.montant) || 0;
+                        });
+
+                        return Object.values(rows)
+                            .filter(r => r.budget > 0 || r.realise > 0)
+                            .map(r => {
+                                const ecart = r.budget - r.realise;
+                                const pct = r.budget > 0 ? Math.round((r.realise / r.budget) * 100) : (r.realise > 0 ? 999 : 0);
+                                return { ...r, ecart, pct };
+                            })
+                            .sort((a, b) => b.budget - a.budget);
+                    });
+
+                    const controleTotaux = computed(() => {
+                        const items = controleBudgetVsReel.value;
+                        const tBudget = items.reduce((s, x) => s + x.budget, 0);
+                        const tRealise = items.reduce((s, x) => s + x.realise, 0);
+                        return { budget: tBudget, realise: tRealise, ecart: tBudget - tRealise };
+                    });
+
+                    // Initialise saisieCompteDefaut au 1er compte dispo (après que comptes soit prêt)
+                    onMounted(() => {
+                        if (!saisieCompteDefaut.value && Array.isArray(comptes.value) && comptes.value.length) {
+                            saisieCompteDefaut.value = comptes.value[0].id;
+                        }
+                    });
+
                     const modeEdition = ref(false);
                     const historiqueFlux = ref({}); // v17.32 : conservé pour compat mais bilanJournal est la source de vérité
                     const compteReleve = ref(null);
@@ -8257,6 +8544,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         showPoidsTooltip, showInlineReleve,
                         // v22.00 P1 : référentiel catégories (Dual-Mode foundation)
                         categoriesById, getCategorieLabel, categoriesParType, migrateCategoriesV22,
+                        // v22.00 P3 : saisie transactions réelles
+                        saisieRapide, saisieCompteDefaut, validerSaisieRapide,
+                        transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
+                        // v22.00 P4 : contrôle budget vs réalisé
+                        moisControle, controleBudgetVsReel, controleTotaux,
                         configAssurances, assurNewAssureur, assurNewBenef, assurNewType, addAssuranceAssureur, removeAssuranceAssureur, addAssuranceBeneficiaire, removeAssuranceBeneficiaire, addAssuranceType, removeAssuranceType,
                         assurancesTracker, assurancesStats, newAssurance, showAssuranceForm, editingAssuranceId, editAssurance, annulerEditionAssurance, ajouterAssurance, toggleAssuranceRembourse, supprimerAssurance, onAssuranceMontantInput, onAssuranceDateDepotChange,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
