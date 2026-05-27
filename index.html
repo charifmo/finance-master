@@ -3904,7 +3904,7 @@
                         <div class="flex items-start justify-between mb-4">
                             <div>
                                 <h2 class="text-2xl font-bold text-gray-800">🎯 Pilotage du Mois Courant</h2>
-                                <p class="text-sm text-gray-500 mt-0.5">Pointage des factures — <b>{{ nomDuMois(soldesInitiaux.moisActuel) }} {{ soldesInitiaux.anneeActuelle }}</b></p>
+                                <p class="text-sm text-gray-500 mt-0.5">Cycle <b>{{ cycleLabel }}</b></p>
                             </div>
                             <span class="text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 self-start mt-1">Survol = détail</span>
                         </div>
@@ -3948,13 +3948,25 @@
                                 <div class="absolute top-full left-0 right-0 mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                                     <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
                                     <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
-                                        <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Trésorerie Courant</p>
+                                        <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🏦 Solde Bancaire Réel</p>
                                         <div class="space-y-1.5">
-                                            <p class="text-slate-400 text-[10px]">Revenus (dest. courant) encaissés<br/>moins charges (src. courant) payées</p>
-                                            <div :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', tresoActuelleCourante >= 0 ? 'text-emerald-300' : 'text-red-300']">
-                                                <span>= Tréso compte courant</span>
-                                                <span>{{ formatMAD(tresoActuelleCourante) }}</span>
-                                            </div>
+                                            <template v-if="comptes.filter(c => c.type === 'liquide').length > 0">
+                                                <div v-for="cpt in comptes.filter(c => c.type === 'liquide')" :key="'kpi1_'+cpt.id" class="flex justify-between gap-3">
+                                                    <span class="text-slate-300">{{ cpt.icone || '💳' }} {{ cpt.label }}</span>
+                                                    <span class="font-black text-white">{{ formatMAD(Number(cpt.solde || 0)) }}</span>
+                                                </div>
+                                                <div v-if="comptes.filter(c => c.type === 'liquide').length > 1" :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', tresoActuelleCourante >= 0 ? 'text-emerald-300' : 'text-red-300']">
+                                                    <span>= Total liquide</span>
+                                                    <span>{{ formatMAD(tresoActuelleCourante) }}</span>
+                                                </div>
+                                            </template>
+                                            <template v-else>
+                                                <p class="text-slate-400 text-[10px]">Aucun compte de type "liquide" configuré.<br/>Configurer vos comptes dans l'onglet Saisie.</p>
+                                                <div class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-amber-300">
+                                                    <span>Solde courant (fallback)</span>
+                                                    <span>{{ formatMAD(tresoActuelleCourante) }}</span>
+                                                </div>
+                                            </template>
                                         </div>
                                     </div>
                                 </div>
@@ -3971,11 +3983,29 @@
                                     <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
                                     <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
                                         <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail par compte</p>
-                                        <div class="space-y-1.5">
+                                        <div class="space-y-2.5">
                                             <div v-if="!resteAPayerDetailParCompte.length" class="text-center text-emerald-400 py-1">✅ Tout est payé !</div>
-                                            <div v-for="grp in resteAPayerDetailParCompte" :key="grp.key" class="flex justify-between gap-3">
-                                                <span :class="grp.key === 'courant' ? 'text-orange-300' : 'text-violet-300'">{{ grp.icon }} {{ grp.label }}</span>
-                                                <span class="font-black text-white">{{ formatMAD(grp.montant) }}</span>
+                                            <div v-for="grp in resteAPayerDetailParCompte" :key="grp.key" class="space-y-1">
+                                                <div class="flex justify-between gap-3 font-black">
+                                                    <span :class="grp.key === 'courant' ? 'text-orange-300' : 'text-violet-300'">{{ grp.icon }} {{ grp.label }}</span>
+                                                    <span class="text-white">{{ formatMAD(grp.montant) }}</span>
+                                                </div>
+                                                <div v-if="grp.parNature.fix > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
+                                                    <span>↳ 🏢 Fixes</span>
+                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.fix) }}</span>
+                                                </div>
+                                                <div v-if="grp.parNature.var > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
+                                                    <span>↳ 🧾 Variables</span>
+                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.var) }}</span>
+                                                </div>
+                                                <div v-if="grp.parNature.choc > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
+                                                    <span>↳ ⚠️ Chocs</span>
+                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.choc) }}</span>
+                                                </div>
+                                                <div v-if="grp.parNature.virement > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
+                                                    <span>↳ 🔄 Virements</span>
+                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.virement) }}</span>
+                                                </div>
                                             </div>
                                             <div v-if="resteAPayerDetailParCompte.length > 1" class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-orange-300">
                                                 <span>= Total tous comptes</span>
@@ -4025,26 +4055,15 @@
                         </div><!-- /KPI Grid v22.50 -->
                     </div><!-- /header -->
 
-                    <div v-if="anneeAffichage === soldesInitiaux.anneeActuelle" class="space-y-6">
-                        <!-- Sélecteurs date + semaines -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 text-center flex flex-col justify-center">
-                                <label class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3 block">Aujourd'hui, nous sommes en</label>
-                                <div class="flex gap-2">
-                                    <select v-model.number="soldesInitiaux.moisActuel" @change="handleDataChange" class="flex-1 bg-slate-900 text-white font-bold text-sm p-3 rounded-xl outline-none cursor-pointer border border-slate-600 text-center">
-                                        <option v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :value="m">{{ nomDuMois(m) }}</option>
-                                    </select>
-                                    <input type="number" v-model.number="soldesInitiaux.anneeActuelle" @input="handleDataChange" class="w-24 bg-slate-900 text-blue-300 font-black text-sm p-3 rounded-xl border border-slate-600 text-center outline-none"/>
-                                </div>
-                            </div>
-                            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 text-center flex flex-col justify-center">
-                                <label class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3 block">📅 Jour de Paie</label>
-                                <div class="flex items-center gap-2 justify-center">
-                                    <span class="text-slate-400 text-sm font-bold">Le</span>
-                                    <input type="number" min="1" max="31" v-model.number="soldesInitiaux.jourDePaie" @input="handleDataChange" class="w-20 bg-slate-900 text-blue-300 font-black text-xl p-3 rounded-xl border border-blue-700 text-center outline-none focus:border-blue-400"/>
-                                    <span class="text-slate-400 text-sm font-bold">de chaque mois</span>
-                                </div>
-                                <p class="text-[10px] text-emerald-400 font-black mt-2 uppercase tracking-widest">⏳ J−{{ joursRestantsAvantPaie }} avant la prochaine paie</p>
+                    <div v-if="anneeAffichage === moisBudgetaire.an" class="space-y-6">
+                        <!-- v22.60 : Sélecteur réduit — jourDePaie seul -->
+                        <div class="flex items-center gap-3 bg-slate-800/60 rounded-2xl border border-slate-700 px-5 py-4">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">📅 Paie le</span>
+                            <input type="number" min="1" max="31" v-model.number="soldesInitiaux.jourDePaie" @input="handleDataChange" class="w-16 bg-slate-900 text-blue-300 font-black text-lg p-2 rounded-xl border border-blue-700 text-center outline-none focus:border-blue-400"/>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">de chaque mois</span>
+                            <div class="ml-auto text-right">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-emerald-400">⏳ J−{{ joursRestantsAvantPaie }} avant la prochaine paie</p>
+                                <p class="text-[9px] text-slate-500 mt-0.5 font-bold">Cycle : {{ cycleLabel }}</p>
                             </div>
                         </div>
 
@@ -4085,7 +4104,7 @@
                                     <span class="text-sm font-black text-green-400">{{ formatMAD(tresoEntrees) }}</span>
                                 </div>
                                 <div class="p-4 space-y-2">
-                                    <div v-for="(rev, key) in donneesAnnuelles[soldesInitiaux.anneeActuelle].revenus" :key="'rev_' + key"
+                                    <div v-for="(rev, key) in donneesAnnuelles[moisBudgetaire.an]?.revenus" :key="'rev_' + key"
                                          class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-green-500 transition-all">
                                         <label class="flex items-center gap-3 cursor-pointer flex-1">
                                             <input type="checkbox"
@@ -4096,7 +4115,7 @@
                                         </label>
                                         <span :class="['text-sm font-black ml-4', isItemPaid(rev, Number(rev.base || 0)) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(Number(rev.base || 0)) }}</span>
                                     </div>
-                                    <div v-if="!donneesAnnuelles[soldesInitiaux.anneeActuelle] || !Object.keys(donneesAnnuelles[soldesInitiaux.anneeActuelle].revenus || {}).length" class="text-center py-4 text-slate-500 text-sm">Aucune entrée configurée</div>
+                                    <div v-if="!donneesAnnuelles[moisBudgetaire.an] || !Object.keys(donneesAnnuelles[moisBudgetaire.an]?.revenus || {}).length" class="text-center py-4 text-slate-500 text-sm">Aucune entrée configurée</div>
                                 </div>
                             </div>
 
@@ -4104,30 +4123,30 @@
                                 <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-750">
                                     <div class="flex items-center gap-3">
                                         <span class="text-blue-400 text-lg">📋</span>
-                                        <span class="text-sm font-black uppercase tracking-widest text-white">Checklist — {{ nomDuMois(soldesInitiaux.moisActuel) }} {{ soldesInitiaux.anneeActuelle }}</span>
+                                        <span class="text-sm font-black uppercase tracking-widest text-white">Checklist — {{ cycleLabel }}</span>
                                     </div>
                                     <span :class="['text-[10px] px-3 py-1 rounded-lg font-black border', elementsDuMoisPayes === elementsDuMoisTotal && elementsDuMoisTotal > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
                                         {{ elementsDuMoisPayes }} / {{ elementsDuMoisTotal }} payés
                                     </span>
                                 </div>
                                 <div class="p-4 space-y-4">
-                                    <div v-if="donneesAnnuelles[soldesInitiaux.anneeActuelle] && Object.keys(donneesAnnuelles[soldesInitiaux.anneeActuelle].chargesFixes).length > 0">
+                                    <div v-if="donneesAnnuelles[moisBudgetaire.an] && Object.keys(donneesAnnuelles[moisBudgetaire.an]?.chargesFixes || {}).length > 0">
                                         <p class="text-[9px] text-orange-400 font-black uppercase tracking-widest mb-2 border-b border-orange-900/50 pb-1 mt-2">🏢 Charges Fixes</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="(f, key) in donneesAnnuelles[soldesInitiaux.anneeActuelle].chargesFixes" :key="key" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-orange-500 transition-all">
+                                            <div v-for="(f, key) in donneesAnnuelles[moisBudgetaire.an]?.chargesFixes" :key="key" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-orange-500 transition-all">
                                                 <label class="flex items-center gap-3 cursor-pointer flex-1">
-                                                    <input type="checkbox" :checked="isItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle))" @change="toggleItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle))" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer"/>
-                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-orange-300']">{{ f.label }}</span>
+                                                    <input type="checkbox" :checked="isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" @change="toggleItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer"/>
+                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(f, getDueFixe(f, moisBudgetaire.an)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-orange-300']">{{ f.label }}</span>
                                                 </label>
                                                 <div class="flex items-center gap-2 ml-4">
                                                     <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-orange-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-orange-400 transition-colors"/>
-                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle)) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(getDueFixe(f, soldesInitiaux.anneeActuelle)).replace(' DH', '') }}</span>
+                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, getDueFixe(f, moisBudgetaire.an)) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(getDueFixe(f, moisBudgetaire.an)).replace(' DH', '') }}</span>
                                                     <span class="text-[9px] text-slate-500 font-bold">DH</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-for="cat in Object.values(donneesAnnuelles[soldesInitiaux.anneeActuelle]?.chargesVariables || {}).filter(c => c.periode === 'mois')" :key="cat.label">
+                                    <div v-for="cat in Object.values(donneesAnnuelles[moisBudgetaire.an]?.chargesVariables || {}).filter(c => c.periode === 'mois')" :key="cat.label">
                                         <p class="text-[9px] text-blue-400 font-black uppercase tracking-widest mb-2 border-b border-blue-900/50 pb-1 mt-2">🧾 {{ cat.label }}</p>
                                         <div class="space-y-1.5">
                                             <div v-for="f in cat.details" :key="f.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-blue-500 transition-all">
@@ -4143,10 +4162,10 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-if="getDepensesMois(soldesInitiaux.moisActuel, soldesInitiaux.anneeActuelle).length > 0">
-                                        <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1 mt-2">⚠️ Flux Exceptionnels de {{ nomDuMois(soldesInitiaux.moisActuel) }}</p>
+                                    <div v-if="getDepensesMois(moisBudgetaire.mois, moisBudgetaire.an).length > 0">
+                                        <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1 mt-2">⚠️ Flux Exceptionnels — {{ cycleLabel }}</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="dep in getDepensesMois(soldesInitiaux.moisActuel, soldesInitiaux.anneeActuelle)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
+                                            <div v-for="dep in getDepensesMois(moisBudgetaire.mois, moisBudgetaire.an)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
                                                 <label class="flex items-center gap-3 cursor-pointer flex-1">
                                                     <input type="checkbox" :checked="isItemPaid(dep, dep.montant)" @change="toggleItemPaid(dep, dep.montant)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500 cursor-pointer"/>
                                                     <span :class="['text-sm font-bold transition-all', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-red-300']">{{ dep.nom }}</span>
@@ -4165,8 +4184,8 @@
                     </div>
 
                     <div v-else class="bg-yellow-50 p-6 rounded-[2rem] border border-yellow-200 text-center shadow-sm">
-                        <p class="text-sm font-bold text-yellow-800">Le pilotage au jour le jour (Checklist) n'est actif que pour l'année en cours ({{ soldesInitiaux.anneeActuelle }}).</p>
-                        <button @click="anneeAffichage = soldesInitiaux.anneeActuelle" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700">Revenir à {{ soldesInitiaux.anneeActuelle }}</button>
+                        <p class="text-sm font-bold text-yellow-800">Le pilotage au jour le jour (Checklist) n'est actif que pour l'année en cours ({{ moisBudgetaire.an }}).</p>
+                        <button @click="anneeAffichage = moisBudgetaire.an" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700">Revenir à {{ moisBudgetaire.an }}</button>
                     </div>
 
                     <!-- ══════════════════════════════════════════════════════ -->
@@ -4894,7 +4913,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "22.50 Pilotage-Pro";
+                    const CURRENT_VERSION = "22.60 Pilotage-Expert";
                     const CHANGELOG = [
                         { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
@@ -7625,8 +7644,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const today = new Date();
                         const todayDay = today.getDate();
                         const jour = jourDePaie.value;
-                        const mois = soldesInitiaux.value.moisActuel || (today.getMonth() + 1);
-                        const an = soldesInitiaux.value.anneeActuelle || today.getFullYear();
+                        const mois = today.getMonth() + 1;
+                        const an = today.getFullYear();
                         const moisAbbr = ['','JAN','FÉV','MAR','AVR','MAI','JUN','JUL','AOÛ','SEP','OCT','NOV','DÉC'];
                         // Dernière paie = jourDePaie du mois actuel si déjà passé, sinon mois précédent
                         let dernierMois, dernierAn, prochainMois, prochainAn;
@@ -7647,13 +7666,34 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const joursAvant = Math.max(0, Math.round((prochainePaieDate - todayMidnight) / msPerDay));
                         const totalCycle = Math.max(1, Math.round((prochainePaieDate - dernierePaieDate) / msPerDay));
                         const progress = Math.min(100, Math.max(0, Math.round((joursDepuis / totalCycle) * 100)));
+                        const moisNomsFr = ['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+                        const jourProchaineM1 = new Date(prochainAn, prochainMois - 1, jour - 1);
+                        const labelFin = (jourProchaineM1.getDate()) + ' ' + moisNomsFr[jourProchaineM1.getMonth() + 1].slice(0,3).replace(/^(.)/, c => c.toUpperCase());
+                        const labelDeb = jour + ' ' + moisNomsFr[dernierMois].slice(0,3).replace(/^(.)/, c => c.toUpperCase());
                         return {
                             joursAvant,
                             joursDepuis,
                             progress,
                             dernierePaieLabel: jour + ' ' + moisAbbr[dernierMois],
                             prochainePaieLabel: jour + ' ' + moisAbbr[prochainMois],
+                            prochainMois,
+                            prochainAn,
+                            dernierMois,
+                            dernierAn,
+                            cycleDebLabel: labelDeb,
+                            cycleFinLabel: labelFin,
                         };
+                    });
+
+                    // v22.60 — Mois budgétaire : mois financé par le cycle actuel
+                    const moisBudgetaire = computed(() => ({
+                        mois: _cyclePaieInfo.value.prochainMois,
+                        an: _cyclePaieInfo.value.prochainAn,
+                    }));
+                    // Label du cycle actuel ex: "27 Mai → 26 Juin"
+                    const cycleLabel = computed(() => {
+                        const info = _cyclePaieInfo.value;
+                        return info.cycleDebLabel + ' → ' + info.cycleFinLabel;
                     });
 
                     const joursRestantsAvantPaie = computed(() => _cyclePaieInfo.value.joursAvant);
@@ -7662,45 +7702,23 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const dernierePaieLabel = computed(() => _cyclePaieInfo.value.dernierePaieLabel);
                     const prochainePaieLabel = computed(() => _cyclePaieInfo.value.prochainePaieLabel);
 
-                    // ─── v22.50 Trésorerie du Compte Courant uniquement ──────────────────
+                    // ─── v22.60 Trésorerie réelle = somme des soldes comptes liquides ───
                     const tresoActuelleCourante = computed(() => {
                         calculationTick.value;
-                        const an = soldesInitiaux.value.anneeActuelle;
-                        const dActuelle = donneesAnnuelles.value[an];
-                        if (!dActuelle) return 0;
-                        let entrees = 0;
-                        Object.values(dActuelle.revenus || {}).forEach(rev => {
-                            const dest = rev.destinationCompte || 'courant';
-                            if (dest !== 'courant') return;
-                            const base = Number(rev.base || 0);
-                            if (isItemPaid(rev, base)) entrees += base;
-                        });
-                        let sorties = 0;
-                        Object.values(dActuelle.chargesFixes || {}).forEach(f => {
-                            if ((f.sourceCompte || 'courant') !== 'courant') return;
-                            const due = getDueFixe(f, an);
-                            if (isItemPaid(f, due)) sorties += due;
-                        });
-                        Object.values(dActuelle.chargesVariables || {}).filter(c => c?.periode === 'mois').forEach(cat => {
-                            if ((cat.sourceCompte || 'courant') !== 'courant') return;
-                            (cat.details || []).forEach(f => {
-                                const m = Number(f.montant || 0);
-                                if (isItemPaid(f, m)) sorties += m;
-                            });
-                        });
-                        getDepensesMois(soldesInitiaux.value.moisActuel, an).forEach(dep => {
-                            if ((dep.sourceCompte || 'courant') !== 'courant') return;
-                            const m = Number(dep.montant || 0);
-                            if (m > 0 && isItemPaid(dep, m)) sorties += m;
-                        });
-                        return entrees - sorties;
+                        const liquides = (comptes.value || []).filter(c => c.type === 'liquide');
+                        if (liquides.length === 0) {
+                            // Fallback : solde courant de soldesInitiaux si aucun compte configuré
+                            return Number(soldesInitiaux.value.courant || 0);
+                        }
+                        return liquides.reduce((sum, c) => sum + Number(c.solde || 0), 0);
                     });
 
-                    // ─── v22.50 Détail des charges restantes, groupées par compte source ─
+                    // ─── v22.60 Détail des charges restantes : moisBudgetaire + parNature ─
                     const resteAPayerDetailParCompte = computed(() => {
                         calculationTick.value;
-                        const an = soldesInitiaux.value.anneeActuelle;
-                        const mois = soldesInitiaux.value.moisActuel;
+                        const mb = moisBudgetaire.value;
+                        const an = mb.an;
+                        const mois = mb.mois;
                         const dActuelle = donneesAnnuelles.value[an];
                         if (!dActuelle) return [];
                         const cptsList = comptes.value || [];
@@ -7721,7 +7739,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     label = ep ? (ep.label || ep.nom || key) : key;
                                     icon = '🎯';
                                 }
-                                groupsMap[key] = { key, icon, label, montant: 0, items: [] };
+                                groupsMap[key] = { key, icon, label, montant: 0, items: [],
+                                    parNature: { fix: 0, var: 0, choc: 0, virement: 0 } };
                             }
                             return groupsMap[key];
                         };
@@ -7731,7 +7750,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const due = getDueFixe(f, an);
                             if (due > 0 && !isItemPaid(f, due)) {
                                 const grp = getOrCreate(f.sourceCompte || 'courant');
-                                grp.montant += due;
+                                grp.montant += due; grp.parNature.fix += due;
                                 grp.items.push({ label: f.label || '?', montant: due, type: 'fix' });
                             }
                         });
@@ -7743,7 +7762,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const m = Number(f.montant || 0);
                                     if (m > 0 && !isItemPaid(f, m)) {
                                         const grp = getOrCreate(src);
-                                        grp.montant += m;
+                                        grp.montant += m; grp.parNature.var += m;
                                         grp.items.push({ label: f.nom || cat.label || '?', montant: m, type: 'var' });
                                     }
                                 });
@@ -7751,7 +7770,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const m = Number(cat.valeur || 0);
                                 if (m > 0) {
                                     const grp = getOrCreate(src);
-                                    grp.montant += m;
+                                    grp.montant += m; grp.parNature.var += m;
                                     grp.items.push({ label: cat.label || '?', montant: m, type: 'var' });
                                 }
                             }
@@ -7761,7 +7780,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const m = Number(dep.montant || 0);
                             if (m > 0 && !isItemPaid(dep, m)) {
                                 const grp = getOrCreate(dep.sourceCompte || 'courant');
-                                grp.montant += m;
+                                grp.montant += m; grp.parNature.choc += m;
                                 grp.items.push({ label: dep.nom || '?', montant: m, type: 'choc' });
                             }
                         });
@@ -7770,7 +7789,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const m = Number(vir.montant || 0);
                             if (m > 0 && !isItemPaid(vir, m)) {
                                 const grp = getOrCreate(vir.sourceCompte || 'courant');
-                                grp.montant += m;
+                                grp.montant += m; grp.parNature.virement += m;
                                 grp.items.push({ label: vir.label || vir.nom || '?', montant: m, type: 'virement' });
                             }
                         });
@@ -9216,7 +9235,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, appMode, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio,
-                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel, elementsDuMoisPayes, elementsDuMoisTotal,
+                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip, showInlineReleve,
