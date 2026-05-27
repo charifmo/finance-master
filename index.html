@@ -4181,62 +4181,57 @@
                         <span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full self-start md:self-auto">{{ transactionsReellesTriees.length }} tx — {{ anneeAffichage }}</span>
                     </div>
 
-                    <div class="bg-white rounded-2xl shadow-sm border-2 border-emerald-300 p-4 md:p-5">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-3">⚡ Smart Saisie <span class="text-gray-400 normal-case font-bold hidden md:inline">— le formulaire ci-dessous se remplit en temps réel</span></p>
-                        <input v-model="saisieRapide" @keyup.enter="validerSaisieForm" type="text"
-                               inputmode="text" autocomplete="off"
-                               placeholder='Ex: "400 courses", "1200 essence"'
-                               class="w-full px-4 py-4 text-base md:text-lg font-bold border-2 border-gray-200 rounded-xl outline-none focus:border-emerald-500 bg-gray-50" />
-                    </div>
+                    <!-- ═══ v22.21 — Saisie minimaliste : 1 ligne + feedback discret + form repliable ═══ -->
+                    <div class="bg-white rounded-xl border border-gray-200 px-3 py-2.5 md:px-4 md:py-3 shadow-sm">
+                        <!-- Ligne principale : input + bouton ➕ -->
+                        <div class="flex gap-2 items-center">
+                            <input v-model="saisieRapide" @keyup.enter="validerSaisieForm" type="text"
+                                   inputmode="text" autocomplete="off"
+                                   placeholder="Ex: 200 courses"
+                                   class="flex-1 px-2 py-2.5 text-base md:text-lg font-bold border-0 outline-none bg-transparent placeholder-gray-300" />
+                            <button @click="validerSaisieForm" :disabled="!saisieForm.montant || saisieForm.montant <= 0"
+                                    :class="[saisieForm.montant > 0 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md' : 'bg-gray-200 text-gray-400 cursor-not-allowed', 'shrink-0 w-11 h-11 rounded-full font-black text-xl flex items-center justify-center transition-colors']"
+                                    title="Ajouter">
+                                ➕
+                            </button>
+                        </div>
 
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 space-y-4">
-                        <div class="flex items-center justify-between">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">📝 Formulaire</p>
-                            <button @click="resetSaisieForm" class="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-700">↺ Reset</button>
+                        <!-- Feedback discret (apparaît quand on tape) -->
+                        <div v-if="saisieRapide || saisieForm.montant" class="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+                            <span v-if="saisieForm.montant" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">💵 {{ formatMAD(saisieForm.montant) }}</span>
+                            <span v-if="saisieForm.categorieId" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">🏷️ {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}</span>
+                            <span v-if="saisieForm.compteId" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200">🏦 {{ (comptes.find(c => c.id === saisieForm.compteId) || {}).label || '—' }}</span>
+                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">📅 {{ saisieDateLabel }}</span>
+                            <button @click="showSaisieDetails = !showSaisieDetails" class="ml-auto text-[10px] font-black text-gray-400 hover:text-emerald-600 transition-colors">
+                                {{ showSaisieDetails ? '× Fermer' : '⚙️ Ajuster' }}
+                            </button>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">📅 Date & heure</label>
+
+                        <!-- Form détaillé (caché par défaut) -->
+                        <div v-if="showSaisieDetails" class="mt-2 pt-2 border-t border-gray-100 space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
                                 <input v-model="saisieForm.datetime" type="datetime-local"
-                                       class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50" />
+                                       class="px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50" />
+                                <input v-model.number="saisieForm.montant" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Montant"
+                                       class="px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50 text-right tabular-nums" />
                             </div>
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">💵 Montant (DH)</label>
-                                <input v-model.number="saisieForm.montant" type="number" inputmode="decimal" step="0.01" min="0"
-                                       placeholder="0"
-                                       class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50 text-right tabular-nums" />
-                            </div>
+                            <select v-model="saisieForm.categorieId"
+                                    class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50">
+                                <option value="">— Catégorie —</option>
+                                <optgroup v-for="g in categoriesForSelect" :key="g.label" :label="g.label">
+                                    <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
+                                </optgroup>
+                                <option value="cat_misc">📦 Misc</option>
+                            </select>
+                            <select v-model="saisieForm.compteId"
+                                    class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50">
+                                <option :value="null">— Compte —</option>
+                                <option v-for="c in comptes" :key="c.id" :value="c.id">{{ c.label }}</option>
+                            </select>
+                            <input v-model="saisieForm.libelle" type="text" placeholder="Libellé"
+                                   class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50" />
+                            <button @click="resetSaisieForm" class="w-full text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-700 py-1">↺ Reset</button>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">🏷️ Catégorie</label>
-                                <select v-model="saisieForm.categorieId"
-                                        class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
-                                    <option value="">— Choisir —</option>
-                                    <optgroup v-for="g in categoriesForSelect" :key="g.label" :label="g.label">
-                                        <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
-                                    </optgroup>
-                                    <option value="cat_misc">📦 Misc (défaut)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">🏦 Compte source</label>
-                                <select v-model="saisieForm.compteId"
-                                        class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
-                                    <option :value="null">— Choisir —</option>
-                                    <option v-for="c in comptes" :key="c.id" :value="c.id">{{ c.label }}</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">✏️ Libellé</label>
-                            <input v-model="saisieForm.libelle" type="text" placeholder="Description courte"
-                                   class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50" />
-                        </div>
-                        <button @click="validerSaisieForm" :disabled="!saisieForm.montant || saisieForm.montant <= 0"
-                                :class="[saisieForm.montant > 0 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md' : 'bg-gray-200 text-gray-400 cursor-not-allowed', 'w-full px-6 py-4 rounded-xl font-black text-base uppercase tracking-widest transition-colors mt-2']">
-                            ✓ Enregistrer la transaction
-                        </button>
                     </div>
 
                     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -4741,8 +4736,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "22.20 Mobile-Unified";
+                    const CURRENT_VERSION = "22.21 Saisie-Zen";
                     const CHANGELOG = [
+                        { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
                         { version: "22.10 P3", date: "2026-05-26 — UX Mobile + Saisie hybride zéro friction", changes: ["FIX CRITIQUE : fermeture manquante </div> du tab Dashboard (avalait le <script> Vue et cassait toute l'app — diagnostiqué via parseur custom Node.js après échec d'un stack-tracker mono-ligne).", "Onglet Saisie REFONTE : barre Smart Spotlight en haut (parse temps réel le montant + libellé + devine la catégorie) qui POPULE un formulaire détaillé en dessous (datetime-local par défaut sur 'maintenant', montant, catégorie via <select> + optgroups groupés par type, compte source, libellé). Le bouton Valider gros et full-width sur mobile.", "Catégorie guessing AMÉLIORÉ : split en mots (≥3 chars), match exact puis substring sur le label des catégories existantes. Si rien trouvé, ne touche pas au choix manuel de l'utilisateur.", "Mobile responsive : tableaux (journal Saisie + Contrôle par catégorie) enveloppés dans overflow-x-auto avec min-w forcé → scroll horizontal natif au lieu de débordement. Colonnes Compte/Source masquées sur mobile (hidden md:table-cell). Headers en flex-col → md:flex-row, paddings adaptés (p-2 md:p-3).", "Onglet Contrôle : 3 KPI cards toujours en grid-cols-1 md:grid-cols-3, tableau wrappé en overflow-x-auto.", "Schéma transaction étendu avec champ optionnel datetime ('YYYY-MM-DDTHH:MM') pour timestamp précis. Backward compat : si datetime absent, fallback sur date YYYY-MM-DD."] },
                         { version: "22.00 P2", date: "2026-05-24 — Master Switch Dual-Mode + onglets Réalisé", changes: ["Sidebar : Master Switch Prévisionnel / Réalisé avec persistance localStorage, switch auto sur le 1er onglet du mode si l'actif n'existe plus.", "4 onglets en mode Réalisé : ✍️ Saisie, 🔍 Contrôle Budget vs Réel, 💰 Trésorerie, 📈 Synthèse — 2 premiers fonctionnels (P3+P4), 2 derniers placeholders pour P5+.", "transactionsReelles[] auto-injecté sur chaque année (idempotent)."] },
@@ -4984,6 +4980,19 @@
                         resetSaisieForm();
                         return true;
                     };
+
+                    // === v22.21 — Saisie minimaliste : toggle détails + label date court ===
+                    const showSaisieDetails = ref(false);
+                    const saisieDateLabel = computed(() => {
+                        const dt = saisieForm.value.datetime;
+                        if (!dt) return 'Maintenant';
+                        const now = new Date();
+                        const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+                        const dPart = dt.slice(0, 10);
+                        const tPart = dt.slice(11, 16);
+                        if (dPart === today) return `Aujourd'hui ${tPart}`;
+                        return `${dt.slice(8, 10)}/${dt.slice(5, 7)} ${tPart}`;
+                    });
 
                     // === v22.20 — FAB Saisie Quick (mobile uniquement) ===
                     const showSaisieQuickModal = ref(false);
@@ -8788,6 +8797,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieForm, validerSaisieForm, resetSaisieForm, categoriesForSelect,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         showSaisieQuickModal, openSaisieQuickModal, closeSaisieQuickModal, validerSaisieFormFromQuick,
+                        showSaisieDetails, saisieDateLabel,
                         // v22.00 P4 : contrôle budget vs réalisé
                         moisControle, controleBudgetVsReel, controleTotaux,
                         configAssurances, assurNewAssureur, assurNewBenef, assurNewType, addAssuranceAssureur, removeAssuranceAssureur, addAssuranceBeneficiaire, removeAssuranceBeneficiaire, addAssuranceType, removeAssuranceType,
