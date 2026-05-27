@@ -230,7 +230,7 @@
             </div>
         </div>
 
-        <div v-if="!isMobile" class="flex-1 flex flex-col bg-gray-50 md:h-full md:overflow-hidden relative">
+        <div v-if="!isMobile && appMode === 'previsionnel'" class="flex-1 flex flex-col bg-gray-50 md:h-full md:overflow-hidden relative">
             
             <div v-show="!chatFullScreen" class="sticky top-0 shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <div class="px-6 py-3 flex flex-wrap gap-4 justify-between items-center bg-slate-50 border-b border-gray-200">
@@ -2443,202 +2443,6 @@
                     </div>
                 </div>
 
-                <!-- ═══ v22.10 P3 — SAISIE HYBRIDE ZÉRO FRICTION ═══ -->
-                <div v-if="appMode === 'reel' && activeTab === 'saisie'" class="max-w-5xl mx-auto space-y-4 md:space-y-6 px-2 md:px-0">
-                    <!-- Header (responsive) -->
-                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b pb-4">
-                        <h2 class="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">✍️ Saisie des Transactions</h2>
-                        <span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full self-start md:self-auto">{{ transactionsReellesTriees.length }} tx — {{ anneeAffichage }}</span>
-                    </div>
-
-                    <!-- Smart Spotlight (toujours visible, populate le form en temps réel) -->
-                    <div class="bg-white rounded-2xl shadow-sm border-2 border-emerald-300 p-4 md:p-5">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-3">⚡ Smart Saisie <span class="text-gray-400 normal-case font-bold">— le formulaire ci-dessous se remplit en temps réel</span></p>
-                        <input v-model="saisieRapide" @keyup.enter="validerSaisieForm" type="text"
-                               inputmode="text" autocomplete="off"
-                               placeholder='Ex: "400 courses", "1200 essence", "85 café"'
-                               class="w-full px-4 py-4 text-base md:text-lg font-bold border-2 border-gray-200 rounded-xl outline-none focus:border-emerald-500 bg-gray-50" />
-                    </div>
-
-                    <!-- Formulaire détaillé (modifiable) -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 space-y-4">
-                        <div class="flex items-center justify-between">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">📝 Formulaire (tout est modifiable)</p>
-                            <button @click="resetSaisieForm" class="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-700">↺ Reset</button>
-                        </div>
-
-                        <!-- Ligne 1 : Date+heure / Montant -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">📅 Date & heure</label>
-                                <input v-model="saisieForm.datetime" type="datetime-local"
-                                       class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50" />
-                            </div>
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">💵 Montant (DH)</label>
-                                <input v-model.number="saisieForm.montant" type="number" inputmode="decimal" step="0.01" min="0"
-                                       placeholder="0"
-                                       class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50 text-right tabular-nums" />
-                            </div>
-                        </div>
-
-                        <!-- Ligne 2 : Catégorie / Compte -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">🏷️ Catégorie</label>
-                                <select v-model="saisieForm.categorieId"
-                                        class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
-                                    <option value="">— Choisir —</option>
-                                    <optgroup v-for="g in categoriesForSelect" :key="g.label" :label="g.label">
-                                        <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
-                                    </optgroup>
-                                    <option value="cat_misc">📦 Misc (défaut)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">🏦 Compte source</label>
-                                <select v-model="saisieForm.compteId"
-                                        class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
-                                    <option :value="null">— Choisir —</option>
-                                    <option v-for="c in comptes" :key="c.id" :value="c.id">{{ c.label }}</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Libellé -->
-                        <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">✏️ Libellé</label>
-                            <input v-model="saisieForm.libelle" type="text" placeholder="Description courte"
-                                   class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50" />
-                        </div>
-
-                        <!-- Bouton Valider (gros, full-width) -->
-                        <button @click="validerSaisieForm" :disabled="!saisieForm.montant || saisieForm.montant <= 0"
-                                :class="[saisieForm.montant > 0 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md' : 'bg-gray-200 text-gray-400 cursor-not-allowed', 'w-full px-6 py-4 rounded-xl font-black text-base uppercase tracking-widest transition-colors mt-2']">
-                            ✓ Enregistrer la transaction
-                        </button>
-                    </div>
-
-                    <!-- Journal des transactions (responsive : table scrollable horizontalement sur mobile) -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 bg-slate-50 flex items-center justify-between">
-                            <h3 class="font-black uppercase tracking-widest text-gray-700 text-xs md:text-sm">📋 Journal</h3>
-                            <span class="text-[10px] text-gray-400 font-bold hidden md:inline">Plus récent → plus ancien</span>
-                        </div>
-                        <div v-if="transactionsReellesTriees.length === 0" class="p-8 md:p-12 text-center text-gray-400 italic text-sm">
-                            Aucune transaction enregistrée pour {{ anneeAffichage }}.<br/>
-                            <span class="text-xs">Saisis-en une avec la barre Smart en haut.</span>
-                        </div>
-                        <div v-else class="overflow-x-auto">
-                            <table class="w-full text-sm min-w-[600px]">
-                                <thead class="bg-gray-50 sticky top-0 z-10">
-                                    <tr>
-                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500 whitespace-nowrap">Date</th>
-                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Catégorie</th>
-                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Libellé</th>
-                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Montant</th>
-                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500 hidden md:table-cell">Compte</th>
-                                        <th class="p-2 md:p-3 text-center font-black text-[10px] uppercase tracking-widest text-gray-500 hidden md:table-cell">Source</th>
-                                        <th class="p-2 md:p-3 w-10"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="tx in transactionsReellesTriees" :key="tx.id" class="border-b border-gray-100 hover:bg-emerald-50/40 transition-colors">
-                                        <td class="p-2 md:p-3 font-bold text-gray-600 whitespace-nowrap text-[11px] tabular-nums">{{ (tx.datetime || tx.date || '').slice(0, 16).replace('T', ' ') }}</td>
-                                        <td class="p-2 md:p-3 text-[11px] md:text-xs font-bold text-blue-700">{{ getCategorieLabel(tx.categorieId) || '(Hors)' }}</td>
-                                        <td class="p-2 md:p-3 text-gray-800 text-[11px] md:text-sm">{{ tx.libelle }}</td>
-                                        <td class="p-2 md:p-3 text-right font-black text-red-600 tabular-nums text-[11px] md:text-sm whitespace-nowrap">-{{ formatMAD(tx.montant) }}</td>
-                                        <td class="p-2 md:p-3 text-xs text-gray-600 hidden md:table-cell">{{ (comptes.find(c => c.id === tx.compteId) || {}).label || '—' }}</td>
-                                        <td class="p-2 md:p-3 text-center hidden md:table-cell">
-                                            <span :class="tx.source === 'telegram' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'" class="text-[9px] px-2 py-0.5 rounded font-black uppercase">{{ tx.source || 'manuel' }}</span>
-                                        </td>
-                                        <td class="p-2 md:p-3 text-center">
-                                            <button @click="supprimerTransactionReelle(tx.id)" class="text-gray-400 hover:text-red-600 text-lg font-black" title="Supprimer">×</button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ═══ v22.00 P4 — CONTRÔLE BUDGET vs RÉEL ═══ -->
-                <div v-if="appMode === 'reel' && activeTab === 'controle'" class="max-w-6xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 flex items-center justify-between">
-                        <span>🔍 Contrôle Budget vs Réel</span>
-                        <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">Mois :</span>
-                            <select v-model.number="moisControle" class="px-3 py-2 rounded-lg border-2 border-gray-200 font-bold text-sm outline-none focus:border-emerald-500">
-                                <option v-for="m in 12" :key="m" :value="m">{{ nomDuMois(m) }}</option>
-                            </select>
-                        </div>
-                    </h2>
-
-                    <!-- Totaux du mois -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-2">📋 Budget Prévu</p>
-                            <p class="text-2xl font-black text-blue-900 tabular-nums">{{ formatMAD(controleTotaux.budget) }}</p>
-                        </div>
-                        <div class="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-2">✓ Réalisé</p>
-                            <p class="text-2xl font-black text-emerald-900 tabular-nums">{{ formatMAD(controleTotaux.realise) }}</p>
-                        </div>
-                        <div :class="controleTotaux.ecart >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300'" class="border-2 rounded-2xl p-5">
-                            <p :class="controleTotaux.ecart >= 0 ? 'text-emerald-700' : 'text-red-700'" class="text-[10px] font-black uppercase tracking-widest mb-2">📊 Écart (Prévu − Réalisé)</p>
-                            <p :class="controleTotaux.ecart >= 0 ? 'text-emerald-900' : 'text-red-900'" class="text-2xl font-black tabular-nums">{{ controleTotaux.ecart >= 0 ? '+' : '' }}{{ formatMAD(controleTotaux.ecart) }}</p>
-                        </div>
-                    </div>
-
-                    <!-- Tableau par catégorie -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 border-b border-gray-100 bg-slate-50">
-                            <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm">📊 Par catégorie — {{ nomDuMois(moisControle) }} {{ anneeAffichage }}</h3>
-                        </div>
-                        <div v-if="controleBudgetVsReel.length === 0" class="p-8 md:p-12 text-center text-gray-400 italic text-sm">
-                            Aucune donnée à afficher pour ce mois.
-                        </div>
-                        <div v-else class="overflow-x-auto">
-                            <table class="w-full text-sm min-w-[640px]">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Catégorie</th>
-                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-blue-600">Prévu</th>
-                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-emerald-600">Réalisé</th>
-                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Écart</th>
-                                        <th class="p-2 md:p-3 text-center font-black text-[10px] uppercase tracking-widest text-gray-500 w-56 md:w-72">Progression</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="b in controleBudgetVsReel" :key="b.categorieId" class="border-b border-gray-100 hover:bg-gray-50/60">
-                                        <td class="p-2 md:p-3 font-bold text-gray-800 text-[11px] md:text-xs">{{ b.label }}</td>
-                                        <td class="p-2 md:p-3 text-right font-black text-blue-700 tabular-nums whitespace-nowrap text-[11px] md:text-sm">{{ formatMAD(b.budget) }}</td>
-                                        <td class="p-2 md:p-3 text-right font-black text-emerald-700 tabular-nums whitespace-nowrap text-[11px] md:text-sm">{{ formatMAD(b.realise) }}</td>
-                                        <td class="p-2 md:p-3 text-right font-black tabular-nums whitespace-nowrap text-[11px] md:text-sm" :class="b.ecart >= 0 ? 'text-emerald-600' : 'text-red-600'">{{ b.ecart >= 0 ? '+' : '' }}{{ formatMAD(b.ecart) }}</td>
-                                        <td class="p-2 md:p-3">
-                                            <div class="flex items-center gap-2">
-                                                <div class="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                                                    <div :class="b.pct > 100 ? 'bg-red-500' : (b.pct > 80 ? 'bg-orange-400' : 'bg-emerald-500')"
-                                                         class="h-full rounded-full transition-all"
-                                                         :style="{ width: Math.min(100, b.pct) + '%' }"></div>
-                                                </div>
-                                                <span class="text-[10px] font-black w-10 md:w-12 text-right" :class="b.pct > 100 ? 'text-red-600' : 'text-gray-600'">{{ b.pct }}%</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                <div v-if="appMode === 'reel' && activeTab === 'tresorerie'" class="max-w-4xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">💰 Trésorerie Réelle</h2>
-                    <div class="p-12 text-center text-slate-400 italic border-2 border-dashed border-slate-300 rounded-2xl bg-white">En construction.</div>
-                </div>
-                <div v-if="appMode === 'reel' && activeTab === 'syntheseReel'" class="max-w-4xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">📈 Synthèse Réelle</h2>
-                    <div class="p-12 text-center text-slate-400 italic border-2 border-dashed border-slate-300 rounded-2xl bg-white">En construction.</div>
-                </div>
 
                 <div v-if="activeTab === 'settings'" class="max-w-5xl mx-auto space-y-8">
                     <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">🛠️ Paramètres de l'Application</h2>
@@ -2909,7 +2713,7 @@
         <!-- ════════════════════════════════════════════════════════════ -->
         <!-- === MOBILE LAYOUT (v12.2) - Hybrid responsive switch    === -->
         <!-- ════════════════════════════════════════════════════════════ -->
-        <div v-if="isMobile" class="mobile-app-layout w-full min-h-screen bg-gray-50 pb-24 relative">
+        <div v-if="isMobile && appMode === 'previsionnel'" class="mobile-app-layout w-full min-h-screen bg-gray-50 pb-24 relative">
 
             <!-- TOP BAR (sticky) -->
             <div class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm px-4 py-3">
@@ -4347,15 +4151,223 @@
 
             </div>
 
-            <!-- FLOATING SAVE VPS (si modifié) -->
-            <button v-if="serverSyncStatus === 'modified'" @click="saveToServer"
-                class="fixed bottom-20 right-4 z-50 bg-purple-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl shadow-purple-900/50 animate-pulse text-xl"
-                title="Sauver sur VPS">
-                💾
-            </button>
+        </div>
 
-            <!-- BOTTOM NAV (v16.1 : 6 onglets + wealth) -->
-            <nav class="fixed bottom-0 left-0 right-0 w-full z-50 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] flex justify-around items-stretch h-16 overflow-x-auto">
+        <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+        <!-- ═══  v22.20 — PANNEAU RÉALISÉ UNIFIÉ (desktop + mobile)                  ═══ -->
+        <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+        <div v-if="appMode === 'reel'" class="flex-1 flex flex-col bg-gray-50 min-h-screen md:h-full md:overflow-hidden relative w-full pb-20 md:pb-0">
+            <!-- Top-bar Réalisé (sticky, master switch sur mobile + year selector) -->
+            <div class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-emerald-200 shadow-sm px-3 md:px-6 py-3">
+                <div class="flex items-center justify-between gap-3">
+                    <div v-if="isMobile" class="inline-flex rounded-xl border border-slate-300 bg-slate-100 p-1 shrink-0">
+                        <button @click="appMode = 'previsionnel'" class="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 transition-colors">🔮 Prévi</button>
+                        <button class="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-emerald-600 text-white shadow">📊 Réalisé</button>
+                    </div>
+                    <span v-else class="text-sm font-black uppercase tracking-widest text-emerald-700">📊 MODE RÉALISÉ</span>
+                    <select v-model.number="anneeAffichage" class="bg-emerald-600 text-white font-black py-1.5 px-3 rounded-lg text-xs shadow-md border border-emerald-700 outline-none shrink-0">
+                        <option v-for="a in anneesDisponibles" :key="a" :value="a">{{ a }}</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Contenu scrollable -->
+            <div class="flex-1 md:overflow-y-auto custom-scroll p-3 md:p-6 pb-20 md:pb-8">
+
+                <!-- ─── Onglet SAISIE ─── -->
+                <div v-if="activeTab === 'saisie'" class="max-w-5xl mx-auto space-y-4 md:space-y-6">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b pb-4">
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">✍️ Saisie des Transactions</h2>
+                        <span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full self-start md:self-auto">{{ transactionsReellesTriees.length }} tx — {{ anneeAffichage }}</span>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border-2 border-emerald-300 p-4 md:p-5">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-3">⚡ Smart Saisie <span class="text-gray-400 normal-case font-bold hidden md:inline">— le formulaire ci-dessous se remplit en temps réel</span></p>
+                        <input v-model="saisieRapide" @keyup.enter="validerSaisieForm" type="text"
+                               inputmode="text" autocomplete="off"
+                               placeholder='Ex: "400 courses", "1200 essence"'
+                               class="w-full px-4 py-4 text-base md:text-lg font-bold border-2 border-gray-200 rounded-xl outline-none focus:border-emerald-500 bg-gray-50" />
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">📝 Formulaire</p>
+                            <button @click="resetSaisieForm" class="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-700">↺ Reset</button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">📅 Date & heure</label>
+                                <input v-model="saisieForm.datetime" type="datetime-local"
+                                       class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50" />
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">💵 Montant (DH)</label>
+                                <input v-model.number="saisieForm.montant" type="number" inputmode="decimal" step="0.01" min="0"
+                                       placeholder="0"
+                                       class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50 text-right tabular-nums" />
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">🏷️ Catégorie</label>
+                                <select v-model="saisieForm.categorieId"
+                                        class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
+                                    <option value="">— Choisir —</option>
+                                    <optgroup v-for="g in categoriesForSelect" :key="g.label" :label="g.label">
+                                        <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
+                                    </optgroup>
+                                    <option value="cat_misc">📦 Misc (défaut)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">🏦 Compte source</label>
+                                <select v-model="saisieForm.compteId"
+                                        class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
+                                    <option :value="null">— Choisir —</option>
+                                    <option v-for="c in comptes" :key="c.id" :value="c.id">{{ c.label }}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">✏️ Libellé</label>
+                            <input v-model="saisieForm.libelle" type="text" placeholder="Description courte"
+                                   class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50" />
+                        </div>
+                        <button @click="validerSaisieForm" :disabled="!saisieForm.montant || saisieForm.montant <= 0"
+                                :class="[saisieForm.montant > 0 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md' : 'bg-gray-200 text-gray-400 cursor-not-allowed', 'w-full px-6 py-4 rounded-xl font-black text-base uppercase tracking-widest transition-colors mt-2']">
+                            ✓ Enregistrer la transaction
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 bg-slate-50 flex items-center justify-between">
+                            <h3 class="font-black uppercase tracking-widest text-gray-700 text-xs md:text-sm">📋 Journal</h3>
+                            <span class="text-[10px] text-gray-400 font-bold hidden md:inline">Plus récent → plus ancien</span>
+                        </div>
+                        <div v-if="transactionsReellesTriees.length === 0" class="p-8 md:p-12 text-center text-gray-400 italic text-sm">
+                            Aucune transaction enregistrée pour {{ anneeAffichage }}.
+                        </div>
+                        <div v-else class="overflow-x-auto">
+                            <table class="w-full text-sm min-w-[600px]">
+                                <thead class="bg-gray-50 sticky top-0 z-10">
+                                    <tr>
+                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500 whitespace-nowrap">Date</th>
+                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Catégorie</th>
+                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Libellé</th>
+                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Montant</th>
+                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500 hidden md:table-cell">Compte</th>
+                                        <th class="p-2 md:p-3 text-center font-black text-[10px] uppercase tracking-widest text-gray-500 hidden md:table-cell">Source</th>
+                                        <th class="p-2 md:p-3 w-10"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="tx in transactionsReellesTriees" :key="tx.id" class="border-b border-gray-100 hover:bg-emerald-50/40 transition-colors">
+                                        <td class="p-2 md:p-3 font-bold text-gray-600 whitespace-nowrap text-[11px] tabular-nums">{{ (tx.datetime || tx.date || '').slice(0, 16).replace('T', ' ') }}</td>
+                                        <td class="p-2 md:p-3 text-[11px] md:text-xs font-bold text-blue-700">{{ getCategorieLabel(tx.categorieId) || '(Hors)' }}</td>
+                                        <td class="p-2 md:p-3 text-gray-800 text-[11px] md:text-sm">{{ tx.libelle }}</td>
+                                        <td class="p-2 md:p-3 text-right font-black text-red-600 tabular-nums text-[11px] md:text-sm whitespace-nowrap">-{{ formatMAD(tx.montant) }}</td>
+                                        <td class="p-2 md:p-3 text-xs text-gray-600 hidden md:table-cell">{{ (comptes.find(c => c.id === tx.compteId) || {}).label || '—' }}</td>
+                                        <td class="p-2 md:p-3 text-center hidden md:table-cell">
+                                            <span :class="tx.source === 'telegram' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'" class="text-[9px] px-2 py-0.5 rounded font-black uppercase">{{ tx.source || 'manuel' }}</span>
+                                        </td>
+                                        <td class="p-2 md:p-3 text-center">
+                                            <button @click="supprimerTransactionReelle(tx.id)" class="text-gray-400 hover:text-red-600 text-lg font-black" title="Supprimer">×</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── Onglet CONTRÔLE ─── -->
+                <div v-if="activeTab === 'controle'" class="max-w-6xl mx-auto space-y-4 md:space-y-6">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b pb-4">
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">🔍 Contrôle Budget vs Réel</h2>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">Mois :</span>
+                            <select v-model.number="moisControle" class="px-3 py-2 rounded-lg border-2 border-gray-200 font-bold text-sm outline-none focus:border-emerald-500">
+                                <option v-for="m in 12" :key="m" :value="m">{{ nomDuMois(m) }}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                        <div class="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 md:p-5">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-2">📋 Budget Prévu</p>
+                            <p class="text-xl md:text-2xl font-black text-blue-900 tabular-nums">{{ formatMAD(controleTotaux.budget) }}</p>
+                        </div>
+                        <div class="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 md:p-5">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-2">✓ Réalisé</p>
+                            <p class="text-xl md:text-2xl font-black text-emerald-900 tabular-nums">{{ formatMAD(controleTotaux.realise) }}</p>
+                        </div>
+                        <div :class="controleTotaux.ecart >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-300'" class="border-2 rounded-2xl p-4 md:p-5">
+                            <p :class="controleTotaux.ecart >= 0 ? 'text-emerald-700' : 'text-red-700'" class="text-[10px] font-black uppercase tracking-widest mb-2">📊 Écart</p>
+                            <p :class="controleTotaux.ecart >= 0 ? 'text-emerald-900' : 'text-red-900'" class="text-xl md:text-2xl font-black tabular-nums">{{ controleTotaux.ecart >= 0 ? '+' : '' }}{{ formatMAD(controleTotaux.ecart) }}</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 bg-slate-50">
+                            <h3 class="font-black uppercase tracking-widest text-gray-700 text-xs md:text-sm">📊 Par catégorie — {{ nomDuMois(moisControle) }} {{ anneeAffichage }}</h3>
+                        </div>
+                        <div v-if="controleBudgetVsReel.length === 0" class="p-8 md:p-12 text-center text-gray-400 italic text-sm">
+                            Aucune donnée à afficher pour ce mois.
+                        </div>
+                        <div v-else class="overflow-x-auto">
+                            <table class="w-full text-sm min-w-[640px]">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="p-2 md:p-3 text-left font-black text-[10px] uppercase tracking-widest text-gray-500">Catégorie</th>
+                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-blue-600">Prévu</th>
+                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-emerald-600">Réalisé</th>
+                                        <th class="p-2 md:p-3 text-right font-black text-[10px] uppercase tracking-widest text-gray-500">Écart</th>
+                                        <th class="p-2 md:p-3 text-center font-black text-[10px] uppercase tracking-widest text-gray-500 w-56 md:w-72">Progression</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="b in controleBudgetVsReel" :key="b.categorieId" class="border-b border-gray-100 hover:bg-gray-50/60">
+                                        <td class="p-2 md:p-3 font-bold text-gray-800 text-[11px] md:text-xs">{{ b.label }}</td>
+                                        <td class="p-2 md:p-3 text-right font-black text-blue-700 tabular-nums whitespace-nowrap text-[11px] md:text-sm">{{ formatMAD(b.budget) }}</td>
+                                        <td class="p-2 md:p-3 text-right font-black text-emerald-700 tabular-nums whitespace-nowrap text-[11px] md:text-sm">{{ formatMAD(b.realise) }}</td>
+                                        <td class="p-2 md:p-3 text-right font-black tabular-nums whitespace-nowrap text-[11px] md:text-sm" :class="b.ecart >= 0 ? 'text-emerald-600' : 'text-red-600'">{{ b.ecart >= 0 ? '+' : '' }}{{ formatMAD(b.ecart) }}</td>
+                                        <td class="p-2 md:p-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                                    <div :class="b.pct > 100 ? 'bg-red-500' : (b.pct > 80 ? 'bg-orange-400' : 'bg-emerald-500')"
+                                                         class="h-full rounded-full transition-all"
+                                                         :style="{ width: Math.min(100, b.pct) + '%' }"></div>
+                                                </div>
+                                                <span class="text-[10px] font-black w-10 md:w-12 text-right" :class="b.pct > 100 ? 'text-red-600' : 'text-gray-600'">{{ b.pct }}%</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── Onglet TRÉSORERIE (placeholder P5) ─── -->
+                <div v-if="activeTab === 'tresorerie'" class="max-w-4xl mx-auto space-y-4 md:space-y-6">
+                    <h2 class="text-xl md:text-2xl font-bold text-gray-800 border-b pb-4">💰 Trésorerie Réelle</h2>
+                    <div class="p-8 md:p-12 text-center text-slate-400 italic border-2 border-dashed border-slate-300 rounded-2xl bg-white text-sm">En construction — Phase 5.</div>
+                </div>
+
+                <!-- ─── Onglet SYNTHÈSE (placeholder P5) ─── -->
+                <div v-if="activeTab === 'syntheseReel'" class="max-w-4xl mx-auto space-y-4 md:space-y-6">
+                    <h2 class="text-xl md:text-2xl font-bold text-gray-800 border-b pb-4">📈 Synthèse Réelle</h2>
+                    <div class="p-8 md:p-12 text-center text-slate-400 italic border-2 border-dashed border-slate-300 rounded-2xl bg-white text-sm">En construction — Phase 5.</div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+        <!-- ═══  v22.20 — BOTTOM-NAV UNIVERSELLE (mobile only, contenu selon appMode)  ═══ -->
+        <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+        <nav v-if="isMobile" class="fixed bottom-0 left-0 right-0 w-full z-50 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] flex justify-around items-stretch h-16 overflow-x-auto">
+            <template v-if="appMode === 'previsionnel'">
                 <button @click="activeMobileTab = 'bilan'"
                         :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'bilan' ? 'text-blue-600 bg-blue-50' : 'text-gray-500']">
                     <span class="text-lg">📊</span>
@@ -4386,8 +4398,92 @@
                     <span class="text-lg">💎</span>
                     <span class="text-[8px] font-black uppercase tracking-wider">Wealth</span>
                 </button>
-            </nav>
+                <!-- Toggle mode rapide -->
+                <button @click="appMode = 'reel'"
+                        class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors bg-emerald-50 text-emerald-600 border-l border-gray-200">
+                    <span class="text-lg">📊</span>
+                    <span class="text-[8px] font-black uppercase tracking-wider">Réalisé</span>
+                </button>
+            </template>
+            <template v-if="appMode === 'reel'">
+                <button @click="activeTab = 'saisie'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeTab === 'saisie' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-500']">
+                    <span class="text-lg">✍️</span>
+                    <span class="text-[8px] font-black uppercase tracking-wider">Saisie</span>
+                </button>
+                <button @click="activeTab = 'controle'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeTab === 'controle' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-500']">
+                    <span class="text-lg">🔍</span>
+                    <span class="text-[8px] font-black uppercase tracking-wider">Contrôle</span>
+                </button>
+                <button @click="activeTab = 'tresorerie'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeTab === 'tresorerie' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-500']">
+                    <span class="text-lg">💰</span>
+                    <span class="text-[8px] font-black uppercase tracking-wider">Tréso</span>
+                </button>
+                <button @click="activeTab = 'syntheseReel'"
+                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeTab === 'syntheseReel' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-500']">
+                    <span class="text-lg">📈</span>
+                    <span class="text-[8px] font-black uppercase tracking-wider">Synthèse</span>
+                </button>
+                <!-- Toggle retour Prévi -->
+                <button @click="appMode = 'previsionnel'"
+                        class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors bg-indigo-50 text-indigo-600 border-l border-gray-200">
+                    <span class="text-lg">🔮</span>
+                    <span class="text-[8px] font-black uppercase tracking-wider">Prévi</span>
+                </button>
+            </template>
+        </nav>
+
+        <!-- ═══ v22.20 — FAB Save VPS (mobile only, si modifié) ═══ -->
+        <button v-if="isMobile && serverSyncStatus === 'modified'" @click="saveToServer"
+            class="fixed bottom-32 right-4 z-50 bg-purple-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-2xl shadow-purple-900/50 animate-pulse text-lg"
+            title="Sauver sur VPS">
+            💾
+        </button>
+
+        <!-- ═══ v22.20 — FAB Saisie ultra-rapide (mobile only, toujours visible) ═══ -->
+        <button v-if="isMobile" @click="openSaisieQuickModal"
+            class="fixed bottom-20 right-4 z-50 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl shadow-emerald-900/50 text-2xl"
+            title="Saisie rapide">
+            ➕
+        </button>
+
+        <!-- ═══ v22.20 — MODAL Saisie Quick (sheet bottom-up sur mobile) ═══ -->
+        <div v-if="showSaisieQuickModal" @click.self="closeSaisieQuickModal" class="fixed inset-0 z-[80] bg-slate-900/80 backdrop-blur-sm flex items-end md:items-center justify-center">
+            <div class="bg-white w-full md:max-w-md md:rounded-2xl max-h-[90vh] overflow-y-auto rounded-t-3xl shadow-2xl">
+                <div class="p-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                    <h3 class="font-black uppercase tracking-widest text-sm text-emerald-700">⚡ Saisie rapide</h3>
+                    <button @click="closeSaisieQuickModal" class="text-gray-400 hover:text-gray-800 text-2xl font-black w-8 h-8">×</button>
+                </div>
+                <div class="p-4 space-y-3">
+                    <input v-model="saisieRapide" @keyup.enter="validerSaisieFormFromQuick" type="text"
+                           placeholder='Ex: "400 courses"'
+                           class="w-full px-4 py-4 text-base font-bold border-2 border-emerald-200 rounded-xl outline-none focus:border-emerald-500 bg-gray-50" />
+                    <div class="grid grid-cols-2 gap-2">
+                        <input v-model="saisieForm.datetime" type="datetime-local" class="px-2 py-3 border-2 border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50" />
+                        <input v-model.number="saisieForm.montant" type="number" inputmode="decimal" step="0.01" placeholder="Montant" class="px-3 py-3 border-2 border-gray-200 rounded-lg text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50 text-right tabular-nums" />
+                    </div>
+                    <select v-model="saisieForm.categorieId" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
+                        <option value="">— Catégorie —</option>
+                        <optgroup v-for="g in categoriesForSelect" :key="g.label" :label="g.label">
+                            <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
+                        </optgroup>
+                        <option value="cat_misc">📦 Misc</option>
+                    </select>
+                    <select v-model="saisieForm.compteId" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
+                        <option :value="null">— Compte —</option>
+                        <option v-for="c in comptes" :key="c.id" :value="c.id">{{ c.label }}</option>
+                    </select>
+                    <input v-model="saisieForm.libelle" type="text" placeholder="Libellé" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50" />
+                    <button @click="validerSaisieFormFromQuick" :disabled="!saisieForm.montant || saisieForm.montant <= 0"
+                            :class="[saisieForm.montant > 0 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md' : 'bg-gray-200 text-gray-400 cursor-not-allowed', 'w-full px-6 py-4 rounded-xl font-black text-base uppercase tracking-widest transition-colors']">
+                            ✓ Valider
+                    </button>
+                </div>
+            </div>
         </div>
+
 
         <!-- ━━ MODALE CRUD UNIFIÉE — Master Asset Engine v17.0 ━━ -->
         <div v-if="showMasterAssetModal" @click.self="closeMasterAssetModal"
@@ -4645,8 +4741,9 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "22.10 P3";
+                    const CURRENT_VERSION = "22.20 Mobile-Unified";
                     const CHANGELOG = [
+                        { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
                         { version: "22.10 P3", date: "2026-05-26 — UX Mobile + Saisie hybride zéro friction", changes: ["FIX CRITIQUE : fermeture manquante </div> du tab Dashboard (avalait le <script> Vue et cassait toute l'app — diagnostiqué via parseur custom Node.js après échec d'un stack-tracker mono-ligne).", "Onglet Saisie REFONTE : barre Smart Spotlight en haut (parse temps réel le montant + libellé + devine la catégorie) qui POPULE un formulaire détaillé en dessous (datetime-local par défaut sur 'maintenant', montant, catégorie via <select> + optgroups groupés par type, compte source, libellé). Le bouton Valider gros et full-width sur mobile.", "Catégorie guessing AMÉLIORÉ : split en mots (≥3 chars), match exact puis substring sur le label des catégories existantes. Si rien trouvé, ne touche pas au choix manuel de l'utilisateur.", "Mobile responsive : tableaux (journal Saisie + Contrôle par catégorie) enveloppés dans overflow-x-auto avec min-w forcé → scroll horizontal natif au lieu de débordement. Colonnes Compte/Source masquées sur mobile (hidden md:table-cell). Headers en flex-col → md:flex-row, paddings adaptés (p-2 md:p-3).", "Onglet Contrôle : 3 KPI cards toujours en grid-cols-1 md:grid-cols-3, tableau wrappé en overflow-x-auto.", "Schéma transaction étendu avec champ optionnel datetime ('YYYY-MM-DDTHH:MM') pour timestamp précis. Backward compat : si datetime absent, fallback sur date YYYY-MM-DD."] },
                         { version: "22.00 P2", date: "2026-05-24 — Master Switch Dual-Mode + onglets Réalisé", changes: ["Sidebar : Master Switch Prévisionnel / Réalisé avec persistance localStorage, switch auto sur le 1er onglet du mode si l'actif n'existe plus.", "4 onglets en mode Réalisé : ✍️ Saisie, 🔍 Contrôle Budget vs Réel, 💰 Trésorerie, 📈 Synthèse — 2 premiers fonctionnels (P3+P4), 2 derniers placeholders pour P5+.", "transactionsReelles[] auto-injecté sur chaque année (idempotent)."] },
                         { version: "22.00 P1", date: "2026-05-24 — Référentiel catégories stable (Dual-Mode foundation)", changes: ["soldesInitiaux.categories[] : registre stable {id, label, type, parent, archive, dateCreation}.", "migrateCategoriesV22() idempotente, génère des IDs slugifiés (cat_rv_*, cat_cf_*, cat_cv_*, cat_cvd_*, cat_ep_*, cat_irr_*), tagge chaque item avec categorieId.", "Catégories système permanentes : cat_irr_assurance, cat_irr_revenu_exceptionnel, cat_irr_depense_exceptionnelle, cat_misc.", "Helpers : categoriesById (Map computed), getCategorieLabel(id), categoriesParType."] },
@@ -4873,7 +4970,7 @@
 
                     const validerSaisieForm = () => {
                         const f = saisieForm.value;
-                        if (!f.montant || f.montant <= 0) return;
+                        if (!f.montant || f.montant <= 0) return false;
                         const dt = f.datetime || _nowLocalDateTime();
                         ajouterTransactionReelle({
                             datetime: dt,
@@ -4885,6 +4982,21 @@
                             compteId: f.compteId,
                         });
                         resetSaisieForm();
+                        return true;
+                    };
+
+                    // === v22.20 — FAB Saisie Quick (mobile uniquement) ===
+                    const showSaisieQuickModal = ref(false);
+                    const openSaisieQuickModal = () => {
+                        resetSaisieForm();
+                        showSaisieQuickModal.value = true;
+                    };
+                    const closeSaisieQuickModal = () => {
+                        showSaisieQuickModal.value = false;
+                    };
+                    const validerSaisieFormFromQuick = () => {
+                        const ok = validerSaisieForm();
+                        if (ok) closeSaisieQuickModal();
                     };
 
                     // Catégories groupées pour <select> avec <optgroup>
@@ -8671,10 +8783,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         showPoidsTooltip, showInlineReleve,
                         // v22.00 P1 : référentiel catégories (Dual-Mode foundation)
                         categoriesById, getCategorieLabel, categoriesParType, migrateCategoriesV22,
-                        // v22.00 P3 / v22.10 : saisie transactions réelles (hybride)
+                        // v22.00 P3 / v22.10 / v22.20 : saisie transactions réelles (hybride + FAB mobile)
                         saisieRapide, saisieCompteDefaut,
                         saisieForm, validerSaisieForm, resetSaisieForm, categoriesForSelect,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
+                        showSaisieQuickModal, openSaisieQuickModal, closeSaisieQuickModal, validerSaisieFormFromQuick,
                         // v22.00 P4 : contrôle budget vs réalisé
                         moisControle, controleBudgetVsReel, controleTotaux,
                         configAssurances, assurNewAssureur, assurNewBenef, assurNewType, addAssuranceAssureur, removeAssuranceAssureur, addAssuranceBeneficiaire, removeAssuranceBeneficiaire, addAssuranceType, removeAssuranceType,
