@@ -3679,6 +3679,29 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        <!-- ── v23.11 : Section Épargne & Virements ── -->
+                                        <div v-if="(donneesAnnuelles[soldesInitiaux.anneeActuelle]?.epargne || []).filter(ep => Number(ep.valeur || 0) > 0).length > 0" class="mt-3">
+                                            <p class="text-[9px] text-purple-400 font-black uppercase tracking-widest mb-2 border-b border-purple-900/50 pb-1">💎 Épargne & Virements</p>
+                                            <div class="space-y-2">
+                                                <div v-for="(ep, epIdx) in (donneesAnnuelles[soldesInitiaux.anneeActuelle]?.epargne || []).filter(ep => Number(ep.valeur || 0) > 0)" :key="epIdx" class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+                                                    <label class="flex items-start gap-3 cursor-pointer">
+                                                        <input type="checkbox"
+                                                            :checked="isItemPaid(ep, Number(ep.valeur || 0))"
+                                                            @change="toggleItemPaid(ep, Number(ep.valeur || 0)); handleDataChange()"
+                                                            class="w-6 h-6 rounded border-slate-600 bg-slate-800 text-purple-500 shrink-0 mt-0.5"/>
+                                                        <div class="flex-1 min-w-0">
+                                                            <p :class="['text-sm font-bold truncate', isItemPaid(ep, Number(ep.valeur || 0)) ? 'text-slate-500 line-through' : 'text-slate-100']">
+                                                                {{ ep.nom || ep.label || '?' }}
+                                                            </p>
+                                                            <p class="text-[10px] font-bold mt-0.5" :class="isItemPaid(ep, Number(ep.valeur || 0)) ? 'text-slate-600' : 'text-purple-400'">
+                                                                {{ formatMAD(Number(ep.valeur || 0)) }}
+                                                                <span v-if="ep.jourPrevu" class="text-slate-500 ml-1">· j.{{ ep.jourPrevu }}</span>
+                                                            </p>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </template>
@@ -4170,10 +4193,10 @@
                                     <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
                                         <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🏦 Solde Bancaire Réel</p>
                                         <div class="space-y-1.5">
-                                            <template v-if="comptes.find(c => c.type === 'courant')">
+                                            <template v-if="comptes.find(c => c.type === 'courant' || c.type === 'liquide')">
                                                 <div class="flex justify-between gap-3">
-                                                    <span class="text-slate-300">{{ comptes.find(c => c.type === 'courant').icone || '💳' }} {{ comptes.find(c => c.type === 'courant').label }}</span>
-                                                    <span class="font-black text-white">{{ formatMAD(Number(comptes.find(c => c.type === 'courant').solde || 0)) }}</span>
+                                                    <span class="text-slate-300">{{ comptes.find(c => c.type === 'courant' || c.type === 'liquide').icone || '💳' }} {{ comptes.find(c => c.type === 'courant' || c.type === 'liquide').label }}</span>
+                                                    <span class="font-black text-white">{{ formatMAD(Number(comptes.find(c => c.type === 'courant' || c.type === 'liquide').solde || 0)) }}</span>
                                                 </div>
                                                 <div :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', tresoActuelleCourante >= 0 ? 'text-emerald-300' : 'text-red-300']">
                                                     <span>= Solde compte courant</span>
@@ -4181,7 +4204,7 @@
                                                 </div>
                                             </template>
                                             <template v-else>
-                                                <p class="text-slate-400 text-[10px]">Aucun compte de type "courant" configuré.<br/>Configurer vos comptes dans l'onglet Saisie.</p>
+                                                <p class="text-slate-400 text-[10px]">Aucun compte de type "courant" ou "liquide" trouvé.<br/>Vérifiez le type de vos comptes dans Trésorerie.</p>
                                                 <div class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-amber-300">
                                                     <span>Fallback soldesInitiaux.courant</span>
                                                     <span>{{ formatMAD(tresoActuelleCourante) }}</span>
@@ -5276,7 +5299,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "23.10 Prorata-T0";
+                    const CURRENT_VERSION = "23.11 Checklist-Tréso-Fix";
                     const CHANGELOG = [
                         { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
@@ -8097,9 +8120,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // ─── v22.80 Trésorerie réelle = solde du compte type 'courant' ───
                     const tresoActuelleCourante = computed(() => {
                         calculationTick.value;
-                        const compteCourant = (comptes.value || []).find(c => c.type === 'courant');
+                        // v23.11 : type 'liquide' = compte courant principal (rôle identique à 'courant')
+                        const compteCourant = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
                         if (compteCourant) return Number(compteCourant.solde || 0);
-                        // Fallback : soldesInitiaux.courant si aucun compte 'courant' configuré
+                        // Fallback si aucun compte courant/liquide configuré
                         return Number(soldesInitiaux.value.courant || 0);
                     });
 
