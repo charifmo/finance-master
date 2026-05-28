@@ -4886,7 +4886,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "22.80 Pilotage-Nominatif";
+                    const CURRENT_VERSION = "22.80 Pilotage-Ledger";
                     const CHANGELOG = [
                         { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
@@ -7375,12 +7375,37 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
 
                     const toggleItemPaid = (item, dueAmount) => {
-                        if (isItemPaid(item, dueAmount)) {
+                        // v22.80 Pilotage-Ledger : synchronise compte.solde au pointage
+                        const wasAlreadyPaid = isItemPaid(item, dueAmount);
+                        if (wasAlreadyPaid) {
                             item.paye = false;
                             item.montantPaye = 0;
                         } else {
                             item.paye = true;
                             item.montantPaye = dueAmount;
+                        }
+                        // Déterminer si c'est un revenu (les revenus ont un champ 'base')
+                        const isRevenu = 'base' in item;
+                        const compteKey = isRevenu
+                            ? (item.destinationCompte || 'courant')
+                            : (item.sourceCompte || 'courant');
+                        // Résoudre le compte cible dans comptes.value
+                        let compteCible = null;
+                        if (compteKey === 'courant') {
+                            compteCible = (comptes.value || []).find(c => c.type === 'courant');
+                        } else if (compteKey.startsWith('cpt_')) {
+                            const cptId = compteKey.slice(4);
+                            compteCible = (comptes.value || []).find(c => String(c.id) === String(cptId));
+                        } else if (compteKey.startsWith('ep_')) {
+                            // Compte épargne — pas de mutation directe sur solde ici
+                            compteCible = null;
+                        }
+                        if (compteCible) {
+                            // signe : +1 pour revenu, -1 pour charge
+                            const signe = isRevenu ? 1 : -1;
+                            // delta : si on coche → ±montant ; si on décoche → ∓montant
+                            const delta = wasAlreadyPaid ? -signe * dueAmount : signe * dueAmount;
+                            compteCible.solde = Math.round(((Number(compteCible.solde) || 0) + delta) * 100) / 100;
                         }
                         handleDataChange();
                     };
