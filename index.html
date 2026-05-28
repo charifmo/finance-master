@@ -446,9 +446,13 @@
                             <h3 class="text-sm font-black uppercase tracking-widest text-emerald-700 mb-3">💰 Revenus Prévus</h3>
                             <div v-if="pilotageTheoLignes.revenus.length === 0" class="text-xs text-slate-400 italic">Aucun revenu défini</div>
                             <ul class="space-y-1.5">
-                                <li v-for="(r, i) in pilotageTheoLignes.revenus" :key="'r'+i" class="flex justify-between text-xs py-1 border-b border-slate-100 last:border-0">
-                                    <span class="text-slate-700 truncate max-w-[180px]">{{ r.nom }}</span>
-                                    <span class="font-bold text-emerald-700">{{ formatMAD(r.montant) }}</span>
+                                <li v-for="(r, i) in pilotageTheoLignes.revenus" :key="'r'+i" class="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0 gap-2">
+                                    <span class="text-slate-700 truncate max-w-[140px]">{{ r.nom }}</span>
+                                    <div class="flex items-center gap-1.5 shrink-0">
+                                        <span v-if="isFluxCetteSemaine(r.jourPrevu)" class="text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded-full">⏳ Cette semaine</span>
+                                        <span v-if="r.jourPrevu" class="text-[9px] text-slate-400 font-bold">📅 j.{{ r.jourPrevu }}</span>
+                                        <span class="font-bold text-emerald-700">{{ formatMAD(r.montant) }}</span>
+                                    </div>
                                 </li>
                             </ul>
                         </div>
@@ -457,9 +461,13 @@
                             <h3 class="text-sm font-black uppercase tracking-widest text-orange-700 mb-3">🏢 Charges Fixes</h3>
                             <div v-if="pilotageTheoLignes.fixes.length === 0" class="text-xs text-slate-400 italic">Aucune charge fixe</div>
                             <ul class="space-y-1.5">
-                                <li v-for="(f, i) in pilotageTheoLignes.fixes" :key="'f'+i" class="flex justify-between text-xs py-1 border-b border-slate-100 last:border-0">
-                                    <span class="text-slate-700 truncate max-w-[180px]">{{ f.nom }}</span>
-                                    <span class="font-bold text-orange-700">{{ formatMAD(f.montant) }}</span>
+                                <li v-for="(f, i) in pilotageTheoLignes.fixes" :key="'f'+i" class="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0 gap-2">
+                                    <span class="text-slate-700 truncate max-w-[140px]">{{ f.nom }}</span>
+                                    <div class="flex items-center gap-1.5 shrink-0">
+                                        <span v-if="isFluxCetteSemaine(f.jourPrevu)" class="text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded-full">⏳ Cette semaine</span>
+                                        <span v-if="f.jourPrevu" class="text-[9px] text-slate-400 font-bold">📅 j.{{ f.jourPrevu }}</span>
+                                        <span class="font-bold text-orange-700">{{ formatMAD(f.montant) }}</span>
+                                    </div>
                                 </li>
                             </ul>
                         </div>
@@ -890,6 +898,12 @@
                                     </optgroup>
                                 </select>
                             </div>
+                            <!-- v22.95 Cashflow-Timing : jour prévu dans le mois -->
+                            <div v-if="!item.parts || !item.parts.length" class="flex items-center gap-2 mt-1 mb-1">
+                                <label class="text-[9px] font-black text-indigo-700 uppercase tracking-widest whitespace-nowrap">📅 Jour prévu :</label>
+                                <input type="number" v-model.number="item.jourPrevu" @input="handleDataChange" min="1" max="31" placeholder="ex: 27" class="w-20 p-1.5 text-xs font-black text-indigo-800 border border-indigo-200 rounded-lg bg-indigo-50 outline-none focus:ring-2 focus:ring-indigo-400 text-center"/>
+                                <span class="text-[9px] text-slate-400 font-bold">du mois (1–31)</span>
+                            </div>
                             <div v-if="item.showExceptions" class="mt-4 bg-blue-50/50 rounded-xl p-4 border border-blue-100 shadow-inner">
                                 <p class="text-[9px] font-black text-blue-800 uppercase tracking-widest mb-3">Règles d'exception (Mois 1 à 12)</p>
                                 <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-blue-100 shadow-sm flex-wrap sm:flex-nowrap">
@@ -962,6 +976,12 @@
                                         <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'cfe_'+ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label }}</option>
                                     </optgroup>
                                 </select>
+                            </div>
+                            <!-- v22.95 Cashflow-Timing : jour prévu dans le mois -->
+                            <div v-if="!item.parts || !item.parts.length" class="flex items-center gap-2 mt-1 mb-1">
+                                <label class="text-[9px] font-black text-indigo-700 uppercase tracking-widest whitespace-nowrap">📅 Jour prévu :</label>
+                                <input type="number" v-model.number="item.jourPrevu" @input="handleDataChange" min="1" max="31" placeholder="ex: 4" class="w-20 p-1.5 text-xs font-black text-indigo-800 border border-indigo-200 rounded-lg bg-indigo-50 outline-none focus:ring-2 focus:ring-indigo-400 text-center"/>
+                                <span class="text-[9px] text-slate-400 font-bold">du mois (1–31)</span>
                             </div>
                             <div v-if="item.showExceptions" class="mt-4 bg-orange-50/50 rounded-xl p-4 border border-orange-100 shadow-inner">
                                 <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-orange-100 shadow-sm flex-wrap sm:flex-nowrap">
@@ -4200,7 +4220,7 @@
                                     <span class="text-sm font-black text-green-400">{{ formatMAD(tresoEntrees) }}</span>
                                 </div>
                                 <div class="p-4 space-y-2">
-                                    <div v-for="(rev, key) in donneesAnnuelles[moisBudgetaire.an]?.revenus" :key="'rev_' + key"
+                                    <div v-for="(rev, key) in revenusBudgetairesTries" :key="'rev_' + key"
                                          class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-green-500 transition-all">
                                         <label class="flex items-center gap-3 cursor-pointer flex-1">
                                             <input type="checkbox"
@@ -4208,6 +4228,8 @@
                                                    @change="toggleItemPaid(rev, Number(rev.base || 0)); handleDataChange()"
                                                    class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer"/>
                                             <span :class="['text-sm font-bold transition-all', isItemPaid(rev, Number(rev.base || 0)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-green-300']">{{ rev.label }}</span>
+                                             <span v-if="isFluxCetteSemaine(rev.jourPrevu) && !isItemPaid(rev, Number(rev.base || 0))" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full ml-1">⏳ Cette sem.</span>
+                                             <span v-if="rev.jourPrevu && !isItemPaid(rev, Number(rev.base || 0))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ rev.jourPrevu }}</span>
                                         </label>
                                         <span :class="['text-sm font-black ml-4', isItemPaid(rev, Number(rev.base || 0)) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(Number(rev.base || 0)) }}</span>
                                     </div>
@@ -4229,10 +4251,12 @@
                                     <div v-if="donneesAnnuelles[moisBudgetaire.an] && Object.keys(donneesAnnuelles[moisBudgetaire.an]?.chargesFixes || {}).length > 0">
                                         <p class="text-[9px] text-orange-400 font-black uppercase tracking-widest mb-2 border-b border-orange-900/50 pb-1 mt-2">🏢 Charges Fixes</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="(f, key) in donneesAnnuelles[moisBudgetaire.an]?.chargesFixes" :key="key" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-orange-500 transition-all">
+                                            <div v-for="(f, key) in chargesFixesBudgetairesTriees" :key="key" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-orange-500 transition-all">
                                                 <label class="flex items-center gap-3 cursor-pointer flex-1">
                                                     <input type="checkbox" :checked="isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" @change="toggleItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer"/>
                                                     <span :class="['text-sm font-bold transition-all', isItemPaid(f, getDueFixe(f, moisBudgetaire.an)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-orange-300']">{{ f.label }}</span>
+                                                 <span v-if="isFluxCetteSemaine(f.jourPrevu) && !isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full ml-1">⏳ Cette sem.</span>
+                                                 <span v-if="f.jourPrevu && !isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ f.jourPrevu }}</span>
                                                 </label>
                                                 <div class="flex items-center gap-2 ml-4">
                                                     <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-orange-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-orange-400 transition-colors"/>
@@ -5009,7 +5033,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "22.90 Double-Pilotage";
+                    const CURRENT_VERSION = "22.95 Cashflow-Timing";
                     const CHANGELOG = [
                         { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
@@ -7954,6 +7978,42 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return cashDispoPourConso.value / (jours / 7);
                     });
 
+                    // ── v22.95 Cashflow-Timing ───────────────────────────────────────────────
+                    const isFluxCetteSemaine = (jourPrevu) => {
+                        if (!jourPrevu || jourPrevu < 1 || jourPrevu > 31) return false;
+                        const today = new Date();
+                        const y = today.getFullYear();
+                        const m = today.getMonth();
+                        const d = today.getDate();
+                        const todayMs = new Date(y, m, d).getTime();
+                        const candidates = [
+                            new Date(y, m, jourPrevu).getTime(),
+                            new Date(y, m + 1, jourPrevu).getTime(),
+                        ];
+                        return candidates.some(ms => {
+                            const diff = Math.round((ms - todayMs) / 86400000);
+                            return diff >= 0 && diff <= 7;
+                        });
+                    };
+
+                    const revenusBudgetairesTries = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an];
+                        if (!d) return [];
+                        return Object.values(d.revenus || {}).slice().sort((a, b) =>
+                            (a.jourPrevu || 99) - (b.jourPrevu || 99));
+                    });
+
+                    const chargesFixesBudgetairesTriees = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an];
+                        if (!d) return [];
+                        return Object.values(d.chargesFixes || {}).slice().sort((a, b) =>
+                            (a.jourPrevu || 99) - (b.jourPrevu || 99));
+                    });
+
                     // ═══════════════════════════════════════════════════════════
                     // v22.90 Double-Pilotage — VUE THÉORIQUE (mode prévisionnel)
                     // Ignore totalement isItemPaid + tresoActuelleCourante.
@@ -8026,11 +8086,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!dActuelle) return out;
                         Object.values(dActuelle.revenus || {}).forEach(r => {
                             const m = Number(r.base || 0);
-                            if (m > 0) out.revenus.push({ nom: r.label || r.nom || '?', montant: m });
+                            if (m > 0) out.revenus.push({ nom: r.label || r.nom || '?', montant: m, jourPrevu: r.jourPrevu || null });
                         });
                         Object.values(dActuelle.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, an);
-                            if (due > 0) out.fixes.push({ nom: f.label || '?', montant: due });
+                            if (due > 0) out.fixes.push({ nom: f.label || '?', montant: due, jourPrevu: f.jourPrevu || null });
                         });
                         Object.values(dActuelle.chargesVariables || {})
                             .filter(c => c?.periode === 'mois')
@@ -8056,6 +8116,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const m = Number(dep.montant || 0);
                             if (m > 0) out.chocs.push({ nom: dep.label || dep.nom || '?', montant: m });
                         });
+                        const sortJour = (a, b) => (a.jourPrevu || 99) - (b.jourPrevu || 99);
+                        out.revenus.sort(sortJour);
+                        out.fixes.sort(sortJour);
                         return out;
                     });
 
@@ -9477,7 +9540,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
                         // v22.90 Double-Pilotage
                         revenusTheoriquesMois, engagementsTheoriquesMois, engagementsTheoriquesDetail,
-                        budgetConsoTheoriqueMois, rythmeTheoriqueSemaine, pilotageTheoLignes, elementsDuMoisPayes, elementsDuMoisTotal,
+                        budgetConsoTheoriqueMois, rythmeTheoriqueSemaine, pilotageTheoLignes,
+                        // v22.95 Cashflow-Timing
+                        isFluxCetteSemaine, revenusBudgetairesTries, chargesFixesBudgetairesTriees, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip, showInlineReleve,
