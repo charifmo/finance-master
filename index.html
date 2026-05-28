@@ -152,6 +152,7 @@
                 <nav class="px-4 py-4 space-y-2">
                     <!-- ─── Onglets mode PRÉVISIONNEL ─── -->
                     <template v-if="appMode === 'previsionnel'">
+                    <button @click="activeTab = 'pilotageTheo'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'pilotageTheo' ? 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-lg shadow-indigo-900/50' : 'hover:bg-slate-800 text-slate-300']">🔮 Pilotage Théorique</button>
                     <button @click="activeTab = 'dashboard'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'dashboard' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📊 Bilan & Simulation</button>
                     <button @click="activeTab = 'parametres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'parametres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">⚙️ Budget Structurel</button>
                     <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📅 Calendrier Pluriannuel</button>
@@ -3898,6 +3899,128 @@
             <div class="flex-1 md:overflow-y-auto custom-scroll p-3 md:p-6 pb-20 md:pb-8">
 
                 <!-- ═══ ONGLET PILOTAGE MENSUEL ═══ -->
+                <!-- ═══════════════════════════════════════════════════════════════
+                     v22.90 Double-Pilotage — VUE THÉORIQUE (mode prévisionnel)
+                     Lecture seule, basée uniquement sur le budget structurel.
+                     ═══════════════════════════════════════════════════════════════ -->
+                <div v-if="activeTab === 'pilotageTheo' && appMode === 'previsionnel'" class="max-w-4xl mx-auto space-y-6">
+                    <div class="border-b pb-5 mb-6">
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <h2 class="text-2xl font-bold text-gray-800">🔮 Pilotage Théorique</h2>
+                                <p class="text-sm text-gray-500 mt-0.5">Budget cible — Cycle <b>{{ cycleLabel }}</b></p>
+                            </div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 self-start mt-1">Vue Prévi · Lecture seule</span>
+                        </div>
+
+                        <!-- Jauge cycle (identique au Réalisé mais accent indigo) -->
+                        <div class="mb-4 bg-gradient-to-br from-indigo-900/80 to-purple-900/70 rounded-2xl border border-indigo-700 p-4">
+                            <div class="flex items-center justify-between mb-2.5">
+                                <div class="text-left">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-indigo-300">📅 Dernière paie</p>
+                                    <p class="text-white text-xs font-black mt-0.5">{{ dernierePaieLabel }}</p>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-xl font-black text-white">⏳ J−{{ joursRestantsAvantPaie }}</p>
+                                    <p class="text-indigo-200 text-[9px] font-bold">{{ formatMAD(rythmeTheoriqueSemaine) }} / sem cible</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-indigo-300">Prochaine paie 📅</p>
+                                    <p class="text-white text-xs font-black mt-0.5">{{ prochainePaieLabel }}</p>
+                                </div>
+                            </div>
+                            <div class="w-full bg-indigo-950/60 rounded-full h-2.5 overflow-hidden">
+                                <div :style="{ width: progressCyclePaie + '%' }" class="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-indigo-400 to-purple-400"></div>
+                            </div>
+                            <div class="flex justify-between text-[9px] text-indigo-300 mt-1.5 font-bold">
+                                <span>{{ joursDepuisDernierePaie }}j écoulés</span>
+                                <span>{{ progressCyclePaie }}% du cycle</span>
+                                <span>{{ joursRestantsAvantPaie }}j restants</span>
+                            </div>
+                        </div>
+
+                        <!-- KPI Grid 3 colonnes — accents indigo/purple/cyan -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-2xl p-4">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-indigo-700 mb-1">🎯 Revenus Cibles</p>
+                                <p class="text-2xl font-black text-indigo-900">{{ formatMAD(revenusTheoriquesMois) }}</p>
+                                <p class="text-[10px] text-indigo-500 mt-1 font-bold">Somme des bases prévues</p>
+                            </div>
+                            <div class="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-2xl p-4">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-purple-700 mb-1">📌 Engagements Prévus</p>
+                                <p class="text-2xl font-black text-purple-900">{{ formatMAD(engagementsTheoriquesMois) }}</p>
+                                <p class="text-[10px] text-purple-500 mt-1 font-bold">
+                                    Fix {{ formatMAD(engagementsTheoriquesDetail.fixes) }} ·
+                                    Ép. {{ formatMAD(engagementsTheoriquesDetail.epargne) }} ·
+                                    Chocs {{ formatMAD(engagementsTheoriquesDetail.chocs) }}
+                                </p>
+                            </div>
+                            <div class="bg-gradient-to-br from-cyan-50 to-sky-100 border border-cyan-200 rounded-2xl p-4">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-cyan-700 mb-1">🛒 Budget Conso Standard</p>
+                                <p class="text-2xl font-black text-cyan-900">{{ formatMAD(budgetConsoTheoriqueMois) }}</p>
+                                <p class="text-[10px] text-cyan-500 mt-1 font-bold">≈ {{ formatMAD(rythmeTheoriqueSemaine) }} / semaine</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Listes lecture seule — ventilation par nature -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Revenus prévus -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-emerald-700 mb-3">💰 Revenus Prévus</h3>
+                            <div v-if="_pilotageTheoLignes.revenus.length === 0" class="text-xs text-slate-400 italic">Aucun revenu défini</div>
+                            <ul class="space-y-1.5">
+                                <li v-for="(r, i) in _pilotageTheoLignes.revenus" :key="'r'+i" class="flex justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+                                    <span class="text-slate-700 truncate max-w-[180px]">{{ r.nom }}</span>
+                                    <span class="font-bold text-emerald-700">{{ formatMAD(r.montant) }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <!-- Charges Fixes -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-orange-700 mb-3">🏢 Charges Fixes</h3>
+                            <div v-if="_pilotageTheoLignes.fixes.length === 0" class="text-xs text-slate-400 italic">Aucune charge fixe</div>
+                            <ul class="space-y-1.5">
+                                <li v-for="(f, i) in _pilotageTheoLignes.fixes" :key="'f'+i" class="flex justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+                                    <span class="text-slate-700 truncate max-w-[180px]">{{ f.nom }}</span>
+                                    <span class="font-bold text-orange-700">{{ formatMAD(f.montant) }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <!-- Charges Variables -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-cyan-700 mb-3">🧾 Charges Variables</h3>
+                            <div v-if="_pilotageTheoLignes.variables.length === 0" class="text-xs text-slate-400 italic">Aucune charge variable</div>
+                            <ul class="space-y-1.5">
+                                <li v-for="(v, i) in _pilotageTheoLignes.variables" :key="'v'+i" class="flex justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+                                    <span class="text-slate-700 truncate max-w-[180px]">{{ v.nom }}</span>
+                                    <span class="font-bold text-cyan-700">{{ formatMAD(v.montant) }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <!-- Épargne + Chocs -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-purple-700 mb-3">💎 Épargne &amp; Chocs</h3>
+                            <div v-if="_pilotageTheoLignes.epargne.length === 0 && _pilotageTheoLignes.chocs.length === 0" class="text-xs text-slate-400 italic">Rien de prévu</div>
+                            <ul class="space-y-1.5">
+                                <li v-for="(e, i) in _pilotageTheoLignes.epargne" :key="'e'+i" class="flex justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+                                    <span class="text-slate-700 truncate max-w-[180px]">💰 {{ e.nom }}</span>
+                                    <span class="font-bold text-purple-700">{{ formatMAD(e.montant) }}</span>
+                                </li>
+                                <li v-for="(c, i) in _pilotageTheoLignes.chocs" :key="'c'+i" class="flex justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+                                    <span class="text-slate-700 truncate max-w-[180px]">⚠️ {{ c.nom }}</span>
+                                    <span class="font-bold text-amber-600">{{ formatMAD(c.montant) }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Note explicative -->
+                    <div class="bg-indigo-50/60 border border-indigo-200 rounded-xl p-3 text-[11px] text-indigo-800 leading-snug">
+                        ℹ️ <b>Vue théorique</b> : ces chiffres ignorent l'état des pointages et le solde bancaire réel. Pour voir l'écart avec la réalité, bascule sur <b class="text-emerald-700">📊 Réalisé</b>.
+                    </div>
+                </div>
+
                 <div v-if="activeTab === 'pilotage'" class="max-w-4xl mx-auto space-y-6">
                     <!-- v22.40 — Header Pilotage Transparent -->
                     <div class="border-b pb-5 mb-6">
@@ -4886,7 +5009,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "22.80 Pilotage-Ledger";
+                    const CURRENT_VERSION = "22.90 Double-Pilotage";
                     const CHANGELOG = [
                         { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
@@ -7831,6 +7954,111 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return cashDispoPourConso.value / (jours / 7);
                     });
 
+                    // ═══════════════════════════════════════════════════════════
+                    // v22.90 Double-Pilotage — VUE THÉORIQUE (mode prévisionnel)
+                    // Ignore totalement isItemPaid + tresoActuelleCourante.
+                    // Calcule ce qui DEVRAIT se passer sur le cycle de paie.
+                    // ═══════════════════════════════════════════════════════════
+                    const revenusTheoriquesMois = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const dActuelle = donneesAnnuelles.value[mb.an];
+                        if (!dActuelle) return 0;
+                        return Object.values(dActuelle.revenus || {})
+                            .reduce((s, r) => s + Number(r.base || 0), 0);
+                    });
+
+                    const engagementsTheoriquesDetail = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const an = mb.an;
+                        const mois = mb.mois;
+                        const dActuelle = donneesAnnuelles.value[an];
+                        if (!dActuelle) return { fixes: 0, epargne: 0, chocs: 0, total: 0 };
+                        let fixes = 0, epargne = 0, chocs = 0;
+                        Object.values(dActuelle.chargesFixes || {}).forEach(f => {
+                            fixes += getDueFixe(f, an);
+                        });
+                        const epArr = Array.isArray(dActuelle.epargne)
+                            ? dActuelle.epargne
+                            : Object.values(dActuelle.epargne || {});
+                        epArr.forEach(ep => { epargne += Number(ep.valeur || 0); });
+                        getDepensesMois(mois, an).forEach(dep => { chocs += Number(dep.montant || 0); });
+                        return { fixes, epargne, chocs, total: fixes + epargne + chocs };
+                    });
+
+                    const engagementsTheoriquesMois = computed(() => engagementsTheoriquesDetail.value.total);
+
+                    const budgetConsoTheoriqueMois = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const dActuelle = donneesAnnuelles.value[mb.an];
+                        if (!dActuelle) return 0;
+                        let total = 0;
+                        Object.values(dActuelle.chargesVariables || {})
+                            .filter(c => c?.periode === 'mois')
+                            .forEach(cat => {
+                                if (cat.details && cat.details.length) {
+                                    cat.details.forEach(d => { total += Number(d.montant || 0); });
+                                } else {
+                                    total += Number(cat.valeur || 0);
+                                }
+                            });
+                        return total;
+                    });
+
+                    const rythmeTheoriqueSemaine = computed(() => {
+                        const info = _cyclePaieInfo.value;
+                        const totalCycleJours = Math.max(1, info.joursAvant + info.joursDepuis);
+                        const semaines = totalCycleJours / 7;
+                        if (!semaines) return 0;
+                        return budgetConsoTheoriqueMois.value / semaines;
+                    });
+
+                    // Listes en lecture seule pour la vue théorique (groupées par compte)
+                    const _pilotageTheoLignes = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const an = mb.an;
+                        const mois = mb.mois;
+                        const dActuelle = donneesAnnuelles.value[an];
+                        const out = { revenus: [], fixes: [], variables: [], epargne: [], chocs: [] };
+                        if (!dActuelle) return out;
+                        Object.values(dActuelle.revenus || {}).forEach(r => {
+                            const m = Number(r.base || 0);
+                            if (m > 0) out.revenus.push({ nom: r.label || r.nom || '?', montant: m });
+                        });
+                        Object.values(dActuelle.chargesFixes || {}).forEach(f => {
+                            const due = getDueFixe(f, an);
+                            if (due > 0) out.fixes.push({ nom: f.label || '?', montant: due });
+                        });
+                        Object.values(dActuelle.chargesVariables || {})
+                            .filter(c => c?.periode === 'mois')
+                            .forEach(cat => {
+                                if (cat.details && cat.details.length) {
+                                    cat.details.forEach(d => {
+                                        const m = Number(d.montant || 0);
+                                        if (m > 0) out.variables.push({ nom: d.nom || cat.label || '?', montant: m });
+                                    });
+                                } else {
+                                    const m = Number(cat.valeur || 0);
+                                    if (m > 0) out.variables.push({ nom: cat.label || '?', montant: m });
+                                }
+                            });
+                        const epArr = Array.isArray(dActuelle.epargne)
+                            ? dActuelle.epargne
+                            : Object.values(dActuelle.epargne || {});
+                        epArr.forEach(ep => {
+                            const m = Number(ep.valeur || 0);
+                            if (m > 0) out.epargne.push({ nom: ep.nom || ep.label || '?', montant: m });
+                        });
+                        getDepensesMois(mois, an).forEach(dep => {
+                            const m = Number(dep.montant || 0);
+                            if (m > 0) out.chocs.push({ nom: dep.label || dep.nom || '?', montant: m });
+                        });
+                        return out;
+                    });
+
                     const studioCalc = computed(() => {
                         const p = projetStudio.value || {}; const prixHT = (Number(p.prixM2)||0) * (Number(p.surface)||0); const resteP = prixHT - (Number(p.avance)||0); const s = Number(p.surplusCredit) || 0; const cap = resteP + (Number(p.taxCouvertCredit)||0) + s;
                         const t = (Number(p.taux)||0)/100/12; const n = (Number(p.duree)||0)*12; const mens = t===0?(n>0?cap/n:0):(cap*t)/(1-Math.pow(1+t,-n));
@@ -9246,7 +9474,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, appMode, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio,
-                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel, elementsDuMoisPayes, elementsDuMoisTotal,
+                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
+                        // v22.90 Double-Pilotage
+                        revenusTheoriquesMois, engagementsTheoriquesMois, engagementsTheoriquesDetail,
+                        budgetConsoTheoriqueMois, rythmeTheoriqueSemaine, _pilotageTheoLignes, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip, showInlineReleve,
