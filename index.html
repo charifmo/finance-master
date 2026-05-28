@@ -3950,20 +3950,20 @@
                                     <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
                                         <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🏦 Solde Bancaire Réel</p>
                                         <div class="space-y-1.5">
-                                            <template v-if="comptes.filter(c => c.type === 'liquide').length > 0">
-                                                <div v-for="cpt in comptes.filter(c => c.type === 'liquide')" :key="'kpi1_'+cpt.id" class="flex justify-between gap-3">
-                                                    <span class="text-slate-300">{{ cpt.icone || '💳' }} {{ cpt.label }}</span>
-                                                    <span class="font-black text-white">{{ formatMAD(Number(cpt.solde || 0)) }}</span>
+                                            <template v-if="comptes.find(c => c.type === 'courant')">
+                                                <div class="flex justify-between gap-3">
+                                                    <span class="text-slate-300">{{ comptes.find(c => c.type === 'courant').icone || '💳' }} {{ comptes.find(c => c.type === 'courant').label }}</span>
+                                                    <span class="font-black text-white">{{ formatMAD(Number(comptes.find(c => c.type === 'courant').solde || 0)) }}</span>
                                                 </div>
-                                                <div v-if="comptes.filter(c => c.type === 'liquide').length > 1" :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', tresoActuelleCourante >= 0 ? 'text-emerald-300' : 'text-red-300']">
-                                                    <span>= Total liquide</span>
+                                                <div :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', tresoActuelleCourante >= 0 ? 'text-emerald-300' : 'text-red-300']">
+                                                    <span>= Solde compte courant</span>
                                                     <span>{{ formatMAD(tresoActuelleCourante) }}</span>
                                                 </div>
                                             </template>
                                             <template v-else>
-                                                <p class="text-slate-400 text-[10px]">Aucun compte de type "liquide" configuré.<br/>Configurer vos comptes dans l'onglet Saisie.</p>
+                                                <p class="text-slate-400 text-[10px]">Aucun compte de type "courant" configuré.<br/>Configurer vos comptes dans l'onglet Saisie.</p>
                                                 <div class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-amber-300">
-                                                    <span>Solde courant (fallback)</span>
+                                                    <span>Fallback soldesInitiaux.courant</span>
                                                     <span>{{ formatMAD(tresoActuelleCourante) }}</span>
                                                 </div>
                                             </template>
@@ -3983,28 +3983,26 @@
                                     <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
                                     <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
                                         <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail par compte</p>
-                                        <div class="space-y-2.5">
+                                        <div class="space-y-3">
                                             <div v-if="!resteAPayerDetailParCompte.length" class="text-center text-emerald-400 py-1">✅ Tout est payé !</div>
                                             <div v-for="grp in resteAPayerDetailParCompte" :key="grp.key" class="space-y-1">
+                                                <!-- En-tête du compte -->
                                                 <div class="flex justify-between gap-3 font-black">
                                                     <span :class="grp.key === 'courant' ? 'text-orange-300' : 'text-violet-300'">{{ grp.icon }} {{ grp.label }}</span>
                                                     <span class="text-white">{{ formatMAD(grp.montant) }}</span>
                                                 </div>
-                                                <div v-if="grp.parNature.fix > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
-                                                    <span>↳ 🏢 Fixes</span>
-                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.fix) }}</span>
-                                                </div>
-                                                <div v-if="grp.parNature.var > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
-                                                    <span>↳ 🧾 Variables</span>
-                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.var) }}</span>
-                                                </div>
-                                                <div v-if="grp.parNature.choc > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
-                                                    <span>↳ ⚠️ Chocs</span>
-                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.choc) }}</span>
-                                                </div>
-                                                <div v-if="grp.parNature.virement > 0" class="flex justify-between gap-3 pl-3 text-[10px] text-slate-400">
-                                                    <span>↳ 🔄 Virements</span>
-                                                    <span class="font-bold text-slate-300">{{ formatMAD(grp.parNature.virement) }}</span>
+                                                <!-- Lignes nominatives -->
+                                                <div v-for="(ligne, li) in grp.lignes" :key="grp.key+'_'+li"
+                                                     class="flex justify-between gap-2 pl-3 text-[10px]">
+                                                    <span class="text-slate-400 truncate max-w-[150px]">
+                                                        <span v-if="ligne.type==='fix'">🏢</span>
+                                                        <span v-else-if="ligne.type==='var'">🧾</span>
+                                                        <span v-else-if="ligne.type==='choc'">⚠️</span>
+                                                        <span v-else-if="ligne.type==='epargne'">💰</span>
+                                                        <span v-else>🔄</span>
+                                                        {{ ligne.nom }}
+                                                    </span>
+                                                    <span class="font-bold text-slate-200 shrink-0">{{ formatMAD(ligne.montant) }}</span>
                                                 </div>
                                             </div>
                                             <div v-if="resteAPayerDetailParCompte.length > 1" class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-orange-300">
@@ -4065,31 +4063,6 @@
                                 <p class="text-[10px] font-black uppercase tracking-widest text-emerald-400">⏳ J−{{ joursRestantsAvantPaie }} avant la prochaine paie</p>
                                 <p class="text-[9px] text-slate-500 mt-0.5 font-bold">Cycle : {{ cycleLabel }}</p>
                             </div>
-                        </div>
-
-                        <!-- Toggle décalage paie -->
-                        <div class="p-4 bg-slate-800 rounded-2xl border border-slate-700 flex items-center justify-between shadow-sm">
-                            <div>
-                                <p class="text-sm font-bold text-white">Mode "Décalage de Paie" actif</p>
-                                <p class="text-[10px] text-slate-400 mt-1">Le salaire reçu en fin de mois finance le mois d'après.</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" v-model="soldesInitiaux.decalagePaie" @change="handleDataChange" class="sr-only peer">
-                                <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-                            </label>
-                        </div>
-
-                        <!-- v17.19 : Destination du Surplus -->
-                        <div class="p-4 bg-slate-800 rounded-2xl border border-slate-700 flex items-center justify-between shadow-sm">
-                            <div>
-                                <p class="text-sm font-bold text-white">🔄 Destination du Surplus</p>
-                                <p class="text-[10px] text-slate-400 mt-1">Où va le cashflow positif de chaque mois ?</p>
-                            </div>
-                            <select v-model="soldesInitiaux.destinationSurplus" @change="handleDataChange" class="bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold outline-none border border-slate-600 cursor-pointer focus:border-blue-500">
-                                <option value="courant">💳 Compte Courant</option>
-                                <option v-for="c in comptesSelectOptions" :key="'dcpt_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                <option v-for="ep in epargneNonLiee" :key="'dest_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
-                            </select>
                         </div>
 
                         <!-- Checklist Revenus + Dépenses — v22.30 -->
@@ -4913,7 +4886,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "22.60 Pilotage-Expert";
+                    const CURRENT_VERSION = "22.80 Pilotage-Nominatif";
                     const CHANGELOG = [
                         { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
@@ -7702,15 +7675,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const dernierePaieLabel = computed(() => _cyclePaieInfo.value.dernierePaieLabel);
                     const prochainePaieLabel = computed(() => _cyclePaieInfo.value.prochainePaieLabel);
 
-                    // ─── v22.60 Trésorerie réelle = somme des soldes comptes liquides ───
+                    // ─── v22.80 Trésorerie réelle = solde du compte type 'courant' ───
                     const tresoActuelleCourante = computed(() => {
                         calculationTick.value;
-                        const liquides = (comptes.value || []).filter(c => c.type === 'liquide');
-                        if (liquides.length === 0) {
-                            // Fallback : solde courant de soldesInitiaux si aucun compte configuré
-                            return Number(soldesInitiaux.value.courant || 0);
-                        }
-                        return liquides.reduce((sum, c) => sum + Number(c.solde || 0), 0);
+                        const compteCourant = (comptes.value || []).find(c => c.type === 'courant');
+                        if (compteCourant) return Number(compteCourant.solde || 0);
+                        // Fallback : soldesInitiaux.courant si aucun compte 'courant' configuré
+                        return Number(soldesInitiaux.value.courant || 0);
                     });
 
                     // ─── v22.60 Détail des charges restantes : moisBudgetaire + parNature ─
@@ -7739,8 +7710,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     label = ep ? (ep.label || ep.nom || key) : key;
                                     icon = '🎯';
                                 }
-                                groupsMap[key] = { key, icon, label, montant: 0, items: [],
-                                    parNature: { fix: 0, var: 0, choc: 0, virement: 0 } };
+                                groupsMap[key] = { key, icon, label, montant: 0, lignes: [],
+                                    parNature: { fix: 0, var: 0, choc: 0, virement: 0, epargne: 0 } };
                             }
                             return groupsMap[key];
                         };
@@ -7751,7 +7722,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (due > 0 && !isItemPaid(f, due)) {
                                 const grp = getOrCreate(f.sourceCompte || 'courant');
                                 grp.montant += due; grp.parNature.fix += due;
-                                grp.items.push({ label: f.label || '?', montant: due, type: 'fix' });
+                                grp.lignes.push({ nom: f.label || '?', montant: due, type: 'fix' });
                             }
                         });
                         // Charges variables mensuelles non payées
@@ -7763,7 +7734,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     if (m > 0 && !isItemPaid(f, m)) {
                                         const grp = getOrCreate(src);
                                         grp.montant += m; grp.parNature.var += m;
-                                        grp.items.push({ label: f.nom || cat.label || '?', montant: m, type: 'var' });
+                                        grp.lignes.push({ nom: f.nom || cat.label || '?', montant: m, type: 'var' });
                                     }
                                 });
                             } else {
@@ -7771,7 +7742,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (m > 0) {
                                     const grp = getOrCreate(src);
                                     grp.montant += m; grp.parNature.var += m;
-                                    grp.items.push({ label: cat.label || '?', montant: m, type: 'var' });
+                                    grp.lignes.push({ nom: cat.label || '?', montant: m, type: 'var' });
                                 }
                             }
                         });
@@ -7781,7 +7752,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (m > 0 && !isItemPaid(dep, m)) {
                                 const grp = getOrCreate(dep.sourceCompte || 'courant');
                                 grp.montant += m; grp.parNature.choc += m;
-                                grp.items.push({ label: dep.nom || '?', montant: m, type: 'choc' });
+                                grp.lignes.push({ nom: dep.nom || '?', montant: m, type: 'choc' });
                             }
                         });
                         // Virements sortants du mois non payés
@@ -7790,8 +7761,23 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (m > 0 && !isItemPaid(vir, m)) {
                                 const grp = getOrCreate(vir.sourceCompte || 'courant');
                                 grp.montant += m; grp.parNature.virement += m;
-                                grp.items.push({ label: vir.label || vir.nom || '?', montant: m, type: 'virement' });
+                                grp.lignes.push({ nom: vir.label || vir.nom || '?', montant: m, type: 'virement' });
                             }
+                        });
+                        // ── v22.80 : Épargne mensuelle (allocations non cochées) ─────────
+                        const epargneArr = Array.isArray(dActuelle.epargne)
+                            ? dActuelle.epargne
+                            : Object.values(dActuelle.epargne || {});
+                        epargneArr.forEach(ep => {
+                            const m = Number(ep.valeur || 0);
+                            if (m <= 0) return;
+                            // Inclure toujours (obligation de virement épargne)
+                            // sauf si explicitement marqué payé dans la checklist
+                            if (isItemPaid(ep, m)) return;
+                            const src = ep.sourceCompte || 'courant';
+                            const grp = getOrCreate(src);
+                            grp.montant += m; grp.parNature.epargne += m;
+                            grp.lignes.push({ nom: ep.nom || ep.label || '?', montant: m, type: 'epargne' });
                         });
 
                         // Courant en premier, puis par montant décroissant
