@@ -694,19 +694,18 @@
                             <!-- Barre de filtres -->
                             <div class="p-4 pb-3 border-b bg-white">
                                 <div class="flex flex-wrap items-center gap-3 mb-3">
-                                    <div class="flex items-center gap-1">
-                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-400 mr-1">Années</label>
-                                        <select multiple v-model="releveAnneesFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[68px]">
-                                            <option v-for="a in releveAnneesDisponibles" :key="a" :value="a">{{ a }}</option>
-                                        </select>
-                                        <button @click.stop="releveAnneesFiltres = []" :class="releveAnneesFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap">Tout</button>
-                                    </div>
-                                    <div class="flex items-center gap-1">
-                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-400 mr-1">Mois</label>
-                                        <select multiple v-model="releveMoisFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[80px]">
-                                            <option v-for="m in releveMoisDisponibles" :key="m.num" :value="m.num">{{ m.nom }}</option>
-                                        </select>
-                                        <button @click.stop="releveMoisFiltres = []" :class="releveMoisFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap">Tout</button>
+                                    <!-- v23.20 : Timeline Cycles (remplace filtres Années+Mois) -->
+                                    <div class="flex items-center gap-1.5 w-full">
+                                        <button @click.stop="releveActiveCycle = null; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                            :class="releveActiveCycle === null ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+                                            class="text-[9px] font-black px-2 py-1.5 rounded-lg transition-all whitespace-nowrap shrink-0">Tout</button>
+                                        <div class="flex gap-1 overflow-x-auto pb-0.5 flex-1" style="scrollbar-width:thin">
+                                            <button v-for="cy in cyclesDisponibles" :key="cy.key" @click.stop="releveActiveCycle = cy.key"
+                                                :class="releveActiveCycle === cy.key ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700'"
+                                                class="text-[9px] font-black px-2 py-1.5 rounded-lg transition-all whitespace-nowrap shrink-0">
+                                                {{ cy.label }}
+                                            </button>
+                                        </div>
                                     </div>
                                     <button @click.stop="releveModeEvolution = !releveModeEvolution"
                                         :class="releveModeEvolution ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
@@ -4149,6 +4148,12 @@
                                     <button @click="vueTemporelle = 'semaine'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'semaine' ? 'bg-amber-500 text-white shadow-lg shadow-amber-900/50' : 'text-slate-400 hover:text-amber-300']">📅 Cette sem.</button>
                                     <button @click="vueTemporelle = 'cycle'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'cycle' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : 'text-slate-400 hover:text-emerald-300']">🗓️ Fin cycle</button>
                                 </div>
+                                <!-- v23.20 : Clôture et archivage du cycle -->
+                                <button @click="cloturerCycle()"
+                                    class="text-[9px] font-black px-2 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:border-purple-500 hover:text-purple-300 transition-all whitespace-nowrap"
+                                    title="Sauvegarder l etat du cycle dans l historique">
+                                    💾 Clôturer
+                                </button>
                             </div>
                         </div>
 
@@ -5185,17 +5190,18 @@
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-base font-black uppercase tracking-wide text-gray-800">📋 Relevé de Comptes</h3>
                         <div class="flex items-center gap-2">
-                            <div class="flex items-center gap-1">
-                                <select multiple v-model="releveAnneesFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[68px]">
-                                    <option v-for="a in releveAnneesDisponibles" :key="a" :value="a">{{ a }}</option>
-                                </select>
-                                <button @click="releveAnneesFiltres = []" :class="releveAnneesFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap" title="Toutes les années">Tout</button>
-                            </div>
-                            <div class="flex items-center gap-1">
-                                <select multiple v-model="releveMoisFiltres" size="2" class="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white outline-none focus:border-blue-500 cursor-pointer min-w-[80px]">
-                                    <option v-for="m in releveMoisDisponibles" :key="m.num" :value="m.num">{{ m.nom }}</option>
-                                </select>
-                                <button @click="releveMoisFiltres = []" :class="releveMoisFiltres.length === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="text-[9px] font-black px-1.5 py-1 rounded-lg transition-all whitespace-nowrap" title="Tous les mois">Tout</button>
+                            <!-- v23.20 : Timeline Cycles dans la modale -->
+                            <div class="flex items-center gap-1.5 max-w-xs">
+                                <button @click="releveActiveCycle = null; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                    :class="releveActiveCycle === null ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+                                    class="text-[9px] font-black px-2 py-1.5 rounded-lg transition-all whitespace-nowrap shrink-0">Tout</button>
+                                <div class="flex gap-1 overflow-x-auto" style="scrollbar-width:thin;max-width:220px">
+                                    <button v-for="cy in cyclesDisponibles" :key="cy.key" @click="releveActiveCycle = cy.key"
+                                        :class="releveActiveCycle === cy.key ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700'"
+                                        class="text-[9px] font-black px-2 py-1.5 rounded-lg transition-all whitespace-nowrap shrink-0">
+                                        {{ cy.label }}
+                                    </button>
+                                </div>
                             </div>
                             <!-- Toggle Transactions / Évolution -->
                             <button @click="releveModeEvolution = !releveModeEvolution"
@@ -5299,8 +5305,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "23.15 Relevé-Intégral";
+                    const CURRENT_VERSION = "23.20 Cycle-Ledger";
                     const CHANGELOG = [
+                        { version: "23.20 Cycle-Ledger", date: "2026-05-29 — Journal par Cycle Financier", changes: [
+                            "CHANTIER 1 : releveCompte et releveEvolution filtrent maintenant par cycle de paie (M-1 + M) via releveActiveCycle.",
+                            "CHANTIER 2 : Sélecteur de timeline horizontal scrollable remplace les menus Années/Mois dans inline et modal.",
+                            "CHANTIER 3 : Bouton Cloturer le cycle dans le header Pilotage — snapshot complet sauvé dans historiqueCycles (localStorage)."
+                        ] },
                         { version: "23.15 Relevé-Intégral", date: "2026-05-29 — Fix Relevé Complet", changes: [
                             "CAUSE RACINE : revenus/charges du Budget Structurel indexés sous clé littérale 'courant' au lieu de 'cpt_<id>' physique car type==='liquide' ignoré.",
                             "FIX _log() : _resolveCle() gère 'courant', null/undefined, IDs nus → clé physique normalisée.",
@@ -7609,6 +7620,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const releveMoisFiltres = ref([]); // vide = tous les mois
                     const releveAnneesFiltres = ref([]); // vide = toutes les années
                     const releveModeEvolution = ref(false); // true = n'afficher que l'évolution des soldes
+                    const releveActiveCycle = ref(null); // v23.20 : "6-2026" = Cycle Juin 2026, null = tout
                     const releveOnglets = computed(() => {
                         const j = bilanJournal.value;
                         if (!j || Object.keys(j).length === 0) return [];
@@ -7638,12 +7650,35 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         releveComptesFiltres.value = compteKey ? [compteKey] : [];
                         releveMoisFiltres.value = [];
                         releveAnneesFiltres.value = [];
+                        releveActiveCycle.value = null;
                         showReleveModal.value = true;
                     };
                     const fermerReleve = () => {
                         showReleveModal.value = false;
                         compteReleve.value = null;
                         releveComptesFiltres.value = [];
+                        releveActiveCycle.value = null;
+                    };
+                    // v23.20 Cycle-Ledger : archivage des cycles financiers
+                    const historiqueCycles = ref((() => { try { return JSON.parse(localStorage.getItem('historiqueCycles') || '{}'); } catch(_) { return {}; } })());
+                    const viewedCycleKey = ref(null);
+                    const cloturerCycle = () => {
+                        const jdp = Number((soldesInitiaux.value || {}).jourDePaie) || 27;
+                        const now = new Date();
+                        const m = now.getMonth() + 1;
+                        const a = now.getFullYear();
+                        const _mNoms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                        const key = m + '-' + a;
+                        historiqueCycles.value[key] = {
+                            clotureDate: now.toISOString(),
+                            nom: 'Cycle ' + _mNoms[m] + ' ' + a,
+                            jdp,
+                            donneesAnnuelles: JSON.parse(JSON.stringify(donneesAnnuelles.value)),
+                            comptes: JSON.parse(JSON.stringify(comptes.value)),
+                            soldesInitiaux: JSON.parse(JSON.stringify(soldesInitiaux.value))
+                        };
+                        try { localStorage.setItem('historiqueCycles', JSON.stringify(historiqueCycles.value)); } catch(_) {}
+                        addLog('Cycle ' + _mNoms[m] + ' ' + a + ' archivé avec succes.', 'success');
                     };
                     // v17.41 : Années et mois disponibles dans le journal (pour les selects de filtre)
                     const releveAnneesDisponibles = computed(() => {
@@ -7658,13 +7693,54 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const moisNoms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
                         return moisNoms.slice(1).map((nom, i) => ({ num: i + 1, nom }));
                     });
+                    // v23.20 Cycle-Ledger : cycles de paie disponibles dans le journal
+                    const cyclesDisponibles = computed(() => {
+                        const _mN = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                        const _mC = ['', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jui', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+                        const jdp = Number((soldesInitiaux.value || {}).jourDePaie) || 27;
+                        const j = bilanJournal.value;
+                        const seen = new Set();
+                        Object.values(j).forEach(entries => entries.forEach(e => {
+                            if (e.mois && e.mois !== '—') {
+                                const parts = e.mois.split(' ');
+                                if (parts.length === 2) {
+                                    const idx = _mN.indexOf(parts[0]);
+                                    const an = Number(parts[1]);
+                                    if (idx > 0 && an > 0) seen.add(idx + '-' + an);
+                                }
+                            }
+                        }));
+                        const cycles = [];
+                        [...seen].forEach(key => {
+                            const [mStr, aStr] = key.split('-');
+                            const m = Number(mStr), a = Number(aStr);
+                            const mPrev = m === 1 ? 12 : m - 1;
+                            const aPrev = m === 1 ? a - 1 : a;
+                            cycles.push({
+                                key, mois: m, an: a, moisPrev: mPrev, anPrev: aPrev,
+                                nom: _mN[m] + ' ' + a,
+                                label: 'Cycle ' + _mN[m] + ' (' + jdp + ' ' + _mC[mPrev] + ' → ' + (jdp - 1) + ' ' + _mC[m] + ')'
+                            });
+                        });
+                        cycles.sort((x, y) => x.an !== y.an ? x.an - y.an : x.mois - y.mois);
+                        return cycles;
+                    });
                     const releveCompte = computed(() => {
                         const j = bilanJournal.value;
                         if (!j || Object.keys(j).length === 0) return [];
                         const comptesFiltres = releveComptesFiltres.value;
                         const moisNoms = { 'Janvier':1,'Février':2,'Mars':3,'Avril':4,'Mai':5,'Juin':6,'Juillet':7,'Août':8,'Septembre':9,'Octobre':10,'Novembre':11,'Décembre':12 };
-                        const aFs = releveAnneesFiltres.value;
-                        const mFs = releveMoisFiltres.value;
+                        let aFs = releveAnneesFiltres.value;
+                        let mFs = releveMoisFiltres.value;
+                        // v23.20 : si un cycle est sélectionné, dériver aFs/mFs depuis le cycle
+                        const _acRel = releveActiveCycle.value;
+                        if (_acRel) {
+                            const _cd = cyclesDisponibles.value.find(c => c.key === _acRel);
+                            if (_cd) {
+                                aFs = [...new Set([_cd.an, _cd.anPrev])];
+                                mFs = [...new Set([_cd.mois, _cd.moisPrev])];
+                            }
+                        }
                         const isGlobal = isGlobalView.value; // true quand 0 comptes sélectionnés
                         let entries = [];
                         if (isGlobal || comptesFiltres.length > 1) {
@@ -7750,8 +7826,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const releveEvolution = computed(() => {
                         const lignes = bilanLignes.value;
                         if (!lignes || lignes.length === 0) return [];
-                        const aFs = releveAnneesFiltres.value;
-                        const mFs = releveMoisFiltres.value;
+                        let aFs = releveAnneesFiltres.value;
+                        let mFs = releveMoisFiltres.value;
+                        // v23.20 : cycle override pour mode évolution
+                        const _acEv = releveActiveCycle.value;
+                        if (_acEv) {
+                            const _cdEv = cyclesDisponibles.value.find(c => c.key === _acEv);
+                            if (_cdEv) {
+                                aFs = [...new Set([_cdEv.an, _cdEv.anPrev])];
+                                mFs = [...new Set([_cdEv.mois, _cdEv.moisPrev])];
+                            }
+                        }
                         const onglets = releveOnglets.value;
                         const comptesFiltres = releveComptesFiltres.value;
                         const tabsToShow = isGlobalView.value ? onglets : onglets.filter(t => comptesFiltres.includes(t.key));
@@ -9948,7 +10033,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         revenusEnAttenteCourant, vueTemporelle, soldeBancaireReel, ecartRapprochement, regulariserEcart,
                         // v23.10 Prorata-T0
                         prorataVariableT0, provisionsFuturesT0, margeT0, elementsDuMoisPayes, elementsDuMoisTotal,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution,
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, releveActiveCycle, cyclesDisponibles, historiqueCycles, viewedCycleKey, cloturerCycle,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip, showInlineReleve,
                         // v22.00 P1 : référentiel catégories (Dual-Mode foundation)
