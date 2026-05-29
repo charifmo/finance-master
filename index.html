@@ -4299,10 +4299,10 @@
 
                             <!-- KPI 3 : Budget Conso courant (tréso courant − obligations courant) -->
                             <div class="relative group cursor-default">
-                                <!-- ── Carte KPI3 Rétro : Solde Fin de Cycle (v24.10) ── -->
-                                <div v-if="isPilotageRetro" :class="['p-4 rounded-2xl border text-center transition-all', journalHybride.soldeAtterrissage >= 0 ? 'bg-indigo-900/30 border-indigo-600' : 'bg-red-900/30 border-red-600']">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">🏁 Solde Fin de Cycle</p>
-                                    <p :class="['text-2xl font-black tracking-tighter', journalHybride.soldeAtterrissage >= 0 ? 'text-indigo-300' : 'text-red-400']">{{ formatMAD(journalHybride.soldeAtterrissage) }}</p>
+                                <!-- ── Carte KPI3 Rétro : Solde de Clôture (v24.30) ── -->
+                                <div v-if="isPilotageRetro" :class="['p-4 rounded-2xl border text-center transition-all', soldeCloturePilotageRetro >= 0 ? 'bg-indigo-900/30 border-indigo-600' : 'bg-red-900/30 border-red-600']">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">🏁 Solde de Clôture</p>
+                                    <p :class="['text-2xl font-black tracking-tighter', soldeCloturePilotageRetro >= 0 ? 'text-indigo-300' : 'text-red-400']">{{ formatMAD(soldeCloturePilotageRetro) }}</p>
                                     <p class="text-[9px] text-gray-400 mt-1 font-bold">Reporté au cycle suivant</p>
                                 </div>
                                 <!-- ── Carte KPI3 : contenu selon mode ── -->
@@ -5386,8 +5386,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "24.20 Journal-Hybride-Universel";
+                    const CURRENT_VERSION = "24.30 KPI-Retro-Fix";
                     const CHANGELOG = [
+        { version: "24.30 KPI-Retro-Fix", date: "2026-05-30", changes: [
+            "KPI3 retro card : soldeCloturePilotageRetro remplace journalHybride.soldeAtterrissage",
+            "Calcul correct du solde de cloture pour le cycle pilotageViewedCycle",
+            "Titre carte retro : Solde de Cloture au lieu de Solde Fin de Cycle"
+        ] },
         { version: "24.20 Journal-Hybride-Universel", date: "2026-05-30", changes: [
             "journalHybridePourReleve : items individuels pour tout cycle (actuel ou passe)",
             "Suppression ligne agregee Charges variables (Prorata Pilotage)",
@@ -8540,6 +8545,51 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         pilotageViewedCycle.value ? Number(pilotageViewedCycle.value.split('-')[1]) : moisBudgetaire.value.an
                     );
                     const isPilotageRetro = computed(() => pilotageViewedCycle.value !== null);
+                    // v24.30 Solde de cloture reel du cycle retro visualise
+                    const soldeCloturePilotageRetro = computed(() => {
+                        calculationTick.value;
+                        if (!pilotageViewedCycle.value) return 0;
+                        const [mStr, aStr] = pilotageViewedCycle.value.split('-');
+                        const mois = Number(mStr), an = Number(aStr);
+                        const dAnnee = donneesAnnuelles.value[an];
+                        if (!dAnnee) return 0;
+                        const moisNoms = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet',
+                            'Août','Septembre','Octobre','Novembre','Décembre'];
+                        const j = bilanJournal.value;
+                        const courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
+                        const courantKey = courantCpt ? 'cpt_' + courantCpt.id : Object.keys(j)[0];
+                        let soldeInit = 0;
+                        if (courantKey && j[courantKey]) {
+                            for (const e of j[courantKey]) {
+                                if (e.type === 'initial') { soldeInit = e.soldeApres; continue; }
+                                if (!e.mois || e.mois === '—') continue;
+                                const ep = e.mois.split(' ');
+                                const eAn = Number(ep[1] || 0);
+                                const eMois = moisNoms.indexOf(ep[0]);
+                                if (eAn > an || (eAn === an && eMois >= mois)) break;
+                                soldeInit = e.soldeApres;
+                            }
+                        }
+                        let totalRevDue = 0, totalRevPaid = 0;
+                        Object.values(dAnnee.revenus || {}).forEach(r => { const due = Number(r.base || 0); totalRevDue += due; totalRevPaid += getPaidAmount(r, due); });
+                        let totalFixDue = 0, totalFixPaid = 0;
+                        Object.values(dAnnee.chargesFixes || {}).forEach(f => { const due = Number(f.valeur || 0); totalFixDue += due; totalFixPaid += getPaidAmount(f, due); });
+                        let totalVarDue = 0, totalVarPaid = 0;
+                        Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
+                            if ((cv.details || []).length > 0) {
+                                cv.details.forEach(d => { const due = Number(d.montant || 0); totalVarDue += due; totalVarPaid += getPaidAmount(d, due); });
+                            } else {
+                                const due = Number(cv.valeur || 0); totalVarDue += due; totalVarPaid += getPaidAmount(cv, due);
+                            }
+                        });
+                        let totalEp = 0;
+                        const _ep = dAnnee.epargne;
+                        if (Array.isArray(_ep)) _ep.forEach(e => { totalEp += Number(e.valeur || 0); });
+                        else Object.values(_ep || {}).forEach(e => { totalEp += Number(e.valeur || 0); });
+                        let totalIrreg = 0;
+                        getDepensesMois(mois, an).forEach(dep => { totalIrreg += getPaidAmount(dep, Number(dep.montant || 0)) || Number(dep.montant || 0); });
+                        return Math.round((soldeInit + (totalRevPaid || totalRevDue) - (totalFixPaid || totalFixDue) - (totalVarPaid || totalVarDue) - totalEp - totalIrreg) * 100) / 100;
+                    });
                     const pilotageCycleLabel = computed(() => {
                         if (!pilotageViewedCycle.value) return cycleLabel.value;
                         const cy = cyclesDisponibles.value.find(c => c.key === pilotageViewedCycle.value);
@@ -10384,6 +10434,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         journalHybride,
                         // v24.20 Journal-Hybride-Universel
                         journalHybridePourReleve,
+                        // v24.30 KPI-Retro-Fix
+                        soldeCloturePilotageRetro,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, releveActiveCycle, cyclesDisponibles, historiqueCycles, viewedCycleKey, cloturerCycle,
                         // v23.30 Retro-Clean
                         pilotageViewedCycle, pilotageViewedMois, pilotageViewedAn, isPilotageRetro, pilotageCycleLabel,
