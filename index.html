@@ -8224,50 +8224,56 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             }
                         }
 
-                        const allItems = [];
-
+                        // ── Agrégats par grande catégorie (pas de détail individuel) ──
+                        // Revenus
+                        let totalRevDue = 0, totalRevPaid = 0;
                         Object.values(dAnnee.revenus || {}).forEach(r => {
-                            const due = Number(r.base || 0); if (!due) return;
-                            const paid = isItemPaid(r, due);
-                            const amt = paid ? (getPaidAmount(r, due) || due) : due;
-                            allItems.push({ libelle: r.label || 'Revenu', montant: amt, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), etat: paid ? 'realise' : 'prevu' });
+                            const due = Number(r.base || 0);
+                            totalRevDue += due;
+                            totalRevPaid += getPaidAmount(r, due);
                         });
 
+                        // Charges Fixes
+                        let totalFixDue = 0, totalFixPaid = 0;
                         Object.values(dAnnee.chargesFixes || {}).forEach(f => {
-                            const due = Number(f.valeur || 0); if (!due) return;
-                            const paid = isItemPaid(f, due);
-                            const amt = paid ? (getPaidAmount(f, due) || due) : due;
-                            allItems.push({ libelle: f.label || 'Charge fixe', montant: amt, type: 'debit', jourPrevu: Number(f.jourPrevu || 10), etat: paid ? 'realise' : 'prevu' });
+                            const due = Number(f.valeur || 0);
+                            totalFixDue += due;
+                            totalFixPaid += getPaidAmount(f, due);
                         });
 
+                        // Charges Variables
+                        let totalVarDue = 0, totalVarPaid = 0;
                         Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
-                            // Toujours afficher la catégorie (jamais les détails individuels)
-                            let dueTotal, paidTotal;
                             if ((cv.details || []).length > 0) {
-                                dueTotal = cv.details.reduce((s, d) => s + Number(d.montant || 0), 0);
-                                paidTotal = cv.details.reduce((s, d) => s + getPaidAmount(d, Number(d.montant || 0)), 0);
+                                cv.details.forEach(d => { const due = Number(d.montant || 0); totalVarDue += due; totalVarPaid += getPaidAmount(d, due); });
                             } else {
-                                dueTotal = Number(cv.valeur || 0);
-                                paidTotal = getPaidAmount(cv, dueTotal);
+                                const due = Number(cv.valeur || 0); totalVarDue += due; totalVarPaid += getPaidAmount(cv, due);
                             }
-                            if (!dueTotal) return;
-                            const paid = paidTotal > 0;
-                            allItems.push({ libelle: cv.label || 'Variable', montant: paid ? paidTotal : dueTotal, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu' });
                         });
 
-                        getDepensesMois(mois, an).forEach(dep => {
-                            const due = Number(dep.montant || 0); if (!due) return;
-                            const paid = isItemPaid(dep, due);
-                            const amt = paid ? (getPaidAmount(dep, due) || due) : due;
-                            allItems.push({ libelle: dep.nom || dep.label || 'Dépense', montant: amt, type: 'debit', jourPrevu: 20, etat: paid ? 'realise' : 'prevu' });
-                        });
+                        // Épargne
+                        let totalEp = 0;
+                        const _ep = dAnnee.epargne;
+                        if (Array.isArray(_ep)) _ep.forEach(e => { totalEp += Number(e.valeur || 0); });
+                        else Object.values(_ep || {}).forEach(e => { totalEp += Number(e.valeur || 0); });
 
-                        allItems.sort((a, b) => a.jourPrevu - b.jourPrevu);
+                        // Dépenses exceptionnelles du mois
+                        let totalIrreg = 0;
+                        getDepensesMois(mois, an).forEach(dep => { totalIrreg += getPaidAmount(dep, Number(dep.montant || 0)) || Number(dep.montant || 0); });
+
+                        const aggItems = [];
+                        if (totalRevDue)  aggItems.push({ libelle: '💰 Revenus',                    montant: totalRevPaid  || totalRevDue,  type: 'credit', jourPrevu: jdp, etat: 'realise' });
+                        if (totalFixDue)  aggItems.push({ libelle: '🔒 Charges Fixes',              montant: totalFixPaid  || totalFixDue,  type: 'debit',  jourPrevu: 10,  etat: 'realise' });
+                        if (totalVarDue)  aggItems.push({ libelle: '📊 Charges Variables',          montant: totalVarPaid  || totalVarDue,  type: 'debit',  jourPrevu: 15,  etat: 'realise' });
+                        if (totalEp)      aggItems.push({ libelle: '💎 Épargne',                    montant: totalEp,                       type: 'debit',  jourPrevu: jdp, etat: 'realise' });
+                        if (totalIrreg)   aggItems.push({ libelle: '⚠️ Dépenses Exceptionnelles',   montant: totalIrreg,                    type: 'debit',  jourPrevu: 20,  etat: 'realise' });
+
+                        aggItems.sort((a, b) => a.jourPrevu - b.jourPrevu);
 
                         const entries = [];
                         entries.push({ type: 'initial', libelle: 'Solde Initial du Cycle', montant: soldeInit, soldeApres: soldeInit, jourPrevu: jdp, etat: 'realise' });
                         let soldeCourant = soldeInit;
-                        allItems.forEach(item => {
+                        aggItems.forEach(item => {
                             soldeCourant = Math.round((soldeCourant + (item.type === 'credit' ? item.montant : -item.montant)) * 100) / 100;
                             entries.push({ ...item, soldeApres: soldeCourant });
                         });
