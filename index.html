@@ -4410,6 +4410,30 @@
                             </div>
                         </div>
 
+                        <!-- v23.30 : Navigateur de cycles pour régularisation rétro -->
+                        <div class="flex items-center gap-1.5 bg-slate-900/40 rounded-xl px-3 py-2 border border-slate-700/60">
+                            <button @click="pilotageViewedCycle = null"
+                                :class="pilotageViewedCycle === null ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'"
+                                class="text-[9px] font-black px-2.5 py-1.5 rounded-lg transition-all whitespace-nowrap shrink-0">🗓️ Actuel</button>
+                            <div class="flex gap-1 overflow-x-auto flex-1" style="scrollbar-width:thin">
+                                <button v-for="cy in cyclesDisponibles" :key="cy.key"
+                                    @click="pilotageViewedCycle = cy.key"
+                                    :class="pilotageViewedCycle === cy.key ? 'bg-amber-500 text-white ring-2 ring-amber-300' : 'bg-slate-700 text-slate-400 hover:text-amber-300 hover:bg-slate-600'"
+                                    class="text-[9px] font-black px-2 py-1.5 rounded-lg transition-all whitespace-nowrap shrink-0">
+                                    {{ cy.nom }}
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Bannière Mode Régularisation -->
+                        <div v-if="isPilotageRetro" class="flex items-center gap-3 bg-amber-900/20 border border-amber-500/40 rounded-xl px-4 py-3">
+                            <span class="text-base shrink-0">⚠️</span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-amber-300 font-black text-[10px] uppercase tracking-widest">Mode Régularisation</p>
+                                <p class="text-amber-200/60 text-[9px] mt-0.5">Vous modifiez un cycle passé. Les changements impacteront les soldes suivants.</p>
+                            </div>
+                            <button @click="pilotageViewedCycle = null" class="text-[9px] font-black text-amber-400 bg-amber-900/40 px-2 py-1 rounded-lg hover:bg-amber-800/50 transition-all whitespace-nowrap shrink-0">Cycle actuel</button>
+                        </div>
+
                         <!-- Checklist Revenus + Dépenses — v22.30 -->
                         <div class="space-y-4">
                             <!-- 🟢 Entrées d'Argent — checklist par source de revenu -->
@@ -4443,7 +4467,7 @@
                                 <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-750">
                                     <div class="flex items-center gap-3">
                                         <span class="text-blue-400 text-lg">📋</span>
-                                        <span class="text-sm font-black uppercase tracking-widest text-white">Checklist — {{ cycleLabel }}</span>
+                                        <span class="text-sm font-black uppercase tracking-widest text-white">Checklist — {{ pilotageCycleLabel }}</span>
                                     </div>
                                     <span :class="['text-[10px] px-3 py-1 rounded-lg font-black border', elementsDuMoisPayes === elementsDuMoisTotal && elementsDuMoisTotal > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
                                         {{ elementsDuMoisPayes }} / {{ elementsDuMoisTotal }} payés
@@ -4488,10 +4512,10 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-if="getDepensesMois(moisBudgetaire.mois, moisBudgetaire.an).length > 0">
-                                        <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1 mt-2">⚠️ Flux Exceptionnels — {{ cycleLabel }}</p>
+                                    <div v-if="getDepensesMois(pilotageViewedMois, pilotageViewedAn).length > 0">
+                                        <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1 mt-2">⚠️ Flux Exceptionnels — {{ pilotageCycleLabel }}</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="dep in getDepensesMois(moisBudgetaire.mois, moisBudgetaire.an)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
+                                            <div v-for="dep in getDepensesMois(pilotageViewedMois, pilotageViewedAn)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
                                                 <label class="flex items-center gap-3 cursor-pointer flex-1">
                                                     <input type="checkbox" :checked="isItemPaid(dep, dep.montant)" @change="toggleItemPaid(dep, dep.montant)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500 cursor-pointer"/>
                                                     <span :class="['text-sm font-bold transition-all', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-red-300']">{{ dep.nom }}</span>
@@ -5305,8 +5329,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "23.20 Cycle-Ledger";
+                    const CURRENT_VERSION = "23.30 Retro-Clean";
                     const CHANGELOG = [
+                        { version: "23.30 Retro-Clean", date: "2026-05-29 — Navigation rétro-cycles", changes: [
+                            "CHANTIER 1 : Pas de verrou sur les cycles passés — checkboxes toujours actives.",
+                            "CHANTIER 2 : Navigateur de cycles scrollable dans le Pilotage (pilotageViewedCycle). Flux Exceptionnels filtrés par le cycle sélectionné.",
+                            "CHANTIER 3 : Bannière ⚠️ Mode Régularisation (orange) remplace tout verrou rouge. handleDataChange() déclenche le recalcul en cascade."
+                        ] },
                         { version: "23.20 Cycle-Ledger", date: "2026-05-29 — Journal par Cycle Financier", changes: [
                             "CHANTIER 1 : releveCompte et releveEvolution filtrent maintenant par cycle de paie (M-1 + M) via releveActiveCycle.",
                             "CHANTIER 2 : Sélecteur de timeline horizontal scrollable remplace les menus Années/Mois dans inline et modal.",
@@ -8198,6 +8227,20 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         mois: _cyclePaieInfo.value.prochainMois,
                         an: _cyclePaieInfo.value.prochainAn,
                     }));
+                    // v23.30 Retro-Clean : navigation des cycles passés pour régularisation
+                    const pilotageViewedCycle = ref(null); // "5-2026" = Mai 2026, null = cycle actuel
+                    const pilotageViewedMois = computed(() =>
+                        pilotageViewedCycle.value ? Number(pilotageViewedCycle.value.split('-')[0]) : moisBudgetaire.value.mois
+                    );
+                    const pilotageViewedAn = computed(() =>
+                        pilotageViewedCycle.value ? Number(pilotageViewedCycle.value.split('-')[1]) : moisBudgetaire.value.an
+                    );
+                    const isPilotageRetro = computed(() => pilotageViewedCycle.value !== null);
+                    const pilotageCycleLabel = computed(() => {
+                        if (!pilotageViewedCycle.value) return cycleLabel.value;
+                        const cy = cyclesDisponibles.value.find(c => c.key === pilotageViewedCycle.value);
+                        return cy ? cy.nom : cycleLabel.value;
+                    });
                     // Label du cycle actuel ex: "27 Mai → 26 Juin"
                     const cycleLabel = computed(() => {
                         const info = _cyclePaieInfo.value;
@@ -10034,6 +10077,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v23.10 Prorata-T0
                         prorataVariableT0, provisionsFuturesT0, margeT0, elementsDuMoisPayes, elementsDuMoisTotal,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, releveActiveCycle, cyclesDisponibles, historiqueCycles, viewedCycleKey, cloturerCycle,
+                        // v23.30 Retro-Clean
+                        pilotageViewedCycle, pilotageViewedMois, pilotageViewedAn, isPilotageRetro, pilotageCycleLabel,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip, showInlineReleve,
                         // v22.00 P1 : référentiel catégories (Dual-Mode foundation)
