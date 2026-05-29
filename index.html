@@ -8241,19 +8241,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
 
                         Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
+                            // Toujours afficher la catégorie (jamais les détails individuels)
+                            let dueTotal, paidTotal;
                             if ((cv.details || []).length > 0) {
-                                cv.details.forEach(d => {
-                                    const due = Number(d.montant || 0); if (!due) return;
-                                    const paid = isItemPaid(d, due);
-                                    const amt = paid ? (getPaidAmount(d, due) || due) : due;
-                                    allItems.push({ libelle: (cv.label ? cv.label + ' · ' : '') + (d.label || d.nom || ''), montant: amt, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu' });
-                                });
+                                dueTotal = cv.details.reduce((s, d) => s + Number(d.montant || 0), 0);
+                                paidTotal = cv.details.reduce((s, d) => s + getPaidAmount(d, Number(d.montant || 0)), 0);
                             } else {
-                                const due = Number(cv.valeur || 0); if (!due) return;
-                                const paid = isItemPaid(cv, due);
-                                const amt = paid ? (getPaidAmount(cv, due) || due) : due;
-                                allItems.push({ libelle: cv.label || 'Variable', montant: amt, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu' });
+                                dueTotal = Number(cv.valeur || 0);
+                                paidTotal = getPaidAmount(cv, dueTotal);
                             }
+                            if (!dueTotal) return;
+                            const paid = paidTotal > 0;
+                            allItems.push({ libelle: cv.label || 'Variable', montant: paid ? paidTotal : dueTotal, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu' });
                         });
 
                         getDepensesMois(mois, an).forEach(dep => {
