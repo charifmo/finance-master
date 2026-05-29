@@ -5299,8 +5299,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "23.12 Relevé-Sync";
+                    const CURRENT_VERSION = "23.15 Relevé-Intégral";
                     const CHANGELOG = [
+                        { version: "23.15 Relevé-Intégral", date: "2026-05-29 — Fix Relevé Complet", changes: [
+                            "CAUSE RACINE : revenus/charges du Budget Structurel indexés sous clé littérale 'courant' au lieu de 'cpt_<id>' physique car type==='liquide' ignoré.",
+                            "FIX _log() : _resolveCle() gère 'courant', null/undefined, IDs nus → clé physique normalisée.",
+                            "FIX _normKey() : helper centralisé appliqué sur routing revenus/chargesFixes/chargesVariables.",
+                            "FIX toggleItemPaid, controleTotaux, CFO, courantId, sandboxProjection : find() étendu à type==='liquide'.",
+                            "FIX releveOnglets : icône 💳 pour type='liquide'."
+                        ] },
                         { version: "22.21 Saisie-Zen", date: "2026-05-27 — Saisie minimaliste type Spotlight/WhatsApp", changes: ["REFONTE UX Saisie : remplacement du formulaire 'lourd' (5 champs visibles, ~280px de hauteur) par une carte 1-ligne (~50px) : input + bouton ➕ rond. Bordures fines, paddings réduits.", "Feedback discret : sous l'input, badges-pilules (💵 montant | 🏷️ catégorie | 🏦 compte | 📅 date) qui n'apparaissent QUE quand l'utilisateur a commencé à taper. Indique en temps réel ce que l'app a détecté.", "Form détaillé CACHÉ par défaut : accessible via lien '⚙️ Ajuster' aligné à droite des badges. Au tap, déplie un mini-form (2 cols datetime+montant, select catégorie, select compte, libellé) entre l'input et le journal, sans modifier le layout global.", "saisieDateLabel computed : affiche 'Aujourd'hui HH:MM' si date du jour, sinon 'DD/MM HH:MM'. showSaisieDetails ref bool pour l'expand/collapse.", "Pas de regression sur la modal FAB mobile (toujours en form complet pour la saisie depuis n'importe quel écran)."] },
                         { version: "22.20 Mobile-Unified", date: "2026-05-27 — Refonte mobile + panneau Réalisé unifié", changes: ["REFONTE STRUCTURELLE : extraction du markup Saisie/Contrôle/Trésorerie/Synthèse hors du panneau desktop → nouveau panneau Réalisé UNIFIÉ visible sur desktop ET mobile (v-if=appMode === 'reel', placé après les panneaux Prévi). Les panneaux Prévi (desktop+mobile) sont désormais gated v-if=appMode === 'previsionnel'.", "BOTTOM-NAV MOBILE UNIVERSELLE : sortie du panneau mobile, rendue toujours visible quand isMobile. Contenu conditionné par appMode : 6 boutons Prévi (bilan/parametres/flux/studio/cfo/wealth) + 1 toggle '📊 Réalisé' / 4 boutons Réalisé (saisie/controle/tresorerie/syntheseReel) + 1 toggle '🔮 Prévi'. Plus de tabs Réalisé inaccessibles sur mobile.", "MASTER SWITCH MOBILE : ajouté dans le top-bar sticky du panneau Réalisé (toggle Prévi/Réalisé visible). Sur desktop le switch reste dans la sidebar.", "FAB SAISIE ULTRA-RAPIDE : bouton flottant ➕ vert toujours visible sur mobile (bottom-20 right-4). Au tap → modal bottom-sheet plein écran avec Spotlight + form compact + Valider. Permet une saisie en 3 secondes depuis n'importe quel écran (Bilan, CFO, Wealth…).", "FAB SAVE VPS : conservé, déplacé en bottom-32 pour ne pas chevaucher le nouveau FAB Saisie.", "VALIDATIONS : showSaisieQuickModal + openSaisieQuickModal + closeSaisieQuickModal + validerSaisieFormFromQuick (qui ferme le modal après succès). validerSaisieForm retourne désormais bool.", "DEBT : Trésorerie + Synthèse restent placeholders P5 mais sont accessibles depuis la nav mobile."] },
                         { version: "22.10 P3", date: "2026-05-26 — UX Mobile + Saisie hybride zéro friction", changes: ["FIX CRITIQUE : fermeture manquante </div> du tab Dashboard (avalait le <script> Vue et cassait toute l'app — diagnostiqué via parseur custom Node.js après échec d'un stack-tracker mono-ligne).", "Onglet Saisie REFONTE : barre Smart Spotlight en haut (parse temps réel le montant + libellé + devine la catégorie) qui POPULE un formulaire détaillé en dessous (datetime-local par défaut sur 'maintenant', montant, catégorie via <select> + optgroups groupés par type, compte source, libellé). Le bouton Valider gros et full-width sur mobile.", "Catégorie guessing AMÉLIORÉ : split en mots (≥3 chars), match exact puis substring sur le label des catégories existantes. Si rien trouvé, ne touche pas au choix manuel de l'utilisateur.", "Mobile responsive : tableaux (journal Saisie + Contrôle par catégorie) enveloppés dans overflow-x-auto avec min-w forcé → scroll horizontal natif au lieu de débordement. Colonnes Compte/Source masquées sur mobile (hidden md:table-cell). Headers en flex-col → md:flex-row, paddings adaptés (p-2 md:p-3).", "Onglet Contrôle : 3 KPI cards toujours en grid-cols-1 md:grid-cols-3, tableau wrappé en overflow-x-auto.", "Schéma transaction étendu avec champ optionnel datetime ('YYYY-MM-DDTHH:MM') pour timestamp précis. Backward compat : si datetime absent, fallback sur date YYYY-MM-DD."] },
@@ -5816,7 +5823,7 @@
                             lines.push('  • Autres comptes (épargne, CTO…) → SOLDE CUMULATIF projeté en fin de mois.');
                             const rowsAnnee = (bilanLignes.value || []).filter(b => Number(b.annee) === Number(aNum));
                             // Clé du compte courant physique (pour mapper sourceCompte='courant')
-                            const _courantCpt = comptes.value.find(c => c.type === 'courant');
+                            const _courantCpt = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
                             const _courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : null;
                             // v20.62 : Surplus mensuel par mois (source = surplusParMois, même moteur que popup SURPLUS RÉEL)
                             const _surplusMois = surplusParMois.value || [];
@@ -5910,7 +5917,7 @@
                     const _buildPayloadCFO = () => {
                         const aNum = anneeAffichage.value;
                         const data = (donneesAnnuelles.value || {})[aNum] || {};
-                        const _courantCptCFO = comptes.value.find(c => c.type === 'courant');
+                        const _courantCptCFO = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
                         const _courantLabelCFO = _courantCptCFO ? (_courantCptCFO.label || 'Compte Courant') : 'Compte Courant';
                         const _getLabel = (src) => {
                             if (!src || src === 'courant') return _courantLabelCFO;
@@ -6444,7 +6451,7 @@
 
                         // 2) Injecter les événements dans le vrai state (ordre chronologique)
                         const sorted = [...sandboxEvents.value].sort((a, b) => (a.annee - b.annee) || (a.mois - b.mois));
-                        const courantCompte = comptes.value.find(c => c.type === 'courant');
+                        const courantCompte = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
                         for (const ev of sorted) {
                             const montant = Number(ev.montant) || 0;
                             if (ev.type === 'achat') {
@@ -6543,7 +6550,7 @@
                     // v17.24 : Comptes bancaires disponibles dans les selects source/destination
                     // v17.38 : Filtrer le compte courant physique — 'courant' est déjà l'option par défaut codée en dur
                     const comptesSelectOptions = computed(() => {
-                        const courantId = comptes.value.find(c => c.type === 'courant')?.id;
+                        const courantId = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide')?.id;
                         return comptes.value
                             .filter(c => c.type !== 'courant' && c.id !== courantId)
                             .map(c => ({ id: c.id, label: c.label, type: c.type, icone: c.icone || '💰' }));
@@ -7609,7 +7616,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // Comptes physiques (cpt_*)
                         comptes.value.forEach(c => {
                             const k = 'cpt_' + c.id;
-                            if (j[k] && j[k].length > 0) tabs.push({ key: k, label: c.nom || c.label || k, icon: c.icone || (c.type === 'courant' ? '💳' : c.type === 'epargne' ? '🏦' : '📈'), type: 'cpt' });
+                            if (j[k] && j[k].length > 0) tabs.push({ key: k, label: c.nom || c.label || k, icon: c.icone || (c.type === 'courant' || c.type === 'liquide' ? '💳' : c.type === 'epargne' ? '🏦' : '📈'), type: 'cpt' });
                         });
                         // v17.45 : Épargne virtuelle — masquer si linkedAccountId (getEpLinkedId, radical)
                         Object.keys(j).filter(k => k.startsWith('ep_')).forEach(k => {
@@ -7805,7 +7812,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // Résoudre le compte cible dans comptes.value
                         let compteCible = null;
                         if (compteKey === 'courant') {
-                            compteCible = (comptes.value || []).find(c => c.type === 'courant');
+                            // v23.15 : inclure type 'liquide' comme compte courant principal
+                            compteCible = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
                         } else if (compteKey.startsWith('cpt_')) {
                             const cptId = compteKey.slice(4);
                             compteCible = (comptes.value || []).find(c => String(c.id) === String(cptId));
@@ -8888,7 +8896,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const _journal = {};
                         const _log = (compte, mois, annee, libelle, montant, type) => {
                             // v17.32 : mapper 'courant' vers la clé physique cpt_<id> du compte courant
-                            const cle = (compte === 'courant' && courantCptKey) ? courantCptKey : compte;
+                            // v23.15 : résolution défensive — 'courant' | null | bare-id → clé physique
+                            const _resolveCle = (k) => {
+                                if (!k || k === 'courant') return courantCptKey || 'courant';
+                                if (/^\d+$/.test(String(k))) return 'cpt_' + k; // ID numérique sans préfixe
+                                return k;
+                            };
+                            const cle = _resolveCle(compte);
                             if (!_journal[cle]) _journal[cle] = [];
                             const entries = _journal[cle];
                             const soldeBefore = entries.length > 0 ? entries[entries.length - 1].soldeApres : (cle.startsWith('cpt_') ? (Number((comptes.value.find(c => 'cpt_'+c.id === cle) || {}).solde) || 0) : Number((soldesInitiaux.value || {})[cle] || 0));
@@ -8916,9 +8930,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                         // v17.25 : Tracking physique des comptes bancaires (parallèle au moteur existant)
                         let soldesComptes = {};
-                        // v23.12 : type 'liquide' = compte courant physique (même rôle que 'courant')
+                        // v23.15 : type 'liquide' = compte courant physique (même rôle que 'courant')
                         const courantCompte = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
                         const courantCptKey = courantCompte ? 'cpt_' + courantCompte.id : null;
+                        // v23.15 : helper de normalisation utilisé partout dans les loops revenus/charges
+                        const _normKey = (k) => {
+                            if (!k || k === 'courant') return courantCptKey || 'courant';
+                            if (/^\d+$/.test(String(k))) return 'cpt_' + k;
+                            return k;
+                        };
                         comptes.value.forEach(c => {
                             soldesComptes['cpt_' + c.id] = Number(c.solde) || 0;
                         });
@@ -8969,13 +8989,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const ratio = partsSum > 0 ? effVal / partsSum : 0;
                                     r.parts.forEach(p => {
                                         const pv = Number(p.base || 0) * ratio;
-                                        const dest = p.destinationCompte || 'courant';
-                                        if (dest === 'courant') { revCourant += pv; }
+                                        const dest = _normKey(p.destinationCompte);
+                                        if (dest === courantCptKey || dest === 'courant') { revCourant += pv; }
                                         else { revParCompte[dest] = (revParCompte[dest] || 0) + pv; }
                                     });
                                 } else {
-                                    const dest = (r || {}).destinationCompte || 'courant';
-                                    if (dest === 'courant') { revCourant += effVal; }
+                                    const dest = _normKey((r || {}).destinationCompte);
+                                    if (dest === courantCptKey || dest === 'courant') { revCourant += effVal; }
                                     else { revParCompte[dest] = (revParCompte[dest] || 0) + effVal; }
                                 }
                             });
@@ -8994,13 +9014,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const ratio = partsSum > 0 ? effVal / partsSum : 0;
                                     f.parts.forEach(p => {
                                         const pv = Number(p.valeur || 0) * ratio;
-                                        const src = p.sourceCompte || 'courant';
-                                        if (src === 'courant') { fixCourant += pv; }
+                                        const src = _normKey(p.sourceCompte);
+                                        if (src === courantCptKey || src === 'courant') { fixCourant += pv; }
                                         else { fixParCompte[src] = (fixParCompte[src] || 0) + pv; }
                                     });
                                 } else {
-                                    const src = (f || {}).sourceCompte || 'courant';
-                                    if (src === 'courant') { fixCourant += effVal; }
+                                    const src = _normKey((f || {}).sourceCompte);
+                                    if (src === courantCptKey || src === 'courant') { fixCourant += effVal; }
                                     else { fixParCompte[src] = (fixParCompte[src] || 0) + effVal; }
                                 }
                             });
@@ -9018,13 +9038,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const ratio = partsSum > 0 ? effVal / partsSum : 0;
                                     curr.parts.forEach(p => {
                                         const pv = Number(p.valeur || 0) * ratio;
-                                        const src = p.sourceCompte || 'courant';
-                                        if (src === 'courant') { varCourant += pv; }
+                                        const src = _normKey(p.sourceCompte);
+                                        if (src === courantCptKey || src === 'courant') { varCourant += pv; }
                                         else { varParCompte[src] = (varParCompte[src] || 0) + pv; }
                                     });
                                 } else {
-                                    const src = (curr || {}).sourceCompte || 'courant';
-                                    if (src === 'courant') { varCourant += effVal; }
+                                    const src = _normKey((curr || {}).sourceCompte);
+                                    if (src === courantCptKey || src === 'courant') { varCourant += effVal; }
                                     else { varParCompte[src] = (varParCompte[src] || 0) + effVal; }
                                 }
                             });
