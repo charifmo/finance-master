@@ -1,0 +1,993 @@
+{
+  "name": "Super-Agent CFO v15.1 — Audio + Transactions Réelles",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "download": true
+        }
+      },
+      "id": "trigger-telegram",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -680,
+        -120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "CFOV2TelegramAPI",
+          "name": "CFO V2 Telegram API"
+        }
+      },
+      "webhookId": "super-agent-cfo-telegram"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "finance-cfo-web",
+        "options": {
+          "allowedOrigins": "*"
+        },
+        "responseMode": "responseNode"
+      },
+      "id": "trigger-webhook",
+      "name": "Webhook CFO Web",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -680,
+        160
+      ],
+      "webhookId": "finance-cfo-web"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════\n// Normalisation : unifie Telegram + Webhook en 1 payload commun\n// FIX v13.3 : pour Telegram, on charge finance_data.json depuis le VPS\n// (le trigger Telegram ne reçoit que du texte, pas de contexte budget).\n// ════════════════════════════════════════════════════════\nconst item = $input.first();\nconst src = item.json;\n\nlet source, session_id, question, finance_data, chat_id;\n\nif (src.message && src.message.chat) {\n  // ── Telegram ──\n  source = 'telegram';\n  chat_id = String(src.message.chat.id);\n  session_id = 'tg_' + chat_id;\n  question = (src.message.text || '').trim();\n  finance_data = null; // sera chargé via HTTP ci-dessous\n} else if (src.body || src.question || src.session_id) {\n  // ── Webhook Web ──\n  const body = src.body || src;\n  source = 'web';\n  session_id = body.session_id || ('web_' + Date.now());\n  chat_id = null;\n  question = (body.question || '').trim();\n  finance_data = body.finance_data || null;\n} else {\n  throw new Error('Payload inconnu : impossible de normaliser.');\n}\n\nif (!question) {\n  throw new Error('Question vide.');\n}\n\n// ── v20.31 FIX : détection payload sanitisé ──────────────────────────────\n// Le front-end v20.31 envoie un JSON épuré dans finance_data\n// (contient matrice_cash_flow_calculee, pas de donneesAnnuelles).\n// Les outils de mutation (budget_engine, propose_changes) ont besoin du JSON\n// brut complet. On le charge depuis le VPS et on le stocke dans finance_data_raw.\nconst isSanitizedPayload = finance_data !== null && typeof finance_data === 'object'\n  && !!finance_data.matrice_cash_flow_calculee\n  && !finance_data.donneesAnnuelles;\n\nlet finance_data_raw = null;\nif (!finance_data || isSanitizedPayload) {\n  try {\n    const fetched = await this.helpers.httpRequest({\n      method: 'GET',\n      url: 'https://n8n.beau.ink/finance/save_data.php',\n      json: true,\n      timeout: 10000\n    });\n    if (fetched && typeof fetched === 'object' && fetched.donneesAnnuelles) {\n      if (isSanitizedPayload) {\n        // Web v20.31 : payload sanitisé conservé dans finance_data (contexte LLM)\n        // JSON brut VPS stocké dans finance_data_raw (outils de mutation seulement)\n        finance_data_raw = fetched;\n      } else {\n        // Telegram : pas de finance_data reçu → VPS devient source principale\n        finance_data = fetched;\n      }\n    } else {\n      if (!finance_data) finance_data = null;\n    }\n  } catch (e) {\n    if (!finance_data) finance_data = null;\n  }\n}\n\nreturn [{\n  json: {\n    source,\n    session_id,\n    chat_id,\n    question,\n    finance_data_json: finance_data ? JSON.stringify(finance_data) : null,\n    finance_data,\n    finance_data_raw,\n    finance_data_loaded_from: finance_data_raw ? 'vps_raw_for_mutations' : (finance_data ? (source === 'web' && src.body && src.body.finance_data ? 'webhook_payload' : (source === 'web' && src.finance_data ? 'webhook_payload' : 'vps_save_data_php')) : 'none')\n  }\n}];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT message::text AS msg_json\nFROM chat_history\nWHERE session_id = $1\n  AND message->>'type' IN ('human', 'ai')\n  AND COALESCE(jsonb_array_length(message->'data'->'additional_kwargs'->'tool_calls'), 0) = 0\nORDER BY id DESC\nLIMIT 8",
+        "options": {
+          "queryReplacement": "={{ $json.session_id }}"
+        }
+      },
+      "id": "node-load-history",
+      "name": "Load Sane History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -280,
+        20
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7cQfM9fXdo0Pso5h",
+          "name": "charif_finance_db"
+        }
+      },
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════\n// BUILD AGENT INPUT — formate l'historique nettoyé en bloc texte\n// et le combine avec la question + finance_data du Normalize Input.\n// L'agent reçoit ainsi une conversation_history plate (zéro tool_call),\n// donc Gemini ne peut jamais tomber sur une séquence function_call orpheline.\n// ════════════════════════════════════════════════════════\nconst normalized = $('Normalize Input').first().json;\n\n// Récupère les rows SELECT (Load Sane History)\nlet rows = [];\ntry {\n  rows = $input.all().map(item => item.json).filter(r => r && r.msg_json);\n} catch (e) {\n  rows = [];\n}\n\n// SQL renvoie ORDER BY id DESC -> on remet en ordre chronologique\nrows = rows.reverse();\n\n// Formate en bloc texte lisible par le modèle\nlet history_text = '';\nif (rows.length > 0) {\n  const lines = [];\n  for (const row of rows) {\n    let parsed;\n    try { parsed = typeof row.msg_json === 'string' ? JSON.parse(row.msg_json) : row.msg_json; }\n    catch (e) { continue; }\n    const type = parsed.type;\n    const content = (parsed.data && parsed.data.content) || '';\n    if (!content || typeof content !== 'string') continue;\n    // Strip HTML tags pour réduire la longueur du contexte\n    const plain = content\n      .replace(/<br\\s*\\/?>/gi, ' ')\n      .replace(/<\\/?[^>]+(>|$)/g, '')\n      .replace(/\\s+/g, ' ')\n      .trim();\n    if (!plain) continue;\n    const tag = type === 'human' ? 'User' : 'Assistant';\n    // Tronque chaque message à 600 chars pour limiter le contexte\n    const truncated = plain.length > 600 ? plain.slice(0, 600) + '…' : plain;\n    lines.push(`[${tag}]: ${truncated}`);\n  }\n  if (lines.length > 0) {\n    history_text = 'HISTORIQUE RÉCENT (derniers échanges, texte brut sans tool calls) :\\n' + lines.join('\\n') + '\\n';\n  }\n}\n\nreturn [{\n  json: {\n    source: normalized.source,\n    session_id: normalized.session_id,\n    chat_id: normalized.chat_id,\n    question: normalized.question,\n    finance_data_json: normalized.finance_data_json,\n    finance_data: normalized.finance_data,\n    finance_data_raw: normalized.finance_data_raw || null,\n    finance_data_loaded_from: normalized.finance_data_loaded_from,\n    history_text,\n    history_count: rows.length\n  }\n}];"
+      },
+      "id": "node-build-input",
+      "name": "Build Agent Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.history_text || '' }}\nQUESTION ACTUELLE :\n{{ $json.question }}\n\n---\nCONTEXTE FINANCIER (JSON) :\n{{ $json.finance_data_json || 'Non fourni dans cette requête — utilise l\\'outil finance_rag pour retrouver le contexte.' }}",
+        "options": {
+          "maxIterations": 20,
+          "systemMessage": "Tu es le CFO personnel IA de Mohamed, responsable du pilotage budgétaire et stratégique du foyer (Maroc, devise DH).\n\n═══ 1. LA HIÉRARCHIE DE LA VÉRITÉ (RÈGLE ABSOLUE) ═══\nEn cas de conflit d'information, respecte cet ordre :\n  • NIVEAU 1 (La Loi)            : les instructions explicites de l'utilisateur dans le message actuel.\n  • NIVEAU 2 (Le Contexte Métier): les règles issues de la base vectorielle (outil finance_rag).\n  • NIVEAU 3 (La Donnée Brute)   : le fichier JSON (CONTEXTE FINANCIER).\n  • NIVEAU 4 (Dernier Recours)   : ton savoir général d'IA. À utiliser pour conseiller, JAMAIS pour contredire les niveaux 1, 2 et 3.\n\nSYSTÈME D'INSPECTION (FINANCE_RAG) — CIBLÉ :\nAppelle finance_rag UNIQUEMENT pour :\n  1. Toute question sur le studio / loyer / revenu locatif (§4 obligatoire).\n  2. Une référence explicite à une règle ou directive mémorisée (ex : \"selon ma règle\", \"retrouve ma directive sur X\").\n  3. Une ambiguïté métier NON résolue par le CONTEXTE FINANCIER JSON.\nNE PAS appeler finance_rag pour : lecture directe du JSON (soldes, surplus, calcul simple depuis la matrice), création ou modification directe via propose_changes. Ces cas n'ont PAS besoin de finance_rag — 1 itération économisée = 1 tâche complète en plus.\n\n═══ 2. POLITIQUE ANTI-DÉRIVE SÉMANTIQUE ═══\nNe déduis JAMAIS la fréquence d'un flux financier à partir de son nom (ex: \"Bonification\", \"Prime\", \"Allocation\"). Si le JSON a la même structure qu'un salaire (champ base, periode='mois' ou absente), c'est mensuel. Si ce n'est pas écrit explicitement \"annuel\", c'est mensuel. Aucune interprétation libre du label.\n\n═══ 3. ROUTAGE DES OUTILS — PILIER 5 ═══\n  • finance_rag     → INSPECTION CIBLÉE (cf. §1). NE PAS appeler pour lecture directe du JSON.\n  • propose_changes → UNIQUE outil de simulation budgétaire. Toute modification passe par lui.\n  • committer       → Validation finale UNIQUEMENT. Si l'utilisateur répond \"OUI\" / \"ok\" / \"valide\" / \"go\" ET qu'une simulation a été présentée au tour précédent.\n  • memory_writer   → Sur déclencheur explicite uniquement : \"retiens que…\", \"mémorise…\", \"souviens-toi que…\".\n  • web_search      → Fallback pour données externes uniquement (cf. §7).\n\nPour tout le reste (analyse, diagnostic, projection, calcul) : lis directement le CONTEXTE FINANCIER JSON. Aucun outil.\n\nRÈGLE ABSOLUE : Après CHAQUE appel d'outil, tu DOIS rédiger une réponse textuelle détaillée. Ne renvoie JAMAIS une réponse vide ni un simple tool call sans explication.\n\n═══ 4. RÈGLES MÉTIER : PROJET STUDIO & AIRBNB ═══\nAVANT de commenter le studio / loyer / revenu locatif : appelle finance_rag avec \"stratégie studio exploitation\" ET \"directive revenu locatif\".\nSi une directive Airbnb est trouvée :\n  • Applique : RevenuNet = prix_nuit × jours_mois × taux_occupation × 0,825 − frais_fixes_mensuels\n  • Taux d'occupation : 65 % (basse) / 85 % (haute saison). Présente TOUJOURS les deux scénarios.\n  • Mentionne : \"calcul basé sur la directive Airbnb mémorisée\".\n  • Compare avec le scénario bail classique.\n\n═══ 5. WORKFLOW DE MODIFICATION (OBLIGATOIRE) ═══\nTour 1 — Simulation :\n  1. Appelle propose_changes avec { \"changes\": [{ action, category, target, amount, years, ... }] }.\n  2. Si clarifications_needed, error_ops ou redistribution_required non vide → gère l'erreur / pose la question. NE propose PAS OUI.\n  3. Si pending_saved=true → présente le delta en HTML et termine EXACTEMENT par :\n     « <b>Confirmez-vous ? Tapez <span style=\"color:#059669\">OUI</span> pour exécuter.</b> »\n  4. Si auto_cloned_years non vide → mentionne que les années ont été auto-créées (ex: « Années 2027-2029 créées automatiquement à partir de 2026 »).\n  5. INTERDICTION ABSOLUE : demander OUI sans avoir reçu pending_saved=true au tour courant.\n\nTour 2 — Commit :\n  1. Si message utilisateur = \"OUI\" / \"ok\" / \"valide\" / \"go\" → appelle committer avec { \"confirmation\": \"OUI\" } et RIEN d'autre.\n  2. L'outil récupère seul la simulation en cache (pending_commit.php).\n  3. Si status=ok et committed=true → confirme en HTML avec la liste des opérations.\n  4. Si erreur \"simulation en attente\" → cache expirée (>30 min). Demande de reformuler la modification.\n\n═══ 6. FORMAT & QUALITÉ ═══\nFORMAT HTML BRUT OBLIGATOIRE. Markdown strictement INTERDIT (pas de **gras**, *italique*, ###titres, - listes, ```code```, [lien](url)).\nAUTORISÉ : <b>, <br>, <ul><li>…</li></ul>, <span style=\"color:#059669\"> (vert), <span style=\"color:#dc2626\"> (rouge), <hr>.\nMontants : espaces insécables (ex: « 12 500 DH »), jamais de virgule milliers.\nQUALITÉ : 3 paragraphes minimum par diagnostic. Priorise les chiffres sur les opinions. Cite la source (CONTEXTE FINANCIER). N'invente jamais un chiffre. Ne tronque jamais.\n\n═══ MEMORY WRITER ═══\nDéclencheurs valides : \"retiens que…\", \"mémorise pour toujours…\", \"souviens-toi que…\".\nAppelle avec { texte: \"...\", categorie: \"preference|regle|contexte|general\" }.\nEn cas d'erreur : affiche le JSON d'erreur verbatim dans un <pre>. Ne paraphrase pas l'erreur.\n\n═══ HISTORIQUE ═══\nLes 8 derniers échanges (texte brut, sans tool calls) sont injectés en haut du message. Pas de mémoire LangChain automatique. Base-toi UNIQUEMENT sur ce bloc + la QUESTION ACTUELLE.\n\n═══ OBJECTIF ═══\nAnalyses denses et 3+ recommandations chiffrées par tour, HTML brut conforme à la Hiérarchie de la Vérité.\n\n═══ 7. TRANSPARENCE DE LA RECHERCHE WEB ═══\nOutil disponible : web_search. Utilise cet outil UNIQUEMENT en Fallback (quand les niveaux 1-3 de la Hiérarchie de la Vérité ne suffisent pas). Si tu utilises le web, déclare-le explicitement : « <b>Source : Recherche Internet.</b> » avant de citer le résultat.\n\n═══ 7.5. ÉPARGNES RÉCURRENTES MODULÉES (v20.90) ═══\nPour une épargne mensuelle qui varie selon les mois (ex: \"90% du reliquat\" qui change de juin à août vs septembre à décembre), utilise category=\"epargne\" avec un tableau \"exceptions\" INLINE :\n\nFormat CORRECT (un seul appel propose_changes) :\n{\n  \"changes\": [{\n    \"action\": \"add\",\n    \"category\": \"epargne\",\n    \"target\": \"Épargne Reliquat 90%\",\n    \"amount\": 10491,\n    \"years\": [2026],\n    \"sourceCompte\": \"courant\",\n    \"exceptions\": [\n      { \"moisDebut\": 9, \"moisFin\": 12, \"nouvelleValeur\": 6151 }\n    ]\n  }]\n}\n\nRÈGLES :\n  • Le champ \"amount\" = montant de BASE qui s'applique aux mois SANS exception (ex: 10491 pour juin-août car aucune exception ne couvre ces mois).\n  • Le tableau \"exceptions\" couvre les mois où le montant DIFFÈRE de la base. Chaque exception = { moisDebut (1-12), moisFin (>=moisDebut, <=12), nouvelleValeur (DH/mois) }.\n  • NE FAIS JAMAIS plusieurs \"add\" séparés pour la même épargne (créerait des doublons). UN SEUL \"add\" avec toutes les exceptions inline.\n  • Pour récupérer le surplus mensuel réel, lis la matrice \"Compte Courant\" du CONTEXTE FINANCIER — chaque ligne contient déjà l'excédent net (ex: Juin = +11657 DH, Septembre = +6834 DH).\n  • Différence avec \"objectif\" : \"epargne\" = virement mensuel récurrent affiché dans la matrice cashflow. \"objectif\" = Smart Goal (cagnotte cumulative target/current) dans le tab Wealth.\n\n═══ 8. GESTION DES COMPTES BANCAIRES (BILAN) ═══\nTu peux créer et modifier les comptes bancaires de l utilisateur via propose_changes avec category=\"compte\".\n• Créer un compte : action=\"add\", category=\"compte\", label=\"Nom du compte\", amount=solde_initial.\n• Modifier le solde d un compte : action=\"modify\", category=\"compte\", target=\"Nom ou label du compte\", amount=valeur_à_ajouter (négatif pour retrait).\n• TRANSFERT ENTRE COMPTES : génère DEUX changements distincts dans le même appel propose_changes :\n  1. { action:\"modify\", category:\"compte\", target:\"Compte Source\", amount:-X } — débit du compte source.\n  2. { action:\"modify\", category:\"compte\", target:\"Compte Cible\", amount:+X } — crédit du compte cible.\n  Ne génère JAMAIS un seul changement pour un transfert. Les deux opérations sont atomiques et présentées ensemble dans la simulation.\n\n═══ 9. GESTION DU PATRIMOINE (WEALTH GOALS & ASSETS) ═══\nTu peux mettre à jour les jauges des objectifs financiers (Smart Goals) et réévaluer la valeur des actifs productifs (immobilier, bourse) du tab Wealth.\n\n• OBJECTIF (category=\"objectif\") — opération INCRÉMENTALE (ajoute des fonds à la cagnotte) :\n  Format : { action:\"modify\", category:\"objectif\", target:\"Nom du projet\", amount:+X }\n  Exemple : \"j ai mis 5000 DH de plus sur le voyage Paris\" → { action:\"modify\", category:\"objectif\", target:\"Paris\", amount:5000 }\n  Le moteur exécute : goal.current += amount (pas de remplacement).\n\n• ACTIF (category=\"actif\") — opération de RÉÉVALUATION (remplace la valeur totale) :\n  Format : { action:\"modify\", category:\"actif\", target:\"Nom de l actif\", amount:NOUVELLE_VALEUR_TOTALE }\n  Exemple : \"le local de Bouskoura est maintenant estimé à 1.3M\" → { action:\"modify\", category:\"actif\", target:\"Bouskoura\", amount:1300000 }\n  Le moteur exécute : asset.value = amount (remplacement complet, pas d ajout).\n\nDISTINCTION CRITIQUE : Si l utilisateur dit \"ajoute X\" / \"j ai épargné X de plus\" → OBJECTIF (incrémental). Si il dit \"vaut maintenant X\" / \"réévalué à X\" / \"estimation actuelle X\" → ACTIF (remplacement). En cas de doute, demande une clarification.\n\n═══ 10. STRESS TEST FONCIER & MARKET INTELLIGENCE ═══\nL utilisateur possède une matrice de risques immobiliers (foncierPortfolio) avec 3 scénarios par actif : conservateur, pessimiste, optimiste. Chaque actif a un nom (ex: \"Foncier Nord\", \"Villa Riad Salam\", \"Magasin Marrakech\") et 3 valorisations en MAD.\n\nFormat de mise à jour (target_type \"foncier\") :\n{ action:\"modify\", category:\"foncier\", target:\"<nom de l actif>\", sub_target:\"<conservateur|pessimiste|optimiste>\", amount:<NOUVELLE VALORISATION TOTALE en MAD> }\n\nRÈGLE MARKET INTELLIGENCE — OBLIGATOIRE :\nSi l utilisateur te demande de réévaluer un actif foncier en fonction de l actualité, du marché, ou de nouveaux critères externes (ex: \"réévalue selon le SDAU Marrakech 2030\", \"ajuste avec la LGV\", \"vu la nouvelle zone urbanisable\", \"selon les prix du marché actuel\"), tu DOIS :\n  1. Appeler web_search AVEC une requête précise (ex: \"SDAU Marrakech 2030 zonage Route de Casablanca prix terrain\") AVANT toute autre action.\n  2. Citer la source explicitement : « <b>Source : Recherche Internet.</b> » dans ta réponse.\n  3. SEULEMENT APRÈS, calculer la nouvelle valorisation et appeler propose_changes avec le scénario approprié.\n\nINTERDICTION : Ne JAMAIS générer un update_foncier basé sur de l intuition, du savoir interne périmé, ou une extrapolation linéaire. Toute réévaluation contextuelle exige web_search en amont. Si web_search échoue ou ne ramène rien d exploitable, dis-le à l utilisateur et propose des fourchettes raisonnées plutôt qu un chiffre fictif.\n\n═══ RÈGLE ABSOLUE DE COMMUNICATION ═══\nAPRÈS AVOIR INVOQUÉ UN OUTIL (web_search, propose_changes, finance_rag, committer, memory_writer), TU DOIS OBLIGATOIREMENT RÉDIGER UNE RÉPONSE TEXTUELLE DÉTAILLÉE POUR L UTILISATEUR. RÉSUME CE QUE TU AS TROUVÉ OU MODIFIÉ EN HTML BRUT. NE RENVOIE JAMAIS UNE RÉPONSE VIDE NI UN SIMPLE TOOL CALL SANS EXPLICATION. SI L OUTIL A ÉCHOUÉ, EXPLIQUE L ÉCHEC ET PROPOSE UNE ACTION ALTERNATIVE.\n\n═══ 11. MODE SAISIE VOCALE (NLP) ═══\nL'utilisateur va souvent dicter ses dépenses via une note vocale. Le texte transcrit sera brut, parfois familier ou sans ponctuation (ex: \"j'ai lâché 150 balles au mcdo et 400 de tqdya\").\n\nRÈGLES ABSOLUES POUR LA SAISIE VOCALE :\n1. Identifie CHAQUE dépense distincte dans le message.\n2. Extrais le montant exact (convertis \"balles\", \"dirhams\", \"dhs\" en nombres).\n3. Associe automatiquement la meilleure catégorie parmi le référentiel existant (ex: \"tqdya\" → Alimentation, \"mcdo\" → Restauration).\n4. Déclenche l'outil transactions_reelles_engine (action: \"add\", avec operations[] pour batch) de manière transparente. Commit DIRECT, pas de OUI requis.\n5. Ne pose JAMAIS de questions supplémentaires si tu as deviné le montant et la catégorie. Agis d'abord.\n6. Ta réponse texte doit être ULTRA COURTE pour que l'audio généré soit rapide à écouter. Exemple de réponse autorisée : \"C'est noté, j'ai ajouté 150 DH en Restauration et 400 DH en Alimentation.\""
+        }
+      },
+      "id": "node-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -120,
+        20
+      ],
+      "continueOnFail": true,
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO chat_history (session_id, message, created_at) VALUES\n  ($1, jsonb_build_object('type','human','data',jsonb_build_object('content',$2::text,'additional_kwargs','{}'::jsonb,'response_metadata','{}'::jsonb)), NOW()),\n  ($1, jsonb_build_object('type','ai','data',jsonb_build_object('content',$3::text,'additional_kwargs','{}'::jsonb,'response_metadata','{}'::jsonb,'tool_calls','[]'::jsonb,'invalid_tool_calls','[]'::jsonb)), NOW())",
+        "options": {
+          "queryReplacement": "={{ [$('Build Agent Input').first().json.session_id, $('Build Agent Input').first().json.question, $json.output ?? $json.error ?? ''] }}"
+        }
+      },
+      "id": "node-save-conv",
+      "name": "Save Conversation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        60,
+        20
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7cQfM9fXdo0Pso5h",
+          "name": "charif_finance_db"
+        }
+      },
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {
+          "temperature": 0.2,
+          "maxOutputTokens": 65536,
+          "thinkingBudget": 8192
+        }
+      },
+      "id": "node-llm",
+      "name": "Gemini 2.5 Pro LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        260
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mngXZBBjSSHswcb5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "finance_rag",
+        "description": "Recherche sémantique dans la base de connaissance financière (table finance_vectors). Entrée : string (la requête). Sortie : extraits pertinents. Utilise-le pour retrouver règles, historique de décisions, patterns budgétaires.",
+        "topK": 5
+      },
+      "id": "node-tool-rag",
+      "name": "Tool: Finance RAG",
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "typeVersion": 1,
+      "position": [
+        120,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve",
+        "tableName": "finance_vectors",
+        "topK": 5,
+        "options": {}
+      },
+      "id": "node-vectorstore-pg",
+      "name": "Postgres Vector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1,
+      "position": [
+        120,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7cQfM9fXdo0Pso5h",
+          "name": "charif_finance_db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "id": "node-embeddings",
+      "name": "Gemini Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        620
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mngXZBBjSSHswcb5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "budget_engine",
+        "description": "═══ CRITICAL v13.21 — BATCH MULTI-ANNÉES ═══\nSi tu dois appliquer la même opération sur plusieurs années :\n  NE FAIS PAS plusieurs appels séparés — utilise UNE SEULE fois budget_engine\n  avec le champ annee en TABLEAU :\n\n    { \"annee\": [2026, 2027, 2028], \"operations\": [...] }\n\nL’outil itère en interne sur chaque année et retourne un résultat consolidé\navec la clé par_annee (un bloc résultat par année) + ops_summary_total global.\n\n═══ OUTIL OBLIGATOIRE — PRÉREQUIS TECHNIQUE ═══\nCet outil est le SEUL moyen de préparer une modification budgétaire. Il :\n  1. Calcule le delta Avant/Après de la simulation.\n  2. ÉCRIT le résultat dans un cache serveur (pending_commit.php).\n  3. Retourne pending_saved=true si la cache est OK.\n\n⚠️ INTERDICTION ABSOLUE : tu ne peux PAS demander 'OUI' à l'utilisateur sans avoir\nappelé cet outil au PREMIER tour. Sans appel à budget_engine, la cache pending\nreste vide et le Committer échouera au tour suivant.\n\nRÈGLE : 1 demande de modification = 1 appel obligatoire à budget_engine.\n─────────────────────────────────────────────\n\nMoteur de simulation budgétaire (delta Avant/Après).\n\nParamètre :\n{ \"simulate\": true, \"operations\": [...], \"annee\": 2026 }\n\nTYPES D'OPÉRATIONS SUPPORTÉS (les SEULS reconnus) :\n\n  ── REVENUS ──\n  { type:\"set_revenu\",            key:\"salaire\",        base:19500 }\n  { type:\"add_revenu\",             key:\"freelance\",     label:\"Freelance\", base:3000 }\n  { type:\"remove_revenu\",          key:\"freelance\" }\n  { type:\"rename_revenu\",          key:\"salaire\",        label:\"Salaire net\" }\n  { type:\"add_revenu_exception\",   key:\"appart\",         moisDebut:1, moisFin:4, nouvelleValeur:0 }\n  { type:\"remove_revenu_exception\",key:\"appart\",         id:1775546659428 }\n\n  ── CHARGES FIXES ──\n  { type:\"set_charge_fixe\",            key:\"loyer\",      valeur:4500 }\n  { type:\"add_charge_fixe\",             key:\"creditAuto\",label:\"Crédit Auto\", valeur:1800 }\n  { type:\"remove_charge_fixe\",          key:\"creditAuto\" }\n  { type:\"rename_charge_fixe\",          key:\"creditImmo\",label:\"Crédit Immo + Assur\" }\n  { type:\"add_charge_fixe_exception\",   key:\"creditStudio\", moisDebut:1, moisFin:6, nouvelleValeur:0 }\n  { type:\"remove_charge_fixe_exception\",key:\"creditStudio\", id:1775548016229 }\n\n  ── CHARGES VARIABLES ──\n  { type:\"set_charge_variable\",         key:\"alimentation\", valeur:1200 }\n  { type:\"add_charge_variable\",          key:\"loisirs\",     label:\"Loisirs\", valeur:500, periode:\"mois\" }\n  { type:\"remove_charge_variable\",       key:\"loisirs\" }\n  { type:\"set_charge_variable_periode\",  key:\"sorties\",     periode:\"mois\" }   // ou \"semaine\"\n\n  ── ÉPARGNE ──\n  { type:\"set_epargne\",     key:\"urgence\", valeur:2000 }\n  { type:\"add_epargne\",      key:\"vacances\",label:\"Vacances\", valeur:500 }\n  { type:\"remove_epargne\",   key:\"vacances\" }\n\n  ── DÉPENSES PONCTUELLES ──\n  { type:\"add_depense_ponctuelle\",    annee:2026, mois:6, nom:\"Notaire\", montant:25000 }\n  { type:\"remove_depense_ponctuelle\", annee:2027, nom:\"Voyage en Espagne\" }   // ou { id:1775546491630 }\n  { type:\"update_depense_ponctuelle\", id:1775546491630, montant:30000, mois:10 }\n\n  ── SOLDES INITIAUX (pas d'année) ──\n  { type:\"set_solde_initial\", key:\"courant\",  valeur:97000 }\n  { type:\"set_solde_initial\", key:\"urgence\",  valeur:5000 }\n  // clés autorisées : courant, urgence, lt, bourse, moisActuel, anneeActuelle, semainesRestantes\n\n  ── ANNÉES (pas d'année cible — on opère sur la structure) ──\n  { type:\"clone_annee\",  depuis:2026, vers:2027 }   // remet à zéro les \"paye\" et reattribue depensesIrregulieres\n  { type:\"delete_annee\", annee:2027 }\n\n  ── PROJET STUDIO ──\n  { type:\"set_projet_studio\", annee:2026, key:\"travaux\",     valeur:90000 }\n  // clés autorisées : prixM2, surface, avance, taux, duree, taxSyndic, taxCouvertCredit, surplusCredit, assuranceMensuelle, travaux, epargneDispo\n\nN'INVENTE AUCUN AUTRE TYPE. Si une demande utilisateur ne matche aucun type, explique-le au lieu d'inventer.\n\n═══ NOUVEAU v13.7 — OPS UNIFIÉES update_* (recommandées) ═══\nPour modifier plusieurs champs d'un coup en une seule op :\n\n  { type:\"update_revenu\",          key:\"salaire\",      base:20000, label:\"Salaire net\" }\n  { type:\"update_charge_fixe\",     key:\"loyer\",        valeur:4500, label:\"Loyer\" }\n  { type:\"update_charge_variable\", key:\"alimentation\", valeur:1000, periode:\"mois\" }\n  { type:\"update_epargne\",         key:\"urgence\",      valeur:2000 }\n  { type:\"update_depense_ponctuelle\", id:1234567890, montant:30000, mois:10 }\n\nChamps optionnels : seuls ceux fournis sont modifiés. Évite de cumuler\nset_charge_variable + set_charge_variable_periode → utilise update_charge_variable.\n\n═══ TOLÉRANCE SYNONYMES ═══\nLes champs numériques acceptent ces synonymes (le 1er trouvé l'emporte) :\n  • Charges/épargne : valeur, montant, value, amount\n  • Revenus : base, valeur, montant, value, amount, salaire\n  • Dépenses ponctuelles : montant, valeur, value, amount\nLes labels acceptent : label, nom.\n\n═══ TYPE INCONNU = ERREUR DURE ═══\nSi tu passes un type d'op qui n'existe pas (ex : 'modify_X', 'update_X'), l'outil\nrenvoie status=error pour cette op ET refuse de sauvegarder le pending. Vérifie\nops_summary.errors dans la réponse — s'il est > 0, corrige et relance.\n\n\n═══ NOUVEAU v13.8 — SCHEMA SANITIZATION ═══\nL'outil purge automatiquement les clés synonymes parasites du JSON\n(legacy issu de bugs v13.6). Workflow :\n  1. Au DÉBUT de chaque appel : passe globale qui supprime montant/value/amount\n     (canonical=valeur), nom (canonical=label), etc. dans tout finance_data.\n  2. À chaque WRITE canonique : purge ciblée sur le bloc modifié.\n  3. PASSE 2 : passe globale post-ops (filet de sécurité).\n\nConséquences :\n  • Le finance_data publié via Committer est TOUJOURS canonique.\n  • Si la passe globale détecte du dirt mais aucune op effective, le pending\n    est quand même sauvegardé (proposition « valider le nettoyage »).\n  • Le rapport sanitize_report dans la réponse t'indique combien de clés\n    parasites ont été supprimées (pre_ops + post_ops).\n\n═══ v13.9 — REDISTRIBUTION PROPORTIONNELLE (CHARGES AVEC SOUS-LIGNES) ═══\nLes charges variables peuvent avoir des sous-lignes (details[]).\nL'UI recalcule le total DEPUIS ces sous-lignes — modifier valeur sans\najuster details serait écrasé au rechargement.\n\nComportement auto lors de set_charge_variable / update_charge_variable :\n  • Sous-lignes non nulles → redistribution proportionnelle auto.\n    La réponse inclut redistribution + details_apres. Présente les nouvelles\n    valeurs par sous-ligne à l'utilisateur.\n  • Toutes sous-lignes à 0 → status=error + requires_redistribution=true.\n    Ne propose pas OUI. Présente les lignes, demande comment ventiler,\n    attends la réponse avant de relancer budget_engine.\n  • redistribution_required (top-level) liste les cas bloquants (null si aucun).\n",
+        "language": "javaScript",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// BUDGET ENGINE v6 (stateful + robust + sanitized + redistrib) — v13.9\n// FIX v13.8 : Schema Sanitization. Toute écriture est CANONIQUE et DESTRUCTIVE :\n//   - on assigne la clé canonique (valeur / base / montant / label)\n//   - on SUPPRIME explicitement les synonymes parasites (montant/value/amount/nom/etc.)\n// Une passe globale sanitizeFinanceData() purge aussi le legacy au début.\n// ════════════════════════════════════════════════════════\n// ── v13.26 : ROBUST PARSING + DIAGNOSTICS (anti-silence) ─────────────\n// REFONTE v13.26 : architecture robuste + diagnostique (plus jamais d'échec silencieux)\n//\n//  Couche 1 - PARSER MULTI-STRATEGIES :\n//     Stratégie A : JSON.parse direct du query trim\n//     Stratégie B : extraction d'un JSON object embarqué via regex (texte LLM verbeux)\n//     Stratégie C : JSON scalar string ('\"OUI\"' -> \"OUI\")\n//     Stratégie D : plain scalar ('OUI') -- UNIQUEMENT si l'outil l'autorise\n//                   (committer oui, budget_engine non)\n//\n//  Couche 2 - PAS D'ECHEC SILENCIEUX :\n//     Si parsing -> input vide, on retourne une erreur diagnostique\n//     contenant raw_query, parse_strategy, et la liste des stratégies tentées.\n//     -> permet de debug ce que Gemini envoie réellement.\n//\n//  Couche 3 - KWARGS TDZ-SAFE (v13.24 conservé) :\n//     try/catch individuel par kwarg pour attraper ReferenceError + TDZ.\n//\nconst TOOL_NAME = 'budget_engine';\nconst ACCEPT_SCALAR = false;\n\nlet input = {};\nlet _parseStrategy = 'none';\nlet _rawQuery = null;\nconst _strategiesAttempted = [];\n\n// Snapshot du query brut (pour diagnostic)\ntry {\n  if (typeof query !== 'undefined' && query !== null) {\n    _rawQuery = (typeof query === 'string') ? query : JSON.stringify(query);\n  }\n} catch (e) { _rawQuery = '<unstringifiable>'; }\n\n// (A) Source primaire : query (multi-stratégies)\nif (typeof query !== 'undefined' && query !== null) {\n  if (typeof query === 'object') {\n    input = Object.assign({}, query);\n    _parseStrategy = 'object_direct';\n  } else if (typeof query === 'string') {\n    const trimmed = query.trim();\n\n    // Stratégie A : JSON.parse direct\n    _strategiesAttempted.push('A:json_parse');\n    try {\n      const parsedA = JSON.parse(trimmed);\n      if (parsedA !== null && typeof parsedA === 'object' && !Array.isArray(parsedA)) {\n        input = parsedA;\n        _parseStrategy = 'A:json_object';\n      } else if (typeof parsedA === 'string') {\n        // JSON scalar '\"OUI\"' -> \"OUI\"\n        if (ACCEPT_SCALAR) {\n          input.confirmation = parsedA;\n          _parseStrategy = 'C:json_scalar';\n        }\n      }\n    } catch (eA) { /* pas du JSON pur */ }\n\n    // Stratégie B : extraction d'un JSON object embarqué (LLM verbeux)\n    if (_parseStrategy === 'none' && trimmed) {\n      _strategiesAttempted.push('B:embedded_json');\n      const m = trimmed.match(/\\{[\\s\\S]*\\}/);\n      if (m) {\n        try {\n          const parsedB = JSON.parse(m[0]);\n          if (parsedB && typeof parsedB === 'object' && !Array.isArray(parsedB)) {\n            input = parsedB;\n            _parseStrategy = 'B:json_embedded';\n          }\n        } catch (eB) { /* échec extraction */ }\n      }\n    }\n\n    // Stratégie D : plain scalar (uniquement outils l'acceptant)\n    if (_parseStrategy === 'none' && trimmed && ACCEPT_SCALAR) {\n      _strategiesAttempted.push('D:plain_scalar');\n      input.confirmation = trimmed;\n      _parseStrategy = 'D:plain_scalar';\n    }\n  }\n}\n\n// (B) kwargs nommés (TDZ-safe, v13.24 conservé)\ntry { if (confirmation !== undefined && input.confirmation === undefined) input.confirmation = confirmation; } catch(e) {}\ntry { if (simulate     !== undefined && input.simulate     === undefined) input.simulate     = simulate;     } catch(e) {}\ntry { if (operations   !== undefined && input.operations   === undefined) input.operations   = operations;   } catch(e) {}\ntry { if (annee        !== undefined && input.annee        === undefined) input.annee        = annee;        } catch(e) {}\ntry { if (session_id   !== undefined && input.session_id   === undefined) input.session_id  = session_id;   } catch(e) {}\n\n// COUCHE 2 : Diagnostic anti-silence\n// Si parsing complètement raté ET pas de kwargs -> erreur explicite avec raw_query\nif (Object.keys(input).length === 0) {\n  return JSON.stringify({\n    error: 'Aucun paramètre détecté (parsing query échoué, kwargs vides). Stratégies tentées: ' + _strategiesAttempted.join(', '),\n    diagnostic: {\n      tool: TOOL_NAME,\n      raw_query: _rawQuery,\n      query_type: typeof query,\n      parse_strategy: _parseStrategy,\n      strategies_attempted: _strategiesAttempted,\n      hint: 'Gemini doit envoyer un JSON object { ... } dans query.'\n    }\n  });\n}\n// ──────────────────────────────────────────────────────────────────────────\n\nconst simulate = input.simulate !== false;\nconst operations = Array.isArray(input.operations) ? input.operations : [];\nconst annees = Array.isArray(input.annee) ? input.annee.map(Number) : [Number(input.annee) || new Date().getFullYear()];\nconst isBatch = annees.length > 1;\n\nlet normalized;\ntry { normalized = $('Build Agent Input').first().json; }\ncatch (e) {\n  try { normalized = $('Normalize Input').first().json; }\n  catch (e2) { return JSON.stringify({ error: \"Contexte introuvable\" }); }\n}\nconst session_id = normalized.session_id;\n// v20.31 : prefer finance_data_raw (full VPS JSON) over sanitized payload for mutation tools\nconst _rawSrcBudget = normalized.finance_data_raw || normalized.finance_data;\nconst financeData = _rawSrcBudget ? JSON.parse(JSON.stringify(_rawSrcBudget)) : null;\n\nif (!financeData) {\n  return JSON.stringify({ error: \"Aucun finance_data dans la requête. Recharge l'interface.\" });\n}\n\n// ── Helpers ──\nconst pickNum = (op, ...keys) => {\n  for (const k of keys) {\n    if (op[k] !== undefined && op[k] !== null && op[k] !== '') {\n      const n = Number(op[k]);\n      if (Number.isFinite(n)) return n;\n    }\n  }\n  return null;\n};\nconst pickStr = (op, ...keys) => {\n  for (const k of keys) {\n    if (op[k] !== undefined && op[k] !== null) return String(op[k]);\n  }\n  return null;\n};\n\n// ═══ SCHEMA SANITIZATION ═══\n// Listes des synonymes parasites à purger après écriture canonique.\nconst SYN_NUM_CHARGE  = ['montant', 'value', 'amount'];                          // canonical = valeur\nconst SYN_NUM_REVENU  = ['valeur', 'montant', 'value', 'amount', 'salaire'];     // canonical = base\nconst SYN_NUM_DEPENSE = ['valeur', 'value', 'amount'];                            // canonical = montant\nconst SYN_LBL         = ['nom'];                                                  // canonical = label\n\nconst purgeKeys = (obj, syns) => {\n  let purged = 0;\n  if (!obj || typeof obj !== 'object') return 0;\n  for (const s of syns) {\n    if (Object.prototype.hasOwnProperty.call(obj, s)) {\n      delete obj[s];\n      purged++;\n    }\n  }\n  return purged;\n};\n\nfunction sanitizeFinanceData(fd) {\n  const report = { revenus: 0, fixes: 0, variables: 0, epargne: 0, depenses: 0 };\n  if (!fd || !fd.donneesAnnuelles) return report;\n\n  for (const annee in fd.donneesAnnuelles) {\n    const y = fd.donneesAnnuelles[annee];\n    if (!y) continue;\n\n    // Revenus : canonical = base, label\n    for (const k in (y.revenus || {})) {\n      const obj = y.revenus[k];\n      if (!obj) continue;\n      // si une valeur canonique 'base' manque mais qu'un synonyme existe : on récupère AVANT de purger\n      if ((obj.base === undefined || obj.base === null) ) {\n        const recovered = pickNum(obj, 'valeur', 'montant', 'value', 'amount', 'salaire');\n        if (recovered !== null) obj.base = recovered;\n      }\n      if ((obj.label === undefined || obj.label === null) && obj.nom) obj.label = String(obj.nom);\n      report.revenus += purgeKeys(obj, SYN_NUM_REVENU);\n      report.revenus += purgeKeys(obj, SYN_LBL);\n    }\n\n    // Charges fixes : canonical = valeur, label\n    for (const k in (y.chargesFixes || {})) {\n      const obj = y.chargesFixes[k];\n      if (!obj) continue;\n      if ((obj.valeur === undefined || obj.valeur === null)) {\n        const recovered = pickNum(obj, 'montant', 'value', 'amount');\n        if (recovered !== null) obj.valeur = recovered;\n      }\n      if ((obj.label === undefined || obj.label === null) && obj.nom) obj.label = String(obj.nom);\n      report.fixes += purgeKeys(obj, SYN_NUM_CHARGE);\n      report.fixes += purgeKeys(obj, SYN_LBL);\n    }\n\n    // Charges variables : canonical = valeur, label, periode\n    for (const k in (y.chargesVariables || {})) {\n      const obj = y.chargesVariables[k];\n      if (!obj) continue;\n      if ((obj.valeur === undefined || obj.valeur === null)) {\n        const recovered = pickNum(obj, 'montant', 'value', 'amount');\n        if (recovered !== null) obj.valeur = recovered;\n      }\n      if ((obj.label === undefined || obj.label === null) && obj.nom) obj.label = String(obj.nom);\n      report.variables += purgeKeys(obj, SYN_NUM_CHARGE);\n      report.variables += purgeKeys(obj, SYN_LBL);\n    }\n\n    // Épargne : canonical = valeur, label\n    for (const k in (y.epargne || {})) {\n      const obj = y.epargne[k];\n      if (!obj) continue;\n      if ((obj.valeur === undefined || obj.valeur === null)) {\n        const recovered = pickNum(obj, 'montant', 'value', 'amount');\n        if (recovered !== null) obj.valeur = recovered;\n      }\n      if ((obj.label === undefined || obj.label === null) && obj.nom) obj.label = String(obj.nom);\n      report.epargne += purgeKeys(obj, SYN_NUM_CHARGE);\n      report.epargne += purgeKeys(obj, SYN_LBL);\n    }\n\n    // Dépenses ponctuelles : canonical = montant, nom\n    for (const d of (y.depensesIrregulieres || [])) {\n      if (!d) continue;\n      if ((d.montant === undefined || d.montant === null)) {\n        const recovered = pickNum(d, 'valeur', 'value', 'amount');\n        if (recovered !== null) d.montant = recovered;\n      }\n      report.depenses += purgeKeys(d, SYN_NUM_DEPENSE);\n      // 'nom' EST canonique pour depensesIrregulieres ; pas de purge ici\n    }\n  }\n  return report;\n}\n\n// ── Per-op write helpers (canonique + purge) ──\nconst writeCharge = (target, valeur, label) => {\n  if (valeur !== null && valeur !== undefined) target.valeur = valeur;\n  if (label !== null && label !== undefined) target.label = label;\n  purgeKeys(target, SYN_NUM_CHARGE);\n  purgeKeys(target, SYN_LBL);\n};\nconst writeRevenu = (target, base, label) => {\n  if (base !== null && base !== undefined) target.base = base;\n  if (label !== null && label !== undefined) target.label = label;\n  purgeKeys(target, SYN_NUM_REVENU);\n  purgeKeys(target, SYN_LBL);\n};\nconst writeEpargne = (target, valeur, label) => {\n  if (valeur !== null && valeur !== undefined) target.valeur = valeur;\n  if (label !== null && label !== undefined) target.label = label;\n  purgeKeys(target, SYN_NUM_CHARGE);\n  purgeKeys(target, SYN_LBL);\n};\n\nconst snapshot = (d, annee) => {\n  const y = d.donneesAnnuelles && d.donneesAnnuelles[annee];\n  if (!y) return null;\n  const sum = obj => Object.values(obj || {}).reduce((s, v) => s + (Number(v && v.valeur) || Number(v && v.base) || 0), 0);\n  return {\n    revenus: sum(y.revenus),\n    fixes: sum(y.chargesFixes),\n    variables: sum(y.chargesVariables),\n    epargne: sum(y.epargne),\n    depensesIrreg: (y.depensesIrregulieres || []).length\n  };\n};\n\n// ⚠️ PASSE 1 : sanitize globale AVANT toute simulation\nconst sanitize_report_pre = sanitizeFinanceData(financeData);\n\nfunction applyOp(financeData, op, anneeTarget) {\n  const a = Number(op.annee || anneeTarget);\n  const y = financeData.donneesAnnuelles && financeData.donneesAnnuelles[a];\n  const log = { op: op.type };\n  try {\n    switch (op.type) {\n      // ═══ REVENUS ═══\n      case 'set_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status = 'skip'; log.reason = 'année ou clé absente'; break; }\n        const v = pickNum(op, 'base', 'valeur', 'montant', 'value', 'amount', 'salaire');\n        if (v === null) { log.status = 'error'; log.reason = 'aucune valeur numérique fournie (essaie base, valeur, montant)'; break; }\n        const old = y.revenus[op.key].base;\n        writeRevenu(y.revenus[op.key], v, null);\n        log.key = op.key; log.avant = old; log.apres = v; break;\n      }\n      case 'add_revenu': {\n        if (!y) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        if (!y.revenus) y.revenus = {};\n        if (y.revenus[op.key]) { log.status = 'skip'; log.reason = 'clé existe déjà — utilise update_revenu'; break; }\n        const v = pickNum(op, 'base', 'valeur', 'montant', 'value', 'amount', 'salaire') ?? 0;\n        const lbl = pickStr(op, 'label', 'nom') || op.key;\n        y.revenus[op.key] = { label: lbl, base: v, showExceptions: false, exceptions: [] };\n        log.key = op.key; log.created = true; log.base = v; break;\n      }\n      case 'remove_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        delete y.revenus[op.key]; log.key = op.key; log.removed = true; break;\n      }\n      case 'rename_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const lbl = pickStr(op, 'label', 'nom');\n        if (lbl === null) { log.status = 'error'; log.reason = 'label manquant'; break; }\n        const old = y.revenus[op.key].label;\n        writeRevenu(y.revenus[op.key], null, lbl);\n        log.key = op.key; log.avant = old; log.apres = lbl; break;\n      }\n      case 'update_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const v = pickNum(op, 'base', 'valeur', 'montant', 'value', 'amount', 'salaire');\n        const lbl = pickStr(op, 'label', 'nom');\n        const target = y.revenus[op.key];\n        const changes = {};\n        if (v !== null) { changes.base = { avant: target.base, apres: v }; }\n        if (lbl !== null) { changes.label = { avant: target.label, apres: lbl }; }\n        if (Object.keys(changes).length === 0) { log.status = 'error'; log.reason = 'aucun champ à mettre à jour (base, label)'; break; }\n        writeRevenu(target, v, lbl);\n        log.key = op.key; log.changes = changes; break;\n      }\n      case 'add_revenu_exception': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        if (!Array.isArray(y.revenus[op.key].exceptions)) y.revenus[op.key].exceptions = [];\n        const id = Date.now() + Math.floor(Math.random() * 1000);\n        y.revenus[op.key].exceptions.push({ id, moisDebut: Number(op.moisDebut), moisFin: Number(op.moisFin), nouvelleValeur: Number(op.nouvelleValeur) });\n        y.revenus[op.key].showExceptions = true;\n        log.key = op.key; log.id = id; break;\n      }\n      case 'remove_revenu_exception': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const before = (y.revenus[op.key].exceptions || []).length;\n        y.revenus[op.key].exceptions = (y.revenus[op.key].exceptions || []).filter(e => Number(e.id) !== Number(op.id));\n        log.key = op.key; log.supprimees = before - y.revenus[op.key].exceptions.length; break;\n      }\n\n      // ═══ CHARGES FIXES ═══\n      case 'set_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status = 'skip'; log.reason = 'année ou clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        if (v === null) { log.status = 'error'; log.reason = 'aucune valeur numérique fournie'; break; }\n        const old = y.chargesFixes[op.key].valeur;\n        writeCharge(y.chargesFixes[op.key], v, null);\n        log.key = op.key; log.avant = old; log.apres = v; break;\n      }\n      case 'add_charge_fixe': {\n        if (!y) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        if (!y.chargesFixes) y.chargesFixes = {};\n        if (y.chargesFixes[op.key]) { log.status = 'skip'; log.reason = 'clé existe déjà — utilise update_charge_fixe'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount') ?? 0;\n        const lbl = pickStr(op, 'label', 'nom') || op.key;\n        y.chargesFixes[op.key] = { label: lbl, valeur: v, showExceptions: false, exceptions: [], montantPaye: 0, paye: false };\n        log.key = op.key; log.created = true; log.valeur = v; break;\n      }\n      case 'remove_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        delete y.chargesFixes[op.key]; log.key = op.key; log.removed = true; break;\n      }\n      case 'rename_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const lbl = pickStr(op, 'label', 'nom');\n        if (lbl === null) { log.status = 'error'; log.reason = 'label manquant'; break; }\n        const old = y.chargesFixes[op.key].label;\n        writeCharge(y.chargesFixes[op.key], null, lbl);\n        log.key = op.key; log.avant = old; log.apres = lbl; break;\n      }\n      case 'update_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        const lbl = pickStr(op, 'label', 'nom');\n        const target = y.chargesFixes[op.key];\n        const changes = {};\n        if (v !== null) { changes.valeur = { avant: target.valeur, apres: v }; }\n        if (lbl !== null) { changes.label = { avant: target.label, apres: lbl }; }\n        if (Object.keys(changes).length === 0) { log.status = 'error'; log.reason = 'aucun champ à mettre à jour'; break; }\n        writeCharge(target, v, lbl);\n        log.key = op.key; log.changes = changes; break;\n      }\n      case 'add_charge_fixe_exception': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        if (!Array.isArray(y.chargesFixes[op.key].exceptions)) y.chargesFixes[op.key].exceptions = [];\n        const id = Date.now() + Math.floor(Math.random() * 1000);\n        y.chargesFixes[op.key].exceptions.push({ id, moisDebut: Number(op.moisDebut), moisFin: Number(op.moisFin), nouvelleValeur: Number(op.nouvelleValeur) });\n        y.chargesFixes[op.key].showExceptions = true;\n        log.key = op.key; log.id = id; break;\n      }\n      case 'remove_charge_fixe_exception': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const before = (y.chargesFixes[op.key].exceptions || []).length;\n        y.chargesFixes[op.key].exceptions = (y.chargesFixes[op.key].exceptions || []).filter(e => Number(e.id) !== Number(op.id));\n        log.key = op.key; log.supprimees = before - y.chargesFixes[op.key].exceptions.length; break;\n      }\n\n      // ═══ CHARGES VARIABLES ═══\n      case 'set_charge_variable': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status = 'skip'; log.reason = 'année ou clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        if (v === null) { log.status = 'error'; log.reason = 'aucune valeur numérique fournie'; break; }\n        const item = y.chargesVariables[op.key];\n        const old = item.valeur;\n        // ── v13.9 : redistribution proportionnelle si details existent ──\n        if (item.details && item.details.length > 0) {\n          const currentSum = item.details.reduce((s, d) => s + (Number(d.montant) || 0), 0);\n          if (currentSum === 0) {\n            log.status = 'error';\n            log.requires_redistribution = true;\n            log.reason = 'Répartition proportionnelle impossible : toutes les sous-lignes sont à 0. Précise comment ventiler le nouveau total.';\n            log.nouveau_total = v;\n            log.lignes = item.details.map(d => ({ id: d.id, nom: d.nom, montant_actuel: d.montant }));\n            break;\n          }\n          const ratio = v / currentSum;\n          let distributed = 0;\n          for (let i = 0; i < item.details.length - 1; i++) {\n            const nm = Math.round(item.details[i].montant * ratio);\n            item.details[i].montant = nm;\n            distributed += nm;\n          }\n          item.details[item.details.length - 1].montant = v - distributed;\n          log.redistribution = 'proportionnelle';\n          log.ratio_applique = Math.round(ratio * 1000) / 1000;\n          log.details_apres = item.details.map(d => ({ nom: d.nom, montant: d.montant }));\n        }\n        writeCharge(item, v, null);\n        log.key = op.key; log.avant = old; log.apres = v; break;\n      }\n      case 'add_charge_variable': {\n        if (!y) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        if (!y.chargesVariables) y.chargesVariables = {};\n        if (y.chargesVariables[op.key]) { log.status = 'skip'; log.reason = 'clé existe déjà — utilise update_charge_variable'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount') ?? 0;\n        const periode = (op.periode === 'semaine' || op.periode === 'mois') ? op.periode : 'mois';\n        const lbl = pickStr(op, 'label', 'nom') || op.key;\n        y.chargesVariables[op.key] = { label: lbl, valeur: v, periode, showDetails: false, details: [] };\n        log.key = op.key; log.created = true; log.valeur = v; log.periode = periode; break;\n      }\n      case 'remove_charge_variable': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        delete y.chargesVariables[op.key]; log.key = op.key; log.removed = true; break;\n      }\n      case 'set_charge_variable_periode': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        if (op.periode !== 'mois' && op.periode !== 'semaine') { log.status = 'error'; log.reason = 'periode doit être \"mois\" ou \"semaine\"'; break; }\n        const old = y.chargesVariables[op.key].periode;\n        y.chargesVariables[op.key].periode = op.periode;\n        log.key = op.key; log.avant = old; log.apres = op.periode; break;\n      }\n      case 'update_charge_variable': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        const lbl = pickStr(op, 'label', 'nom');\n        const per = (op.periode === 'mois' || op.periode === 'semaine') ? op.periode : null;\n        const target = y.chargesVariables[op.key];\n        const changes = {};\n        if (v !== null) {\n          // ── v13.9 : redistribution proportionnelle si details existent ──\n          if (target.details && target.details.length > 0) {\n            const currentSum = target.details.reduce((s, d) => s + (Number(d.montant) || 0), 0);\n            if (currentSum === 0) {\n              log.status = 'error';\n              log.requires_redistribution = true;\n              log.reason = 'Répartition proportionnelle impossible : toutes les sous-lignes sont à 0. Précise comment ventiler le nouveau total.';\n              log.nouveau_total = v;\n              log.lignes = target.details.map(d => ({ id: d.id, nom: d.nom, montant_actuel: d.montant }));\n              break;\n            }\n            const ratio = v / currentSum;\n            let distributed = 0;\n            for (let i = 0; i < target.details.length - 1; i++) {\n              const nm = Math.round(target.details[i].montant * ratio);\n              target.details[i].montant = nm;\n              distributed += nm;\n            }\n            target.details[target.details.length - 1].montant = v - distributed;\n            changes.redistribution = { mode: 'proportionnelle', ratio: Math.round(ratio * 1000) / 1000, details_apres: target.details.map(d => ({ nom: d.nom, montant: d.montant })) };\n          }\n          changes.valeur = { avant: target.valeur, apres: v };\n        }\n        if (per !== null) { changes.periode = { avant: target.periode, apres: per }; target.periode = per; }\n        if (lbl !== null) { changes.label = { avant: target.label, apres: lbl }; }\n        if (Object.keys(changes).length === 0) { log.status = 'error'; log.reason = 'aucun champ à mettre à jour'; break; }\n        writeCharge(target, v, lbl);\n        log.key = op.key; log.changes = changes; break;\n      }\n\n      // ═══ ÉPARGNE ═══\n      case 'set_epargne': {\n        if (!y || !y.epargne || !y.epargne[op.key]) { log.status = 'skip'; log.reason = 'année ou clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        if (v === null) { log.status = 'error'; log.reason = 'aucune valeur numérique fournie'; break; }\n        const old = y.epargne[op.key].valeur;\n        writeEpargne(y.epargne[op.key], v, null);\n        log.key = op.key; log.avant = old; log.apres = v; break;\n      }\n      case 'add_epargne': {\n        if (!y) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        if (!y.epargne) y.epargne = {};\n        if (y.epargne[op.key]) { log.status = 'skip'; log.reason = 'clé existe déjà — utilise update_epargne'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount') ?? 0;\n        const lbl = pickStr(op, 'label', 'nom') || op.key;\n        y.epargne[op.key] = { label: lbl, valeur: v };\n        log.key = op.key; log.created = true; log.valeur = v; break;\n      }\n      case 'remove_epargne': {\n        if (!y || !y.epargne || !y.epargne[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        delete y.epargne[op.key]; log.key = op.key; log.removed = true; break;\n      }\n      case 'update_epargne': {\n        if (!y || !y.epargne || !y.epargne[op.key]) { log.status = 'skip'; log.reason = 'clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        const lbl = pickStr(op, 'label', 'nom');\n        const target = y.epargne[op.key];\n        const changes = {};\n        if (v !== null) { changes.valeur = { avant: target.valeur, apres: v }; }\n        if (lbl !== null) { changes.label = { avant: target.label, apres: lbl }; }\n        if (Object.keys(changes).length === 0) { log.status = 'error'; log.reason = 'aucun champ à mettre à jour'; break; }\n        writeEpargne(target, v, lbl);\n        log.key = op.key; log.changes = changes; break;\n      }\n\n      // ═══ DÉPENSES PONCTUELLES ═══\n      case 'add_depense_ponctuelle': {\n        if (!y) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        if (!Array.isArray(y.depensesIrregulieres)) y.depensesIrregulieres = [];\n        const v = pickNum(op, 'montant', 'valeur', 'value', 'amount');\n        if (v === null) { log.status = 'error'; log.reason = 'montant requis'; break; }\n        const id = Date.now() + Math.floor(Math.random() * 1000);\n        y.depensesIrregulieres.push({ id, mois: Number(op.mois), annee: a, nom: pickStr(op, 'nom', 'label') || 'Dépense', montant: v, paye: false, montantPaye: 0 });\n        log.id = id; log.nom = op.nom; log.montant = v; break;\n      }\n      case 'remove_depense_ponctuelle': {\n        if (!y) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        if (!Array.isArray(y.depensesIrregulieres)) y.depensesIrregulieres = [];\n        const before = y.depensesIrregulieres.length;\n        const byId = op.id != null;\n        const byName = op.nom != null;\n        y.depensesIrregulieres = y.depensesIrregulieres.filter(d => {\n          if (byId && Number(d.id) === Number(op.id)) return false;\n          if (byName && String(d.nom).toLowerCase().trim() === String(op.nom).toLowerCase().trim()) return false;\n          return true;\n        });\n        log.critere = byId ? ('id=' + op.id) : ('nom=' + op.nom);\n        log.supprimees = before - y.depensesIrregulieres.length; break;\n      }\n      case 'update_depense_ponctuelle': {\n        if (!y || !Array.isArray(y.depensesIrregulieres)) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        const target = y.depensesIrregulieres.find(d => Number(d.id) === Number(op.id));\n        if (!target) { log.status = 'skip'; log.reason = 'id introuvable'; break; }\n        const v = pickNum(op, 'montant', 'valeur', 'value', 'amount');\n        const changes = {};\n        if (v !== null) { changes.montant = { avant: target.montant, apres: v }; target.montant = v; }\n        if (op.mois != null) { changes.mois = { avant: target.mois, apres: Number(op.mois) }; target.mois = Number(op.mois); }\n        if (op.annee != null) { changes.annee = { avant: target.annee, apres: Number(op.annee) }; target.annee = Number(op.annee); }\n        if (op.nom != null) { changes.nom = { avant: target.nom, apres: String(op.nom) }; target.nom = String(op.nom); }\n        // Purge synonymes parasites sur dépenses\n        purgeKeys(target, SYN_NUM_DEPENSE);\n        if (Object.keys(changes).length === 0) { log.status = 'error'; log.reason = 'aucun champ à mettre à jour'; break; }\n        log.id = op.id; log.changes = changes; break;\n      }\n\n      // ═══ SOLDES INITIAUX ═══\n      case 'set_solde_initial': {\n        if (!financeData.soldesInitiaux) financeData.soldesInitiaux = {};\n        const allowed = ['courant','urgence','lt','bourse','moisActuel','anneeActuelle','semainesRestantes'];\n        if (!allowed.includes(op.key)) { log.status = 'error'; log.reason = 'clé non autorisée. Autorisées: ' + allowed.join(', '); break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        if (v === null) { log.status = 'error'; log.reason = 'aucune valeur numérique fournie'; break; }\n        const old = financeData.soldesInitiaux[op.key];\n        financeData.soldesInitiaux[op.key] = v;\n        log.key = op.key; log.avant = old; log.apres = v; break;\n      }\n\n      // ═══ ANNÉES ═══\n      case 'clone_annee': {\n        const src = financeData.donneesAnnuelles && financeData.donneesAnnuelles[op.depuis];\n        if (!src) { log.status = 'skip'; log.reason = 'année source absente'; break; }\n        if (financeData.donneesAnnuelles[op.vers]) { log.status = 'skip'; log.reason = 'année cible existe déjà'; break; }\n        const cloned = JSON.parse(JSON.stringify(src));\n        Object.values(cloned.chargesFixes || {}).forEach(f => { f.paye = false; f.montantPaye = 0; });\n        Object.values(cloned.chargesVariables || {}).forEach(c => { if (c.details) c.details.forEach(d => { d.paye = false; d.montantPaye = 0; }); });\n        (cloned.depensesIrregulieres || []).forEach(d => { d.paye = false; d.montantPaye = 0; d.annee = Number(op.vers); d.id = Date.now() + Math.floor(Math.random() * 1000); });\n        financeData.donneesAnnuelles[op.vers] = cloned;\n        log.depuis = op.depuis; log.vers = op.vers; log.created = true; break;\n      }\n      case 'delete_annee': {\n        if (!financeData.donneesAnnuelles[op.annee]) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        delete financeData.donneesAnnuelles[op.annee];\n        log.annee = op.annee; log.removed = true; break;\n      }\n\n      // ═══ PROJET STUDIO ═══\n      case 'set_projet_studio': {\n        if (!y) { log.status = 'skip'; log.reason = 'année absente'; break; }\n        if (!y.projetStudio) y.projetStudio = {};\n        const allowed = ['prixM2','surface','avance','taux','duree','taxSyndic','taxCouvertCredit','surplusCredit','assuranceMensuelle','travaux','epargneDispo'];\n        if (!allowed.includes(op.key)) { log.status = 'error'; log.reason = 'champ non autorisé. Autorisés: ' + allowed.join(', '); break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        if (v === null) { log.status = 'error'; log.reason = 'aucune valeur numérique fournie'; break; }\n        const old = y.projetStudio[op.key];\n        y.projetStudio[op.key] = v;\n        log.key = op.key; log.avant = old; log.apres = v; break;\n      }\n\n      default:\n        log.status = 'error';\n        log.reason = \"type d'opération INCONNU: '\" + op.type + \"'. Types valides : set/add/remove/rename/update_revenu, set/add/remove/rename/update_charge_fixe, set/add/remove/update_charge_variable, set_charge_variable_periode, set/add/remove/update_epargne, add/remove/update_depense_ponctuelle, set_solde_initial, clone_annee, delete_annee, set_projet_studio.\";\n    }\n  } catch (e) {\n    log.status = 'error'; log.reason = e.message;\n  }\n  return log;\n}\n\n// ═══ v13.21 : BATCH MULTI-ANNÉES ═══\nconst resultsByYear = {};\nlet allLogs = [];\n\nfor (const anneeTarget of annees) {\n  const before = snapshot(financeData, anneeTarget);\n  const log = [];\n  for (const op of operations) {\n    log.push(applyOp(financeData, op, anneeTarget));\n  }\n  const after = snapshot(financeData, anneeTarget);\n  const sc = log.filter(l => l.status !== 'skip' && l.status !== 'error').length;\n  const ec = log.filter(l => l.status === 'error').length;\n  const sk = log.filter(l => l.status === 'skip').length;\n  resultsByYear[anneeTarget] = {\n    avant: before,\n    apres: after,\n    delta: before && after ? {\n      revenus: after.revenus - before.revenus,\n      fixes: after.fixes - before.fixes,\n      variables: after.variables - before.variables,\n      epargne: after.epargne - before.epargne\n    } : null,\n    ops_summary: { total: operations.length, success: sc, errors: ec, skipped: sk },\n    operations_appliquees: log\n  };\n  allLogs = allLogs.concat(log);\n}\n\n// ⚠️ PASSE 2 : sanitize globale APRÈS toutes les ops (filet de sécurité)\nconst sanitize_report_post = sanitizeFinanceData(financeData);\n\nconst valid = financeData.donneesAnnuelles && typeof financeData.donneesAnnuelles === 'object' &&\n              financeData.soldesInitiaux && typeof financeData.soldesInitiaux === 'object';\n\nconst successCount = allLogs.filter(l => l.status !== 'skip' && l.status !== 'error').length;\nconst errorCount   = allLogs.filter(l => l.status === 'error').length;\nconst skipCount    = allLogs.filter(l => l.status === 'skip').length;\n\nconst totalDirtPurged = Object.values(sanitize_report_pre).reduce((s, n) => s + n, 0)\n                     + Object.values(sanitize_report_post).reduce((s, n) => s + n, 0);\n\n// Si AUCUN op réussi MAIS du dirt a été nettoyé → on cache quand même la sanitize\nconst hasEffectiveChanges = (successCount > 0 && errorCount === 0) || (totalDirtPurged > 0 && errorCount === 0);\n\nlet pending_saved = false;\nlet pending_error = null;\nif (simulate && valid && hasEffectiveChanges && session_id) {\n  try {\n    const resp = await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://n8n.beau.ink/finance/pending_commit.php',\n      body: {\n        session_id,\n        annee: isBatch ? annees : annees[0],\n        operations,\n        finance_data: financeData\n      },\n      json: true,\n      timeout: 10000\n    });\n    pending_saved = !!(resp && resp.status === 'ok');\n  } catch (e) {\n    pending_error = e.message;\n  }\n}\n\n// Retour consolidé : batch vs single-year (même interface backward-compat)\nconst firstYear = annees[0];\nreturn JSON.stringify(isBatch ? {\n  mode: simulate ? 'SIMULATION' : 'APPLY',\n  valid,\n  annees,\n  batch: true,\n  par_annee: resultsByYear,\n  ops_summary_total: {\n    total: operations.length * annees.length,\n    success: successCount,\n    errors: errorCount,\n    skipped: skipCount\n  },\n  sanitize_report: {\n    pre_ops: sanitize_report_pre,\n    post_ops: sanitize_report_post,\n    total_keys_purged: totalDirtPurged\n  },\n  pending_saved,\n  pending_error,\n  pending_session_id: session_id || null,\n  warning: errorCount > 0 ? \"Au moins une opération a échoué — pending NON sauvegardé. Vérifie par_annee, corrige et relance.\" : null,\n  redistribution_required: allLogs.some(l => l.requires_redistribution) ? allLogs.filter(l => l.requires_redistribution) : null\n} : {\n  mode: simulate ? 'SIMULATION' : 'APPLY',\n  valid,\n  annee: firstYear,\n  avant: resultsByYear[firstYear].avant,\n  apres: resultsByYear[firstYear].apres,\n  delta: resultsByYear[firstYear].delta,\n  ops_summary: resultsByYear[firstYear].ops_summary,\n  operations_appliquees: resultsByYear[firstYear].operations_appliquees,\n  sanitize_report: {\n    pre_ops: sanitize_report_pre,\n    post_ops: sanitize_report_post,\n    total_keys_purged: totalDirtPurged\n  },\n  pending_saved,\n  pending_error,\n  pending_session_id: session_id || null,\n  warning: errorCount > 0 ? \"Au moins une opération a échoué — pending NON sauvegardé. Vérifie operations_appliquees, corrige et relance.\" : null,\n  redistribution_required: allLogs.some(l => l.requires_redistribution) ? allLogs.filter(l => l.requires_redistribution) : null\n}, null, 2);"
+      },
+      "id": "node-tool-budget",
+      "name": "Tool: Budget Engine",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "name": "committer",
+        "description": "Persiste les modifications budgétaires sur le VPS. ⚠️ N'appeler QUE si l'utilisateur a tapé 'OUI' (ou 'ok' / 'valide') dans son DERNIER message.\n\nParamètre MINIMAL :\n{ \"confirmation\": \"OUI\" }\n\nLe Committer récupère AUTOMATIQUEMENT la dernière simulation en attente (cachée serveur-side dans pending_commit.php par Budget Engine au tour précédent) et l'applique. Tu n'as PAS besoin de re-passer les operations — elles sont déjà cachées.\n\nSi aucune simulation n'est en attente, le tool renverra une erreur explicite : demande alors à l'utilisateur de reformuler sa modification pour relancer Budget Engine.",
+        "language": "javaScript",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// COMMITTER v4 (stateful) — lit pending_commit.php puis save_data.php\n// FIX v13.5 : ne dépend PLUS de l'historique conversationnel.\n// Workflow :\n//   1. Vérifie confirmation === \"OUI\"\n//   2. GET pending_commit.php?session_id=X\n//   3. POST le finance_data récupéré vers save_data.php\n//   4. DELETE pending_commit.php?session_id=X\n// ════════════════════════════════════════════════════════\n// ── v13.26 : ROBUST PARSING + DIAGNOSTICS (anti-silence) ─────────────\n// REFONTE v13.26 : architecture robuste + diagnostique (plus jamais d'échec silencieux)\n//\n//  Couche 1 - PARSER MULTI-STRATEGIES :\n//     Stratégie A : JSON.parse direct du query trim\n//     Stratégie B : extraction d'un JSON object embarqué via regex (texte LLM verbeux)\n//     Stratégie C : JSON scalar string ('\"OUI\"' -> \"OUI\")\n//     Stratégie D : plain scalar ('OUI') -- UNIQUEMENT si l'outil l'autorise\n//                   (committer oui, budget_engine non)\n//\n//  Couche 2 - PAS D'ECHEC SILENCIEUX :\n//     Si parsing -> input vide, on retourne une erreur diagnostique\n//     contenant raw_query, parse_strategy, et la liste des stratégies tentées.\n//     -> permet de debug ce que Gemini envoie réellement.\n//\n//  Couche 3 - KWARGS TDZ-SAFE (v13.24 conservé) :\n//     try/catch individuel par kwarg pour attraper ReferenceError + TDZ.\n//\nconst TOOL_NAME = 'committer';\nconst ACCEPT_SCALAR = true;\n\nlet input = {};\nlet _parseStrategy = 'none';\nlet _rawQuery = null;\nconst _strategiesAttempted = [];\n\n// Snapshot du query brut (pour diagnostic)\ntry {\n  if (typeof query !== 'undefined' && query !== null) {\n    _rawQuery = (typeof query === 'string') ? query : JSON.stringify(query);\n  }\n} catch (e) { _rawQuery = '<unstringifiable>'; }\n\n// (A) Source primaire : query (multi-stratégies)\nif (typeof query !== 'undefined' && query !== null) {\n  if (typeof query === 'object') {\n    input = Object.assign({}, query);\n    _parseStrategy = 'object_direct';\n  } else if (typeof query === 'string') {\n    const trimmed = query.trim();\n\n    // Stratégie A : JSON.parse direct\n    _strategiesAttempted.push('A:json_parse');\n    try {\n      const parsedA = JSON.parse(trimmed);\n      if (parsedA !== null && typeof parsedA === 'object' && !Array.isArray(parsedA)) {\n        input = parsedA;\n        _parseStrategy = 'A:json_object';\n      } else if (typeof parsedA === 'string') {\n        // JSON scalar '\"OUI\"' -> \"OUI\"\n        if (ACCEPT_SCALAR) {\n          input.confirmation = parsedA;\n          _parseStrategy = 'C:json_scalar';\n        }\n      }\n    } catch (eA) { /* pas du JSON pur */ }\n\n    // Stratégie B : extraction d'un JSON object embarqué (LLM verbeux)\n    if (_parseStrategy === 'none' && trimmed) {\n      _strategiesAttempted.push('B:embedded_json');\n      const m = trimmed.match(/\\{[\\s\\S]*\\}/);\n      if (m) {\n        try {\n          const parsedB = JSON.parse(m[0]);\n          if (parsedB && typeof parsedB === 'object' && !Array.isArray(parsedB)) {\n            input = parsedB;\n            _parseStrategy = 'B:json_embedded';\n          }\n        } catch (eB) { /* échec extraction */ }\n      }\n    }\n\n    // Stratégie D : plain scalar (uniquement outils l'acceptant)\n    if (_parseStrategy === 'none' && trimmed && ACCEPT_SCALAR) {\n      _strategiesAttempted.push('D:plain_scalar');\n      input.confirmation = trimmed;\n      _parseStrategy = 'D:plain_scalar';\n    }\n  }\n}\n\n// (B) kwargs nommés (TDZ-safe, v13.24 conservé)\ntry { if (confirmation !== undefined && input.confirmation === undefined) input.confirmation = confirmation; } catch(e) {}\ntry { if (simulate     !== undefined && input.simulate     === undefined) input.simulate     = simulate;     } catch(e) {}\ntry { if (operations   !== undefined && input.operations   === undefined) input.operations   = operations;   } catch(e) {}\ntry { if (annee        !== undefined && input.annee        === undefined) input.annee        = annee;        } catch(e) {}\ntry { if (session_id   !== undefined && input.session_id   === undefined) input.session_id  = session_id;   } catch(e) {}\n\n// COUCHE 2 : Diagnostic anti-silence\n// Si parsing complètement raté ET pas de kwargs -> erreur explicite avec raw_query\nif (Object.keys(input).length === 0) {\n  return JSON.stringify({\n    error: 'Aucun paramètre détecté (parsing query échoué, kwargs vides). Stratégies tentées: ' + _strategiesAttempted.join(', '),\n    diagnostic: {\n      tool: TOOL_NAME,\n      raw_query: _rawQuery,\n      query_type: typeof query,\n      parse_strategy: _parseStrategy,\n      strategies_attempted: _strategiesAttempted,\n      hint: 'Gemini doit envoyer un JSON object { ... } dans query.'\n    }\n  });\n}\n// ──────────────────────────────────────────────────────────────────────────\n\n// ── GARDE 1 : confirmation = \"OUI\" ──\nif (!input.confirmation || String(input.confirmation).toUpperCase().trim() !== 'OUI') {\n  return JSON.stringify({ error: 'REFUS : le paramètre confirmation doit être \"OUI\". Demande à l\\'utilisateur de taper OUI.' });\n}\n\n// ── Récupère session_id depuis Build Agent Input (ou Normalize Input) ──\nlet session_id = null;\ntry { session_id = $('Build Agent Input').first().json.session_id; } catch (e) {}\nif (!session_id) {\n  try { session_id = $('Normalize Input').first().json.session_id; } catch (e) {}\n}\nif (!session_id) {\n  return JSON.stringify({ error: 'session_id introuvable dans le contexte' });\n}\n\n// ── GARDE 2 : dernier message utilisateur contient \"OUI\" ──\nlet lastUserMsg = '';\ntry { lastUserMsg = String($('Normalize Input').first().json.question || '').toUpperCase(); } catch (e) {}\nif (!/\\bOUI\\b|\\bOK\\b|\\bVALIDE\\b|\\bGO\\b/.test(lastUserMsg)) {\n  return JSON.stringify({ error: 'REFUS : le dernier message utilisateur ne contient pas OUI/OK/VALIDE. Demande confirmation explicite.' });\n}\n\nconst PENDING_URL = 'https://n8n.beau.ink/finance/pending_commit.php';\nconst SAVE_URL    = 'https://n8n.beau.ink/finance/save_data.php';\n\n// ── 1. Récupère le pending depuis le cache serveur ──\nlet pending;\ntry {\n  pending = await this.helpers.httpRequest({\n    method: 'GET',\n    url: PENDING_URL + '?session_id=' + encodeURIComponent(session_id),\n    json: true,\n    timeout: 10000\n  });\n} catch (e) {\n  return JSON.stringify({\n    error: 'Aucune simulation en attente. Demande à l\\'utilisateur de reformuler sa modification (ex : \"baisse le loyer à 4500\"), je referai la simulation puis tu pourras valider par OUI.',\n    detail: e.message,\n    session_id\n  });\n}\n\nif (!pending || !pending.finance_data || !pending.finance_data.donneesAnnuelles) {\n  return JSON.stringify({\n    error: 'Pending récupéré mais finance_data invalide. Demande à l\\'utilisateur de relancer la simulation.',\n    session_id,\n    pending_keys: pending ? Object.keys(pending) : null\n  });\n}\n\nconst financeData = pending.finance_data;\nconst operations = pending.operations || [];\nconst annee = pending.annee;\n\n// ── 2. POST vers save_data.php (commit officiel) ──\nlet saveResp;\ntry {\n  saveResp = await this.helpers.httpRequest({\n    method: 'POST',\n    url: SAVE_URL,\n    body: financeData,\n    json: true,\n    headers: { 'Content-Type': 'application/json' },\n    timeout: 15000\n  });\n} catch (e) {\n  return JSON.stringify({\n    error: 'Échec écriture save_data.php',\n    detail: e.message,\n    session_id,\n    pending_preserved: true\n  });\n}\n\n// ── 3. DELETE pending (cleanup, idempotent) ──\nlet pendingDeleted = false;\ntry {\n  const delResp = await this.helpers.httpRequest({\n    method: 'DELETE',\n    url: PENDING_URL + '?session_id=' + encodeURIComponent(session_id),\n    json: true,\n    timeout: 5000\n  });\n  pendingDeleted = !!(delResp && delResp.status === 'ok');\n} catch (e) {\n  // best effort, le pending expirera tout seul après 30 min\n}\n\nreturn JSON.stringify({\n  status: 'ok',\n  committed: true,\n  session_id,\n  annee,\n  operations_count: operations.length,\n  operations: operations,\n  pending_deleted: pendingDeleted,\n  server_response: saveResp\n});"
+      },
+      "id": "node-tool-commit",
+      "name": "Tool: Committer",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        520,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Telegram Trigger').isExecuted }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "telegram"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook CFO Web').isExecuted }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "web"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "node-switch",
+      "name": "Route Response",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        180,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════\n// FORMAT FOR TELEGRAM v13.21.1 — Hotfix Unterminated group\n// HOTFIX root cause : raw string Python introduisait 2 backslashes\n//   devant / dans le litteral regex -> / terminait le litteral\n//   -> pattern (<(?!\\\\ non ferme -> Unterminated group.\n// Fix : new RegExp() pour le pattern strip-tags (pas de litteral regex /.../).\n// ════════════════════════════════════════════════════════\nlet html = '';\nlet isError = false;\nlet errorDetail = '';\n\ntry {\n  const agentOut = $('AI Agent').first().json;\n  if (agentOut.error) {\n    isError = true;\n    errorDetail = typeof agentOut.error === 'string'\n      ? agentOut.error\n      : (agentOut.error.message || JSON.stringify(agentOut.error));\n  } else {\n    html = agentOut.output || agentOut.text || agentOut.response || '';\n    if (!html) {\n      isError = true;\n      errorDetail = 'Aucune réponse générée (output vide après continueOnFail).';\n    }\n  }\n} catch (e) {\n  isError = true;\n  errorDetail = e.message || 'Exception lors de la lecture de la sortie agent.';\n}\n\nif (isError) {\n  const safeDetail = String(errorDetail)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\n  return [{\n    json: {\n      telegram_text: '\\u26a0\\ufe0f <b>Alerte Syst\\u00e8me (Super-Agent CFO)</b>\\n'\n        + 'Une exception a emp\\u00each\\u00e9 l\\'ex\\u00e9cution correcte de la commande.\\n'\n        + '<b>D\\u00e9tail technique :</b> <code>' + safeDetail + '</code>',\n      chat_id: $('Telegram Trigger').first().json.message.chat.id\n    }\n  }];\n}\n\nif (typeof html !== 'string') html = String(html);\n\n// Regex pre-compilée hors littéral pour éviter le bug de terminaison /\n// JS source : '<(?!/?(?:b|i|u|s|code|pre|a)\\\\b)[^>]+>'\n// Dans le string literal JS, \\\\b = string value \\b = RegExp word boundary\nconst STRIP_TAGS = new RegExp('<(?!/?(?:b|i|u|s|code|pre|a)\\\\b)[^>]+>', 'gi');\n\nconst text = html\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>\\s*<p[^>]*>/gi, '\\n\\n')\n  .replace(/<\\/?p[^>]*>/gi, '')\n  .replace(/<\\/li>/gi, '\\n')\n  .replace(/<li[^>]*>/gi, '\\u2022 ')\n  .replace(/<\\/?ul[^>]*>/gi, '\\n')\n  .replace(/<\\/?ol[^>]*>/gi, '\\n')\n  .replace(/<hr\\s*\\/?>/gi, '\\n\\u2014\\u2014\\u2014\\n')\n  .replace(/<\\/?span[^>]*>/gi, '')\n  .replace(/<\\/?div[^>]*>/gi, '\\n')\n  .replace(/<strong>/gi, '<b>').replace(/<\\/strong>/gi, '</b>')\n  .replace(/<em>/gi, '<i>').replace(/<\\/em>/gi, '</i>')\n  .replace(STRIP_TAGS, '')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#39;/g, \"'\")\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nreturn [{\n  json: {\n    telegram_text: text,\n    chat_id: $('Telegram Trigger').first().json.message.chat.id\n  }\n}];"
+      },
+      "id": "node-format-telegram",
+      "name": "Format for Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "node-send-telegram",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        -120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "CFOV2TelegramAPI",
+          "name": "CFO V2 Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"html\": $('AI Agent').first().json.output, \"session_id\": $('Normalize Input').first().json.session_id } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-respond-webhook",
+      "name": "Respond Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "name": "memory_writer",
+        "description": "Outil de memorisation long terme. Vectorise et persiste une regle, preference ou information personnelle dans finance_vectors pour qu'elle soit disponible lors de TOUTES les sessions futures via l'outil finance_rag.\n\nUTILISER UNIQUEMENT sur demande EXPLICITE de l utilisateur :\n  retiens que, memorise, souviens-toi que, garde en memoire, note pour toutes les sessions.\n\nCet outil n a besoin d AUCUN parametre — il extrait automatiquement le texte a memoriser depuis la question de l utilisateur via regex sur les patterns de memorisation.\nAppelle simplement memory_writer() sans argument quand l utilisateur demande explicitement une memorisation permanente.",
+        "language": "javaScript",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// MEMORY WRITER v1.4 — extraction depuis langage naturel\n// v1.3 a prouve : query={} (Gemini envoie 0 arg car n8n ne lit pas le schema).\n// v1.4 : on extrait le texte DIRECTEMENT de $json.question via regex.\n//   L'agent n'a plus qu'a decider d'appeler l'outil.\n//   L'outil parse seul. Aucun schema, aucun parametre attendu.\n// ════════════════════════════════════════════════════════\n\n// ── Helper : recherche cle dans n'importe quelle structure ───────────────────\nfunction findKey(obj, key, depth) {\n  if (depth === undefined) depth = 0;\n  if (depth > 4 || obj === null || typeof obj !== 'object') return undefined;\n  if (Array.isArray(obj)) {\n    for (const item of obj) {\n      const f = findKey(item, key, depth + 1);\n      if (f !== undefined && f !== null && f !== '') return f;\n    }\n    return undefined;\n  }\n  if (key in obj && obj[key] !== null && obj[key] !== '') return obj[key];\n  for (const k of Object.keys(obj)) {\n    if (typeof obj[k] === 'object' && obj[k] !== null) {\n      const f = findKey(obj[k], key, depth + 1);\n      if (f !== undefined && f !== null && f !== '') return f;\n    }\n  }\n  return undefined;\n}\n\nlet _texte    = '';\nlet _categorie = 'general';\nlet _source   = null;\n\n// ─────────────────────────────────────────────────────────────────────────────\n// TENTATIVE 1 : Si Gemini envoie quand meme des params (cas chanceux)\n// ─────────────────────────────────────────────────────────────────────────────\nconst sources = [];\ntry { if (typeof query !== 'undefined') sources.push({ n: 'query', v: query }); } catch (e) {}\ntry { if (typeof texte !== 'undefined') sources.push({ n: 'direct-vars', v: { texte, categorie: typeof categorie !== 'undefined' ? categorie : null } }); } catch (e) {}\n\nfor (const s of sources) {\n  let val = s.v;\n  if (typeof val === 'string') {\n    try { val = JSON.parse(val); } catch (e) { /* string brute */\n      if (val.length >= 5) { _texte = val.trim(); _source = s.n + '-string-direct'; }\n      continue;\n    }\n  }\n  const t = findKey(val, 'texte') || findKey(val, 'text');\n  if (t && String(t).trim().length >= 5) {\n    _texte = String(t).trim();\n    const c = findKey(val, 'categorie') || findKey(val, 'category');\n    if (c) _categorie = String(c).trim().toLowerCase();\n    _source = s.n;\n    break;\n  }\n}\n\n// ─────────────────────────────────────────────────────────────────────────────\n// TENTATIVE 2 : Extraction depuis $json.question via REGEX (cas standard)\n// ─────────────────────────────────────────────────────────────────────────────\nlet userQuestion = '';\nif (!_texte || _texte.length < 5) {\n  try { userQuestion = $('Build Agent Input').first().json.question || ''; } catch (e) {}\n  if (!userQuestion) {\n    try { userQuestion = $json.question || ''; } catch (e) {}\n  }\n  if (!userQuestion) {\n    try { userQuestion = $('Normalize Input').first().json.question || ''; } catch (e) {}\n  }\n\n  if (userQuestion) {\n    // Patterns ordonnes du plus specifique au plus general\n    const patterns = [\n      // \"memorise cette information : XXX\" (avec ou sans CFO devant)\n      /(?:CFO[\\s,]*)?(?:memorise|m[ée]morise|m[éeè]morise)[\\s,]*cette\\s+information[\\s\\:,]+(.+?)(?:[\\.\\!\\?]?\\s*$)/i,\n      // \"retiens (que/pour/cela) XXX\"\n      /(?:retiens|garde\\s+en\\s+m[ée]moire|note\\s+(?:pour|que))\\s*(?:que|pour\\s+(?:le\\s+)?futur|cela)?\\s*[:,]?\\s*(.+?)(?:[\\.\\!\\?]?\\s*$)/i,\n      // \"souviens-toi (que) XXX\"\n      /souviens[\\s\\-]toi\\s*(?:que|de|du|des)?\\s*[:,]?\\s*(.+?)(?:[\\.\\!\\?]?\\s*$)/i,\n      // \"memorise XXX\" simple (en dernier car plus permissif)\n      /(?:CFO[\\s,]*)?(?:memorise|m[ée]morise|m[éeè]morise)\\s*(?:que)?\\s*[:,]?\\s*(.+?)(?:[\\.\\!\\?]?\\s*$)/i,\n    ];\n\n    for (const p of patterns) {\n      const m = userQuestion.match(p);\n      if (m && m[1]) {\n        let extracted = m[1].trim();\n        // Nettoyage : supprime ponctuation finale et espaces\n        extracted = extracted.replace(/[\\.\\!\\?\\s]+$/, '').trim();\n        if (extracted.length >= 5) {\n          _texte = extracted;\n          _source = 'question-regex';\n          break;\n        }\n      }\n    }\n  }\n}\n\n// ─────────────────────────────────────────────────────────────────────────────\n// TENTATIVE 3 : Inference de categorie depuis le contenu du texte\n// ─────────────────────────────────────────────────────────────────────────────\nif (_texte && _categorie === 'general') {\n  const lower = _texte.toLowerCase();\n  if (/\\b(je\\s+pr[ée]f[èe]re|j['']aime|habituellement|toujours|jamais)\\b/.test(lower)) {\n    _categorie = 'preference';\n  } else if (/\\b(plafond|max(?:imum)?|limite|jamais\\s+(?:plus|moins)|r[èe]gle)\\b/.test(lower)) {\n    _categorie = 'regle';\n  } else if (/\\b(actuellement|en\\s+ce\\s+moment|cette\\s+ann[ée]e|jusqu['']en)\\b/.test(lower)) {\n    _categorie = 'contexte';\n  }\n}\n\n// ─────────────────────────────────────────────────────────────────────────────\n// Validation\n// ─────────────────────────────────────────────────────────────────────────────\nconst VALID_CATS = ['preference', 'regle', 'contexte', 'general'];\nif (!VALID_CATS.includes(_categorie)) _categorie = 'general';\n\nif (!_texte || _texte.length < 5) {\n  return JSON.stringify({\n    error: 'INPUT_INVALIDE',\n    raison: 'Aucune source ni regex n a trouve de texte a memoriser.',\n    user_question_recu: userQuestion ? userQuestion.slice(0, 200) : '(vide)',\n    user_question_length: userQuestion ? userQuestion.length : 0,\n    sources_disponibles: sources.length,\n    cause_probable: 'La question utilisateur ne contient pas de pattern de memorisation reconnu (retiens que / memorise / souviens-toi). Demander a l utilisateur de reformuler.'\n  });\n}\n\n// ─────────────────────────────────────────────────────────────────────────────\n// session_id\n// ─────────────────────────────────────────────────────────────────────────────\nlet session_id = null;\ntry { session_id = $('Build Agent Input').first().json.session_id; } catch (e) {}\nif (!session_id) {\n  try { session_id = $('Normalize Input').first().json.session_id; } catch (e) {}\n}\n\n// ─────────────────────────────────────────────────────────────────────────────\n// Appel sous-workflow d'ingestion\n// ─────────────────────────────────────────────────────────────────────────────\nconst WEBHOOK_URL = 'https://n8n.beau.ink/webhook/finance-memory-ingest';\nconst requestBody = { texte: _texte, categorie: _categorie, session_id: session_id || 'unknown' };\n\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'POST',\n    url: WEBHOOK_URL,\n    body: requestBody,\n    json: true,\n    timeout: 20000\n  });\n\n  if (resp && resp.status === 'ok') {\n    return JSON.stringify({\n      status: 'ok',\n      memorise: true,\n      texte: _texte,\n      categorie: _categorie,\n      input_source: _source,\n      message: 'Information enregistree dans la memoire long terme. Disponible dans toutes les sessions futures via finance_rag.'\n    });\n  }\n  return JSON.stringify({\n    error: 'INGESTION_REPONSE_KO',\n    raison: 'Sous-workflow a repondu sans status=ok',\n    response_recue: resp,\n    request_envoyee: requestBody\n  });\n\n} catch (e) {\n  const errInfo = {\n    error: 'WEBHOOK_ECHEC',\n    e_message: e && e.message ? e.message : null,\n    e_statusCode: (e && (e.statusCode || e.code)) || null,\n    request_envoyee: requestBody,\n    cause_probable: null\n  };\n  if (errInfo.e_statusCode === 404) errInfo.cause_probable = 'Sous-workflow CFO Memory Ingest non ACTIVE';\n  else if (errInfo.e_statusCode === 500) errInfo.cause_probable = 'Sous-workflow leve une exception';\n  else if (/ECONNREFUSED|ENOTFOUND|timeout/i.test(errInfo.e_message || '')) errInfo.cause_probable = 'Reseau / DNS / timeout';\n  return JSON.stringify(errInfo);\n}"
+      },
+      "id": "node-tool-memory",
+      "name": "Tool: Memory Writer",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        260
+      ]
+    },
+    {
+      "id": "node-tool-intent",
+      "name": "Tool: Intent Compiler",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        460
+      ],
+      "parameters": {
+        "name": "propose_changes",
+        "description": "Simulateur budgétaire intelligent. Appelle cet outil pour simuler ET sauvegarder toute modification budgétaire demandée par l'utilisateur.\n\nPARAMÈTRE UNIQUE :\n{\n  \"changes\": [\n    {\n      \"action\": \"modify | add | remove | rename | add_exception | remove_exception | update_one_off | clone_year | set_balance | set_studio\",\n      \"category\": \"revenu | charge_fixe | charge_variable | epargne | depense_ponctuelle | solde | studio | annee | compte | objectif | actif | foncier\",\n      \"target\": \"libellé humain de la ligne ex: alimentation, loyer, salaire (l outil résout le mapping clé technique via fuzzy match)\",\n      \"amount\": 1000,\n      \"label\": \"Nouvel intitulé (si création ou renommage)\",\n      \"period\": \"mois | semaine\",\n      \"years\": [2026],\n      \"month\": 6,\n      \"exception_start\": 1,\n      \"exception_end\": 4,\n      \"exception_value\": 0,\n      \"exception_id\": 1234567890,\n      \"clone_from_year\": 2026,\n      \"studio_key\": \"travaux\",\n      \"balance_key\": \"courant\",\n      \"one_off_id\": 1234567890,\n      \"sub_target\": \"Nom exact de la sous-catégorie ou détail (ex: psy, essence, internet) si la modification cible une ligne précise à l intérieur d une catégorie.\",\n      \"notes\": \"citation utilisateur (optionnel)\"\n    }\n  ]\n}\n\nRÈGLES :\n• years : TOUJOURS un tableau, même pour une année : [2026]. Batch multi-années : [2026, 2027].\n• target : le nom humain tel que l utilisateur l a mentionné. N invente JAMAIS de clé technique.\n• L outil retourne pending_saved=true si la simulation est prête : tu peux proposer OUI à l utilisateur.\n• Si clarifications_needed non vide : pose les questions à l utilisateur, n invente PAS de réponse.\n• Si error_ops non vide : explique le problème, NE PROPOSE PAS OUI.\n• category \"compte\" : agit sur les comptes bancaires du bilan. action \"add\" crée un compte (fournir \"label\" et \"amount\" pour le solde initial). action \"modify\" ajuste le solde d un compte (fournir \"target\" = label du compte et \"amount\" à AJOUTER ou SOUSTRAIRE — valeur NÉGATIVE pour un retrait ou transfert sortant).\n• category \"objectif\" : action \"modify\" pour AJOUTER des fonds à un objectif existant (fournir \"target\" = nom du projet, ex: \"Paris\", \"Jlilou\" ; \"amount\" = montant à AJOUTER à la valeur actuelle, donc INCREMENTAL). action \"add\" pour CRÉER un nouvel objectif (fournir \"target\" ou \"label\" = nom du nouvel objectif, \"amount\" = montant déjà épargné (current, peut être 0), \"target_amount\" = montant cible à atteindre (optionnel, défaut 10 000 DH)). Si \"modify\" est utilisé sur un objectif inexistant, il sera créé automatiquement (upsert).\n• category \"epargne\" : c'est un VIREMENT MENSUEL RÉCURRENT prélevé sur le compte source vers une cagnotte (différent de \"objectif\" qui est un Smart Goal). action \"add\" crée un objectif d'épargne mensuelle (fournir \"label\" ou \"target\" = nom, \"amount\" = montant mensuel de base en DH, \"sourceCompte\" optionnel = \"courant\" par défaut, \"linkedAccountId\" optionnel = id du compte de destination, \"exceptions\" optionnel = tableau de modulations [{moisDebut, moisFin, nouvelleValeur}] pour faire varier le montant selon les mois). Exemple modulation 90% reliquat : { action:\"add\", category:\"epargne\", target:\"Épargne Reliquat 90%\", amount:10491, years:[2026], exceptions:[{moisDebut:9, moisFin:12, nouvelleValeur:6151}] }. action \"modify\" met à jour le montant ou label. action \"add_exception\" sur une épargne EXISTANTE (target = nom) avec exception_start/exception_end/exception_value pour ajouter une modulation après coup. action \"remove_exception\" avec exception_id pour supprimer une modulation. PRÉFÉRER les exceptions INLINE dans \"add\" pour éviter le problème de résolution batch (l'épargne n'est résolue qu'après création).\n• category \"actif\" : action \"modify\" pour tout actif patrimonial (productif OU foncier — source unique v17). Fournir \"target\" = nom de l actif. Pour un actif productif : \"amount\" = capital investi (prix d achat, remplace). Champ \"valeur_actuelle\" = valeur marchande estimée actuelle (optionnel, déclenche calcul plus-value latente). Champs optionnels dette/levier : \"taux_credit\", \"annees_total\", \"annees_restantes\", \"apport_personnel\" (mise de fonds initiale en DH), \"montant_credit\" (capital emprunté en DH). Ces champs ne sont mis à jour que si fournis. Pour un actif foncier : \"sub_target\" = scénario parmi 'conservateur' | 'pessimiste' | 'optimiste' et \"amount\" = NOUVELLE VALORISATION. Si \"sub_target\" fourni, seul le scénario est mis à jour (conservateur→value, pessimiste→val_pessimiste, optimiste→val_optimiste). Champ \"valeur_actuelle\" aussi applicable aux fonciers. Exemple actif productif : { action:\"modify\", category:\"actif\", target:\"Studio Airbnb\", amount:450000, valeur_actuelle:580000, apport_personnel:150000, montant_credit:300000 }. Exemple foncier : { action:\"modify\", category:\"actif\", target:\"Foncier Nord\", sub_target:\"optimiste\", amount:90000000 }.",
+        "language": "javaScript",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// INTENT COMPILER v1.0 — Super-Agent CFO v14.0\n// Architecture NLU -> Compiler -> Apply\n//\n// Interface Gemini (simple, sans types techniques) :\n//   { \"changes\": [{ action, category, target, amount, years, ... }] }\n//\n// Pipeline interne :\n//   1. Parse input (multi-strategy)\n//   2. Valide et résout chaque change (fuzzy match target -> key)\n//   3. Si clarification nécessaire : retourne sans appliquer\n//   4. Capture snapshot \"avant\" par année\n//   5. Construit les ops canoniques et les applique inline\n//   6. Capture snapshot \"après\" et calcule delta\n//   7. Sauvegarde pending_commit\n// ════════════════════════════════════════════════════════\n\nconst TOOL_NAME = 'propose_changes';\n\n// ── Multi-strategy parser (défense en profondeur) ──────\nlet input = {};\nlet _parseStrategy = 'none';\nlet _rawQuery = null;\nconst _strategiesAttempted = [];\n\ntry {\n  if (typeof query !== 'undefined' && query !== null) {\n    _rawQuery = typeof query === 'string' ? query : JSON.stringify(query);\n  }\n} catch (e) { _rawQuery = '<unstringifiable>'; }\n\nif (typeof query !== 'undefined' && query !== null) {\n  if (typeof query === 'object') {\n    input = Object.assign({}, query);\n    _parseStrategy = 'object_direct';\n  } else if (typeof query === 'string') {\n    const trimmed = query.trim();\n    _strategiesAttempted.push('A:json_parse');\n    try {\n      const parsedA = JSON.parse(trimmed);\n      if (parsedA && typeof parsedA === 'object' && !Array.isArray(parsedA)) {\n        input = parsedA; _parseStrategy = 'A:json_object';\n      }\n    } catch (eA) {}\n    if (_parseStrategy === 'none' && trimmed) {\n      _strategiesAttempted.push('B:embedded_json');\n      const m = trimmed.match(/\\{[\\s\\S]*\\}/);\n      if (m) {\n        try {\n          const parsedB = JSON.parse(m[0]);\n          if (parsedB && typeof parsedB === 'object' && !Array.isArray(parsedB)) {\n            input = parsedB; _parseStrategy = 'B:json_embedded';\n          }\n        } catch (eB) {}\n      }\n    }\n  }\n}\n\n// kwargs TDZ-safe\ntry { if (typeof changes !== 'undefined' && input.changes === undefined) input.changes = changes; } catch(e) {}\n\nif (!input.changes || !Array.isArray(input.changes) || !input.changes.length) {\n  return JSON.stringify({\n    error: 'Paramètre \"changes\" manquant ou vide. Format : { \"changes\": [{ action, category, target, years, ... }] }',\n    diagnostic: { tool: TOOL_NAME, raw_query: _rawQuery, parse_strategy: _parseStrategy, strategies_attempted: _strategiesAttempted }\n  });\n}\n\n// ── Contexte ──────────────────────────────────────────\nlet normalized;\ntry { normalized = $('Build Agent Input').first().json; }\ncatch (e) {\n  try { normalized = $('Normalize Input').first().json; }\n  catch (e2) { return JSON.stringify({ error: 'Contexte introuvable (Build Agent Input / Normalize Input)' }); }\n}\nconst session_id = normalized.session_id;\n// v20.80 : prefer finance_data_raw (full VPS JSON with donneesAnnuelles) over sanitized payload v20.31\nconst _rawSrcIntent = normalized.finance_data_raw || normalized.finance_data;\nconst financeData = _rawSrcIntent ? JSON.parse(JSON.stringify(_rawSrcIntent)) : null;\nif (!financeData) return JSON.stringify({ error: 'finance_data absent. Recharge l\\'interface web.' });\n\n// ════════════════════════════════════════════════════════\n// HELPERS (portés du Budget Engine v6/v13.9)\n// ════════════════════════════════════════════════════════\nconst pickNum = (op, ...keys) => {\n  for (const k of keys) {\n    if (op[k] !== undefined && op[k] !== null && op[k] !== '') {\n      const n = Number(op[k]); if (Number.isFinite(n)) return n;\n    }\n  }\n  return null;\n};\nconst pickStr = (op, ...keys) => {\n  for (const k of keys) { if (op[k] !== undefined && op[k] !== null) return String(op[k]); }\n  return null;\n};\n\nconst SYN_NUM_CHARGE  = ['montant', 'value', 'amount'];\nconst SYN_NUM_REVENU  = ['valeur', 'montant', 'value', 'amount', 'salaire'];\nconst SYN_NUM_DEPENSE = ['valeur', 'value', 'amount'];\nconst SYN_LBL         = ['nom'];\n\nconst purgeKeys = (obj, syns) => {\n  let p = 0;\n  if (!obj || typeof obj !== 'object') return 0;\n  for (const s of syns) { if (Object.prototype.hasOwnProperty.call(obj, s)) { delete obj[s]; p++; } }\n  return p;\n};\n\nfunction sanitizeFinanceData(fd) {\n  const r = { revenus: 0, fixes: 0, variables: 0, epargne: 0, depenses: 0 };\n  if (!fd || !fd.donneesAnnuelles) return r;\n  for (const yr in fd.donneesAnnuelles) {\n    const y = fd.donneesAnnuelles[yr]; if (!y) continue;\n    for (const k in (y.revenus || {})) {\n      const o = y.revenus[k]; if (!o) continue;\n      if (o.base == null) { const rv = pickNum(o, 'valeur', 'montant', 'value', 'amount', 'salaire'); if (rv !== null) o.base = rv; }\n      if (o.label == null && o.nom) o.label = String(o.nom);\n      r.revenus += purgeKeys(o, SYN_NUM_REVENU) + purgeKeys(o, SYN_LBL);\n    }\n    for (const k in (y.chargesFixes || {})) {\n      const o = y.chargesFixes[k]; if (!o) continue;\n      if (o.valeur == null) { const rv = pickNum(o, 'montant', 'value', 'amount'); if (rv !== null) o.valeur = rv; }\n      if (o.label == null && o.nom) o.label = String(o.nom);\n      r.fixes += purgeKeys(o, SYN_NUM_CHARGE) + purgeKeys(o, SYN_LBL);\n    }\n    for (const k in (y.chargesVariables || {})) {\n      const o = y.chargesVariables[k]; if (!o) continue;\n      if (o.valeur == null) { const rv = pickNum(o, 'montant', 'value', 'amount'); if (rv !== null) o.valeur = rv; }\n      if (o.label == null && o.nom) o.label = String(o.nom);\n      r.variables += purgeKeys(o, SYN_NUM_CHARGE) + purgeKeys(o, SYN_LBL);\n    }\n    // v20.90 : epargne peut etre array (Vue.js v17.99) OU legacy object — itere les deux\n    const _epPool = Array.isArray(y.epargne) ? y.epargne.filter(Boolean) : Object.values(y.epargne || {}).filter(Boolean);\n    for (const o of _epPool) {\n      if (o.valeur == null) { const rv = pickNum(o, 'montant', 'value', 'amount'); if (rv !== null) o.valeur = rv; }\n      if (o.label == null && o.nom) o.label = String(o.nom);\n      if (o.nom == null && o.label) o.nom = String(o.label);\n      r.epargne += purgeKeys(o, SYN_NUM_CHARGE) + purgeKeys(o, SYN_LBL);\n    }\n    for (const d of (y.depensesIrregulieres || [])) {\n      if (!d) continue;\n      if (d.montant == null) { const rv = pickNum(d, 'valeur', 'value', 'amount'); if (rv !== null) d.montant = rv; }\n      r.depenses += purgeKeys(d, SYN_NUM_DEPENSE);\n    }\n  }\n  return r;\n}\n\nconst writeCharge = (t, v, l) => { if (v != null) t.valeur = v; if (l != null) t.label = l; purgeKeys(t, SYN_NUM_CHARGE); purgeKeys(t, SYN_LBL); };\nconst writeRevenu  = (t, b, l) => { if (b != null) t.base  = b; if (l != null) t.label = l; purgeKeys(t, SYN_NUM_REVENU);  purgeKeys(t, SYN_LBL); };\nconst writeEpargne = (t, v, l) => { if (v != null) t.valeur = v; if (l != null) t.label = l; purgeKeys(t, SYN_NUM_CHARGE); purgeKeys(t, SYN_LBL); };\n\nconst snapshot = (fd, yr) => {\n  const y = fd.donneesAnnuelles && fd.donneesAnnuelles[yr];\n  if (!y) return null;\n  const sum = obj => Object.values(obj || {}).reduce((s, v) => s + (Number(v && v.valeur) || Number(v && v.base) || 0), 0);\n  return { revenus: sum(y.revenus), fixes: sum(y.chargesFixes), variables: sum(y.chargesVariables), epargne: sum(y.epargne), depensesIrreg: (y.depensesIrregulieres || []).length };\n};\n\n// ════════════════════════════════════════════════════════\n// ENTITY RESOLVER — fuzzy match target label -> key technique\n// ════════════════════════════════════════════════════════\nfunction normStr(s) {\n  return String(s || '').toLowerCase()\n    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9]+/g, ' ').trim();\n}\n\nfunction levenshtein(a, b) {\n  const m = a.length, n = b.length;\n  const dp = [];\n  for (let i = 0; i <= m; i++) { dp[i] = [i]; for (let j = 1; j <= n; j++) dp[i][j] = 0; }\n  for (let j = 0; j <= n; j++) dp[0][j] = j;\n  for (let i = 1; i <= m; i++) {\n    for (let j = 1; j <= n; j++) {\n      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);\n    }\n  }\n  return dp[m][n];\n}\n\nconst POOL_MAP = { revenu: 'revenus', charge_fixe: 'chargesFixes', charge_variable: 'chargesVariables', epargne: 'epargne' };\n\nfunction resolveEntity(target, category, fd) {\n  const normT = normStr(target);\n  const candidates = [];\n  const seen = new Set();\n\n  const catKeys = category && POOL_MAP[category] ? [category] : Object.keys(POOL_MAP);\n\n  for (const yr in fd.donneesAnnuelles) {\n    const y = fd.donneesAnnuelles[yr]; if (!y) continue;\n    for (const cat of catKeys) {\n      const rawPool = y[POOL_MAP[cat]] || {};\n      // v20.90 : epargne v17.99 = array d'objets {id, nom, ...} → cle technique = 'ep_'+id\n      const pool = Array.isArray(rawPool)\n        ? Object.fromEntries(rawPool.filter(Boolean).map(item => ['ep_' + (item.id || ''), item]))\n        : rawPool;\n      for (const key in pool) {\n        const dk = cat + ':' + key;\n        if (seen.has(dk)) continue; seen.add(dk);\n        const item = pool[key];\n        const lbl = item.label || item.nom || key;\n        const normL = normStr(lbl), normK = normStr(key);\n        const dist = Math.min(levenshtein(normT, normL), levenshtein(normT, normK));\n        const contains = normL.includes(normT) || normK.includes(normT) || normT.includes(normL) || normT.includes(normK);\n        candidates.push({ key, label: lbl, category: cat, dist, contains });\n      }\n    }\n  }\n\n  // Soldes initiaux\n  if (!category || category === 'solde') {\n    for (const key in (fd.soldesInitiaux || {})) {\n      const dk = 'solde:' + key;\n      if (seen.has(dk)) continue; seen.add(dk);\n      const normK = normStr(key);\n      const dist = levenshtein(normT, normK);\n      const contains = normK.includes(normT) || normT.includes(normK);\n      candidates.push({ key, label: key, category: 'solde', dist, contains });\n    }\n  }\n\n  if (!candidates.length) {\n    return { resolved: false, error: '\"' + target + '\" introuvable' + (category ? ' dans ' + category : '') + '. Finance data vide ou catégorie incorrecte.' };\n  }\n\n  candidates.sort((a, b) => {\n    if (a.contains !== b.contains) return a.contains ? -1 : 1;\n    return a.dist - b.dist;\n  });\n\n  const best = candidates[0];\n  const second = candidates[1];\n  const thresh = Math.max(4, Math.floor(normT.length * 0.55));\n\n  // Ambiguïté : deux candidats \"contains\" avec même distance\n  if (second && second.contains && best.contains && best.key !== second.key && best.dist === second.dist && best.category === second.category) {\n    return { resolved: false, ambiguous: true, choices: [best, second],\n      error: '\"' + target + '\" est ambigu. Précise : \"' + best.label + '\" (' + best.key + ') ou \"' + second.label + '\" (' + second.key + ') ?' };\n  }\n\n  // Distance trop grande sans \"contains\"\n  if (!best.contains && best.dist > thresh) {\n    const sugg = candidates.slice(0, 4).map(c => '\"' + c.label + '\"').join(', ');\n    return { resolved: false, error: '\"' + target + '\" ne correspond à aucune ligne connue. Lignes proches : ' + sugg };\n  }\n\n  return { resolved: true, key: best.key, label: best.label, category: best.category };\n}\n\n// ════════════════════════════════════════════════════════\n// OP BUILDER — (action, category, resolvedKey) -> op[]\n// Gemini ne voit JAMAIS les types techniques — c'est ici qu'ils sont déterminés.\n// ════════════════════════════════════════════════════════\nfunction buildOps(change, resolvedKey, resolvedCat, annee) {\n  const { action, amount, label: newLabel, period, month, exception_start, exception_end, exception_value, exception_id, clone_from_year, studio_key, balance_key, one_off_id, target, sub_target: subTarget } = change;\n  const amt = (amount !== undefined && amount !== null && !isNaN(Number(amount))) ? Number(amount) : null;\n  // v15.14 — Multi-Add Key Collision fix : suffixe aléatoire pour les ops 'add'\n  // garantit l'unicité de la clé technique même si l'IA ajoute 3 fois le même label\n  const safeTarget = String(target || newLabel || 'nouvelle_ligne').replace(/\\s+/g, '_').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const baseKey = resolvedKey || (action === 'add' ? safeTarget + '_' + Math.random().toString(36).substring(2, 6) : safeTarget);\n\n  switch (action) {\n    case 'modify':\n      switch (resolvedCat) {\n        case 'revenu':         return [{ type: 'update_revenu',         key: resolvedKey, ...(amt != null && { base: amt }),   ...(newLabel && { label: newLabel }) }];\n        case 'charge_fixe':    return [{ type: 'update_charge_fixe',    key: resolvedKey, ...(amt != null && { valeur: amt }), ...(newLabel && { label: newLabel }) }];\n        case 'charge_variable':\n          if (subTarget) return [{ type: 'update_charge_variable_detail', key: resolvedKey, sub_key: subTarget, montant: amt }];\n          return [{ type: 'update_charge_variable', key: resolvedKey, ...(amt != null && { valeur: amt }), ...(period && { periode: period }), ...(newLabel && { label: newLabel }) }];\n        case 'epargne':        return [{ type: 'update_epargne',        key: resolvedKey, ...(amt != null && { valeur: amt }), ...(newLabel && { label: newLabel }) }];\n        case 'studio':         return [{ type: 'set_projet_studio', annee, key: studio_key || resolvedKey || 'travaux', valeur: amt }];\n        case 'solde':          return [{ type: 'set_solde_initial', key: balance_key || resolvedKey || 'courant', valeur: amt }];\n        case 'compte':         return [{ type: 'update_compte', key: change.target_key || target, montant: amt }];\n        case 'objectif':       return [{ type: 'update_objectif', key: change.target_key || target, montant: amt }];\n        case 'actif':\n        case 'foncier':        return [{ type: 'update_master_asset', key: change.target_key || target, montant: amt, ...(subTarget && { scenario: subTarget }), ...(change.sous_categorie && { scenario: change.sous_categorie }), ...(change.taux_credit !== undefined && { taux_credit: change.taux_credit }), ...(change.annees_total !== undefined && { annees_total: change.annees_total }), ...(change.annees_restantes !== undefined && { annees_restantes: change.annees_restantes }), ...(change.apport_personnel !== undefined && { apport_personnel: change.apport_personnel }), ...(change.montant_credit !== undefined && { montant_credit: change.montant_credit }), ...(change.valeur_actuelle !== undefined && { valeur_actuelle: change.valeur_actuelle }) }];\n        default: return null;\n      }\n    case 'add':\n      switch (resolvedCat) {\n        case 'revenu':          return [{ type: 'add_revenu',         key: baseKey, label: newLabel || target, base: amt || 0 }];\n        case 'charge_fixe':     return [{ type: 'add_charge_fixe',    key: baseKey, label: newLabel || target, valeur: amt || 0 }];\n        case 'charge_variable': return [{ type: 'add_charge_variable',key: baseKey, label: newLabel || target, valeur: amt || 0, periode: period || 'mois' }];\n        case 'epargne':         return [{ type: 'add_epargne',        key: baseKey, label: newLabel || target, valeur: amt || 0 }];\n        case 'depense_ponctuelle': return [{ type: 'add_depense_ponctuelle', annee, mois: month || 1, nom: newLabel || target, montant: amt || 0 }];\n        case 'compte':         return [{ type: 'create_compte', label: newLabel || target, montant: amt || 0 }];\n        case 'objectif':       return [{ type: 'create_objectif', name: newLabel || target, current: amt || 0, target_amount: change.target_amount || 0 }];\n        default: return null;\n      }\n    case 'remove':\n      switch (resolvedCat) {\n        case 'revenu':          return [{ type: 'remove_revenu',         key: resolvedKey }];\n        case 'charge_fixe':     return [{ type: 'remove_charge_fixe',    key: resolvedKey }];\n        case 'charge_variable': return [{ type: 'remove_charge_variable',key: resolvedKey }];\n        case 'epargne':         return [{ type: 'remove_epargne',        key: resolvedKey }];\n        case 'depense_ponctuelle': return one_off_id ? [{ type: 'remove_depense_ponctuelle', annee, id: one_off_id }] : [{ type: 'remove_depense_ponctuelle', annee, nom: target }];\n        case 'annee':           return [{ type: 'delete_annee', annee }];\n        default: return null;\n      }\n    case 'rename':\n      if (!newLabel) return null;\n      switch (resolvedCat) {\n        case 'revenu':      return [{ type: 'rename_revenu',      key: resolvedKey, label: newLabel }];\n        case 'charge_fixe': return [{ type: 'rename_charge_fixe', key: resolvedKey, label: newLabel }];\n        default: return null;\n      }\n    case 'add_exception':\n      switch (resolvedCat) {\n        case 'revenu':      return [{ type: 'add_revenu_exception',     key: resolvedKey, moisDebut: exception_start, moisFin: exception_end, nouvelleValeur: exception_value }];\n        case 'charge_fixe': return [{ type: 'add_charge_fixe_exception',key: resolvedKey, moisDebut: exception_start, moisFin: exception_end, nouvelleValeur: exception_value }];\n        case 'epargne':     return [{ type: 'add_epargne_exception',    key: resolvedKey || target, moisDebut: exception_start, moisFin: exception_end, nouvelleValeur: exception_value }];\n        default: return null;\n      }\n    case 'remove_exception':\n      switch (resolvedCat) {\n        case 'revenu':      return [{ type: 'remove_revenu_exception',     key: resolvedKey, id: exception_id }];\n        case 'charge_fixe': return [{ type: 'remove_charge_fixe_exception',key: resolvedKey, id: exception_id }];\n        case 'epargne':     return [{ type: 'remove_epargne_exception',    key: resolvedKey || target, id: exception_id }];\n        default: return null;\n      }\n    case 'update_one_off':\n      return one_off_id ? [{ type: 'update_depense_ponctuelle', id: one_off_id, ...(amt != null && { montant: amt }), ...(month && { mois: month }), ...(newLabel && { nom: newLabel }) }] : null;\n    case 'clone_year':\n      return [{ type: 'clone_annee', depuis: clone_from_year || (annee - 1), vers: annee }];\n    case 'set_balance':\n      return [{ type: 'set_solde_initial', key: balance_key || baseKey, valeur: amt }];\n    case 'set_studio':\n      return [{ type: 'set_projet_studio', annee, key: studio_key || baseKey, valeur: amt }];\n    default: return null;\n  }\n}\n\n// ════════════════════════════════════════════════════════\n// applyOp — inline depuis Budget Engine v6/v13.9 (logique identique)\n// ════════════════════════════════════════════════════════\nfunction applyOp(fd, op, anneeTarget) {\n  const a = Number(op.annee || anneeTarget);\n  const y = fd.donneesAnnuelles && fd.donneesAnnuelles[a];\n  const log = { op: op.type };\n  try {\n    switch (op.type) {\n      // ── REVENUS ────────────────────────────────────────\n      case 'set_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const v = pickNum(op, 'base', 'valeur', 'montant', 'value', 'amount', 'salaire');\n        if (v === null) { log.status='error'; log.reason='valeur manquante'; break; }\n        const old = y.revenus[op.key].base; writeRevenu(y.revenus[op.key], v, null);\n        log.key=op.key; log.avant=old; log.apres=v; break;\n      }\n      case 'add_revenu': {\n        if (!y) { log.status='skip'; log.reason='année absente'; break; }\n        if (!y.revenus) y.revenus={};\n        if (y.revenus[op.key]) { log.status='skip'; log.reason='clé existe déjà'; break; }\n        const v = pickNum(op, 'base', 'valeur', 'montant', 'value', 'amount', 'salaire') ?? 0;\n        const lbl = pickStr(op, 'label', 'nom') || op.key;\n        y.revenus[op.key] = { label: lbl, base: v, showExceptions: false, exceptions: [] };\n        log.key=op.key; log.created=true; log.base=v; break;\n      }\n      case 'remove_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        delete y.revenus[op.key]; log.key=op.key; log.removed=true; break;\n      }\n      case 'rename_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const lbl = pickStr(op, 'label', 'nom');\n        if (!lbl) { log.status='error'; log.reason='label manquant'; break; }\n        const old = y.revenus[op.key].label; writeRevenu(y.revenus[op.key], null, lbl);\n        log.key=op.key; log.avant=old; log.apres=lbl; break;\n      }\n      case 'update_revenu': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const v = pickNum(op, 'base', 'valeur', 'montant', 'value', 'amount', 'salaire');\n        const lbl = pickStr(op, 'label', 'nom');\n        const t = y.revenus[op.key]; const ch = {};\n        if (v !== null) ch.base = { avant: t.base, apres: v };\n        if (lbl !== null) ch.label = { avant: t.label, apres: lbl };\n        if (!Object.keys(ch).length) { log.status='error'; log.reason='aucun champ fourni'; break; }\n        writeRevenu(t, v, lbl); log.key=op.key; log.changes=ch; break;\n      }\n      case 'add_revenu_exception': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        if (!Array.isArray(y.revenus[op.key].exceptions)) y.revenus[op.key].exceptions=[];\n        const id = Date.now()+Math.floor(Math.random()*1000);\n        y.revenus[op.key].exceptions.push({ id, moisDebut:Number(op.moisDebut), moisFin:Number(op.moisFin), nouvelleValeur:Number(op.nouvelleValeur) });\n        y.revenus[op.key].showExceptions=true; log.key=op.key; log.id=id; break;\n      }\n      case 'remove_revenu_exception': {\n        if (!y || !y.revenus || !y.revenus[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const before=(y.revenus[op.key].exceptions||[]).length;\n        y.revenus[op.key].exceptions=(y.revenus[op.key].exceptions||[]).filter(e=>Number(e.id)!==Number(op.id));\n        log.key=op.key; log.supprimees=before-y.revenus[op.key].exceptions.length; break;\n      }\n      // ── CHARGES FIXES ──────────────────────────────────\n      case 'set_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        if (v === null) { log.status='error'; log.reason='valeur manquante'; break; }\n        const old = y.chargesFixes[op.key].valeur; writeCharge(y.chargesFixes[op.key], v, null);\n        log.key=op.key; log.avant=old; log.apres=v; break;\n      }\n      case 'add_charge_fixe': {\n        if (!y) { log.status='skip'; log.reason='année absente'; break; }\n        if (!y.chargesFixes) y.chargesFixes={};\n        if (y.chargesFixes[op.key]) { log.status='skip'; log.reason='clé existe déjà'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount') ?? 0;\n        const lbl = pickStr(op, 'label', 'nom') || op.key;\n        y.chargesFixes[op.key] = { label:lbl, valeur:v, showExceptions:false, exceptions:[], montantPaye:0, paye:false };\n        log.key=op.key; log.created=true; log.valeur=v; break;\n      }\n      case 'remove_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        delete y.chargesFixes[op.key]; log.key=op.key; log.removed=true; break;\n      }\n      case 'rename_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const lbl = pickStr(op, 'label', 'nom');\n        if (!lbl) { log.status='error'; log.reason='label manquant'; break; }\n        const old = y.chargesFixes[op.key].label; writeCharge(y.chargesFixes[op.key], null, lbl);\n        log.key=op.key; log.avant=old; log.apres=lbl; break;\n      }\n      case 'update_charge_fixe': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        const lbl = pickStr(op, 'label', 'nom');\n        const t = y.chargesFixes[op.key]; const ch={};\n        if (v !== null) ch.valeur = { avant:t.valeur, apres:v };\n        if (lbl !== null) ch.label = { avant:t.label, apres:lbl };\n        if (!Object.keys(ch).length) { log.status='error'; log.reason='aucun champ fourni'; break; }\n        writeCharge(t, v, lbl); log.key=op.key; log.changes=ch; break;\n      }\n      case 'add_charge_fixe_exception': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        if (!Array.isArray(y.chargesFixes[op.key].exceptions)) y.chargesFixes[op.key].exceptions=[];\n        const id=Date.now()+Math.floor(Math.random()*1000);\n        y.chargesFixes[op.key].exceptions.push({ id, moisDebut:Number(op.moisDebut), moisFin:Number(op.moisFin), nouvelleValeur:Number(op.nouvelleValeur) });\n        y.chargesFixes[op.key].showExceptions=true; log.key=op.key; log.id=id; break;\n      }\n      case 'remove_charge_fixe_exception': {\n        if (!y || !y.chargesFixes || !y.chargesFixes[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const before=(y.chargesFixes[op.key].exceptions||[]).length;\n        y.chargesFixes[op.key].exceptions=(y.chargesFixes[op.key].exceptions||[]).filter(e=>Number(e.id)!==Number(op.id));\n        log.key=op.key; log.supprimees=before-y.chargesFixes[op.key].exceptions.length; break;\n      }\n      // ── CHARGES VARIABLES ──────────────────────────────\n      case 'set_charge_variable': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        if (v === null) { log.status='error'; log.reason='valeur manquante'; break; }\n        const item = y.chargesVariables[op.key]; const old = item.valeur;\n        if (item.details && item.details.length > 0) {\n          const cs = item.details.reduce((s,d) => s+(Number(d.montant)||0), 0);\n          if (cs === 0) { log.status='error'; log.requires_redistribution=true; log.reason='Sous-lignes toutes à 0 — précise comment ventiler'; log.nouveau_total=v; log.lignes=item.details.map(d=>({id:d.id,nom:d.nom,montant_actuel:d.montant})); break; }\n          const ratio = v/cs; let dist=0;\n          for (let i=0; i<item.details.length-1; i++) { const nm=Math.round(item.details[i].montant*ratio); item.details[i].montant=nm; dist+=nm; }\n          item.details[item.details.length-1].montant=v-dist;\n          log.redistribution='proportionnelle'; log.ratio=Math.round(ratio*1000)/1000; log.details_apres=item.details.map(d=>({nom:d.nom,montant:d.montant}));\n        }\n        writeCharge(item, v, null); log.key=op.key; log.avant=old; log.apres=v; break;\n      }\n      case 'add_charge_variable': {\n        if (!y) { log.status='skip'; log.reason='année absente'; break; }\n        if (!y.chargesVariables) y.chargesVariables={};\n        if (y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé existe déjà'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount') ?? 0;\n        const per = (op.periode==='semaine'||op.periode==='mois') ? op.periode : 'mois';\n        const lbl = pickStr(op, 'label', 'nom') || op.key;\n        y.chargesVariables[op.key]={ label:lbl, valeur:v, periode:per, showDetails:false, details:[] };\n        log.key=op.key; log.created=true; log.valeur=v; log.periode=per; break;\n      }\n      case 'remove_charge_variable': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        delete y.chargesVariables[op.key]; log.key=op.key; log.removed=true; break;\n      }\n      case 'set_charge_variable_periode': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        if (op.periode!=='mois' && op.periode!=='semaine') { log.status='error'; log.reason='periode invalide (mois|semaine)'; break; }\n        const old=y.chargesVariables[op.key].periode; y.chargesVariables[op.key].periode=op.periode;\n        log.key=op.key; log.avant=old; log.apres=op.periode; break;\n      }\n      case 'update_charge_variable_detail': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé mère absente'; break; }\n        const t = y.chargesVariables[op.key];\n        if (!t.details || !t.details.length) { log.status='error'; log.reason='aucune sous-ligne existante'; break; }\n        const normStrOp = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n        const normSub = normStrOp(op.sub_key);\n        const detail = t.details.find(d => normStrOp(d.nom).includes(normSub) || normSub.includes(normStrOp(d.nom)));\n        if (!detail) { log.status='error'; log.reason='sous-ligne introuvable: '+op.sub_key; break; }\n        const v = pickNum(op, 'montant', 'valeur', 'value', 'amount');\n        if (v === null) { log.status='error'; log.reason='montant manquant'; break; }\n        const old = detail.montant;\n        detail.montant = v;\n        t.valeur = t.details.reduce((s, d) => s + (Number(d.montant) || 0), 0);\n        log.key=op.key; log.sub_key=detail.nom; log.avant=old; log.apres=v; log.nouveau_total=t.valeur;\n        break;\n      }\n      case 'update_charge_variable': {\n        if (!y || !y.chargesVariables || !y.chargesVariables[op.key]) { log.status='skip'; log.reason='clé absente'; break; }\n        const v = pickNum(op, 'valeur', 'montant', 'value', 'amount');\n        const lbl = pickStr(op, 'label', 'nom');\n        const per = (op.periode==='mois'||op.periode==='semaine') ? op.periode : null;\n        const t = y.chargesVariables[op.key]; const ch={};\n        if (v !== null) {\n          if (t.details && t.details.length > 0) {\n            const cs=t.details.reduce((s,d)=>s+(Number(d.montant)||0),0);\n            if (cs===0) { log.status='error'; log.requires_redistribution=true; log.reason='Sous-lignes toutes à 0'; log.nouveau_total=v; log.lignes=t.details.map(d=>({id:d.id,nom:d.nom,montant_actuel:d.montant})); break; }\n            const ratio=v/cs; let dist=0;\n            for (let i=0;i<t.details.length-1;i++){const nm=Math.round(t.details[i].montant*ratio);t.details[i].montant=nm;dist+=nm;}\n            t.details[t.details.length-1].montant=v-dist;\n            ch.redistribution={mode:'proportionnelle',ratio:Math.round(ratio*1000)/1000,details_apres:t.details.map(d=>({nom:d.nom,montant:d.montant}))};\n          }\n          ch.valeur={avant:t.valeur,apres:v};\n        }\n        if (per!==null) { ch.periode={avant:t.periode,apres:per}; t.periode=per; }\n        if (lbl!==null) ch.label={avant:t.label,apres:lbl};\n        if (!Object.keys(ch).length) { log.status='error'; log.reason='aucun champ fourni'; break; }\n        writeCharge(t, v, lbl); log.key=op.key; log.changes=ch; break;\n      }\n      // ── ÉPARGNE ────────────────────────────────────────\n      // ── ÉPARGNES v20.90 : Schema ARRAY d'objets {id, nom, label, valeur, sourceCompte, linkedAccountId, exceptions[], showExceptions} aligné Vue.js v17.99 ──\n      // Helper de migration legacy object → array (idempotent)\n      // -- LE BLOC suivant utilise une fonction locale dans chaque case pour rester compatible avec n8n typeVersion 1.2 (pas de hoisting global) --\n      case 'set_epargne': {\n        if (!y){log.status='skip';log.reason='année absente';break;}\n        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));\n        if (!Array.isArray(y.epargne) || !y.epargne.length){log.status='skip';log.reason='aucune epargne';break;}\n        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();\n        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));\n        if (!ep){log.status='skip';log.reason='epargne introuvable: '+op.key;break;}\n        const v=pickNum(op,'valeur','montant','value','amount');\n        if (v===null){log.status='error';log.reason='valeur manquante';break;}\n        const old=ep.valeur; ep.valeur=v;\n        log.cible=ep.nom||ep.label;log.avant=old;log.apres=v;break;\n      }\n      case 'add_epargne': {\n        // v20.90 : Création au format ARRAY (était objet → invisible dans surplusParMois et selects)\n        if (!y){log.status='skip';log.reason='année absente';break;}\n        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));\n        if (!Array.isArray(y.epargne)) y.epargne = [];\n        const v = pickNum(op,'valeur','montant','value','amount') ?? 0;\n        const lbl = pickStr(op,'label','nom') || op.key || 'Nouvel objectif';\n        // Anti-doublon par nom normalisé\n        const normLbl = String(lbl).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();\n        const existing = y.epargne.find(e => e && String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim() === normLbl);\n        if (existing){log.status='skip';log.reason='Objectif epargne deja existant: '+lbl;break;}\n        const newId = Date.now() + Math.floor(Math.random()*1000);\n        const newEp = {\n          id: newId,\n          nom: lbl,\n          label: lbl,\n          valeur: v,\n          sourceCompte: pickStr(op,'sourceCompte') || 'courant',\n          linkedAccountId: (op.linkedAccountId !== undefined && op.linkedAccountId !== null) ? op.linkedAccountId : null,\n          exceptions: [],\n          showExceptions: false\n        };\n        // v20.90 : Support des exceptions inline { exceptions: [{moisDebut, moisFin, nouvelleValeur}] }\n        if (Array.isArray(op.exceptions)) {\n          for (const e of op.exceptions) {\n            if (!e) continue;\n            const mD = Number(e.moisDebut !== undefined ? e.moisDebut : (e.month_start !== undefined ? e.month_start : e.exception_start));\n            const mF = Number(e.moisFin !== undefined ? e.moisFin : (e.month_end !== undefined ? e.month_end : e.exception_end));\n            const nv = Number(e.nouvelleValeur !== undefined ? e.nouvelleValeur : (e.value !== undefined ? e.value : e.exception_value));\n            if (mD>=1 && mD<=12 && mF>=mD && mF<=12 && Number.isFinite(nv)) {\n              newEp.exceptions.push({id: Date.now() + Math.floor(Math.random()*10000), moisDebut: mD, moisFin: mF, nouvelleValeur: nv});\n              newEp.showExceptions = true;\n            }\n          }\n        }\n        y.epargne.push(newEp);\n        // Initialise le solde initial de l'objectif (comme addObjectifEpargne dans Vue.js)\n        if (!financeData.soldesInitiaux) financeData.soldesInitiaux = {};\n        if (financeData.soldesInitiaux['ep_'+newId] === undefined) financeData.soldesInitiaux['ep_'+newId] = 0;\n        log.id = newId; log.key = 'ep_'+newId; log.cible = lbl; log.created = true; log.valeur = v;\n        if (newEp.exceptions.length) log.exceptions_count = newEp.exceptions.length;\n        break;\n      }\n      case 'remove_epargne': {\n        if (!y){log.status='skip';log.reason='année absente';break;}\n        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));\n        if (!Array.isArray(y.epargne)){log.status='skip';log.reason='aucune epargne';break;}\n        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();\n        const idx=y.epargne.findIndex(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));\n        if (idx===-1){log.status='skip';log.reason='epargne introuvable: '+op.key;break;}\n        const removed=y.epargne[idx]; y.epargne.splice(idx,1);\n        log.cible=removed.nom||removed.label;log.removed=true;break;\n      }\n      case 'update_epargne': {\n        if (!y){log.status='skip';log.reason='année absente';break;}\n        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));\n        if (!Array.isArray(y.epargne) || !y.epargne.length){log.status='skip';log.reason='aucune epargne';break;}\n        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();\n        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));\n        if (!ep){log.status='skip';log.reason='epargne introuvable: '+op.key;break;}\n        const v=pickNum(op,'valeur','montant','value','amount');\n        const lbl=pickStr(op,'label','nom');\n        const ch={};\n        if (v!==null){ ch.valeur={avant:ep.valeur,apres:v}; ep.valeur=v; }\n        if (lbl!==null){ ch.label={avant:ep.nom||ep.label,apres:lbl}; ep.nom=lbl; ep.label=lbl; }\n        if (!Object.keys(ch).length){log.status='error';log.reason='aucun champ fourni';break;}\n        log.cible=ep.nom||ep.label;log.changes=ch;break;\n      }\n      case 'add_epargne_exception': {\n        // v20.90 : Modulation mensuelle d'une epargne (Vue.js v17.99 lignes 6477/6631 appliquent moisDebut<=mNum<=moisFin)\n        if (!y){log.status='error';log.reason='année absente';break;}\n        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));\n        if (!Array.isArray(y.epargne) || !y.epargne.length){log.status='error';log.reason='Aucune epargne dans cette annee — cree-la d abord avec action=add category=epargne';break;}\n        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();\n        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));\n        if (!ep){log.status='error';log.reason='Epargne introuvable: '+op.key;break;}\n        const mD=Number(op.moisDebut); const mF=Number(op.moisFin); const nv=Number(op.nouvelleValeur);\n        if (!(mD>=1 && mD<=12)){log.status='error';log.reason='moisDebut invalide (1-12 requis)';break;}\n        if (!(mF>=mD && mF<=12)){log.status='error';log.reason='moisFin invalide (>=moisDebut, <=12)';break;}\n        if (!Number.isFinite(nv)){log.status='error';log.reason='nouvelleValeur manquante ou invalide';break;}\n        if (!Array.isArray(ep.exceptions)) ep.exceptions=[];\n        const xid=Date.now()+Math.floor(Math.random()*1000);\n        ep.exceptions.push({id:xid, moisDebut:mD, moisFin:mF, nouvelleValeur:nv});\n        ep.showExceptions=true;\n        log.cible=ep.nom||ep.label; log.id=xid; log.exception={moisDebut:mD,moisFin:mF,nouvelleValeur:nv}; break;\n      }\n      case 'remove_epargne_exception': {\n        if (!y){log.status='error';log.reason='année absente';break;}\n        if (y.epargne && !Array.isArray(y.epargne)) y.epargne = Object.entries(y.epargne).map(([k,v]) => ({...v, id: (v && v.id) || k}));\n        if (!Array.isArray(y.epargne)){log.status='error';log.reason='aucune epargne';break;}\n        const normKey=String(op.key||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();\n        const ep=y.epargne.find(e=>e&&(String(e.id)===String(op.key)||'ep_'+e.id===op.key||String(e.nom||e.label||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').includes(normKey)));\n        if (!ep || !Array.isArray(ep.exceptions)){log.status='error';log.reason='epargne ou exceptions introuvable';break;}\n        const idx=ep.exceptions.findIndex(x=>String(x.id)===String(op.id));\n        if (idx===-1){log.status='error';log.reason='exception id introuvable: '+op.id;break;}\n        ep.exceptions.splice(idx,1);\n        if (!ep.exceptions.length) ep.showExceptions=false;\n        log.cible=ep.nom||ep.label; log.removed_id=op.id; break;\n      }\n      // ── DÉPENSES PONCTUELLES ──────────────────────────\n      case 'add_depense_ponctuelle': {\n        if (!y){log.status='skip';log.reason='année absente';break;}\n        if (!Array.isArray(y.depensesIrregulieres)) y.depensesIrregulieres=[];\n        const v=pickNum(op,'montant','valeur','value','amount');\n        if (v===null){log.status='error';log.reason='montant requis';break;}\n        const id=Date.now()+Math.floor(Math.random()*1000);\n        y.depensesIrregulieres.push({id,mois:Number(op.mois),annee:a,nom:pickStr(op,'nom','label')||'Dépense',montant:v,paye:false,montantPaye:0});\n        log.id=id;log.nom=op.nom;log.montant=v;break;\n      }\n      case 'remove_depense_ponctuelle': {\n        if (!y||!Array.isArray(y.depensesIrregulieres)){log.status='skip';log.reason='année absente';break;}\n        const before=y.depensesIrregulieres.length;\n        y.depensesIrregulieres=y.depensesIrregulieres.filter(d=>{\n          if (op.id!=null&&Number(d.id)===Number(op.id)) return false;\n          if (op.nom!=null&&String(d.nom).toLowerCase().trim()===String(op.nom).toLowerCase().trim()) return false;\n          return true;\n        });\n        log.supprimees=before-y.depensesIrregulieres.length;break;\n      }\n      case 'update_depense_ponctuelle': {\n        if (!y||!Array.isArray(y.depensesIrregulieres)){log.status='skip';log.reason='année absente';break;}\n        const t=y.depensesIrregulieres.find(d=>Number(d.id)===Number(op.id));\n        if (!t){log.status='skip';log.reason='id introuvable';break;}\n        const v=pickNum(op,'montant','valeur','value','amount'); const ch={};\n        if (v!==null){ch.montant={avant:t.montant,apres:v};t.montant=v;}\n        if (op.mois!=null){ch.mois={avant:t.mois,apres:Number(op.mois)};t.mois=Number(op.mois);}\n        if (op.nom!=null){ch.nom={avant:t.nom,apres:String(op.nom)};t.nom=String(op.nom);}\n        purgeKeys(t,SYN_NUM_DEPENSE);\n        if (!Object.keys(ch).length){log.status='error';log.reason='aucun champ fourni';break;}\n        log.id=op.id;log.changes=ch;break;\n      }\n      // ── SOLDES INITIAUX ────────────────────────────────\n      case 'set_solde_initial': {\n        if (!fd.soldesInitiaux) fd.soldesInitiaux={};\n        const allowed=['courant','urgence','lt','bourse','moisActuel','anneeActuelle','semainesRestantes'];\n        if (!allowed.includes(op.key)){log.status='error';log.reason='clé non autorisée. Autorisées: '+allowed.join(', ');break;}\n        const v=pickNum(op,'valeur','montant','value','amount');\n        if (v===null){log.status='error';log.reason='valeur manquante';break;}\n        const old=fd.soldesInitiaux[op.key];fd.soldesInitiaux[op.key]=v;\n        log.key=op.key;log.avant=old;log.apres=v;break;\n      }\n      // ── ANNÉES ────────────────────────────────────────\n      case 'clone_annee': {\n        const src=fd.donneesAnnuelles&&fd.donneesAnnuelles[op.depuis];\n        if (!src){log.status='skip';log.reason='année source absente';break;}\n        if (fd.donneesAnnuelles[op.vers]){log.status='skip';log.reason='année cible existe déjà';break;}\n        const cloned=JSON.parse(JSON.stringify(src));\n        Object.values(cloned.chargesFixes||{}).forEach(f=>{f.paye=false;f.montantPaye=0;});\n        Object.values(cloned.chargesVariables||{}).forEach(c=>{if(c.details)c.details.forEach(d=>{d.paye=false;d.montantPaye=0;});});\n        (cloned.depensesIrregulieres||[]).forEach(d=>{d.paye=false;d.montantPaye=0;d.annee=Number(op.vers);d.id=Date.now()+Math.floor(Math.random()*1000);});\n        fd.donneesAnnuelles[op.vers]=cloned;\n        log.depuis=op.depuis;log.vers=op.vers;log.created=true;break;\n      }\n      case 'delete_annee': {\n        if (!fd.donneesAnnuelles[op.annee]){log.status='skip';log.reason='année absente';break;}\n        delete fd.donneesAnnuelles[op.annee];log.annee=op.annee;log.removed=true;break;\n      }\n      // ── PROJET STUDIO ──────────────────────────────────\n      case 'set_projet_studio': {\n        if (!y){log.status='skip';log.reason='année absente';break;}\n        if (!y.projetStudio) y.projetStudio={};\n        const allowed=['prixM2','surface','avance','taux','duree','taxSyndic','taxCouvertCredit','surplusCredit','assuranceMensuelle','travaux','epargneDispo'];\n        if (!allowed.includes(op.key)){log.status='error';log.reason='champ non autorisé. Autorisés: '+allowed.join(', ');break;}\n        const v=pickNum(op,'valeur','montant','value','amount');\n        if (v===null){log.status='error';log.reason='valeur manquante';break;}\n        const old=y.projetStudio[op.key];y.projetStudio[op.key]=v;\n        log.key=op.key;log.avant=old;log.apres=v;break;\n      }\n      // ── COMPTES BANCAIRES (BILAN) ──────────────────────\n      case 'create_compte': {\n        if (!fd.comptes) fd.comptes = [];\n        const newId = String(op.label||'compte').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'_');\n        if (fd.comptes.find(c => c.id === newId)) { log.status='error'; log.reason='Compte avec cet id existe déjà: '+newId; break; }\n        fd.comptes.push({ id: newId, label: String(op.label), solde: Number(op.montant) || 0 });\n        log.status='success'; log.action='Creation compte'; log.compte=op.label; log.solde=op.montant; break;\n      }\n      case 'update_compte': {\n        if (!fd.comptes || !fd.comptes.length) { log.status='error'; log.reason='Aucun compte existant'; break; }\n        const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();\n        const c = fd.comptes.find(x => x.id === normKey || String(x.label).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));\n        if (!c) { log.status='error'; log.reason='Compte introuvable: '+op.key; break; }\n        const oldVal = c.solde;\n        c.solde += Number(op.montant);\n        log.status='success'; log.action='Mise a jour compte'; log.compte=c.label; log.avant=oldVal; log.apres=c.solde; break;\n      }\n      // ── WEALTH : OBJECTIFS & ACTIFS (top-level fd.*) ───\n      case 'update_objectif': {\n        if (!Array.isArray(fd.wealthGoals)) fd.wealthGoals = [];\n        const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();\n        const goal = fd.wealthGoals.find(x => String(x.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));\n        if (!goal) {\n          // Upsert : objectif introuvable → création automatique (même comportement que create_objectif)\n          const newGoal = { name: String(op.key || 'Nouvel objectif'), target: 10000, current: Number(op.montant) || 0 };\n          fd.wealthGoals.push(newGoal);\n          log.status='success'; log.action='Upsert objectif (creation auto)'; log.cible=newGoal.name; log.target=newGoal.target; log.current=newGoal.current; break;\n        }\n        const oldVal = Number(goal.current) || 0;\n        goal.current = oldVal + (Number(op.montant) || 0);\n        log.status='success'; log.action='Mise a jour objectif (incremental)'; log.cible=goal.name; log.avant=oldVal; log.apres=goal.current; break;\n      }\n      case 'create_objectif': {\n        // v20.70 : Création d'un nouveau Smart Goal (wealthGoals[])\n        // Schéma Vue.js attendu : { name, target, current }\n        if (!Array.isArray(fd.wealthGoals)) fd.wealthGoals = [];\n        const goalName = String(op.name || 'Nouvel objectif').trim();\n        // Éviter les doublons exacts (même nom normalisé)\n        const normNew = goalName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();\n        const exists = fd.wealthGoals.find(x => String(x.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim() === normNew);\n        if (exists) {\n          // Objectif déjà existant : on incrémente current au lieu de dupliquer\n          const oldVal = Number(exists.current) || 0;\n          exists.current = oldVal + (Number(op.current) || 0);\n          log.status='success'; log.action='Objectif existant — current incremente'; log.cible=exists.name; log.avant=oldVal; log.apres=exists.current; break;\n        }\n        const newGoal = {\n          name: goalName,\n          target: Number(op.target_amount) > 0 ? Number(op.target_amount) : 10000,\n          current: Number(op.current) || 0\n        };\n        fd.wealthGoals.push(newGoal);\n        log.status='success'; log.action='Creation objectif'; log.cible=newGoal.name; log.target=newGoal.target; log.current=newGoal.current; break;\n      }\n      // ── MASTER ASSET ENGINE v17.0 (unifié productif + foncier) ──\n      case 'update_master_asset':\n      case 'update_actif':\n      case 'update_foncier': {\n        if (!Array.isArray(fd.masterAssets) || !fd.masterAssets.length) { log.status='error'; log.reason='Aucun actif dans masterAssets'; break; }\n        const normKey = String(op.key||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();\n        const asset = fd.masterAssets.find(x => String(x.name||x.nom||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(normKey));\n        if (!asset) { log.status='error'; log.reason='Actif introuvable dans masterAssets: '+op.key; break; }\n        const changes = {};\n        const scenarioMap = { conservateur: 'value', pessimiste: 'val_pessimiste', optimiste: 'val_optimiste' };\n        if (op.scenario) {\n          // Mode foncier : mise à jour d un scénario spécifique\n          const normScen = String(op.scenario).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();\n          const fieldName = scenarioMap[normScen];\n          if (!fieldName) { log.status='error'; log.reason='Scenario invalide (conservateur|pessimiste|optimiste): '+op.scenario; break; }\n          const oldVal = Number(asset[fieldName]) || 0;\n          asset[fieldName] = Number(op.montant) || 0;\n          changes[fieldName] = { avant: oldVal, apres: asset[fieldName] };\n        } else if (op.montant !== undefined && op.montant !== null) {\n          // Mode productif : mise à jour de la valeur principale\n          const oldVal = Number(asset.value) || 0;\n          asset.value = Number(op.montant) || 0;\n          changes.value = { avant: oldVal, apres: asset.value };\n        }\n        if (op.taux_credit !== undefined) { const old = asset.taux_credit; asset.taux_credit = Number(op.taux_credit) || 0; changes.taux_credit = { avant: old, apres: asset.taux_credit }; }\n        if (op.annees_total !== undefined) { const old = asset.annees_total; asset.annees_total = Number(op.annees_total) || 0; changes.annees_total = { avant: old, apres: asset.annees_total }; }\n        if (op.annees_restantes !== undefined) { const old = asset.annees_restantes; asset.annees_restantes = Number(op.annees_restantes) || 0; changes.annees_restantes = { avant: old, apres: asset.annees_restantes }; }\n        if (op.apport_personnel !== undefined) { const old = asset.apport_personnel||0; asset.apport_personnel = Number(op.apport_personnel) || 0; changes.apport_personnel = { avant: old, apres: asset.apport_personnel }; }\n        if (op.montant_credit !== undefined) { const old = asset.montant_credit||0; asset.montant_credit = Number(op.montant_credit) || 0; changes.montant_credit = { avant: old, apres: asset.montant_credit }; }\n        if (op.valeur_actuelle !== undefined) { const old = asset.valeur_actuelle||0; asset.valeur_actuelle = Number(op.valeur_actuelle) || 0; changes.valeur_actuelle = { avant: old, apres: asset.valeur_actuelle }; }\n        if (!Object.keys(changes).length) { log.status='error'; log.reason='Aucun champ fourni'; break; }\n        log.status='success'; log.action='Update master asset'; log.cible=asset.name; log.changes=changes; break;\n      }\n      default:\n        log.status='error'; log.reason='type inconnu: '+op.type;\n    }\n  } catch(e){ log.status='error'; log.reason=e.message; }\n  return log;\n}\n\n// ════════════════════════════════════════════════════════\n// ORCHESTRATION PRINCIPALE\n// ════════════════════════════════════════════════════════\n\nconst sanitize_pre = sanitizeFinanceData(financeData);\nconst changes = input.changes;\n\n// ── Phase 1 : résolution de toutes les entités (avant toute mutation) ──\nconst resolvedChanges = []; // { change, resolvedKey, resolvedCat, years, ops_to_apply }\nconst clarifications = [];\n\nfor (const change of changes) {\n  const { action, category, target, years: rawYears } = change;\n  const years = Array.isArray(rawYears) ? rawYears.map(Number) : [Number(rawYears || new Date().getFullYear())];\n\n  const NEEDS_RESOLVE = ['modify', 'remove', 'rename', 'add_exception', 'remove_exception'];\n  let resolvedKey = null, resolvedCat = category;\n\n  if (NEEDS_RESOLVE.includes(action) && target && category && !['depense_ponctuelle','annee','solde','studio','compte','objectif','actif','foncier'].includes(category)) {\n    const res = resolveEntity(target, category, financeData);\n    if (!res.resolved) {\n      clarifications.push({ change_index: changes.indexOf(change), target, category, action, error: res.error, ambiguous: res.ambiguous || false, choices: res.choices || null });\n      continue;\n    }\n    resolvedKey = res.key; resolvedCat = res.category;\n  }\n\n  resolvedChanges.push({ change, resolvedKey, resolvedCat, years });\n}\n\n// Si des clarifications sont nécessaires : retour immédiat sans mutation\nif (clarifications.length > 0) {\n  return JSON.stringify({\n    status: 'needs_clarification',\n    clarifications_needed: clarifications,\n    pending_saved: false,\n    hint: 'Pose ces questions à l\\'utilisateur avant de relancer propose_changes.'\n  }, null, 2);\n}\n\n// ── Phase 2a : auto-création des années manquantes (clone depuis la plus proche) ──\nconst allYears = [...new Set(resolvedChanges.flatMap(rc => rc.years))].sort((a,b)=>a-b);\nconst autoCloned = [];\nfor (const yr of allYears) {\n  if (!financeData.donneesAnnuelles[yr]) {\n    const existing = Object.keys(financeData.donneesAnnuelles).map(Number).sort((a,b)=>a-b);\n    if (existing.length) {\n      const src = existing.reduce((best,e) => Math.abs(e-yr) < Math.abs(best-yr) ? e : best, existing[0]);\n      const cloned = JSON.parse(JSON.stringify(financeData.donneesAnnuelles[src]));\n      Object.values(cloned.chargesFixes||{}).forEach(f=>{f.paye=false;f.montantPaye=0;});\n      Object.values(cloned.chargesVariables||{}).forEach(c=>{if(c.details)c.details.forEach(d=>{d.paye=false;d.montantPaye=0;});});\n      (cloned.depensesIrregulieres||[]).forEach(d=>{d.paye=false;d.montantPaye=0;d.annee=yr;d.id=Date.now()+Math.floor(Math.random()*1000);});\n      financeData.donneesAnnuelles[yr] = cloned;\n      autoCloned.push({ annee: yr, cloned_from: src });\n    }\n  }\n}\n\n// ── Phase 2b : snapshot \"avant\" par année ──\nconst snapshotBefore = {};\nfor (const yr of allYears) snapshotBefore[yr] = snapshot(financeData, yr);\n\n// ── Phase 3 : construction et application des ops ──\nconst allOpsLog = [];\n\nfor (const { change, resolvedKey, resolvedCat, years } of resolvedChanges) {\n  for (const annee of years) {\n    const ops = buildOps(change, resolvedKey, resolvedCat, annee);\n    if (!ops || !ops.length) {\n      allOpsLog.push({ annee, op: { type: 'n/a', action: change.action, category: resolvedCat }, log: { status: 'error', reason: 'Action \"' + change.action + '\" non supportée pour \"' + resolvedCat + '\"' } });\n      continue;\n    }\n    for (const op of ops) {\n      const opLog = applyOp(financeData, op, annee);\n      allOpsLog.push({ annee, op, log: opLog });\n    }\n  }\n}\n\n// ── Phase 4 : snapshot \"après\" + delta ──\nconst resultsByYear = {};\nfor (const yr of allYears) {\n  const before = snapshotBefore[yr], after = snapshot(financeData, yr);\n  resultsByYear[yr] = {\n    avant: before, apres: after,\n    delta: (before && after) ? { revenus: after.revenus-before.revenus, fixes: after.fixes-before.fixes, variables: after.variables-before.variables, epargne: after.epargne-before.epargne } : null\n  };\n}\n\nconst sanitize_post = sanitizeFinanceData(financeData);\n\nconst successOps = allOpsLog.filter(o => o.log.status !== 'error' && o.log.status !== 'skip');\nconst errorOps   = allOpsLog.filter(o => o.log.status === 'error');\nconst skipOps    = allOpsLog.filter(o => o.log.status === 'skip');\nconst redistributionRequired = allOpsLog.filter(o => o.log.requires_redistribution).map(o => o.log);\n\nconst totalDirt = Object.values(sanitize_pre).reduce((s,v)=>s+v,0) + Object.values(sanitize_post).reduce((s,v)=>s+v,0);\nconst hasErrors = errorOps.length > 0;\nconst hasEffective = (successOps.length > 0 && !hasErrors) || (totalDirt > 0 && !hasErrors);\nconst valid = !!(financeData.donneesAnnuelles && financeData.soldesInitiaux);\n\n// ── Phase 5 : sauvegarde pending ──\nlet pending_saved = false, pending_error = null;\nif (valid && hasEffective && session_id) {\n  const anneePayload = allYears.length === 1 ? allYears[0] : allYears;\n  try {\n    const resp = await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://n8n.beau.ink/finance/pending_commit.php',\n      body: { session_id, annee: anneePayload, operations: allOpsLog.map(o=>o.op), finance_data: financeData },\n      json: true, timeout: 10000\n    });\n    pending_saved = !!(resp && resp.status === 'ok');\n  } catch (e) { pending_error = e.message; }\n}\n\nreturn JSON.stringify({\n  status: hasErrors ? 'partial_error' : 'ok',\n  ops_summary: { total: allOpsLog.length, success: successOps.length, errors: errorOps.length, skipped: skipOps.length },\n  resultats_par_annee: resultsByYear,\n  error_ops: hasErrors ? errorOps.map(o=>({ op: o.op.type, key: o.op.key, annee: o.annee, reason: o.log.reason })) : null,\n  redistribution_required: redistributionRequired.length ? redistributionRequired : null,\n  auto_cloned_years: autoCloned.length ? autoCloned : null,\n  sanitize_report: { pre: sanitize_pre, post: sanitize_post, total_purged: totalDirt },\n  pending_saved, pending_error,\n  warning: hasErrors ? 'Des opérations ont échoué — pending NON sauvegardé. Vérifiez error_ops.' : null\n}, null, 2);"
+      }
+    },
+    {
+      "id": "node-tool-tavily",
+      "name": "web_search",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        600
+      ],
+      "parameters": {
+        "name": "web_search",
+        "description": "Utilise cet outil UNIQUEMENT en Fallback pour chercher sur Internet (cours de bourse, actualités, prix immobilier). Reçoit la requête en paramètre.",
+        "language": "javaScript",
+        "jsCode": "const searchQuery = typeof query !== 'undefined' ? query : (typeof input !== 'undefined' ? input : '');\nconst apiKey = \"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\";\ntry {\n  const response = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.tavily.com/search',\n    headers: { 'Content-Type': 'application/json' },\n    body: { api_key: apiKey, query: searchQuery, search_depth: \"basic\", include_answer: true }\n  });\n  return response.answer || JSON.stringify(response.results);\n} catch (e) {\n  return \"Erreur lors de la recherche web : \" + e.message;\n}"
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "audio-cond-text",
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Texte"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "audio-cond-voice",
+                    "leftValue": "={{ $json.message.voice }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "object",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Audio"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -540,
+        -120
+      ],
+      "id": "node-audio-switch",
+      "name": "Route Input Type"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.voice.file_id }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        60
+      ],
+      "id": "node-get-voice-file",
+      "name": "Get Voice File",
+      "webhookId": "cfo-get-voice-file",
+      "credentials": {
+        "telegramApi": {
+          "id": "CFOV2TelegramAPI",
+          "name": "CFO V2 Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {
+          "language": ""
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -260,
+        60
+      ],
+      "id": "node-transcribe-voice",
+      "name": "Transcribe Voice",
+      "credentials": {
+        "openAiApi": {
+          "id": "62I49CmP0fAa4WH3",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════\n// Injecte le texte transcrit dans le payload original Telegram\n// pour que Normalize Input lise message.text comme d'habitude.\n// ════════════════════════════════════════════════════════\nconst trigger = $('Telegram Trigger').first().json;\nconst transcript = (($('Transcribe Voice').first().json.text) || '').trim();\nconst clone = JSON.parse(JSON.stringify(trigger));\nif (!clone.message) clone.message = {};\nclone.message.text = transcript;\nclone._is_audio = true;\nreturn [{ json: clone }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        60
+      ],
+      "id": "node-mark-audio",
+      "name": "Mark Audio Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "tts-cond",
+              "leftValue": "={{ $('Transcribe Voice').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        700,
+        -200
+      ],
+      "id": "node-if-audio",
+      "name": "If Voice Input"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "model": "tts-1-hd",
+        "input": "={{ (($('AI Agent').item.json.output) || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 4000) }}",
+        "voice": "onyx",
+        "options": {
+          "response_format": "mp3"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        840,
+        -260
+      ],
+      "id": "node-tts-generate",
+      "name": "Generate TTS",
+      "credentials": {
+        "openAiApi": {
+          "id": "62I49CmP0fAa4WH3",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "binaryData": true,
+        "additionalFields": {
+          "fileName": "cfo-response.mp3"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        980,
+        -260
+      ],
+      "id": "node-send-audio",
+      "name": "Send Voice Response",
+      "webhookId": "cfo-send-audio",
+      "credentials": {
+        "telegramApi": {
+          "id": "CFOV2TelegramAPI",
+          "name": "CFO V2 Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "transactions_reelles_engine",
+        "description": "Outil de saisie DIRECTE des transactions réelles dans donneesAnnuelles[annee].transactionsReelles[].\nDifférent de budget_engine : PAS de simulation, PAS de cache pending — commit IMMÉDIAT sur le VPS.\nTu n'as PAS besoin de demander OUI. L'action s'exécute en un tour.\n\nACTIONS SUPPORTÉES :\n{ \"action\": \"add\", \"transaction\": {...} }       — ajoute UNE transaction\n{ \"action\": \"add\", \"operations\": [{...}, ...] } — ajoute PLUSIEURS transactions en batch\n{ \"action\": \"remove\", \"id\": <number>, \"annee\": <number> }  — supprime par id\n{ \"action\": \"list\", \"annee\": <number>, \"mois\": <number> }   — liste (lecture seule, pas de commit)\n\nSCHÉMA D'UNE TRANSACTION (champs acceptés) :\n{\n  \"amount\":    <number>,         // OBLIGATOIRE — en DH (synonymes acceptés : montant, valeur)\n  \"libelle\":   \"<string>\",        // OBLIGATOIRE — description courte (synonymes : label, nom)\n  \"categorie\": \"<string>\",        // label de la catégorie OU id (cat_*). Match approximatif accepté.\n                                  //   Ex: \"Alimentation\" → trouve cat_cv_alim. \"tqdya\" → match aussi.\n                                  //   Si rien trouvé → cat_misc.\n  \"compte\":    \"<string>\",        // label du compte (ex: \"Courant\", \"Espèces\"). Match approximatif.\n  \"date\":      \"<YYYY-MM-DD>\",    // optionnel, défaut = aujourd'hui\n  \"datetime\":  \"<YYYY-MM-DDTHH:MM>\",  // optionnel, plus précis\n  \"annee\":     <number>,          // optionnel, dérivé de date\n  \"mois\":      <number>,          // optionnel, dérivé de date (1-12)\n  \"source\":    \"telegram\"|\"cfo\"   // optionnel, défaut \"cfo\"\n}\n\nEXEMPLE — note vocale \"j'ai lâché 150 balles au mcdo et 400 de tqdya\" :\n{\n  \"action\": \"add\",\n  \"operations\": [\n    { \"amount\": 150, \"libelle\": \"Mcdo\",  \"categorie\": \"Restauration\" },\n    { \"amount\": 400, \"libelle\": \"Tqdya\", \"categorie\": \"Alimentation\" }\n  ]\n}\n\nEXEMPLE — saisie isolée :\n{ \"action\": \"add\", \"transaction\": { \"amount\": 85, \"libelle\": \"Café\", \"categorie\": \"Sorties\" } }\n\nRÈGLES :\n1. NE demande JAMAIS confirmation à l'utilisateur. L'action est immédiate.\n2. Si tu hésites entre 2 catégories, choisis la plus probable (pas de question).\n3. Ta réponse texte après l'appel doit être ULTRA COURTE (utilise le format : \"✓ Ajouté: 150 DH Restauration · 400 DH Alimentation\").\n4. Si l'outil renvoie errors > 0, signale-le proprement à l'utilisateur sans drame.",
+        "language": "javaScript",
+        "jsCode": "// ════════════════════════════════════════════════════════\n// TRANSACTIONS RÉELLES ENGINE v1 — commit direct (pas de pending)\n// Insère/supprime des transactions dans donneesAnnuelles[a].transactionsReelles[]\n// Aucune confirmation requise. POST direct sur save_data.php.\n// ════════════════════════════════════════════════════════\nconst TOOL_NAME = 'transactions_reelles_engine';\nconst ACCEPT_SCALAR = false;\n\nlet input = {};\nlet _parseStrategy = 'none';\nlet _rawQuery = null;\nconst _strategiesAttempted = [];\n\ntry { if (typeof query !== 'undefined' && query !== null) _rawQuery = (typeof query === 'string') ? query : JSON.stringify(query); }\ncatch (e) { _rawQuery = '<unstringifiable>'; }\n\nif (typeof query !== 'undefined' && query !== null) {\n  if (typeof query === 'object') {\n    input = Object.assign({}, query);\n    _parseStrategy = 'object_direct';\n  } else if (typeof query === 'string') {\n    const trimmed = query.trim();\n    _strategiesAttempted.push('A:json_parse');\n    try {\n      const parsedA = JSON.parse(trimmed);\n      if (parsedA !== null && typeof parsedA === 'object' && !Array.isArray(parsedA)) {\n        input = parsedA;\n        _parseStrategy = 'A:json_object';\n      }\n    } catch (eA) {}\n    if (_parseStrategy === 'none' && trimmed) {\n      _strategiesAttempted.push('B:embedded_json');\n      const m = trimmed.match(/\\{[\\s\\S]*\\}/);\n      if (m) {\n        try {\n          const parsedB = JSON.parse(m[0]);\n          if (parsedB && typeof parsedB === 'object' && !Array.isArray(parsedB)) {\n            input = parsedB;\n            _parseStrategy = 'B:json_embedded';\n          }\n        } catch (eB) {}\n      }\n    }\n  }\n}\n\ntry { if (action      !== undefined && input.action      === undefined) input.action      = action; }      catch(e) {}\ntry { if (operations  !== undefined && input.operations  === undefined) input.operations  = operations; }  catch(e) {}\ntry { if (transaction !== undefined && input.transaction === undefined) input.transaction = transaction; } catch(e) {}\ntry { if (id          !== undefined && input.id          === undefined) input.id          = id; }          catch(e) {}\ntry { if (annee       !== undefined && input.annee       === undefined) input.annee       = annee; }       catch(e) {}\ntry { if (mois        !== undefined && input.mois        === undefined) input.mois        = mois; }        catch(e) {}\n\nif (Object.keys(input).length === 0) {\n  return JSON.stringify({\n    error: 'Aucun paramètre détecté.',\n    diagnostic: { tool: TOOL_NAME, raw_query: _rawQuery, parse_strategy: _parseStrategy, strategies_attempted: _strategiesAttempted }\n  });\n}\n\n// ── Charger le finance_data brut (pour mutation) ──\nlet normalized;\ntry { normalized = $('Build Agent Input').first().json; }\ncatch (e) {\n  try { normalized = $('Normalize Input').first().json; }\n  catch (e2) { return JSON.stringify({ error: 'Contexte introuvable' }); }\n}\nconst session_id = normalized.session_id;\nconst _src = normalized.finance_data_raw || normalized.finance_data;\nconst fd = _src ? JSON.parse(JSON.stringify(_src)) : null;\n\nif (!fd) return JSON.stringify({ error: 'Aucun finance_data dans la requête.' });\n\n// ── Helpers ──\nconst today = new Date();\nconst pad = n => String(n).padStart(2, '0');\nconst todayDate = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());\nconst currentAnnee = today.getFullYear();\nconst currentMois = today.getMonth() + 1;\n\nconst pickNum = (op, ...keys) => {\n  for (const k of keys) {\n    if (op[k] !== undefined && op[k] !== null && op[k] !== '') {\n      const n = Number(op[k]);\n      if (Number.isFinite(n)) return n;\n    }\n  }\n  return null;\n};\nconst pickStr = (op, ...keys) => {\n  for (const k of keys) {\n    if (op[k] !== undefined && op[k] !== null) return String(op[k]).trim();\n  }\n  return null;\n};\n\nfunction resolveCategorieId(rawInput, fd) {\n  if (!rawInput) return 'cat_misc';\n  const s = String(rawInput).toLowerCase().trim();\n  if (!s) return 'cat_misc';\n  if (s.startsWith('cat_')) return s;\n  const cats = ((fd.soldesInitiaux && fd.soldesInitiaux.categories) || []).filter(c => c && !c.archive);\n  // 1. Match exact label\n  for (const c of cats) {\n    if (String(c.label || '').toLowerCase() === s) return c.id;\n  }\n  // 2. Match mot-par-mot (tokenisation)\n  const targetWords = s.split(/[\\s,;.()\\-_/&]+/).filter(w => w.length >= 3);\n  for (const c of cats) {\n    const lab = String(c.label || '').toLowerCase().trim();\n    if (!lab) continue;\n    const labWords = lab.split(/[\\s,;.()\\-_/&]+/).filter(w => w.length >= 3);\n    for (const tw of targetWords) {\n      for (const lw of labWords) {\n        if (tw === lw) return c.id;\n        if (tw.length >= 4 && lw.includes(tw)) return c.id;\n        if (lw.length >= 4 && tw.includes(lw)) return c.id;\n      }\n    }\n  }\n  return 'cat_misc';\n}\n\nfunction resolveCompteId(rawInput, fd) {\n  if (rawInput === null || rawInput === undefined || rawInput === '') return null;\n  if (typeof rawInput === 'number') return rawInput;\n  const s = String(rawInput).toLowerCase().trim();\n  if (!s) return null;\n  const comptes = fd.comptes || (fd.soldesInitiaux && fd.soldesInitiaux.comptes) || [];\n  // 1. Exact label match\n  for (const c of comptes) {\n    if (String(c.label || '').toLowerCase() === s) return c.id;\n  }\n  // 2. Substring match\n  for (const c of comptes) {\n    const lab = String(c.label || '').toLowerCase();\n    if (lab && (lab.includes(s) || s.includes(lab))) return c.id;\n  }\n  return null;\n}\n\n// ── Actions ──\nconst results = [];\nconst touchedAnnees = new Set();\n\nfunction addOne(tx) {\n  const log = { action: 'add' };\n  try {\n    const amount = pickNum(tx, 'amount', 'montant', 'valeur', 'value');\n    if (amount === null || amount <= 0) { log.status = 'error'; log.reason = 'montant invalide ou manquant'; return log; }\n    const libelle = pickStr(tx, 'libelle', 'label', 'nom') || 'Sans libellé';\n    const dt = tx.datetime || tx.date || todayDate;\n    const dateOnly = (dt.length >= 10) ? dt.slice(0, 10) : todayDate;\n    const annee = Number(tx.annee) || Number(dateOnly.slice(0, 4)) || currentAnnee;\n    const mois = Number(tx.mois) || Number(dateOnly.slice(5, 7)) || currentMois;\n    const categorieId = resolveCategorieId(tx.categorie || tx.categorieId, fd);\n    const compteId = resolveCompteId(tx.compte || tx.compteId, fd);\n\n    if (!fd.donneesAnnuelles) fd.donneesAnnuelles = {};\n    if (!fd.donneesAnnuelles[annee]) { log.status = 'error'; log.reason = 'année ' + annee + ' absente du dataset'; return log; }\n    if (!Array.isArray(fd.donneesAnnuelles[annee].transactionsReelles)) fd.donneesAnnuelles[annee].transactionsReelles = [];\n\n    const newTx = {\n      id: Date.now() + Math.floor(Math.random() * 1000),\n      datetime: dt.length > 10 ? dt : null,\n      date: dateOnly,\n      mois,\n      libelle,\n      montant: amount,\n      categorieId,\n      compteId,\n      source: tx.source || 'cfo'\n    };\n    fd.donneesAnnuelles[annee].transactionsReelles.push(newTx);\n    touchedAnnees.add(annee);\n    log.status = 'ok'; log.tx = newTx;\n    return log;\n  } catch (e) {\n    log.status = 'error'; log.reason = e.message; return log;\n  }\n}\n\nfunction removeOne(criteria) {\n  const log = { action: 'remove' };\n  const annee = Number(criteria.annee) || currentAnnee;\n  if (!fd.donneesAnnuelles[annee] || !Array.isArray(fd.donneesAnnuelles[annee].transactionsReelles)) {\n    log.status = 'skip'; log.reason = 'année ' + annee + ' sans transactions'; return log;\n  }\n  if (criteria.id === undefined) { log.status = 'error'; log.reason = 'id requis'; return log; }\n  const before = fd.donneesAnnuelles[annee].transactionsReelles.length;\n  fd.donneesAnnuelles[annee].transactionsReelles = fd.donneesAnnuelles[annee].transactionsReelles.filter(t => Number(t.id) !== Number(criteria.id));\n  const removed = before - fd.donneesAnnuelles[annee].transactionsReelles.length;\n  if (removed > 0) touchedAnnees.add(annee);\n  log.status = removed > 0 ? 'ok' : 'skip';\n  log.count = removed;\n  log.id = criteria.id;\n  return log;\n}\n\nfunction listTxs(criteria) {\n  const log = { action: 'list' };\n  const annee = Number(criteria.annee) || currentAnnee;\n  const mois = criteria.mois ? Number(criteria.mois) : null;\n  const txs = (fd.donneesAnnuelles[annee] && fd.donneesAnnuelles[annee].transactionsReelles) || [];\n  const filtered = mois ? txs.filter(t => Number(t.mois) === mois) : txs;\n  log.status = 'ok';\n  log.annee = annee; log.mois = mois; log.count = filtered.length;\n  log.transactions = filtered.slice(-20).map(t => ({\n    id: t.id, date: t.datetime || t.date, libelle: t.libelle, montant: t.montant,\n    categorie: t.categorieId, compte: t.compteId\n  }));\n  return log;\n}\n\n// ── Dispatch ──\nconst opsToProcess = Array.isArray(input.operations) && input.operations.length\n  ? input.operations\n  : (input.transaction ? [Object.assign({ action: input.action || 'add' }, input.transaction)] : [input]);\n\nfor (const op of opsToProcess) {\n  const act = String(op.action || input.action || 'add').toLowerCase();\n  if (act === 'add' || act === 'add_transaction_reelle') {\n    results.push(addOne(op));\n  } else if (act === 'remove' || act === 'remove_transaction_reelle' || act === 'delete') {\n    results.push(removeOne(op));\n  } else if (act === 'list' || act === 'list_transactions_reelles') {\n    results.push(listTxs(op));\n  } else {\n    results.push({ status: 'error', reason: 'action inconnue: ' + act + ' (valides: add, remove, list)' });\n  }\n}\n\nconst successCount = results.filter(r => r.status === 'ok').length;\nconst errorCount = results.filter(r => r.status === 'error').length;\nconst isReadOnly = results.every(r => r.action === 'list');\n\n// ── Commit direct (sauf si lecture seule) ──\nlet saved = false;\nlet saveError = null;\nif (!isReadOnly && successCount > 0 && touchedAnnees.size > 0) {\n  try {\n    const resp = await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://n8n.beau.ink/finance/save_data.php',\n      body: fd,\n      json: true,\n      headers: { 'Content-Type': 'application/json' },\n      timeout: 15000\n    });\n    saved = !!(resp && (resp.status === 'ok' || resp.success === true || resp === 'ok'));\n    if (!saved && resp) saveError = 'Réponse VPS inattendue: ' + JSON.stringify(resp).slice(0, 200);\n  } catch (e) {\n    saveError = e.message;\n  }\n}\n\nreturn JSON.stringify({\n  tool: TOOL_NAME,\n  operations_processed: results.length,\n  success: successCount,\n  errors: errorCount,\n  touched_annees: Array.from(touchedAnnees),\n  results,\n  committed_to_vps: saved,\n  save_error: saveError,\n  hint: isReadOnly ? 'Lecture seule — aucun commit.' : (saved ? 'Transactions enregistrées DIRECTEMENT. Pas besoin de OUI.' : 'Aucun commit (erreurs ou aucune transaction ajoutée).')\n}, null, 2);"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        260
+      ],
+      "id": "node-tool-transactions",
+      "name": "Tool: Transactions Réelles"
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route Input Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook CFO Web": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Load Sane History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Save Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 2.5 Pro LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Tool: Finance RAG",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Finance RAG": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Vector Store": {
+      "ai_vectorStore": [
+        [
+          {
+            "node": "Tool: Finance RAG",
+            "type": "ai_vectorStore",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Postgres Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Committer": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Response": {
+      "main": [
+        [
+          {
+            "node": "Format for Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Telegram": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Sane History": {
+      "main": [
+        [
+          {
+            "node": "Build Agent Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Agent Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Conversation": {
+      "main": [
+        [
+          {
+            "node": "Route Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Memory Writer": {
+      "ai_tool": [
+        [
+          {
+            "index": 0,
+            "node": "AI Agent",
+            "type": "ai_tool"
+          }
+        ]
+      ]
+    },
+    "Tool: Intent Compiler": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "web_search": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Input Type": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Voice File": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Voice": {
+      "main": [
+        [
+          {
+            "node": "Mark Audio Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Audio Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram": {
+      "main": [
+        [
+          {
+            "node": "If Voice Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Voice Input": {
+      "main": [
+        [
+          {
+            "node": "Generate TTS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Generate TTS": {
+      "main": [
+        [
+          {
+            "node": "Send Voice Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Transactions Réelles": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Africa/Casablanca"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "cfo"
+    },
+    {
+      "name": "finance"
+    }
+  ],
+  "versionId": "v13.8",
+  "meta": {
+    "templateCreatedBy": "Finance Master v13.8 (schema sanitization — purge dirty synonyms)"
+  },
+  "active": false
+}
