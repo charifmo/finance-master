@@ -694,9 +694,17 @@
                             <!-- Barre de filtres -->
                             <div class="p-4 pb-3 border-b bg-white">
                                 <div class="flex flex-wrap items-center gap-3 mb-3">
-                                    <!-- v25.1 Forward-Projection : titre projection (filtres temporels supprimés) -->
+                                    <!-- v25.30 Future-Restored : titre projection + sélecteur cycle (courant + futurs) -->
                                     <div class="flex items-center gap-2 flex-wrap w-full">
                                         <span class="text-xs font-black text-indigo-600 uppercase tracking-wide">📅 Projection jusqu'au {{ releveProjectionLabel }}</span>
+                                        <div class="flex items-center gap-1.5 ml-auto">
+                                            <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Cycle</label>
+                                            <select :value="releveActiveCycle || (moisBudgetaire.mois + '-' + moisBudgetaire.an)"
+                                                @change="releveActiveCycle = $event.target.value || null; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                                class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer">
+                                                <option v-for="cy in releveCyclesFuturs" :key="cy.key" :value="cy.key">{{ cy.nom }}</option>
+                                            </select>
+                                        </div>
                                     </div>
                                     <button @click.stop="releveModeEvolution = !releveModeEvolution"
                                         :class="releveModeEvolution ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
@@ -5235,8 +5243,13 @@
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-base font-black uppercase tracking-wide text-gray-800">📋 Relevé de Comptes</h3>
                         <div class="flex items-center gap-2">
-                            <!-- v25.1 Forward-Projection : titre projection (filtres temporels supprimés) -->
+                            <!-- v25.30 Future-Restored : titre projection + sélecteur cycle (courant + futurs) -->
                             <span class="text-[11px] font-black text-indigo-600 uppercase tracking-wide">📅 Jusqu'au {{ releveProjectionLabel }}</span>
+                            <select :value="releveActiveCycle || (moisBudgetaire.mois + '-' + moisBudgetaire.an)"
+                                @change="releveActiveCycle = $event.target.value || null; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                class="text-xs font-bold bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                                <option v-for="cy in releveCyclesFuturs" :key="cy.key" :value="cy.key">{{ cy.nom }}</option>
+                            </select>
                             <!-- Toggle Transactions / Évolution -->
                             <button @click="releveModeEvolution = !releveModeEvolution"
                                 :class="releveModeEvolution ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
@@ -5364,8 +5377,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "25.1 Forward-Projection";
+                    const CURRENT_VERSION = "25.30 Future-Restored";
                     const CHANGELOG = [
+        { version: "25.30 Future-Restored", date: "2026-05-30", changes: [
+            "Sélecteur de cycle restauré dans le Relevé — affiche le cycle courant + tous les cycles futurs (jusqu'à fin de l'année suivante), aucun cycle passé",
+            "Bouclier des règles temporelles : les exceptions (moisDebut/moisFin → nouvelleValeur) sont appliquées par mois projeté — un flux à 0 ce mois-là (ex: Appartement) n'apparaît plus dans le journal",
+            "Projection multi-cycles : cycle courant = départ T0 réel + flux non payés ; cycle futur = solde initial projeté (chaîné depuis aujourd'hui) + tous les flux théoriques valides du mois"
+        ] },
         { version: "25.1 Forward-Projection", date: "2026-05-30", changes: [
             "Relevé refondu en projection pure 'Forward-Only' : ligne 1 = ⏰ AUJOURD'HUI (solde réel T0), puis uniquement les flux paye:false du cycle courant triés par jour, solde courant continu jusqu'à l'Atterrissage Projeté",
             "Suppression des filtres temporels (Année / Période / Cycle) — le Relevé affiche le reste du cycle en cours uniquement, titre '📅 Projection jusqu'au 26 [Mois]'",
@@ -8246,13 +8264,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // v24.60 Relevé-Fix : account filter + past cycle clos + rule of 27
                     const journalHybridePourReleve = computed(() => {
                         calculationTick.value;
-                        // v25.1 Forward-Projection : moteur projection pure depuis T0 (solde réel)
+                        // v25.30 Future-Restored : projection multi-cycles (présent + futur) avec bouclier temporel
                         const _rFiltres = releveComptesFiltres.value;
-                        const an = moisBudgetaire.value.an;
-                        const mois = moisBudgetaire.value.mois;
-                        const dAnnee = donneesAnnuelles.value[an] || {};
                         const jdp = Number((soldesInitiaux.value || {}).jourDePaie) || 27;
                         const _si = soldesInitiaux.value || {};
+                        const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
 
                         const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
                         const courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
@@ -8261,78 +8277,114 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (/^\d+$/.test(String(k))) return 'cpt_' + k;
                             return k;
                         };
+                        const _fxSrc  = _normKey(_si.compteChargesFixes || 'courant');
+                        const _varSrc = _normKey(_si.compteChargesVariables || 'courant');
 
-                        // ── Génération des "legs" : uniquement les flux NON payés (paye:false) ──
-                        const legs = [];
-                        const _remaining = (item, due) => {
-                            if (isItemPaid(item, due)) return 0;
-                            const r = due - (getPaidAmount(item, due) || 0);
-                            return r > 0 ? Math.round(r * 100) / 100 : 0;
+                        // ── Bouclier temporel : valeur effective d'un item pour un mois donné ──
+                        // exceptions = [{ moisDebut, moisFin, nouvelleValeur }] → override la valeur sur la plage
+                        const _effVal = (item, baseVal, m) => {
+                            let v = Number(baseVal || 0);
+                            (item.exceptions || []).forEach(e => {
+                                const md = Number(e.moisDebut || 0), mf = Number(e.moisFin || 0);
+                                if (md && mf && m >= md && m <= mf) v = Number(e.nouvelleValeur || 0);
+                            });
+                            return v;
                         };
 
-                        // Revenus → destinationCompte (crédit)
-                        Object.values(dAnnee.revenus || {}).forEach(r => {
-                            const due = Number(r.base || 0); if (!due) return;
-                            const amt = _remaining(r, due); if (!amt) return;
-                            legs.push({ account: _normKey(r.destinationCompte), libelle: r.label || 'Revenu', montant: amt, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp) });
-                        });
+                        // ── Génère les "legs" d'un cycle (m, a) ──
+                        //   mode 'remaining' : cycle courant → uniquement le reste non payé (paye:false)
+                        //   mode 'full'      : cycle futur   → tous les flux théoriques valides
+                        const _mkLegs = (m, a, mode) => {
+                            const dA = donneesAnnuelles.value[a] || {};
+                            const out = [];
+                            const _amt = (item, baseVal) => {
+                                const v = _effVal(item, baseVal, m);
+                                if (v <= 0) return 0; // bouclier : flux inactif ce mois-là → exclu
+                                if (mode === 'full') return Math.round(v * 100) / 100;
+                                if (isItemPaid(item, v)) return 0;
+                                const r = v - (getPaidAmount(item, v) || 0);
+                                return r > 0 ? Math.round(r * 100) / 100 : 0;
+                            };
+                            // Revenus → destinationCompte (crédit)
+                            Object.values(dA.revenus || {}).forEach(r => {
+                                const amt = _amt(r, r.base); if (!amt) return;
+                                out.push({ account: _normKey(r.destinationCompte), libelle: r.label || 'Revenu', montant: amt, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp) });
+                            });
+                            // Charges fixes → compteChargesFixes (débit)
+                            Object.values(dA.chargesFixes || {}).forEach(f => {
+                                const amt = _amt(f, f.valeur); if (!amt) return;
+                                out.push({ account: _fxSrc, libelle: f.label || 'Charge fixe', montant: amt, type: 'debit', jourPrevu: Number(f.jourPrevu || 10) });
+                            });
+                            // Charges variables agrégées par catégorie → compteChargesVariables (débit)
+                            Object.values(dA.chargesVariables || {}).forEach(cv => {
+                                let amt = 0;
+                                if ((cv.details || []).length > 0) cv.details.forEach(d => { amt += _amt(d, d.montant); });
+                                else amt += _amt(cv, cv.valeur);
+                                if (amt > 0) out.push({ account: _varSrc, libelle: cv.label || 'Variable', montant: Math.round(amt * 100) / 100, type: 'debit', jourPrevu: 15 });
+                            });
+                            // Dépenses exceptionnelles du cycle (règle du 27) → sourceCompte (débit)
+                            getDepensesCycle(m, a).forEach(dep => {
+                                const due = Number(dep.montant || 0); if (!due) return;
+                                let amt;
+                                if (mode === 'full') amt = due;
+                                else { if (isItemPaid(dep, due)) amt = 0; else { const r = due - (getPaidAmount(dep, due) || 0); amt = r > 0 ? Math.round(r * 100) / 100 : 0; } }
+                                if (!amt) return;
+                                out.push({ account: _normKey(dep.sourceCompte), libelle: dep.nom || dep.label || 'Dépense', montant: amt, type: 'debit', jourPrevu: 20 });
+                            });
+                            // Épargne → transfert interne : débit source + crédit destination
+                            const epArr = Array.isArray(dA.epargne) ? dA.epargne : Object.values(dA.epargne || {});
+                            epArr.forEach(e => {
+                                const v = _effVal(e, e.valeur, m); if (v <= 0) return;
+                                const src = _normKey(e.sourceCompte || 'courant');
+                                const dest = e.linkedAccountId ? _normKey(e.linkedAccountId) : ('ep_' + e.id);
+                                out.push({ account: src,  libelle: '💎 ' + (e.nom || 'Épargne'), montant: v, type: 'debit',  jourPrevu: jdp, internal: true });
+                                out.push({ account: dest, libelle: '💎 ' + (e.nom || 'Épargne'), montant: v, type: 'credit', jourPrevu: jdp, internal: true });
+                            });
+                            return out;
+                        };
 
-                        // Charges fixes → compteChargesFixes (débit)
-                        const _fxSrc = _normKey(_si.compteChargesFixes || 'courant');
-                        Object.values(dAnnee.chargesFixes || {}).forEach(f => {
-                            const due = Number(f.valeur || 0); if (!due) return;
-                            const amt = _remaining(f, due); if (!amt) return;
-                            legs.push({ account: _fxSrc, libelle: f.label || 'Charge fixe', montant: amt, type: 'debit', jourPrevu: Number(f.jourPrevu || 10) });
-                        });
+                        // ── Filtre des legs selon le compte affiché (single ou Global) ──
+                        const _viewLegs = (lgs) => {
+                            if (_rFiltres.length === 1) return lgs.filter(l => l.account === _rFiltres[0]);
+                            return lgs.filter(l => !l.internal); // Global : transferts internes exclus (net nul)
+                        };
+                        const _netLegs = (lgs) => _viewLegs(lgs).reduce((s, l) => s + (l.type === 'credit' ? l.montant : -l.montant), 0);
 
-                        // Charges variables agrégées par catégorie → compteChargesVariables (débit)
-                        const _varSrc = _normKey(_si.compteChargesVariables || 'courant');
-                        Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
-                            let amt = 0;
-                            if ((cv.details || []).length > 0) {
-                                cv.details.forEach(d => { const due = Number(d.montant || 0); if (due) amt += _remaining(d, due); });
-                            } else {
-                                const due = Number(cv.valeur || 0); if (due) amt += _remaining(cv, due);
-                            }
-                            if (amt > 0) legs.push({ account: _varSrc, libelle: cv.label || 'Variable', montant: Math.round(amt * 100) / 100, type: 'debit', jourPrevu: 15 });
-                        });
-
-                        // Dépenses exceptionnelles du cycle (règle du 27) → sourceCompte (débit)
-                        getDepensesCycle(mois, an).forEach(dep => {
-                            const due = Number(dep.montant || 0); if (!due) return;
-                            const amt = _remaining(dep, due); if (!amt) return;
-                            legs.push({ account: _normKey(dep.sourceCompte), libelle: dep.nom || dep.label || 'Dépense', montant: amt, type: 'debit', jourPrevu: 20 });
-                        });
-
-                        // Épargne → transfert interne : débit source + crédit destination
-                        const _epArr = Array.isArray(dAnnee.epargne) ? dAnnee.epargne : Object.values(dAnnee.epargne || {});
-                        _epArr.forEach(e => {
-                            const due = Number(e.valeur || 0); if (!due) return;
-                            const src = _normKey(e.sourceCompte || 'courant');
-                            const dest = e.linkedAccountId ? _normKey(e.linkedAccountId) : ('ep_' + e.id);
-                            legs.push({ account: src,  libelle: '💎 ' + (e.nom || 'Épargne'), montant: due, type: 'debit',  jourPrevu: jdp, internal: true });
-                            legs.push({ account: dest, libelle: '💎 ' + (e.nom || 'Épargne'), montant: due, type: 'credit', jourPrevu: jdp, internal: true });
-                        });
-
-                        // ── Sélection T0 + filtrage des legs selon le compte affiché ──
-                        let T0 = 0, selLegs;
+                        // ── T0 : solde réel du compte affiché (ou somme en Global) ──
+                        let T0;
                         if (_rFiltres.length === 1) {
-                            const _k = _rFiltres[0];
-                            const _cpt = (comptes.value || []).find(c => ('cpt_' + c.id) === _k);
+                            const _cpt = (comptes.value || []).find(c => ('cpt_' + c.id) === _rFiltres[0]);
                             T0 = _cpt ? (Number(_cpt.solde) || 0) : 0;
-                            selLegs = legs.filter(l => l.account === _k);
                         } else {
-                            // Global : somme de tous les comptes ; transferts internes (épargne) exclus (net nul)
                             T0 = (comptes.value || []).reduce((s, c) => s + (Number(c.solde) || 0), 0);
-                            selLegs = legs.filter(l => !l.internal);
                         }
 
-                        selLegs.sort((a, b) => (a.jourPrevu || 0) - (b.jourPrevu || 0));
+                        // ── Cycle sélectionné (clé "m-a") — défaut = cycle courant, jamais le passé ──
+                        let selM = curM, selA = curA;
+                        if (releveActiveCycle.value) {
+                            const _p = String(releveActiveCycle.value).split('-').map(Number);
+                            if (_p.length === 2 && _p[0] >= 1 && _p[0] <= 12 && _p[1] > 0) { selM = _p[0]; selA = _p[1]; }
+                            if (selA < curA || (selA === curA && selM < curM)) { selM = curM; selA = curA; }
+                        }
+                        const isCurrent = (selM === curM && selA === curA);
+
+                        // ── Chaînage : avance T0 cycle après cycle jusqu'au cycle sélectionné ──
+                        let opening = T0, m = curM, a = curA, _guard = 0;
+                        while (!(m === selM && a === selA) && _guard++ < 36) {
+                            const _mode = (m === curM && a === curA) ? 'remaining' : 'full';
+                            opening = Math.round((opening + _netLegs(_mkLegs(m, a, _mode))) * 100) / 100;
+                            if (m === 12) { m = 1; a++; } else { m++; }
+                        }
+
+                        // ── Construction du relevé du cycle sélectionné ──
+                        const dispMode = isCurrent ? 'remaining' : 'full';
+                        const dispLegs = _viewLegs(_mkLegs(selM, selA, dispMode));
+                        dispLegs.sort((x, y) => (x.jourPrevu || 0) - (y.jourPrevu || 0));
 
                         const entries = [];
-                        entries.push({ type: 'initial', libelle: "⏰ AUJOURD'HUI", montant: T0, soldeApres: T0, jourPrevu: null, etat: 't0' });
-                        let solde = T0;
-                        selLegs.forEach(l => {
+                        entries.push({ type: 'initial', libelle: isCurrent ? "⏰ AUJOURD'HUI" : "🔮 Solde Initial Projeté", montant: opening, soldeApres: opening, jourPrevu: null, etat: isCurrent ? 't0' : 'projete' });
+                        let solde = opening;
+                        dispLegs.forEach(l => {
                             solde = Math.round((solde + (l.type === 'credit' ? l.montant : -l.montant)) * 100) / 100;
                             entries.push({ libelle: l.libelle, montant: l.montant, type: l.type, jourPrevu: l.jourPrevu, etat: 'prevu', soldeApres: solde });
                         });
@@ -8340,10 +8392,29 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return { entries, soldeAtterrissage: solde };
                     });
 
-                    // v25.1 : libellé de projection ("26 [Mois]")
+                    // v25.30 : cycles disponibles dans le Relevé = courant + futurs (jamais le passé)
+                    const releveCyclesFuturs = computed(() => {
+                        const _mN = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+                        const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
+                        const endA = curA + 1; // jusqu'à la fin de l'année suivante
+                        const out = [];
+                        let m = curM, a = curA, _g = 0;
+                        while ((a < endA || (a === endA && m <= 12)) && _g++ < 36) {
+                            out.push({ key: m + '-' + a, mois: m, an: a, nom: _mN[m] + ' ' + a });
+                            if (m === 12) { m = 1; a++; } else { m++; }
+                        }
+                        return out;
+                    });
+
+                    // v25.30 : libellé de projection ("26 [Mois du cycle sélectionné]")
                     const releveProjectionLabel = computed(() => {
                         const _mn = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-                        return '26 ' + (_mn[moisBudgetaire.value.mois] || '');
+                        let m = moisBudgetaire.value.mois;
+                        if (releveActiveCycle.value) {
+                            const _p = String(releveActiveCycle.value).split('-').map(Number);
+                            if (_p.length === 2 && _p[0] >= 1 && _p[0] <= 12) m = _p[0];
+                        }
+                        return '26 ' + (_mn[m] || '');
                     });
 
                     const getMonthlyVariableValue = (item) => { const v = Number((item || {}).valeur) || 0; return item?.periode === 'semaine' ? v * 4.3 : v; };
@@ -10492,7 +10563,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v24.0 Journal-Hybride
                         journalHybride,
                         // v24.20 Journal-Hybride-Universel
-                        journalHybridePourReleve, releveProjectionLabel,
+                        journalHybridePourReleve, releveProjectionLabel, releveCyclesFuturs,
                         // v24.30 KPI-Retro-Fix
                         soldeCloturePilotageRetro,
                         // v24.40 Freeze-Retro
