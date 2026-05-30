@@ -3617,11 +3617,11 @@
                                         <div v-for="(rev, key) in donneesAnnuelles[soldesInitiaux.anneeActuelle].revenus" :key="'mrev_'+key"
                                              class="flex items-center gap-3 p-2.5 bg-slate-900/80 rounded-xl border border-slate-700">
                                             <input type="checkbox"
-                                                   :checked="isItemPaid(rev, Number(rev.base || 0))"
-                                                   @change="toggleItemPaid(rev, Number(rev.base || 0)); handleDataChange()"
+                                                   :checked="isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an))"
+                                                   @change="toggleItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)); handleDataChange()"
                                                    class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 cursor-pointer shrink-0"/>
-                                            <span :class="['text-xs font-bold flex-1', isItemPaid(rev, Number(rev.base || 0)) ? 'text-slate-500 line-through' : 'text-slate-200']">{{ rev.label }}</span>
-                                            <span :class="['text-xs font-black', isItemPaid(rev, Number(rev.base || 0)) ? 'text-green-400' : 'text-slate-500']">{{ formatMAD(Number(rev.base || 0)) }}</span>
+                                            <span :class="['text-xs font-bold flex-1', isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)) ? 'text-slate-500 line-through' : 'text-slate-200']">{{ rev.label }}</span>
+                                            <span :class="['text-xs font-black', isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)) ? 'text-green-400' : 'text-slate-500']">{{ formatMAD(getDueRevenu(rev, moisBudgetaire.an)) }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -4479,14 +4479,14 @@
                                          class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-green-500 transition-all">
                                         <label class="flex items-center gap-3 cursor-pointer flex-1">
                                             <input type="checkbox"
-                                                   :checked="isItemPaid(rev, Number(rev.base || 0))"
-                                                   @change="toggleItemPaid(rev, Number(rev.base || 0)); handleDataChange()"
+                                                   :checked="isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an))"
+                                                   @change="toggleItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)); handleDataChange()"
                                                    class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer"/>
-                                            <span :class="['text-sm font-bold transition-all', isItemPaid(rev, Number(rev.base || 0)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-green-300']">{{ rev.label }}</span>
-                                             <span v-if="isFluxCetteSemaine(rev.jourPrevu) && !isItemPaid(rev, Number(rev.base || 0))" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full ml-1">⏳ Cette sem.</span>
-                                             <span v-if="rev.jourPrevu && !isItemPaid(rev, Number(rev.base || 0))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ rev.jourPrevu }}</span>
+                                            <span :class="['text-sm font-bold transition-all', isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-green-300']">{{ rev.label }}</span>
+                                             <span v-if="isFluxCetteSemaine(rev.jourPrevu) && !isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an))" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full ml-1">⏳ Cette sem.</span>
+                                             <span v-if="rev.jourPrevu && !isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ rev.jourPrevu }}</span>
                                         </label>
-                                        <span :class="['text-sm font-black ml-4', isItemPaid(rev, Number(rev.base || 0)) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(Number(rev.base || 0)) }}</span>
+                                        <span :class="['text-sm font-black ml-4', isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(getDueRevenu(rev, moisBudgetaire.an)) }}</span>
                                     </div>
                                     <div v-if="!donneesAnnuelles[moisBudgetaire.an] || !Object.keys(donneesAnnuelles[moisBudgetaire.an]?.revenus || {}).length" class="text-center py-4 text-slate-500 text-sm">Aucune entrée configurée</div>
                                 </div>
@@ -5377,8 +5377,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "25.40 Strict-Immutability";
+                    const CURRENT_VERSION = "25.50 Revenu-Bouclier";
                     const CHANGELOG = [
+        { version: "25.50 Revenu-Bouclier", date: "2026-05-30", changes: [
+            "Bouclier temporel étendu aux REVENUS : getDueRevenu applique les règles d'exception (moisDebut/moisFin → nouvelleValeur) comme getDueFixe le fait pour les charges",
+            "Pilotage : un revenu suspendu à 0 ce mois-là (ex: Appartement avec règle 0 jusqu'au mois 7) n'apparaît plus dans les Entrées d'argent",
+            "Totaux d'entrées (tresoEntrees, tresoActuelleMois) calculés sur la valeur effective du mois, pas la valeur brute"
+        ] },
         { version: "25.40 Strict-Immutability", date: "2026-05-30", changes: [
             "RÈGLE D'OR : le solde réel d'un compte n'est modifiable QUE par saisie manuelle directe (formulaire des soldes)",
             "toggleItemPaid (checklist Pilotage) ne mute plus compte.solde — cocher/décocher ne change que item.paye / montantPaye ; la ligne ⏰ AUJOURD'HUI reste figée sur le solde bancaire réel",
@@ -8057,6 +8062,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return due;
                     };
 
+                    // v25.50 : équivalent de getDueFixe pour les revenus (champ 'base')
+                    // applique les règles d'exception → un revenu suspendu vaut 0 ce mois-là
+                    const getDueRevenu = (item, aNum) => {
+                        let due = Number(item.base || 0);
+                        const mNum = Number((soldesInitiaux.value || {}).moisActuel || 4);
+                        (item.exceptions || []).forEach(e => {
+                            if (mNum >= e.moisDebut && mNum <= e.moisFin) due = Number(e.nouvelleValeur || 0);
+                        });
+                        return due;
+                    };
+
                     const isItemPaid = (item, dueAmount) => {
                         if (item.paye && !item.montantPaye) return true;
                         // Si c'est une injection de cash (montant négatif), on se fie strictement à la case à cocher
@@ -8514,7 +8530,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // Entrées cochées
                         let entrees = 0;
                         Object.values(dActuelle.revenus || {}).forEach(rev => {
-                            const base = Number(rev.base || 0);
+                            const base = getDueRevenu(rev, an);
                             if (isItemPaid(rev, base)) entrees += base;
                         });
                         // Sorties cochées
@@ -8540,7 +8556,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!dActuelle) return 0;
                         let entrees = 0;
                         Object.values(dActuelle.revenus || {}).forEach(rev => {
-                            const base = Number(rev.base || 0);
+                            const base = getDueRevenu(rev, an);
                             if (isItemPaid(rev, base)) entrees += base;
                         });
                         return entrees;
@@ -9004,8 +9020,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const mb = moisBudgetaire.value;
                         const d = donneesAnnuelles.value[mb.an];
                         if (!d) return [];
-                        return Object.values(d.revenus || {}).slice().sort((a, b) =>
-                            (a.jourPrevu || 99) - (b.jourPrevu || 99));
+                        return Object.values(d.revenus || {})
+                            .filter(r => getDueRevenu(r, mb.an) > 0)
+                            .slice().sort((a, b) => (a.jourPrevu || 99) - (b.jourPrevu || 99));
                     });
 
                     // v24.50 Pilotage-Sync : cycle-aware — utilise pilotageViewedAn en mode retro
