@@ -4172,8 +4172,8 @@
                             </div>
                             <div class="flex items-center gap-2 self-start mt-1 flex-wrap">
                                 <span class="text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-100 px-2 py-1 rounded-lg border border-gray-200">Survol = détail</span>
-                                <!-- v23.10 Toggle Vue Temporelle (3 états) — masqué en mode Rétro (v24.10) -->
-                                <div v-if="!isPilotageRetro" class="flex items-center bg-slate-900 rounded-xl p-0.5 border border-slate-600 gap-0.5">
+                                <!-- v23.10 Toggle Vue Temporelle (3 états) — masqué en cycle passé (v24.40) -->
+                                <div v-if="!isCyclePasse" class="flex items-center bg-slate-900 rounded-xl p-0.5 border border-slate-600 gap-0.5">
                                     <button @click="vueTemporelle = 'at0'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'at0' ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/50' : 'text-slate-400 hover:text-violet-300']">⏱️ À T0</button>
                                     <button @click="vueTemporelle = 'semaine'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'semaine' ? 'bg-amber-500 text-white shadow-lg shadow-amber-900/50' : 'text-slate-400 hover:text-amber-300']">📅 Cette sem.</button>
                                     <button @click="vueTemporelle = 'cycle'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'cycle' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : 'text-slate-400 hover:text-emerald-300']">🗓️ Fin cycle</button>
@@ -4250,9 +4250,16 @@
                                 </div>
                             </div>
 
-                            <!-- KPI 2 : Reste à Payer — Tous comptes avec détail par compte -->
+                            <!-- KPI 2 : Reste à Payer — Tous comptes (Finito en cycle passé v24.40) -->
                             <div class="relative group cursor-default">
-                                <div :class="['p-4 rounded-2xl border text-center transition-all', resteAPayerTotalGlobal > 0 ? 'bg-orange-900/20 border-orange-700 group-hover:border-orange-500' : 'bg-green-900/20 border-green-700 group-hover:border-green-500']">
+                                <!-- Carte KPI2 Cycle Passé : Finito - Cycle Clos -->
+                                <div v-if="isCyclePasse" class="p-4 rounded-2xl border text-center transition-all bg-green-900/30 border-green-600 group-hover:border-green-400">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">🔴 Reste à Payer</p>
+                                    <p class="text-2xl font-black tracking-tighter text-emerald-300">{{ formatMAD(0) }}</p>
+                                    <p class="text-[9px] mt-1 font-bold text-emerald-400">🏁 Finito — Cycle Clos</p>
+                                </div>
+                                <!-- Carte KPI2 normale (cycle actuel) -->
+                                <div v-else :class="['p-4 rounded-2xl border text-center transition-all', resteAPayerTotalGlobal > 0 ? 'bg-orange-900/20 border-orange-700 group-hover:border-orange-500' : 'bg-green-900/20 border-green-700 group-hover:border-green-500']">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">🔴 Reste à Payer</p>
                                     <p :class="['text-2xl font-black tracking-tighter', resteAPayerTotalGlobal > 0 ? 'text-orange-400' : 'text-green-400']">{{ formatMAD(resteAPayerTotalGlobal) }}</p>
                                     <p class="text-[9px] mt-1 font-bold" :class="resteAPayerTotalGlobal === 0 ? 'text-emerald-400' : 'text-gray-500'">
@@ -4299,11 +4306,11 @@
 
                             <!-- KPI 3 : Budget Conso courant (tréso courant − obligations courant) -->
                             <div class="relative group cursor-default">
-                                <!-- ── Carte KPI3 Rétro : Solde de Clôture (v24.30) ── -->
-                                <div v-if="isPilotageRetro" :class="['p-4 rounded-2xl border text-center transition-all', soldeCloturePilotageRetro >= 0 ? 'bg-indigo-900/30 border-indigo-600' : 'bg-red-900/30 border-red-600']">
+                                <!-- ── Carte KPI3 Rétro : Solde de Clôture (v24.40 Freeze-Retro) ── -->
+                                <div v-if="isCyclePasse" :class="['p-4 rounded-2xl border text-center transition-all', soldeCloturePilotageRetro >= 0 ? 'bg-indigo-900/30 border-indigo-600' : 'bg-red-900/30 border-red-600']">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">🏁 Solde de Clôture</p>
                                     <p :class="['text-2xl font-black tracking-tighter', soldeCloturePilotageRetro >= 0 ? 'text-indigo-300' : 'text-red-400']">{{ formatMAD(soldeCloturePilotageRetro) }}</p>
-                                    <p class="text-[9px] text-gray-400 mt-1 font-bold">Reporté au cycle suivant</p>
+                                    <p class="text-[9px] text-gray-400 mt-1 font-bold">Transféré au cycle suivant</p>
                                 </div>
                                 <!-- ── Carte KPI3 : contenu selon mode ── -->
                                 <div v-else :class="['p-4 rounded-2xl border text-center transition-all',
@@ -4336,8 +4343,8 @@
                                         </template>
                                     </p>
                                 </div>
-                                <!-- ── Tooltip ── -->
-                                <div v-if="!isPilotageRetro" class="absolute top-full left-0 right-0 mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                <!-- ── Tooltip — masqué en cycle passé (v24.40) ── -->
+                                <div v-if="!isCyclePasse" class="absolute top-full left-0 right-0 mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                                     <!-- Tooltip T0 -->
                                     <template v-if="vueTemporelle === 'at0'">
                                         <div class="w-3 h-3 bg-violet-950 border-t border-l border-violet-500 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
@@ -5386,8 +5393,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "24.30 KPI-Retro-Fix";
+                    const CURRENT_VERSION = "24.40 Freeze-Retro";
                     const CHANGELOG = [
+        { version: "24.40 Freeze-Retro", date: "2026-05-30", changes: [
+            "Nouveau computed isCyclePasse (chronologique) remplace isPilotageRetro dans le template Pilotage",
+            "Gel des computed temporels en cycle passe : joursRestants=0, joursDepuis=total cycle, progress=100",
+            "prorataVariableT0 = budget complet en cycle passe (plus de prorata new Date())",
+            "KPI2 Reste a Payer : carte dediee Finito - Cycle Clos en cycle passe",
+            "KPI3 retro : sous-titre Transfere au cycle suivant",
+            "Toggle vueTemporelle et tooltip T0 masques par isCyclePasse"
+        ] },
         { version: "24.30 KPI-Retro-Fix", date: "2026-05-30", changes: [
             "KPI3 retro card : soldeCloturePilotageRetro remplace journalHybride.soldeAtterrissage",
             "Calcul correct du solde de cloture pour le cycle pilotageViewedCycle",
@@ -8545,6 +8560,24 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         pilotageViewedCycle.value ? Number(pilotageViewedCycle.value.split('-')[1]) : moisBudgetaire.value.an
                     );
                     const isPilotageRetro = computed(() => pilotageViewedCycle.value !== null);
+                    // v24.40 Cycle chronologiquement passé (vs cycle reel courant)
+                    const isCyclePasse = computed(() => {
+                        if (!pilotageViewedCycle.value) return false;
+                        const [vMois, vAn] = pilotageViewedCycle.value.split('-').map(Number);
+                        const cMois = moisBudgetaire.value.mois;
+                        const cAn = moisBudgetaire.value.an;
+                        return vAn < cAn || (vAn === cAn && vMois < cMois);
+                    });
+                    // v24.40 Nombre total de jours du cycle passe visualise
+                    const _joursCyclePasse = computed(() => {
+                        if (!isCyclePasse.value) return 0;
+                        const m = pilotageViewedMois.value;
+                        const a = pilotageViewedAn.value;
+                        const jdp = jourDePaie.value;
+                        const debut = new Date(a, m - 2, jdp);
+                        const fin = new Date(a, m - 1, jdp);
+                        return Math.round((fin - debut) / 864e5);
+                    });
                     // v24.30 Solde de cloture reel du cycle retro visualise
                     const soldeCloturePilotageRetro = computed(() => {
                         calculationTick.value;
@@ -8601,9 +8634,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return info.cycleDebLabel + ' → ' + info.cycleFinLabel;
                     });
 
-                    const joursRestantsAvantPaie = computed(() => _cyclePaieInfo.value.joursAvant);
-                    const joursDepuisDernierePaie = computed(() => _cyclePaieInfo.value.joursDepuis);
-                    const progressCyclePaie = computed(() => _cyclePaieInfo.value.progress);
+                    // v24.40 Freeze-Retro : valeurs gelees en cycle passe (cycle est mort, le temps ne court plus)
+                    const joursRestantsAvantPaie = computed(() => isCyclePasse.value ? 0 : _cyclePaieInfo.value.joursAvant);
+                    const joursDepuisDernierePaie = computed(() => isCyclePasse.value ? _joursCyclePasse.value : _cyclePaieInfo.value.joursDepuis);
+                    const progressCyclePaie = computed(() => isCyclePasse.value ? 100 : _cyclePaieInfo.value.progress);
                     const dernierePaieLabel = computed(() => _cyclePaieInfo.value.dernierePaieLabel);
                     const prochainePaieLabel = computed(() => _cyclePaieInfo.value.prochainePaieLabel);
 
@@ -8783,8 +8817,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     // ── v23.10 : Computeds Prorata-T0 ──────────────────────────────────────
+                    // v24.40 Freeze-Retro : 100% du budget consomme en cycle passe (pas de prorata temporel)
                     const prorataVariableT0 = computed(() =>
-                        budgetConsoTheoriqueMois.value * progressCyclePaie.value
+                        isCyclePasse.value
+                            ? budgetConsoTheoriqueMois.value
+                            : budgetConsoTheoriqueMois.value * progressCyclePaie.value
                     );
 
                     const provisionsFuturesT0 = computed(() => {
@@ -10436,6 +10473,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         journalHybridePourReleve,
                         // v24.30 KPI-Retro-Fix
                         soldeCloturePilotageRetro,
+                        // v24.40 Freeze-Retro
+                        isCyclePasse, _joursCyclePasse,
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, releveActiveCycle, cyclesDisponibles, historiqueCycles, viewedCycleKey, cloturerCycle,
                         // v23.30 Retro-Clean
                         pilotageViewedCycle, pilotageViewedMois, pilotageViewedAn, isPilotageRetro, pilotageCycleLabel,
