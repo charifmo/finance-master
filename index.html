@@ -5377,8 +5377,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "25.30 Future-Restored";
+                    const CURRENT_VERSION = "25.40 Strict-Immutability";
                     const CHANGELOG = [
+        { version: "25.40 Strict-Immutability", date: "2026-05-30", changes: [
+            "RÈGLE D'OR : le solde réel d'un compte n'est modifiable QUE par saisie manuelle directe (formulaire des soldes)",
+            "toggleItemPaid (checklist Pilotage) ne mute plus compte.solde — cocher/décocher ne change que item.paye / montantPaye ; la ligne ⏰ AUJOURD'HUI reste figée sur le solde bancaire réel",
+            "Le moteur de projection retire automatiquement l'élément coché du futur et recalcule l'atterrissage, sans toucher la base"
+        ] },
         { version: "25.30 Future-Restored", date: "2026-05-30", changes: [
             "Sélecteur de cycle restauré dans le Relevé — affiche le cycle courant + tous les cycles futurs (jusqu'à fin de l'année suivante), aucun cycle passé",
             "Bouclier des règles temporelles : les exceptions (moisDebut/moisFin → nouvelleValeur) sont appliquées par mois projeté — un flux à 0 ce mois-là (ex: Appartement) n'apparaît plus dans le journal",
@@ -8060,7 +8065,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
 
                     const toggleItemPaid = (item, dueAmount) => {
-                        // v22.80 Pilotage-Ledger : synchronise compte.solde au pointage
+                        // v25.40 Strict-Immutability : cocher/décocher ne change QUE l'état de l'item.
+                        // Le solde réel des comptes n'est JAMAIS muté ici — seule la saisie manuelle
+                        // (formulaire de mise à jour des soldes) modifie compte.solde. Le moteur de
+                        // projection ignore simplement l'élément coché pour le futur.
                         const wasAlreadyPaid = isItemPaid(item, dueAmount);
                         if (wasAlreadyPaid) {
                             item.paye = false;
@@ -8068,30 +8076,6 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         } else {
                             item.paye = true;
                             item.montantPaye = dueAmount;
-                        }
-                        // Déterminer si c'est un revenu (les revenus ont un champ 'base')
-                        const isRevenu = 'base' in item;
-                        const compteKey = isRevenu
-                            ? (item.destinationCompte || 'courant')
-                            : (item.sourceCompte || 'courant');
-                        // Résoudre le compte cible dans comptes.value
-                        let compteCible = null;
-                        if (compteKey === 'courant') {
-                            // v23.15 : inclure type 'liquide' comme compte courant principal
-                            compteCible = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
-                        } else if (compteKey.startsWith('cpt_')) {
-                            const cptId = compteKey.slice(4);
-                            compteCible = (comptes.value || []).find(c => String(c.id) === String(cptId));
-                        } else if (compteKey.startsWith('ep_')) {
-                            // Compte épargne — pas de mutation directe sur solde ici
-                            compteCible = null;
-                        }
-                        if (compteCible) {
-                            // signe : +1 pour revenu, -1 pour charge
-                            const signe = isRevenu ? 1 : -1;
-                            // delta : si on coche → ±montant ; si on décoche → ∓montant
-                            const delta = wasAlreadyPaid ? -signe * dueAmount : signe * dueAmount;
-                            compteCible.solde = Math.round(((Number(compteCible.solde) || 0) + delta) * 100) / 100;
                         }
                         handleDataChange();
                     };
