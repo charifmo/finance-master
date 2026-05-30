@@ -697,12 +697,18 @@
                                     <!-- v25.30 Future-Restored : titre projection + sélecteur cycle (courant + futurs) -->
                                     <div class="flex items-center gap-2 flex-wrap w-full">
                                         <span class="text-xs font-black text-indigo-600 uppercase tracking-wide">📅 Projection jusqu'au {{ releveProjectionLabel }}</span>
-                                        <div class="flex items-center gap-1.5 ml-auto">
-                                            <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Cycle</label>
-                                            <select :value="releveActiveCycle || (moisBudgetaire.mois + '-' + moisBudgetaire.an)"
-                                                @change="releveActiveCycle = $event.target.value || null; releveAnneesFiltres = []; releveMoisFiltres = []"
-                                                class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer">
-                                                <option v-for="cy in releveCyclesFuturs" :key="cy.key" :value="cy.key">{{ cy.nom }}</option>
+                                        <!-- v25.80 Master-Cycle-Sync : deux sélecteurs larges Mois + Année -->
+                                        <div class="flex items-center gap-2 ml-auto">
+                                            <select :value="releveSelectedMois"
+                                                @change="releveActiveCycle = $event.target.value + '-' + releveSelectedAn; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                                class="text-sm font-bold bg-white border-2 border-indigo-200 rounded-xl px-3 py-2 text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-sm">
+                                                <option v-for="n in 12" :key="n" :value="n">{{ ['','Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'][n] }}</option>
+                                            </select>
+                                            <select :value="releveSelectedAn"
+                                                @change="releveActiveCycle = releveSelectedMois + '-' + $event.target.value; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                                class="text-sm font-bold bg-white border-2 border-indigo-200 rounded-xl px-3 py-2 text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-sm">
+                                                <option :value="moisBudgetaire.an">{{ moisBudgetaire.an }}</option>
+                                                <option :value="moisBudgetaire.an + 1">{{ moisBudgetaire.an + 1 }}</option>
                                             </select>
                                         </div>
                                     </div>
@@ -762,9 +768,10 @@
                                                 <td colspan="3" class="p-2 text-xs font-black text-blue-700 uppercase tracking-wider">{{ e.libelle }}</td>
                                                 <td class="p-2 text-right font-black text-xs tabular-nums text-blue-700">{{ formatMAD(e.soldeApres) }}</td>
                                             </tr>
-                                            <tr v-else :class="['border-b transition-all', e.etat === 'prevu' ? 'opacity-50 border-dashed border-gray-200 bg-white' : (e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50')]">
-                                                <td class="p-2 text-[10px] text-gray-400 font-bold whitespace-nowrap">{{ e.jourPrevu ? 'j.' + e.jourPrevu : '' }}</td>
-                                                <td class="p-2 text-xs text-gray-700"><span v-if="e.etat === 'prevu'" class="inline-block text-[8px] font-black bg-amber-100 text-amber-600 px-1 rounded mr-1">⏳</span>{{ e.libelle }}</td>
+                                            <!-- v25.80 Master-Cycle-Sync : lignes futures traitées comme les autres (simulation sérieuse) -->
+                                            <tr v-else :class="['border-b transition-all', e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50']">
+                                                <td class="p-2 text-[10px] text-gray-600 font-bold whitespace-nowrap">{{ e.jourPrevu ? 'j.' + e.jourPrevu : '' }}</td>
+                                                <td class="p-2 text-xs text-gray-700">{{ e.libelle }}</td>
                                                 <td class="p-2 text-right font-bold text-green-600 text-xs tabular-nums">{{ e.type === 'credit' ? formatMAD(e.montant) : '' }}</td>
                                                 <td class="p-2 text-right font-bold text-red-500 text-xs tabular-nums">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
                                                 <td class="p-2 text-right font-black text-xs tabular-nums" :class="e.soldeApres < 0 ? 'text-red-600' : 'text-gray-800'">{{ formatMAD(e.soldeApres) }}</td>
@@ -5285,12 +5292,17 @@
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-base font-black uppercase tracking-wide text-gray-800">📋 Relevé de Comptes</h3>
                         <div class="flex items-center gap-2">
-                            <!-- v25.30 Future-Restored : titre projection + sélecteur cycle (courant + futurs) -->
-                            <span class="text-[11px] font-black text-indigo-600 uppercase tracking-wide">📅 Jusqu'au {{ releveProjectionLabel }}</span>
-                            <select :value="releveActiveCycle || (moisBudgetaire.mois + '-' + moisBudgetaire.an)"
-                                @change="releveActiveCycle = $event.target.value || null; releveAnneesFiltres = []; releveMoisFiltres = []"
-                                class="text-xs font-bold bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                                <option v-for="cy in releveCyclesFuturs" :key="cy.key" :value="cy.key">{{ cy.nom }}</option>
+                            <!-- v25.80 Master-Cycle-Sync : deux sélecteurs larges Mois + Année (remplace liste combinée) -->
+                            <select :value="releveSelectedMois"
+                                @change="releveActiveCycle = $event.target.value + '-' + releveSelectedAn; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                class="text-base font-bold bg-white border-2 border-indigo-200 rounded-xl px-4 py-2 text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-sm min-w-[7rem]">
+                                <option v-for="n in 12" :key="n" :value="n">{{ ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][n] }}</option>
+                            </select>
+                            <select :value="releveSelectedAn"
+                                @change="releveActiveCycle = releveSelectedMois + '-' + $event.target.value; releveAnneesFiltres = []; releveMoisFiltres = []"
+                                class="text-base font-bold bg-white border-2 border-indigo-200 rounded-xl px-4 py-2 text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-sm">
+                                <option :value="moisBudgetaire.an">{{ moisBudgetaire.an }}</option>
+                                <option :value="moisBudgetaire.an + 1">{{ moisBudgetaire.an + 1 }}</option>
                             </select>
                             <!-- Toggle Transactions / Évolution -->
                             <button @click="releveModeEvolution = !releveModeEvolution"
@@ -5349,9 +5361,10 @@
                                     <td colspan="3" class="p-2 text-xs font-black text-blue-700 uppercase tracking-wider">{{ e.libelle }}</td>
                                     <td class="p-2 text-right font-black text-xs tabular-nums text-blue-700">{{ formatMAD(e.soldeApres) }}</td>
                                 </tr>
-                                <tr v-else :class="['border-b transition-all', e.etat === 'prevu' ? 'opacity-50 border-dashed border-gray-200 bg-white' : (e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50')]">
-                                    <td class="p-2 text-[10px] text-gray-400 font-bold whitespace-nowrap">{{ e.jourPrevu ? 'j.' + e.jourPrevu : '' }}</td>
-                                    <td class="p-2 text-xs text-gray-700"><span v-if="e.etat === 'prevu'" class="inline-block text-[8px] font-black bg-amber-100 text-amber-600 px-1 rounded mr-1">⏳</span>{{ e.libelle }}</td>
+                                <!-- v25.80 Master-Cycle-Sync : lignes futures traitées comme les autres (simulation sérieuse) -->
+                                <tr v-else :class="['border-b transition-all', e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50']">
+                                    <td class="p-2 text-[10px] text-gray-600 font-bold whitespace-nowrap">{{ e.jourPrevu ? 'j.' + e.jourPrevu : '' }}</td>
+                                    <td class="p-2 text-xs text-gray-700">{{ e.libelle }}</td>
                                     <td class="p-2 text-right font-bold text-green-600 text-xs tabular-nums">{{ e.type === 'credit' ? formatMAD(e.montant) : '' }}</td>
                                     <td class="p-2 text-right font-bold text-red-500 text-xs tabular-nums">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
                                     <td class="p-2 text-right font-black text-xs tabular-nums" :class="e.soldeApres < 0 ? 'text-red-600' : 'text-gray-800'">{{ formatMAD(e.soldeApres) }}</td>
@@ -5419,8 +5432,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "25.70 Pilotage-Align";
+                    const CURRENT_VERSION = "25.80 Master-Cycle-Sync";
                     const CHANGELOG = [
+        { version: "25.80 Master-Cycle-Sync", date: "2026-05-30", changes: [
+            "BUG RACINE corrigé : getDueFixe + getDueRevenu évaluent les règles d'exception par rapport au MOIS DU CYCLE (moisBudgetaire.mois = 6 pour Juin) et non plus le mois civil (5 pour Mai)",
+            "Tri chronologique cycle-aware dans le Relevé et le Pilotage : jours 27→31 classés AVANT jours 1→26 (respect du cycle 27→26)",
+            "Relevé : deux sélecteurs larges et séparés Mois / Année remplacent la liste combinée — plus mobile-friendly",
+            "Relevé : suppression de opacity-50, border-dashed et du badge ⏳ sur les entrées futures — affichage clair et uniforme",
+            "Note de version : demande intitulée V25.60 — numérotée 25.80 (25.60/25.70 déjà publiées)"
+        ] },
         { version: "25.70 Pilotage-Align", date: "2026-05-30", changes: [
             "Checklist Pilotage : un élément suspendu ce mois (règle d'exception → 0) reste VISIBLE avec montant à 0, opacité réduite et badge ⏸️ Suspendu ce mois (revenus + charges fixes), au lieu d'être masqué",
             "revenusBudgetairesTries ne filtre plus les revenus à 0 — comportement aligné sur les charges fixes",
@@ -7865,6 +7885,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const releveAnneesFiltres = ref([]); // vide = toutes les années
                     const releveModeEvolution = ref(false); // true = n'afficher que l'évolution des soldes
                     const releveActiveCycle = ref(null); // v23.20 : "6-2026" = Cycle Juin 2026, null = tout
+
+                    // v25.80 Master-Cycle-Sync : mois et année dérivés du cycle sélectionné (pour les deux sélecteurs)
+                    const releveSelectedMois = computed(() => {
+                        if (!releveActiveCycle.value) return moisBudgetaire.value.mois;
+                        const p = String(releveActiveCycle.value).split('-').map(Number);
+                        return (p[0] >= 1 && p[0] <= 12) ? p[0] : moisBudgetaire.value.mois;
+                    });
+                    const releveSelectedAn = computed(() => {
+                        if (!releveActiveCycle.value) return moisBudgetaire.value.an;
+                        const p = String(releveActiveCycle.value).split('-').map(Number);
+                        return (p[1] > 2000) ? p[1] : moisBudgetaire.value.an;
+                    });
                     const releveOnglets = computed(() => {
                         const j = bilanJournal.value;
                         if (!j || Object.keys(j).length === 0) return [];
@@ -8109,7 +8141,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // --- LOGIQUE PAIEMENTS PARTIELS ---
                     const getDueFixe = (item, aNum) => {
                         let due = Number(item.valeur || 0);
-                        const mNum = Number((soldesInitiaux.value || {}).moisActuel || 4);
+                        // v25.80 Master-Cycle-Sync : évaluation par rapport au mois du CYCLE, pas le mois civil
+                        const mNum = Number(moisBudgetaire?.value?.mois || (soldesInitiaux.value || {}).moisActuel || 4);
                         (item.exceptions || []).forEach(e => {
                             if (mNum >= e.moisDebut && mNum <= e.moisFin) due = Number(e.nouvelleValeur || 0);
                         });
@@ -8120,7 +8153,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // applique les règles d'exception → un revenu suspendu vaut 0 ce mois-là
                     const getDueRevenu = (item, aNum) => {
                         let due = Number(item.base || 0);
-                        const mNum = Number((soldesInitiaux.value || {}).moisActuel || 4);
+                        // v25.80 Master-Cycle-Sync : évaluation par rapport au mois du CYCLE, pas le mois civil
+                        const mNum = Number(moisBudgetaire?.value?.mois || (soldesInitiaux.value || {}).moisActuel || 4);
                         (item.exceptions || []).forEach(e => {
                             if (mNum >= e.moisDebut && mNum <= e.moisFin) due = Number(e.nouvelleValeur || 0);
                         });
@@ -8291,8 +8325,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                         });
 
-                        paidItems.sort((a, b) => a.jourPrevu - b.jourPrevu);
-                        unpaidItems.sort((a, b) => a.jourPrevu - b.jourPrevu);
+                        // v25.80 Master-Cycle-Sync : tri cyclique
+                        const _pSort = (j) => (j || 0) >= jdp ? (j || 0) - jdp : (j || 0) + (32 - jdp);
+                        paidItems.sort((a, b) => _pSort(a.jourPrevu) - _pSort(b.jourPrevu));
+                        unpaidItems.sort((a, b) => _pSort(a.jourPrevu) - _pSort(b.jourPrevu));
 
                         const entries = [];
                         entries.push({ type: 'initial', libelle: 'Solde Initial du Cycle', montant: soldeInit, soldeApres: soldeInit, jourPrevu: jdp, etat: 'realise' });
@@ -8461,7 +8497,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // ── Construction du relevé du cycle sélectionné ──
                         const dispMode = isCurrent ? 'remaining' : 'full';
                         const dispLegs = _viewLegs(_mkLegs(selM, selA, dispMode));
-                        dispLegs.sort((x, y) => (x.jourPrevu || 0) - (y.jourPrevu || 0));
+                        // v25.80 Master-Cycle-Sync : tri cyclique — jours ≥ jdp (27…31) avant jours 1…26
+                        const _cSort = (j) => (j || 0) >= jdp ? (j || 0) - jdp : (j || 0) + (32 - jdp);
+                        dispLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu));
 
                         const entries = [];
                         entries.push({ type: 'initial', libelle: isCurrent ? "⏰ AUJOURD'HUI" : "🔮 Solde Initial Projeté", montant: opening, soldeApres: opening, jourPrevu: null, etat: isCurrent ? 't0' : 'projete' });
@@ -10657,7 +10695,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v24.0 Journal-Hybride
                         journalHybride,
                         // v24.20 Journal-Hybride-Universel
-                        journalHybridePourReleve, releveProjectionLabel, releveCyclesFuturs,
+                        journalHybridePourReleve, releveProjectionLabel, releveCyclesFuturs, releveSelectedMois, releveSelectedAn,
                         // v24.30 KPI-Retro-Fix
                         soldeCloturePilotageRetro,
                         // v24.40 Freeze-Retro
