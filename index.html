@@ -4537,7 +4537,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-for="cat in Object.values(donneesAnnuelles[moisBudgetaire.an]?.chargesVariables || {}).filter(c => c.periode === 'mois')" :key="cat.label">
+                                    <div v-for="cat in chargesVarMensuellePilotage" :key="cat.label">
                                         <p class="text-[9px] text-blue-400 font-black uppercase tracking-widest mb-2 border-b border-blue-900/50 pb-1 mt-2 flex items-center gap-2">
                                             <span>🧾 {{ cat.label }}</span>
                                             <span v-if="isFluxCetteSemaine(cat.jourPrevu)" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full">⏳ Cette sem.</span>
@@ -4557,10 +4557,10 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-if="getDepensesMois(pilotageViewedMois, pilotageViewedAn).length > 0">
+                                    <div v-if="getDepensesCycle(pilotageViewedMois, pilotageViewedAn).length > 0">
                                         <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1 mt-2">⚠️ Flux Exceptionnels — {{ pilotageCycleLabel }}</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="dep in getDepensesMois(pilotageViewedMois, pilotageViewedAn)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
+                                            <div v-for="dep in getDepensesCycle(pilotageViewedMois, pilotageViewedAn)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
                                                 <label class="flex items-center gap-3 cursor-pointer flex-1">
                                                     <input type="checkbox" :checked="isItemPaid(dep, dep.montant)" @change="toggleItemPaid(dep, dep.montant)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500 cursor-pointer"/>
                                                     <span :class="['text-sm font-bold transition-all', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-red-300']">{{ dep.nom }}</span>
@@ -5393,8 +5393,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "24.40 Freeze-Retro";
+                    const CURRENT_VERSION = "24.50 Pilotage-Sync";
                     const CHANGELOG = [
+        { version: "24.50 Pilotage-Sync", date: "2026-05-30", changes: [
+            "getDepensesCycle(cycleM, cycleA) : filtre règle du 27 — items mois-1 jourPrevu>=jdp inclus, items mois jourPrevu>=jdp exclus",
+            "ajouterDepense : jourPrevu = new Date().getDate() par défaut pour les nouveaux items",
+            "chargesFixesBudgetairesTriees : pilotageViewedAn en retro + filtre jourPrevu < jdp",
+            "chargesVarMensuellePilotage : computed cycle-aware pour les variables mensuelles",
+            "Checklist Pilotage : getDepensesCycle remplace getDepensesMois pour les flux exceptionnels",
+            "resteAPayerDetailParCompte : getDepensesCycle pour les chocs"
+        ] },
         { version: "24.40 Freeze-Retro", date: "2026-05-30", changes: [
             "Nouveau computed isCyclePasse (chronologique) remplace isPilotageRetro dans le template Pilotage",
             "Gel des computed temporels en cycle passe : joursRestants=0, joursDepuis=total cycle, progress=100",
@@ -7644,9 +7652,30 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!donneesAnnuelles.value[a]) return [];
                         return (donneesAnnuelles.value[a].depensesIrregulieres || []).filter(d => d.mois === m);
                     };
+                    // v24.50 Pilotage-Sync : filtre cycle-aware avec règle du 27
+                    // Un item avec jourPrevu >= jourDePaie appartient au cycle SUIVANT (mois+1)
+                    const getDepensesCycle = (cycleM, cycleA) => {
+                        const jdp = jourDePaie.value;
+                        const mPrev = cycleM === 1 ? 12 : cycleM - 1;
+                        const aPrev = cycleM === 1 ? cycleA - 1 : cycleA;
+                        const result = [];
+                        // Items du mois calendaire cycleM avec jourPrevu < jdp (ou sans jourPrevu = appartient au cycle mois)
+                        if (donneesAnnuelles.value[cycleA]) {
+                            (donneesAnnuelles.value[cycleA].depensesIrregulieres || [])
+                                .filter(d => Number(d.mois) === cycleM && (!d.jourPrevu || Number(d.jourPrevu) < jdp))
+                                .forEach(d => result.push(d));
+                        }
+                        // Items du mois précédent avec jourPrevu >= jdp (début de ce cycle)
+                        if (donneesAnnuelles.value[aPrev]) {
+                            (donneesAnnuelles.value[aPrev].depensesIrregulieres || [])
+                                .filter(d => Number(d.mois) === mPrev && d.jourPrevu && Number(d.jourPrevu) >= jdp)
+                                .forEach(d => result.push(d));
+                        }
+                        return result;
+                    };
                     const totalMoisAffichage = (m) => getDepensesMois(m, anneeAffichage.value).reduce((sum, d) => sum + (Number(d.montant) || 0), 0);
                     
-                    const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' }); handleDataChange(); };
+                    const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle', jourPrevu: new Date().getDate() }); handleDataChange(); };
                     const supprimerDepense = (id) => { if(donneesAnnuelles.value[anneeAffichage.value]) donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres = donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres.filter(d => d.id !== id); handleDataChange(); };
                     // v17.96 : Virements internes CRUD
                     const getVirementsMois = (m, a) => (donneesAnnuelles.value[a]?.virementsInternes || []).filter(v => v.mois === m);
@@ -8722,8 +8751,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 }
                             }
                         });
-                        // Dépenses irrégulières du mois non payées
-                        getDepensesMois(mois, an).forEach(dep => {
+                        // Dépenses irrégulières — v24.50 filtre cycle-aware (règle du 27)
+                        getDepensesCycle(mois, an).forEach(dep => {
                             const m = Number(dep.montant || 0);
                             if (m > 0 && !isItemPaid(dep, m) && ok(dep)) {
                                 const grp = getOrCreate(dep.sourceCompte || 'courant');
@@ -8908,13 +8937,32 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             (a.jourPrevu || 99) - (b.jourPrevu || 99));
                     });
 
+                    // v24.50 Pilotage-Sync : cycle-aware — utilise pilotageViewedAn en mode retro
+                    // filtre les charges avec jourPrevu >= jourDePaie (appartiennent au cycle suivant)
                     const chargesFixesBudgetairesTriees = computed(() => {
                         calculationTick.value;
-                        const mb = moisBudgetaire.value;
-                        const d = donneesAnnuelles.value[mb.an];
+                        const jdp = jourDePaie.value;
+                        const an = isCyclePasse.value ? pilotageViewedAn.value : moisBudgetaire.value.an;
+                        const d = donneesAnnuelles.value[an];
                         if (!d) return [];
-                        return Object.values(d.chargesFixes || {}).slice().sort((a, b) =>
-                            (a.jourPrevu || 99) - (b.jourPrevu || 99));
+                        const all = Object.values(d.chargesFixes || {});
+                        const filtered = isCyclePasse.value
+                            ? all.filter(f => !f.jourPrevu || Number(f.jourPrevu) < jdp)
+                            : all;
+                        return filtered.sort((a, b) => (a.jourPrevu || 99) - (b.jourPrevu || 99));
+                    });
+                    // v24.50 Charges variables mensuelles — cycle-aware (pilotageViewedAn + règle du 27)
+                    const chargesVarMensuellePilotage = computed(() => {
+                        calculationTick.value;
+                        const jdp = jourDePaie.value;
+                        const an = isCyclePasse.value ? pilotageViewedAn.value : moisBudgetaire.value.an;
+                        const d = donneesAnnuelles.value[an];
+                        if (!d) return [];
+                        return Object.values(d.chargesVariables || {}).filter(c => {
+                            if (!c || c.periode !== 'mois') return false;
+                            if (!isCyclePasse.value) return true;
+                            return !c.jourPrevu || Number(c.jourPrevu) < jdp;
+                        });
                     });
 
                     // ═══════════════════════════════════════════════════════════
@@ -10460,7 +10508,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         revenusTheoriquesMois, engagementsTheoriquesMois, engagementsTheoriquesDetail,
                         budgetConsoTheoriqueMois, rythmeTheoriqueSemaine, pilotageTheoLignes,
                         // v22.95 Cashflow-Timing
-                        isFluxCetteSemaine, revenusBudgetairesTries, chargesFixesBudgetairesTriees,
+                        isFluxCetteSemaine, revenusBudgetairesTries, chargesFixesBudgetairesTriees, chargesVarMensuellePilotage,
                         // v22.97 Conso-Target
                         besoinVariableHebdoTheorique, chargesVarHebdoDetail,
                         // v23.00 ERP-Edition
