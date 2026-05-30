@@ -745,7 +745,15 @@
                             <!-- Tableau : Mode Transactions — v24.0 Journal Hybride -->
                             <div v-if="!releveModeEvolution" class="overflow-auto max-h-[600px] custom-scroll">
                                 <!-- Journal Hybride Universel v24.20 : cycle actuel OU passé -->
-                                <table v-if="journalHybridePourReleve.entries.length > 0" class="w-full min-w-[400px] text-sm border-collapse">
+                                <!-- v24.60 Cycle Clos -->
+                                <div v-if="journalHybridePourReleve.cycleClos" class="flex items-center justify-center py-12">
+                                    <div class="text-center">
+                                        <p class="text-4xl mb-2">🏁</p>
+                                        <p class="text-sm font-black text-gray-500 uppercase tracking-widest">Cycle Clos</p>
+                                        <p class="text-xs text-gray-400 mt-1">Ce cycle est terminé — consultez le Pilotage pour le bilan</p>
+                                    </div>
+                                </div>
+                                <table v-else-if="journalHybridePourReleve.entries.length > 0" class="w-full min-w-[400px] text-sm border-collapse">
                                     <thead class="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-400 w-10">J.</th>
@@ -5300,7 +5308,15 @@
                 <!-- Tableau : Mode Transactions — v24.20 Journal Hybride Universel -->
                 <div v-if="!releveModeEvolution" class="flex-1 overflow-auto">
                     <!-- Journal Hybride Universel : cycle actuel OU cycle passé -->
-                    <table v-if="journalHybridePourReleve.entries.length > 0" class="w-full min-w-[400px] text-sm border-collapse">
+                    <!-- v24.60 Cycle Clos -->
+                    <div v-if="journalHybridePourReleve.cycleClos" class="flex items-center justify-center py-12">
+                        <div class="text-center">
+                            <p class="text-4xl mb-2">🏁</p>
+                            <p class="text-sm font-black text-gray-500 uppercase tracking-widest">Cycle Clos</p>
+                            <p class="text-xs text-gray-400 mt-1">Ce cycle est terminé — consultez le Pilotage pour le bilan</p>
+                        </div>
+                    </div>
+                    <table v-else-if="journalHybridePourReleve.entries.length > 0" class="w-full min-w-[400px] text-sm border-collapse">
                         <thead class="bg-gray-50 sticky top-0 z-10">
                             <tr>
                                 <th class="p-2 text-left font-black text-[10px] uppercase tracking-widest text-gray-400 w-10">J.</th>
@@ -5393,8 +5409,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "24.50 Pilotage-Sync";
+                    const CURRENT_VERSION = "24.60 Relevé-Fix";
                     const CHANGELOG = [
+        { version: "24.60 Relevé-Fix", date: "2026-05-30", changes: [
+            "journalHybride : getDepensesCycle remplace getDepensesMois — règle du 27 pour le cycle actuel (dépenses irrégulières)",
+            "journalHybridePourReleve : compte non-courant sélectionné → bilanJournal de ce compte (corrige régression filtre onglets)",
+            "journalHybridePourReleve : cycle passé sélectionné → cycleClos:true (aucune transaction affichée)",
+            "Template Relevé inline + modal : v-if cycleClos → carte 🏁 Cycle Clos"
+        ] },
         { version: "24.50 Pilotage-Sync", date: "2026-05-30", changes: [
             "getDepensesCycle(cycleM, cycleA) : filtre règle du 27 — items mois-1 jourPrevu>=jdp inclus, items mois jourPrevu>=jdp exclus",
             "ajouterDepense : jourPrevu = new Date().getDate() par défaut pour les nouveaux items",
@@ -8206,8 +8228,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             }
                         });
 
-                        // Dépenses irrégulières du mois
-                        getDepensesMois(mois, an).forEach(dep => {
+                        // Dépenses irrégulières — v24.60 règle du 27 (cycle-aware)
+                        getDepensesCycle(mois, an).forEach(dep => {
                             const due = Number(dep.montant || 0);
                             if (!due) return;
                             const paid = isItemPaid(dep, due);
@@ -8244,11 +8266,24 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return { entries, soldeAtterrissage: soldeProj };
                     });
 
-                    // v24.20 Journal Hybride Universel : items individuels pour tout cycle (actuel ou passé)
+                    // v24.60 Relevé-Fix : account filter + past cycle clos + rule of 27
                     const journalHybridePourReleve = computed(() => {
                         calculationTick.value;
+                        // Routing v24.60 : cycle passé → clos | per-account → bilanJournal | default → hybrid
+                        const _rFiltres = releveComptesFiltres.value;
+                        const _rJ = bilanJournal.value;
+                        const _rCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
+                        const _rCourantKey = _rCpt ? 'cpt_' + _rCpt.id : Object.keys(_rJ)[0];
+                        if (releveActiveCycle.value) {
+                            const [_rVM, _rVA] = releveActiveCycle.value.split('-').map(Number);
+                            if (_rVA < moisBudgetaire.value.an || (_rVA === moisBudgetaire.value.an && _rVM < moisBudgetaire.value.mois))
+                                return { entries: [], soldeAtterrissage: 0, cycleClos: true };
+                        }
+                        if (_rFiltres.length === 1 && _rFiltres[0] !== _rCourantKey) {
+                            const _rRaw = (_rJ[_rFiltres[0]] || []).filter(e => e.type === 'initial' || Number(e.montant || 0) !== 0);
+                            return { entries: _rRaw, soldeAtterrissage: _rRaw.length ? Number((_rRaw[_rRaw.length - 1]).soldeApres || 0) : 0 };
+                        }
                         if (!releveActiveCycle.value) return journalHybride.value;
-
                         const [mStr, aStr] = releveActiveCycle.value.split('-');
                         const mois = Number(mStr), an = Number(aStr);
                         const dAnnee = donneesAnnuelles.value[an];
