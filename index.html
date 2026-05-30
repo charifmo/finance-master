@@ -5409,8 +5409,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "24.60 Relevé-Fix";
+                    const CURRENT_VERSION = "24.61 Relevé-PerCompte";
                     const CHANGELOG = [
+        { version: "24.61 Relevé-PerCompte", date: "2026-05-30", changes: [
+            "journalHybride : sourceCompte attaché aux items dépenses irrégulières (dep.sourceCompte || courant)",
+            "journalHybridePourReleve : Compte Courant sélectionné → hybrid filtré courant seulement (exclut items sourceCompte != courant)",
+            "Séparateur AUJOURD'HUI ancre sur tresoActuelleCourante même en vue filtrée"
+        ] },
         { version: "24.60 Relevé-Fix", date: "2026-05-30", changes: [
             "journalHybride : getDepensesCycle remplace getDepensesMois — règle du 27 pour le cycle actuel (dépenses irrégulières)",
             "journalHybridePourReleve : compte non-courant sélectionné → bilanJournal de ce compte (corrige régression filtre onglets)",
@@ -8238,7 +8243,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 libelle: dep.nom || dep.label || 'Dépense',
                                 montant: amt, type: 'debit',
                                 jourPrevu: 20,
-                                etat: paid ? 'realise' : 'prevu'
+                                etat: paid ? 'realise' : 'prevu',
+                                sourceCompte: dep.sourceCompte || 'courant'
                             });
                         });
 
@@ -8282,6 +8288,20 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (_rFiltres.length === 1 && _rFiltres[0] !== _rCourantKey) {
                             const _rRaw = (_rJ[_rFiltres[0]] || []).filter(e => e.type === 'initial' || Number(e.montant || 0) !== 0);
                             return { entries: _rRaw, soldeAtterrissage: _rRaw.length ? Number((_rRaw[_rRaw.length - 1]).soldeApres || 0) : 0 };
+                        }
+                        // Compte Courant sélectionné → journal hybride filtré (items courant seulement)
+                        if (_rFiltres.length === 1 && _rFiltres[0] === _rCourantKey) {
+                            const _rBase = journalHybride.value;
+                            const _rFiltered = [];
+                            let _rSolde = 0;
+                            _rBase.entries.forEach(_re => {
+                                if (_re.type === 'initial') { _rSolde = _re.soldeApres; _rFiltered.push({..._re}); return; }
+                                if (_re.type === 'separator') { _rSolde = _re.soldeApres; _rFiltered.push({..._re}); return; }
+                                if ((_re.sourceCompte || 'courant') !== 'courant') return;
+                                _rSolde = Math.round((_rSolde + (_re.type === 'credit' ? _re.montant : -_re.montant)) * 100) / 100;
+                                _rFiltered.push({..._re, soldeApres: _rSolde});
+                            });
+                            return { entries: _rFiltered, soldeAtterrissage: _rSolde };
                         }
                         if (!releveActiveCycle.value) return journalHybride.value;
                         const [mStr, aStr] = releveActiveCycle.value.split('-');
