@@ -5505,8 +5505,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "26.30 Strict-Forward-Ledger";
+                    const CURRENT_VERSION = "26.40 Core-Ledger-Rebuild";
                     const CHANGELOG = [
+        { version: "26.40 Core-Ledger-Rebuild", date: "2026-05-31", changes: [
+            "CENSURE TOTALE DU PASSÉ : suppression de la section 'Déjà Réalisé' (realized-in) — le journal commence directement par ⏰ AUJOURD'HUI suivi uniquement des flux futurs (paye:false)",
+            "PIVOT T0 UNIQUE : les lignes ⏰ AUJOURD'HUI apparaissent UNIQUEMENT en tête du premier cycle. Les cycles suivants reçoivent seulement un séparateur 📅 --- CYCLE DE JUILLET --- sans réinitialiser les soldes (simulation continue)",
+            "_viewLegs CORRIGÉ : gestion stricte de single / multi-select / Global. Plus de bug 'dernier compte sélectionné' — chaque filtre affiche le bon T0 isolé",
+            "CRÉANCES FUTURES incluses : les dépenses irrégulières à montant négatif (remboursements, créances) apparaissent maintenant comme entrées 💚 dans le journal (paye:false uniquement)",
+            "ATTERRISSAGE MULTI-SELECT : en sélection multiple, l'atterrissage = somme des soldes finaux des comptes sélectionnés (jamais la somme globale de tous les comptes)",
+            "Note de version : demande intitulée V26.40 — numérotée 26.40 Core-Ledger-Rebuild (continuité après 26.30)"
+        ] },
         { version: "26.30 Strict-Forward-Ledger", date: "2026-05-31", changes: [
             "RÉÉCRITURE TOTALE du moteur autour d'un dictionnaire de soldes ISOLÉS : const soldes = { 'cpt_x': T0, 'ep_y': T0 }. La colonne Solde = UNIQUEMENT soldes[compteCible] après chaque flux — aucune somme globale, jamais",
             "PIVOTS MULTI-LIGNES : en vue Global, ⏰ AUJOURD'HUI et 🔮 génèrent UNE ligne PAR COMPTE ACTIF (solde T0 isolé par compte) — fini le cumul 106 800 DH sur une seule ligne",
@@ -8599,14 +8607,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             }, {});
                             Object.keys(_varByAcc).forEach(k => { if (_varByAcc[k] > 0) out.push({ account: k, libelle: '🛒 Total Charges Variables', montant: _varByAcc[k], type: 'debit', jourPrevu: 15, internal: false }); });
 
-                            // ===== CHOCS EXCEPTIONNELS : DÉTAILLÉS ligne par ligne (JAMAIS regroupés — on garde la trace) =====
+                            // ===== CHOCS EXCEPTIONNELS + CRÉANCES FUTURES : DÉTAILLÉS ligne par ligne =====
                             getDepensesCycle(m, a).forEach(dep => {
-                                const due = Number(dep.montant || 0); if (!due) return;
+                                const rawDue = Number(dep.montant || 0); if (rawDue === 0) return;
+                                const isCreance = rawDue < 0; // montant négatif = créance / remboursement à recevoir
+                                const due = Math.abs(rawDue);
                                 let amt;
                                 if (mode === 'full') amt = due;
                                 else { if (isItemPaid(dep, due)) amt = 0; else { const r = due - (getPaidAmount(dep, due) || 0); amt = r > 0 ? r : 0; } }
                                 amt = Math.round(amt * 100) / 100;
-                                if (amt > 0) out.push({ account: _normKey(dep.sourceCompte), libelle: '⚠️ ' + (dep.nom || dep.label || 'Dépense'), montant: amt, type: 'debit', jourPrevu: Number(dep.jourPrevu || 20), internal: false });
+                                if (amt > 0) out.push({ account: _normKey(dep.sourceCompte), libelle: (isCreance ? '💚 ' : '⚠️ ') + (dep.nom || dep.label || (isCreance ? 'Créance' : 'Dépense')), montant: amt, type: isCreance ? 'credit' : 'debit', jourPrevu: Number(dep.jourPrevu || 20), internal: false });
                             });
 
                             // ===== ÉPARGNE : DÉTAILLÉE + DOUBLE ÉCRITURE ; paye:true CENSURÉ à 100% (déjà dans les T0) =====
@@ -8627,12 +8637,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             return out;
                         };
 
-                        // ── Filtre des legs selon le compte affiché (single ou Global) ──
+                        // ── Filtre des legs selon le compte affiché (single, multi-select, ou Global) ──
                         const _viewLegs = (lgs) => {
-                            if (_rFiltres.length === 1) return lgs.filter(l => l.account === _rFiltres[0]);
-                            // v26.10 Multi-Ledger-Correction : vue Global → on AFFICHE les transferts internes (double écriture
-                            // débit compte source / crédit compte destination). Chaque ligne garde son solde isolé par compte.
-                            return lgs;
+                            if (_rFiltres.length === 0) return lgs; // Global : tous les legs (transferts internes inclus)
+                            return lgs.filter(l => _rFiltres.includes(l.account)); // single ou multi-select : comptes sélectionnés
                         };
                         const _netLegs = (lgs) => _viewLegs(lgs).reduce((s, l) => s + (l.type === 'credit' ? l.montant : -l.montant), 0);
 
@@ -8673,12 +8681,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                               if (_cm === 12) { _cm = 1; _ca++; } else { _cm++; }
                           } }
 
-                        // comptes réellement impactés par un flux de la sélection (pour purger les pivots à 0 DH inactifs)
+                        // comptes réellement impactés par un flux de la sélection (pour purger les pivots T0 à 0 DH inactifs)
                         const _impacted = new Set();
                         _activeCycles.forEach(cyc => {
                             const _isCur = (cyc.m === curM && cyc.a === curA);
                             _viewLegs(_mkLegs(cyc.m, cyc.a, _isCur ? 'remaining' : 'full')).forEach(l => _impacted.add(l.account));
-                            if (_isCur) _viewLegs(_mkLegs(cyc.m, cyc.a, 'realized-in')).forEach(l => _impacted.add(l.account));
                         });
 
                         const entries = [];
@@ -8687,38 +8694,33 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const cyc = _activeCycles[_ci];
                             const isCurrent = (cyc.m === curM && cyc.a === curA);
 
-                            // Séparateur inter-cycle (sauf le premier) — pas de solde global dans la colonne
+                            // Séparateur inter-cycle (sauf le premier) — solde du compte filtré ou null en Global
                             if (_ci > 0) {
-                                entries.push({ type: 'cycle_sep', libelle: '📅 ' + _mNL[cyc.m] + ' ' + cyc.a, soldeApres: (_rFiltres.length === 1 ? (Number(soldes[_rFiltres[0]]) || 0) : null), jourPrevu: null });
+                                const _sepSolde = _rFiltres.length > 0 ? (Number(soldes[_rFiltres[_rFiltres.length - 1]]) || 0) : null;
+                                entries.push({ type: 'cycle_sep', libelle: '📅 ' + _mNL[cyc.m] + ' ' + cyc.a, soldeApres: _sepSolde, jourPrevu: null });
                             }
 
-                            // ── CHANTIER 2 : ENTRÉES DÉJÀ REÇUES (paye:true) — détaillées, AVANT les pivots. Ne touchent PAS le dict (déjà dans T0) ──
-                            if (isCurrent) {
-                                const inLegs = _viewLegs(_mkLegs(cyc.m, cyc.a, 'realized-in'));
-                                inLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu));
-                                if (inLegs.length > 0) {
-                                    entries.push({ type: 'sep_realise', libelle: '✅ Déjà Réalisé (entrées reçues)', soldeApres: null, jourPrevu: null });
-                                    inLegs.forEach(l => {
-                                        entries.push({ libelle: l.libelle, montant: l.montant, type: l.type, jourPrevu: l.jourPrevu, etat: 'realise', soldeApres: null, compteKey: l.account, soldeCompteApres: null });
+                            // ── PIVOT T0 : UNIQUE, en tête du PREMIER cycle seulement ──
+                            // Les cycles suivants reçoivent uniquement un séparateur 📅 (soldes non réinitialisés, simulation continue)
+                            if (_ci === 0) {
+                                const _pivotLabel = isCurrent ? "⏰ AUJOURD'HUI" : ("🔮 " + _mNL[cyc.m] + ' ' + cyc.a);
+                                if (_rFiltres.length === 0) {
+                                    // Global : une ligne T0 par compte actif (solde isolé — jamais de somme)
+                                    _accountKeys().forEach(k => {
+                                        const sv = Number(soldes[k]) || 0;
+                                        if (sv === 0 && !_impacted.has(k)) return;
+                                        entries.push({ type: 'initial', libelle: _pivotLabel, montant: sv, soldeApres: sv, jourPrevu: null, etat: isCurrent ? 't0' : 'projete', compteKey: k, soldeCompteApres: sv });
+                                    });
+                                } else {
+                                    // Single ou multi-select : une ligne T0 par compte sélectionné (corrige bug "dernier compte actif")
+                                    _rFiltres.forEach(k => {
+                                        const sv = Number(soldes[k]) || 0;
+                                        entries.push({ type: 'initial', libelle: _pivotLabel, montant: sv, soldeApres: sv, jourPrevu: null, etat: isCurrent ? 't0' : 'projete', compteKey: k, soldeCompteApres: sv });
                                     });
                                 }
                             }
 
-                            // ── CHANTIER 1 : PIVOT ⏰ AUJOURD'HUI / 🔮 — UNE ligne PAR COMPTE en Global (jamais de somme), solde isolé du dict ──
-                            const _pivotLabel = isCurrent ? "⏰ AUJOURD'HUI" : ("🔮 " + _mNL[cyc.m] + ' ' + cyc.a);
-                            if (_rFiltres.length === 0) {
-                                _accountKeys().forEach(k => {
-                                    const sv = Number(soldes[k]) || 0;
-                                    if (sv === 0 && !_impacted.has(k)) return; // purge des pivots à 0 DH non impactés
-                                    entries.push({ type: 'initial', libelle: _pivotLabel, montant: sv, soldeApres: sv, jourPrevu: null, etat: isCurrent ? 't0' : 'projete', compteKey: k, soldeCompteApres: sv });
-                                });
-                            } else {
-                                const k = _rFiltres[0];
-                                const sv = Number(soldes[k]) || 0;
-                                entries.push({ type: 'initial', libelle: _pivotLabel, montant: sv, soldeApres: sv, jourPrevu: null, etat: isCurrent ? 't0' : 'projete', compteKey: k, soldeCompteApres: sv });
-                            }
-
-                            // ── CHANTIER 3+4 : flux à venir (paye:false). Chaque ligne : soldes[cible] += flux → colonne Solde = soldes[cible] ──
+                            // ── Flux futurs (paye:false) ── soldes[compte] += flux → Solde = soldes[compte] ──
                             const dispLegs = _viewLegs(_mkLegs(cyc.m, cyc.a, isCurrent ? 'remaining' : 'full'));
                             dispLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu));
                             dispLegs.forEach(l => {
@@ -8738,8 +8740,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             }
                         }
 
-                        // Atterrissage : solde isolé du compte (single) ou patrimoine total projeté (Global) — résumé de pied de tableau uniquement
-                        return { entries, soldeAtterrissage: (_rFiltres.length === 1 ? (Number(soldes[_rFiltres[0]]) || 0) : _sumSoldes()) };
+                        // Atterrissage : somme des comptes sélectionnés (single/multi) ou patrimoine total (Global)
+                        const _soldeAtterr = _rFiltres.length === 0 ? _sumSoldes() : _rFiltres.reduce((s, k) => s + (Number(soldes[k]) || 0), 0);
+                        return { entries, soldeAtterrissage: _soldeAtterr };
                     });
 
                     // v25.30 : cycles disponibles dans le Relevé = courant + futurs (jamais le passé)
