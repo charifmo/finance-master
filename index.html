@@ -1875,15 +1875,8 @@
                                 </div>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-sm py-6 italic">Aucun objectif d'épargne configuré.</div>
-                            <!-- v17.96 : Compte lié obligatoire avant création -->
-                            <div class="mt-3 flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl px-3 py-2">
-                                <span class="text-[10px] font-black text-purple-700 uppercase tracking-widest shrink-0">Compte lié :</span>
-                                <select v-model="newEpargneLinkedId" class="flex-1 text-xs font-bold bg-white border border-purple-200 rounded-lg px-2 py-1.5 outline-none text-purple-700 cursor-pointer focus:border-purple-400">
-                                    <option :value="null" disabled>— Sélectionner un compte —</option>
-                                    <option v-for="c in comptesSelectOptions" :key="'nlink_'+c.id" :value="c.id">{{ c.icone || '💰' }} {{ c.label }}</option>
-                                </select>
-                            </div>
-                            <button @click="addObjectifEpargne(anneeAffichage)" :disabled="!newEpargneLinkedId" :class="['mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm uppercase tracking-widest shadow-sm transition-colors', newEpargneLinkedId ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed']">
+                            <!-- v26.72 : bouton direct — sélecteur "Compte lié" pré-requis supprimé (résidu v17.96 inutile) -->
+                            <button @click="addObjectifEpargne(anneeAffichage)" class="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm uppercase tracking-widest shadow-sm transition-colors bg-purple-600 hover:bg-purple-700 text-white cursor-pointer">
                                 <span class="text-lg leading-none">＋</span> Ajouter un objectif
                             </button>
                         </div>
@@ -6978,12 +6971,11 @@
                     // v17.15 — CRUD Objectifs Épargne
                     const addObjectifEpargne = (annee) => {
                         if (!donneesAnnuelles.value[annee]) return;
-                        if (!newEpargneLinkedId.value) return; // v17.96 : compte lié obligatoire
+                        // v26.72 : plus de pré-requis compte lié — l'utilisateur configure "Vers :" dans la ligne inline
                         if (!Array.isArray(donneesAnnuelles.value[annee].epargne)) donneesAnnuelles.value[annee].epargne = [];
                         const newId = Date.now();
-                        donneesAnnuelles.value[annee].epargne.push({ id: newId, nom: 'Nouvel objectif', valeur: 0, linkedAccountId: newEpargneLinkedId.value, sourceCompte: 'courant' });
+                        donneesAnnuelles.value[annee].epargne.push({ id: newId, nom: 'Nouvel objectif', valeur: 0, linkedAccountId: null, sourceCompte: 'courant' });
                         soldesInitiaux.value['ep_' + newId] = 0;
-                        newEpargneLinkedId.value = null;
                         handleDataChange();
                     };
                     const deleteObjectifEpargne = (annee, idx) => {
@@ -9807,7 +9799,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Solution : paye: false → moteur inclut le flux comme revenu planifié
                     // L'utilisateur coche manuellement dans Flux Exceptionnels quand reçu
                     const _syncAssuranceCashflow = (item) => {
-                        // v26.71 FAB-Journal-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
+                        // v26.72 Objectif-Epargne-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
                         // Les créances Déclarées s'injectent directement dans journalHybridePourReleve via assurances_tracker
                         // Cette fonction nettoie uniquement les anciennes entrées potentiellement existantes
                         Object.values(donneesAnnuelles.value).forEach(d => {
