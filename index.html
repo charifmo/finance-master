@@ -92,12 +92,12 @@
         </button>
 
         <!-- v26.80 FAB CFO Widget — au-dessus du Journal, accès direct sans changer d'onglet -->
-        <button @click="showCfoWidget = !showCfoWidget"
+        <button @click="showCfoModal = true"
             title="Ouvrir le CFO & Audit"
             :class="['fixed z-[9995] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl',
                      'bottom-60 right-4 w-12 h-12 text-xl',
                      'md:bottom-[10.5rem] md:left-6 md:right-auto md:w-16 md:h-16 md:text-3xl',
-                     showCfoWidget
+                     showCfoModal
                        ? 'bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white border-fuchsia-300 shadow-fuchsia-900/50'
                        : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-fuchsia-500/40 shadow-slate-900/50']">
             🧠
@@ -1559,178 +1559,35 @@
                     </div>
                 </div>
 
-                <!-- v26.80 CFO-Floating-Widget — modale redimensionnable (Teleport → body, v-show persistant) -->
+                <!-- v26.95 CFO-Modal-Layout-Fix — single-column chat, flex fluide, v-show persistant -->
                 <Teleport to="body">
-                <div id="cfo-widget-modal" v-show="showCfoWidget"
-                     class="fixed z-[9990] bg-white rounded-2xl shadow-2xl border border-fuchsia-200/60 flex flex-col overflow-hidden"
-                     style="resize:both;overflow:auto;min-width:350px;min-height:400px;max-width:90vw;max-height:90vh;width:min(740px,90vw);height:min(640px,85vh);bottom:5.5rem;left:5rem;">
+                <div id="cfo-widget-modal" v-show="showCfoModal"
+                     class="fixed z-[9990] bg-white rounded-2xl shadow-2xl border border-fuchsia-200/60 flex flex-col"
+                     style="resize:both;overflow:hidden;min-width:320px;min-height:380px;max-width:95vw;max-height:92vh;width:min(620px,90vw);height:min(600px,85vh);bottom:5.5rem;left:5rem;">
                     <!-- ── Barre de titre (drag-to-move) ── -->
                     <div class="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white shrink-0 cursor-move select-none"
                          @mousedown="startDragCfoWidget">
-                        <div class="flex items-center gap-2 pointer-events-none">
-                            <span class="font-black text-sm">🧠 CFO &amp; Audit</span>
-                            <span class="text-[8px] bg-white/10 px-1.5 py-0.5 rounded-full font-mono text-white/60">{{ cfoSessionId.slice(0,13) }}…</span>
+                        <div class="flex items-center gap-2">
+                            <span class="font-black text-sm pointer-events-none">🧠 CFO &amp; Audit</span>
+                            <span class="text-[8px] bg-white/10 px-1.5 py-0.5 rounded-full font-mono text-white/60 pointer-events-none">{{ cfoSessionId.slice(0,13) }}…</span>
                         </div>
                         <div class="flex items-center gap-2">
+                            <button @click.stop="transfererAuditAuCFO" class="text-[9px] text-fuchsia-100 hover:text-white font-bold uppercase tracking-widest hover:bg-white/10 px-2 py-0.5 rounded transition-colors">⚡ Briefer</button>
                             <button @click.stop="resetCFOSession" class="text-[9px] text-fuchsia-100 hover:text-white font-bold uppercase tracking-widest hover:bg-white/10 px-2 py-0.5 rounded transition-colors">🔄 Reset</button>
-                            <button @click.stop="showCfoWidget = false" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/20 text-white font-black text-base transition-colors" title="Fermer">✕</button>
+                            <button @click.stop="showCfoModal = false" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/20 text-white font-black text-base transition-colors" title="Fermer">✕</button>
                         </div>
                     </div>
-                    <!-- ── Contenu scrollable ── -->
-                    <div class="flex-1 overflow-auto min-h-0 p-4">
-                    <div class="grid lg:grid-cols-12 gap-5">
+                    <!-- ── Contenu flex-col v26.95 : single-column, chat flex-1 ── -->
+                    <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
 
-                    <!-- ── GAUCHE : Audit 7-KPI ── -->
-                    <div v-show="!chatFullScreen" class="lg:col-span-5 space-y-3 order-2 lg:order-1">
-                        <!-- Header -->
-                        <div class="flex items-center justify-between pb-2 border-b border-gray-200">
-                            <div>
-                                <h2 class="text-base font-black text-gray-800">🧠 Audit Financier · {{ anneeAffichage }}</h2>
-                                <p class="text-[10px] text-gray-400 font-medium">Score /14 — 7 KPIs Directeur Financier</p>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button @click="transfererAuditAuCFO" class="bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white font-black px-3 py-1.5 rounded-lg shadow text-[10px] uppercase tracking-widest">⚡ Briefer</button>
-                                <div :class="['px-2.5 py-1.5 rounded-lg font-black text-center border-2', auditFinancier.scoreGlobal === 'vert' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : (auditFinancier.scoreGlobal === 'orange' ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-red-50 border-red-300 text-red-700')]">
-                                    <p class="text-[8px] uppercase tracking-widest font-bold opacity-80 leading-none">Score</p>
-                                    <p class="text-sm font-black leading-tight">{{ auditFinancier.scoreTotal }}/14</p>
-                                    <p class="text-[10px] font-black">{{ auditFinancier.scoreGlobal === 'vert' ? '🟢' : (auditFinancier.scoreGlobal === 'orange' ? '🟠' : '🔴') }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ⚡ COURT TERME -->
-                        <div class="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
-                            <div class="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
-                                <span class="text-sm">⚡</span>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-amber-700">Court Terme — Opérationnel</p>
-                            </div>
-                            <div class="divide-y divide-gray-100">
-                                <div class="p-3 flex items-start gap-3">
-                                    <span class="text-base shrink-0 mt-0.5">{{ auditFinancier.liquidite.score === 'vert' ? '🟢' : (auditFinancier.liquidite.score === 'orange' ? '🟠' : '🔴') }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline justify-between gap-1">
-                                            <p class="text-xs font-black text-gray-800">Liquidité Projetée</p>
-                                            <p class="text-xs font-black text-gray-700 shrink-0">{{ auditFinancier.liquidite.valeur }}</p>
-                                        </div>
-                                        <p :class="['text-[10px] font-bold leading-none mb-0.5', auditFinancier.liquidite.score === 'vert' ? 'text-emerald-600' : (auditFinancier.liquidite.score === 'orange' ? 'text-orange-600' : 'text-red-600')]">{{ auditFinancier.liquidite.label }}</p>
-                                        <p class="text-[10px] text-gray-500 leading-snug">{{ auditFinancier.liquidite.detail }}</p>
-                                    </div>
-                                </div>
-                                <div class="p-3 flex items-start gap-3">
-                                    <span class="text-base shrink-0 mt-0.5">{{ auditFinancier.budgetJour.score === 'vert' ? '🟢' : (auditFinancier.budgetJour.score === 'orange' ? '🟠' : '🔴') }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline justify-between gap-1">
-                                            <p class="text-xs font-black text-gray-800">Budget Journalier</p>
-                                            <p class="text-xs font-black text-gray-700 shrink-0">{{ auditFinancier.budgetJour.valeur }}</p>
-                                        </div>
-                                        <p :class="['text-[10px] font-bold leading-none mb-0.5', auditFinancier.budgetJour.score === 'vert' ? 'text-emerald-600' : (auditFinancier.budgetJour.score === 'orange' ? 'text-orange-600' : 'text-red-600')]">{{ auditFinancier.budgetJour.label }}</p>
-                                        <p class="text-[10px] text-gray-500 leading-snug">{{ auditFinancier.budgetJour.detail }}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 🛡️ MOYEN TERME -->
-                        <div class="bg-white rounded-2xl border border-blue-200 shadow-sm overflow-hidden">
-                            <div class="px-3 py-2 bg-blue-50 border-b border-blue-200 flex items-center gap-2">
-                                <span class="text-sm">🛡️</span>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-blue-700">Moyen Terme — Résilience</p>
-                            </div>
-                            <div class="divide-y divide-gray-100">
-                                <div class="p-3 flex items-start gap-3">
-                                    <span class="text-base shrink-0 mt-0.5">{{ auditFinancier.fondsSurvie.score === 'vert' ? '🟢' : (auditFinancier.fondsSurvie.score === 'orange' ? '🟠' : '🔴') }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline justify-between gap-1">
-                                            <p class="text-xs font-black text-gray-800">Fonds de Survie</p>
-                                            <p class="text-xs font-black text-gray-700 shrink-0">{{ auditFinancier.fondsSurvie.valeur }}</p>
-                                        </div>
-                                        <p :class="['text-[10px] font-bold leading-none mb-0.5', auditFinancier.fondsSurvie.score === 'vert' ? 'text-emerald-600' : (auditFinancier.fondsSurvie.score === 'orange' ? 'text-orange-600' : 'text-red-600')]">{{ auditFinancier.fondsSurvie.label }}</p>
-                                        <p class="text-[10px] text-gray-500 leading-snug">{{ auditFinancier.fondsSurvie.detail }}</p>
-                                    </div>
-                                </div>
-                                <div class="p-3 flex items-start gap-3">
-                                    <span class="text-base shrink-0 mt-0.5">{{ auditFinancier.rigidite.score === 'vert' ? '🟢' : (auditFinancier.rigidite.score === 'orange' ? '🟠' : '🔴') }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline justify-between gap-1">
-                                            <p class="text-xs font-black text-gray-800">Rigidité des Charges</p>
-                                            <p class="text-xs font-black text-gray-700 shrink-0">{{ auditFinancier.rigidite.valeur }}</p>
-                                        </div>
-                                        <p :class="['text-[10px] font-bold leading-none mb-0.5', auditFinancier.rigidite.score === 'vert' ? 'text-emerald-600' : (auditFinancier.rigidite.score === 'orange' ? 'text-orange-600' : 'text-red-600')]">{{ auditFinancier.rigidite.label }}</p>
-                                        <p class="text-[10px] text-gray-500 leading-snug">{{ auditFinancier.rigidite.detail }}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 📈 LONG TERME -->
-                        <div class="bg-white rounded-2xl border border-purple-200 shadow-sm overflow-hidden">
-                            <div class="px-3 py-2 bg-purple-50 border-b border-purple-200 flex items-center gap-2">
-                                <span class="text-sm">📈</span>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-purple-700">Long Terme — Stratégique</p>
-                            </div>
-                            <div class="divide-y divide-gray-100">
-                                <div class="p-3 flex items-start gap-3">
-                                    <span class="text-base shrink-0 mt-0.5">{{ auditFinancier.endettement.score === 'vert' ? '🟢' : (auditFinancier.endettement.score === 'orange' ? '🟠' : '🔴') }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline justify-between gap-1">
-                                            <p class="text-xs font-black text-gray-800">Taux d'Endettement</p>
-                                            <p class="text-xs font-black text-gray-700 shrink-0">{{ auditFinancier.endettement.valeur }}</p>
-                                        </div>
-                                        <p :class="['text-[10px] font-bold leading-none mb-0.5', auditFinancier.endettement.score === 'vert' ? 'text-emerald-600' : (auditFinancier.endettement.score === 'orange' ? 'text-orange-600' : 'text-red-600')]">{{ auditFinancier.endettement.label }}</p>
-                                        <p class="text-[10px] text-gray-500 leading-snug">{{ auditFinancier.endettement.detail }}</p>
-                                    </div>
-                                </div>
-                                <div class="p-3 flex items-start gap-3">
-                                    <span class="text-base shrink-0 mt-0.5">{{ auditFinancier.tauxEpargne.score === 'vert' ? '🟢' : (auditFinancier.tauxEpargne.score === 'orange' ? '🟠' : '🔴') }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline justify-between gap-1">
-                                            <p class="text-xs font-black text-gray-800">Taux d'Épargne</p>
-                                            <p class="text-xs font-black text-gray-700 shrink-0">{{ auditFinancier.tauxEpargne.valeur }}</p>
-                                        </div>
-                                        <p :class="['text-[10px] font-bold leading-none mb-0.5', auditFinancier.tauxEpargne.score === 'vert' ? 'text-emerald-600' : (auditFinancier.tauxEpargne.score === 'orange' ? 'text-orange-600' : 'text-red-600')]">{{ auditFinancier.tauxEpargne.label }}</p>
-                                        <p class="text-[10px] text-gray-500 leading-snug">{{ auditFinancier.tauxEpargne.detail }}</p>
-                                    </div>
-                                </div>
-                                <div class="p-3 flex items-start gap-3">
-                                    <span class="text-base shrink-0 mt-0.5">{{ auditFinancier.cashDrag.score === 'vert' ? '🟢' : (auditFinancier.cashDrag.score === 'orange' ? '🟠' : '🔴') }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline justify-between gap-1">
-                                            <p class="text-xs font-black text-gray-800">Argent Dormant (Cash Drag)</p>
-                                            <p class="text-xs font-black text-gray-700 shrink-0">{{ auditFinancier.cashDrag.valeur }}</p>
-                                        </div>
-                                        <p :class="['text-[10px] font-bold leading-none mb-0.5', auditFinancier.cashDrag.score === 'vert' ? 'text-emerald-600' : (auditFinancier.cashDrag.score === 'orange' ? 'text-orange-600' : 'text-red-600')]">{{ auditFinancier.cashDrag.label }}</p>
-                                        <p class="text-[10px] text-gray-500 leading-snug">{{ auditFinancier.cashDrag.detail }}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ── DROITE : Chat CFO ── -->
-                    <div :class="[chatFullScreen ? 'lg:col-span-12' : 'lg:col-span-7', 'space-y-4 order-1 lg:order-2']">
-                        <div class="flex items-start gap-3 justify-between flex-wrap border-b pb-4">
-                            <div class="min-w-0">
-                                <h2 class="text-xl lg:text-2xl font-bold text-gray-800">💬 Super-Agent CFO</h2>
-                                <p class="text-xs lg:text-sm text-gray-500 mt-1 font-medium">Dialogue direct avec votre directeur financier IA. Toute modification exige votre validation par <b>OUI</b>.</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-[9px] uppercase tracking-widest font-bold text-gray-400">Session</p>
-                                <p class="text-[10px] font-mono text-gray-600">{{ cfoSessionId.slice(0, 13) }}…</p>
-                                <div class="flex items-center gap-3 justify-end mt-1">
-                                    <button @click="resetCFOSession" class="text-[9px] text-fuchsia-600 hover:underline font-bold uppercase tracking-widest">🔄 Nouvelle session</button>
-                                    <button @click="chatFullScreen = !chatFullScreen" class="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border transition-colors" :class="chatFullScreen ? 'border-slate-400 text-slate-600 hover:bg-slate-100' : 'border-fuchsia-300 text-fuchsia-600 hover:bg-fuchsia-50'">{{ chatFullScreen ? '🗗 Réduire' : '⛶ Plein écran' }}</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-if="!cfoWebhookUrl" class="bg-orange-50 border-2 border-orange-300 p-5 rounded-2xl">
+                        <div v-if="!cfoWebhookUrl" class="m-4 bg-orange-50 border-2 border-orange-300 p-5 rounded-2xl shrink-0">
                             <p class="text-xs font-black uppercase tracking-widest text-orange-800 mb-2">⚠️ Configuration requise</p>
                             <p class="text-xs text-orange-700 mb-3 leading-relaxed">Collez ici l'URL du Webhook n8n (path <code class="bg-white px-1 rounded font-mono">finance-cfo-web</code>) :</p>
                             <input v-model="cfoWebhookInput" @keyup.enter="saveCFOWebhook" type="url" placeholder="https://n8n.votre-vps.com/webhook/finance-cfo-web" class="w-full p-3 border-2 border-orange-300 rounded-lg font-mono text-xs bg-white outline-none focus:border-orange-500 mb-3" />
                             <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest hover:bg-orange-700">Enregistrer l'URL</button>
                         </div>
 
-                        <div v-if="cfoWebhookUrl" :class="['bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-700 min-h-[300px] overflow-y-auto', chatFullScreen ? 'max-h-[calc(100vh-200px)]' : 'max-h-[380px]']" ref="cfoChatContainer">
+                        <div v-if="cfoWebhookUrl" class="flex-1 min-h-0 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 mx-3 mt-3 rounded-2xl shadow-2xl border border-slate-700 p-4" ref="cfoChatContainer">
                             <div v-if="cfoMessages.length === 0" class="text-center py-16">
                                 <p class="text-5xl mb-4">🤖</p>
                                 <p class="text-slate-300 font-bold text-sm uppercase tracking-widest mb-2">CFO prêt</p>
@@ -1757,37 +1614,36 @@
                             </div>
                         </div>
 
-                        <div v-if="cfoWebhookUrl" class="bg-white p-4 rounded-2xl shadow-lg border border-gray-200 flex gap-3">
-                            <input v-model="cfoInput" @keyup.enter="envoyerCFO" :disabled="cfoLoading" type="text" placeholder="Posez votre question au CFO…" class="flex-1 p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-fuchsia-500 text-sm disabled:bg-gray-100" />
-                            <button @click="envoyerCFO" :disabled="cfoLoading || !cfoInput.trim()" class="px-6 py-4 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white font-black rounded-xl uppercase text-[10px] tracking-widest shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:scale-100">Envoyer</button>
+                        <div v-if="cfoWebhookUrl" class="shrink-0 flex gap-2 p-3">
+                            <input v-model="cfoInput" @keyup.enter="envoyerCFO" :disabled="cfoLoading" type="text" placeholder="Posez votre question au CFO…" class="flex-1 p-3 border-2 border-gray-200 rounded-xl outline-none focus:border-fuchsia-500 text-sm disabled:bg-gray-100 bg-white shadow" />
+                            <button @click="envoyerCFO" :disabled="cfoLoading || !cfoInput.trim()" class="px-5 py-3 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white font-black rounded-xl uppercase text-[10px] tracking-widest shadow hover:scale-105 transition-all disabled:opacity-50 disabled:scale-100 shrink-0">Envoyer</button>
                         </div>
 
-                        <div v-if="cfoWebhookUrl && cfoMessages.length === 0" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <button @click="cfoInput = 'Fais un diagnostic complet de ma situation financière'; envoyerCFO()" class="p-4 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors">
-                                <p class="text-xs font-black uppercase tracking-widest text-fuchsia-700 mb-1">📊 Diagnostic</p>
-                                <p class="text-[10px] text-gray-600">Bilan global de ma santé financière</p>
+                        <div v-if="cfoWebhookUrl && cfoMessages.length === 0" class="shrink-0 grid grid-cols-3 gap-2 px-3 pb-2">
+                            <button @click="cfoInput = 'Fais un diagnostic complet de ma situation financière'; envoyerCFO()" class="p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors shadow-sm">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700 mb-1">📊 Diagnostic</p>
+                                <p class="text-[9px] text-gray-600">Bilan global</p>
                             </button>
-                            <button @click="cfoInput = 'Comment puis-je augmenter mon épargne de 2000 DH/mois ?'; envoyerCFO()" class="p-4 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors">
-                                <p class="text-xs font-black uppercase tracking-widest text-fuchsia-700 mb-1">💰 Épargne</p>
-                                <p class="text-[10px] text-gray-600">Plan pour épargner +2000 DH/mois</p>
+                            <button @click="cfoInput = 'Comment puis-je augmenter mon épargne de 2000 DH/mois ?'; envoyerCFO()" class="p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors shadow-sm">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700 mb-1">💰 Épargne</p>
+                                <p class="text-[9px] text-gray-600">+2000 DH/mois</p>
                             </button>
-                            <button @click="cfoInput = 'Analyse mes charges fixes et propose 3 pistes d\'optimisation'; envoyerCFO()" class="p-4 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors">
-                                <p class="text-xs font-black uppercase tracking-widest text-fuchsia-700 mb-1">🔒 Optimiser</p>
-                                <p class="text-[10px] text-gray-600">Réduire mes charges fixes</p>
+                            <button @click="cfoInput = 'Analyse mes charges fixes et propose 3 pistes d\'optimisation'; envoyerCFO()" class="p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors shadow-sm">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700 mb-1">🔒 Optimiser</p>
+                                <p class="text-[9px] text-gray-600">Réduire les charges</p>
                             </button>
                         </div>
 
-                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-gray-600 font-medium leading-relaxed">
-                            <p class="font-black uppercase text-slate-700 mb-2 tracking-widest text-[10px]">🔐 Sécurité</p>
-                            <ul class="space-y-1 list-disc pl-5">
+                        <div class="shrink-0 bg-slate-50 mx-3 mb-3 p-3 rounded-xl border border-slate-200 text-[10px] text-gray-600 font-medium leading-relaxed">
+                            <p class="font-black uppercase text-slate-700 mb-1 tracking-widest text-[9px]">🔐 Sécurité</p>
+                            <ul class="space-y-0.5 list-disc pl-4">
                                 <li>Le CFO ne modifie jamais vos données sans votre accord explicite par <b>OUI</b>.</li>
                                 <li>Chaque simulation est affichée <b>Avant / Après</b> pour validation.</li>
                                 <li>La mémoire conversationnelle est conservée côté VPS (PostgreSQL).</li>
                             </ul>
                         </div>
-                    </div>
-                </div><!-- /grid lg:grid-cols-12 -->
-                    </div><!-- /scrollable-content -->
+
+                    </div><!-- /flex-col-content -->
                 </div><!-- /cfo-widget-modal -->
                 </Teleport>
 
@@ -6124,7 +5980,7 @@
                     const cfoInput = ref('');
                     const cfoLoading = ref(false);
                     const chatFullScreen = ref(false);
-                    const showCfoWidget = ref(false); // v26.80 : widget modal flottant CFO
+                    const showCfoModal = ref(false); // v26.95 : widget modal flottant CFO
                     // v26.80 : drag-to-move du widget CFO par sa barre de titre
                     const startDragCfoWidget = (e) => {
                         const modal = document.getElementById('cfo-widget-modal');
@@ -9882,7 +9738,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Solution : paye: false → moteur inclut le flux comme revenu planifié
                     // L'utilisateur coche manuellement dans Flux Exceptionnels quand reçu
                     const _syncAssuranceCashflow = (item) => {
-                        // v26.80 CFO-Floating-Widget : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
+                        // v26.95 Modal-Layout-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
                         // Les créances Déclarées s'injectent directement dans journalHybridePourReleve via assurances_tracker
                         // Cette fonction nettoie uniquement les anciennes entrées potentiellement existantes
                         Object.values(donneesAnnuelles.value).forEach(d => {
@@ -10813,7 +10669,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
 Score global : ${a.scoreTotal}/14 (${a.scoreGlobal === 'vert' ? 'SAIN' : (a.scoreGlobal === 'orange' ? 'VIGILANCE' : 'CRITIQUE')})`;
                         cfoInput.value = prompt;
-                        showCfoWidget.value = true; // v26.80 : ouvre le widget flottant
+                        showCfoModal.value = true; // v26.95 : ouvre le widget flottant
                         if (isMobile.value) { setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 100); }
                         setTimeout(() => { envoyerCFO(); }, 500);
                     };
@@ -11047,7 +10903,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         assurancesTracker, assurancesStats, newAssurance, showAssuranceForm, editingAssuranceId, editAssurance, annulerEditionAssurance, ajouterAssurance, toggleAssuranceRembourse, supprimerAssurance, onAssuranceMontantInput, onAssuranceDateDepotChange,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
-                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, showCfoWidget, startDragCfoWidget, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
+                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, showCfoModal, startDragCfoWidget, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, getDueRevenu, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
