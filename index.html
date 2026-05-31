@@ -8634,16 +8634,23 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 // Ligne 2 — CRÉDIT sur le compte DESTINATION (l'argent arrive)
                                 out.push({ account: _dst, libelle: '💎 Versement reçu — ' + lbl, montant: amt, type: 'credit', jourPrevu: _jr, internal: true });
                             });
-                            // ===== CRÉANCES DÉCLARÉES : assurances_tracker (remboursement:true) — ligne détaillée par créance =====
+                            // ===== CRÉANCES DÉCLARÉES : assurances_tracker (remboursement:true) — INJECTION UNIVERSELLE =====
+                            // v26.70 : zéro filtrage catégorie — toutes créances Déclarées incluses.
+                            // Si dateRemboursement absente → injection de secours dans le cycle courant.
                             (_si.assurances_tracker || []).forEach(c => {
-                                if (!c.remboursement) return; // uniquement "Déclaré" (coché)
-                                if (!c.dateRemboursement) return;
-                                const _dr = new Date(c.dateRemboursement);
-                                if ((_dr.getMonth() + 1) !== m || _dr.getFullYear() !== a) return; // filtre cycle exact
+                                if (!c.remboursement) return; // seules les créances "Déclaré" cochées
+                                // Routage cycle : dateRemboursement si définie, sinon cycle courant (secours)
+                                let _cycleM = curM, _cycleA = curA, _jourPrevu = jdp;
+                                if (c.dateRemboursement) {
+                                    const _dr = new Date(c.dateRemboursement);
+                                    _cycleM = _dr.getMonth() + 1; _cycleA = _dr.getFullYear(); _jourPrevu = _dr.getDate();
+                                }
+                                if (_cycleM !== m || _cycleA !== a) return; // filtre cycle exact
                                 const amt = Math.round(Number(c.montantRembourse || c.montant || 0) * 100) / 100;
                                 if (amt <= 0) return;
-                                const _lbl = '💰 Créance : ' + (c.libelle || ((c.assureur || '') + (c.type ? ' ' + c.type : '')) || 'Remboursement');
-                                out.push({ account: _normKey(c.compteDepot || 'courant'), libelle: _lbl, montant: amt, type: 'credit', jourPrevu: _dr.getDate(), internal: false });
+                                const _compteTarget = _normKey(c.compteDepot || 'courant'); // routage dynamique : compteDepot → courant par défaut
+                                const _lbl = '💰 Créance : ' + (c.libelle || [c.assureur, c.type].filter(Boolean).join(' ') || 'Remboursement');
+                                out.push({ account: _compteTarget, libelle: _lbl, montant: amt, type: 'credit', jourPrevu: _jourPrevu, internal: false });
                             });
                             return out;
                         };
@@ -9790,7 +9797,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Solution : paye: false → moteur inclut le flux comme revenu planifié
                     // L'utilisateur coche manuellement dans Flux Exceptionnels quand reçu
                     const _syncAssuranceCashflow = (item) => {
-                        // v26.50 Workflow-Creances-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
+                        // v26.70 Creances-Loop-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
                         // Les créances Déclarées s'injectent directement dans journalHybridePourReleve via assurances_tracker
                         // Cette fonction nettoie uniquement les anciennes entrées potentiellement existantes
                         Object.values(donneesAnnuelles.value).forEach(d => {
@@ -9803,6 +9810,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const toggleAssuranceRembourse = (item) => {
                         item.remboursement = !item.remboursement;
                         _syncAssuranceCashflow(item); // cleanup dans les deux directions (plus d'injection)
+                        forceUpdateCalculations(); // v26.70 : réactivité immédiate journal après toggle déclaré
                         handleDataChange();
                     };
 
