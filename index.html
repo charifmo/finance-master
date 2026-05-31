@@ -90,6 +90,19 @@
                    bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-indigo-400/60 shadow-indigo-900/50">
             📑
         </button>
+
+        <!-- v26.80 FAB CFO Widget — au-dessus du Journal, accès direct sans changer d'onglet -->
+        <button @click="showCfoWidget = !showCfoWidget"
+            title="Ouvrir le CFO & Audit"
+            :class="['fixed z-[9995] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl',
+                     'bottom-60 right-4 w-12 h-12 text-xl',
+                     'md:bottom-[10.5rem] md:left-6 md:right-auto md:w-16 md:h-16 md:text-3xl',
+                     showCfoWidget
+                       ? 'bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white border-fuchsia-300 shadow-fuchsia-900/50'
+                       : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-fuchsia-500/40 shadow-slate-900/50']">
+            🧠
+        </button>
+
         <transition name="fade">
             <div v-if="merlinActive && !merlinBubble.open" class="fixed bottom-36 right-4 md:bottom-24 md:left-6 md:right-auto z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[240px] backdrop-blur">
                 ✨ <b>Mode Merlin actif</b><br/>
@@ -168,7 +181,7 @@
                     <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">📅 Calendrier Pluriannuel</button>
                     <button @click="activeTab = 'studio'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']">🏢 Projet Studio</button>
                     <button @click="activeTab = 'wealth'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'wealth' ? 'bg-gradient-to-r from-emerald-600 to-teal-700 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']">💎 Patrimoine & Objectifs</button>
-                    <button @click="activeTab = 'cfo'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'cfo' ? 'bg-gradient-to-r from-fuchsia-600 to-purple-700 shadow-lg shadow-purple-900/50' : 'hover:bg-slate-800 text-slate-300']">🧠 CFO & Audit <span class="ml-auto text-[9px] bg-purple-900/80 text-purple-100 px-1.5 py-0.5 rounded border border-purple-400/30">v14</span></button>
+                    <!-- v26.80 : bouton CFO supprimé de la sidebar — accès via FAB flottant 🧠 -->
                     <button @click="activeTab = 'settings'" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-sm font-bold', activeTab === 'settings' ? 'bg-slate-700 shadow-lg' : 'hover:bg-slate-800 text-slate-300']">🛠️ Paramètres</button>
                     </template>
                     <!-- ─── Onglets mode RÉALISÉ (Phase 3) ─── -->
@@ -1546,16 +1559,26 @@
                     </div>
                 </div>
 
-                <!-- Bouton flottant plein écran -->
+                <!-- v26.80 CFO-Floating-Widget — modale redimensionnable (Teleport → body, v-show persistant) -->
                 <Teleport to="body">
-                    <button v-if="chatFullScreen" @click="chatFullScreen = false"
-                        class="fixed top-4 right-4 z-[9999] flex items-center gap-2 bg-slate-800/90 backdrop-blur text-white text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-2xl border border-slate-600 hover:bg-fuchsia-700 transition-colors">
-                        🗗 Réduire
-                    </button>
-                </Teleport>
-
-                <!-- === CFO & AUDIT (v15.10 — Unified Control Center) === -->
-                <div v-if="activeTab === 'cfo'" class="grid lg:grid-cols-12 gap-5">
+                <div id="cfo-widget-modal" v-show="showCfoWidget"
+                     class="fixed z-[9990] bg-white rounded-2xl shadow-2xl border border-fuchsia-200/60 flex flex-col overflow-hidden"
+                     style="resize:both;overflow:auto;min-width:350px;min-height:400px;max-width:90vw;max-height:90vh;width:min(740px,90vw);height:min(640px,85vh);bottom:5.5rem;left:5rem;">
+                    <!-- ── Barre de titre (drag-to-move) ── -->
+                    <div class="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white shrink-0 cursor-move select-none"
+                         @mousedown="startDragCfoWidget">
+                        <div class="flex items-center gap-2 pointer-events-none">
+                            <span class="font-black text-sm">🧠 CFO &amp; Audit</span>
+                            <span class="text-[8px] bg-white/10 px-1.5 py-0.5 rounded-full font-mono text-white/60">{{ cfoSessionId.slice(0,13) }}…</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button @click.stop="resetCFOSession" class="text-[9px] text-fuchsia-100 hover:text-white font-bold uppercase tracking-widest hover:bg-white/10 px-2 py-0.5 rounded transition-colors">🔄 Reset</button>
+                            <button @click.stop="showCfoWidget = false" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/20 text-white font-black text-base transition-colors" title="Fermer">✕</button>
+                        </div>
+                    </div>
+                    <!-- ── Contenu scrollable ── -->
+                    <div class="flex-1 overflow-auto min-h-0 p-4">
+                    <div class="grid lg:grid-cols-12 gap-5">
 
                     <!-- ── GAUCHE : Audit 7-KPI ── -->
                     <div v-show="!chatFullScreen" class="lg:col-span-5 space-y-3 order-2 lg:order-1">
@@ -1707,7 +1730,7 @@
                             <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest hover:bg-orange-700">Enregistrer l'URL</button>
                         </div>
 
-                        <div v-if="cfoWebhookUrl" :class="['bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-700 min-h-[300px] overflow-y-auto', chatFullScreen ? 'max-h-[calc(100vh-200px)]' : 'max-h-[60vh] lg:max-h-[520px]']" ref="cfoChatContainer">
+                        <div v-if="cfoWebhookUrl" :class="['bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-700 min-h-[300px] overflow-y-auto', chatFullScreen ? 'max-h-[calc(100vh-200px)]' : 'max-h-[380px]']" ref="cfoChatContainer">
                             <div v-if="cfoMessages.length === 0" class="text-center py-16">
                                 <p class="text-5xl mb-4">🤖</p>
                                 <p class="text-slate-300 font-bold text-sm uppercase tracking-widest mb-2">CFO prêt</p>
@@ -1763,7 +1786,10 @@
                             </ul>
                         </div>
                     </div>
-                </div>
+                </div><!-- /grid lg:grid-cols-12 -->
+                    </div><!-- /scrollable-content -->
+                </div><!-- /cfo-widget-modal -->
+                </Teleport>
 
                 <!-- ═══════════════════════════════════════════════════════════ -->
                 <!-- ONGLET PARAMÈTRES v15                                       -->
@@ -5087,11 +5113,7 @@
                     <span class="text-lg">🏢</span>
                     <span class="text-[8px] font-black uppercase tracking-wider">Studio</span>
                 </button>
-                <button @click="activeMobileTab = 'cfo'"
-                        :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'cfo' ? 'text-fuchsia-600 bg-fuchsia-50' : 'text-gray-500']">
-                    <span class="text-lg">🧠</span>
-                    <span class="text-[8px] font-black uppercase tracking-wider">CFO</span>
-                </button>
+                <!-- v26.80 : bouton CFO mobile supprimé — accès via FAB flottant -->
                 <button @click="activeMobileTab = 'wealth'"
                         :class="['flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors', activeMobileTab === 'wealth' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-500']">
                     <span class="text-lg">💎</span>
@@ -6102,6 +6124,20 @@
                     const cfoInput = ref('');
                     const cfoLoading = ref(false);
                     const chatFullScreen = ref(false);
+                    const showCfoWidget = ref(false); // v26.80 : widget modal flottant CFO
+                    // v26.80 : drag-to-move du widget CFO par sa barre de titre
+                    const startDragCfoWidget = (e) => {
+                        const modal = document.getElementById('cfo-widget-modal');
+                        if (!modal) return;
+                        e.preventDefault();
+                        const rect = modal.getBoundingClientRect();
+                        const ox = e.clientX - rect.left, oy = e.clientY - rect.top;
+                        modal.style.bottom = 'auto';
+                        const onMove = ev => { modal.style.left = (ev.clientX - ox) + 'px'; modal.style.top = (ev.clientY - oy) + 'px'; };
+                        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                        document.addEventListener('mousemove', onMove);
+                        document.addEventListener('mouseup', onUp);
+                    };
                     const cfoWebhookUrl = ref(localStorage.getItem('cfo_webhook_url') || '');
                     const cfoWebhookInput = ref('');
                     const cfoChatContainer = ref(null);
@@ -9846,7 +9882,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Solution : paye: false → moteur inclut le flux comme revenu planifié
                     // L'utilisateur coche manuellement dans Flux Exceptionnels quand reçu
                     const _syncAssuranceCashflow = (item) => {
-                        // v26.74 Surplus-Real-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
+                        // v26.80 CFO-Floating-Widget : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
                         // Les créances Déclarées s'injectent directement dans journalHybridePourReleve via assurances_tracker
                         // Cette fonction nettoie uniquement les anciennes entrées potentiellement existantes
                         Object.values(donneesAnnuelles.value).forEach(d => {
@@ -10777,7 +10813,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
 Score global : ${a.scoreTotal}/14 (${a.scoreGlobal === 'vert' ? 'SAIN' : (a.scoreGlobal === 'orange' ? 'VIGILANCE' : 'CRITIQUE')})`;
                         cfoInput.value = prompt;
-                        activeTab.value = 'cfo';
+                        showCfoWidget.value = true; // v26.80 : ouvre le widget flottant
                         if (isMobile.value) { setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 100); }
                         setTimeout(() => { envoyerCFO(); }, 500);
                     };
@@ -11011,7 +11047,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         assurancesTracker, assurancesStats, newAssurance, showAssuranceForm, editingAssuranceId, editAssurance, annulerEditionAssurance, ajouterAssurance, toggleAssuranceRembourse, supprimerAssurance, onAssuranceMontantInput, onAssuranceDateDepotChange,
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
-                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
+                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, showCfoWidget, startDragCfoWidget, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, getDueRevenu, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
