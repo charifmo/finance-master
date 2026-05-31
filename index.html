@@ -317,9 +317,10 @@
                                     <span class="text-[8px] font-black uppercase text-blue-400 text-right">Net</span>
                                 </div>
                                 <div class="max-h-64 overflow-y-auto custom-scroll">
-                                    <div v-for="row in surplusParMois" :key="row.mNum" class="grid grid-cols-[52px_1fr_1fr_1fr] px-3 py-1 hover:bg-gray-800 transition-colors items-center">
-                                        <span class="text-[9px] font-bold text-gray-400 whitespace-nowrap">{{ nomDuMois(row.mNum).slice(0,4) }}</span>
-                                        <span class="text-[9px] font-black tabular-nums text-right text-emerald-400 whitespace-nowrap">+{{ formatMAD(row.brut) }}</span>
+                                    <div v-for="row in surplusParMois" v-if="!row.isPast" :key="row.mNum"
+                                         :class="['grid grid-cols-[52px_1fr_1fr_1fr] px-3 py-1 hover:bg-gray-800 transition-colors items-center', row.isCurrent ? 'bg-blue-900/30 border-l-2 border-blue-400' : '']">
+                                        <span class="text-[9px] font-bold whitespace-nowrap" :class="row.isCurrent ? 'text-blue-200' : 'text-gray-400'">{{ nomDuMois(row.mNum).slice(0,4) }}{{ row.isCurrent ? ' ✓' : '' }}</span>
+                                        <span class="text-[9px] font-black tabular-nums text-right whitespace-nowrap" :class="row.brut >= 0 ? 'text-emerald-400' : 'text-rose-400'">{{ row.brut >= 0 ? '+' : '' }}{{ formatMAD(row.brut) }}</span>
                                         <span class="text-[9px] font-black tabular-nums text-right text-purple-400 whitespace-nowrap">{{ row.epargne > 0 ? '-' : '' }}{{ formatMAD(row.epargne) }}</span>
                                         <span class="text-[9px] font-black tabular-nums text-right whitespace-nowrap" :class="row.net >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ row.net >= 0 ? '+' : '' }}{{ formatMAD(row.net) }}</span>
                                     </div>
@@ -2722,9 +2723,10 @@
                                 <span class="text-[7px] font-black uppercase text-blue-400 text-right">Net</span>
                             </div>
                             <div class="max-h-60 overflow-y-auto">
-                                <div v-for="row in surplusParMois" :key="row.mNum" class="grid grid-cols-[44px_1fr_1fr_1fr] px-2 py-0.5 items-center">
-                                    <span class="text-[8px] font-bold text-gray-400 whitespace-nowrap">{{ nomDuMois(row.mNum).slice(0,4) }}</span>
-                                    <span class="text-[8px] font-black tabular-nums text-right text-emerald-400 whitespace-nowrap">+{{ formatMAD(row.brut) }}</span>
+                                <div v-for="row in surplusParMois" v-if="!row.isPast" :key="row.mNum"
+                                     :class="['grid grid-cols-[44px_1fr_1fr_1fr] px-2 py-0.5 items-center', row.isCurrent ? 'bg-blue-900/30 border-l-2 border-blue-400' : '']">
+                                    <span class="text-[8px] font-bold whitespace-nowrap" :class="row.isCurrent ? 'text-blue-200' : 'text-gray-400'">{{ nomDuMois(row.mNum).slice(0,4) }}{{ row.isCurrent ? ' ✓' : '' }}</span>
+                                    <span class="text-[8px] font-black tabular-nums text-right whitespace-nowrap" :class="row.brut >= 0 ? 'text-emerald-400' : 'text-rose-400'">{{ row.brut >= 0 ? '+' : '' }}{{ formatMAD(row.brut) }}</span>
                                     <span class="text-[8px] font-black tabular-nums text-right text-purple-400 whitespace-nowrap">{{ row.epargne > 0 ? '-' : '' }}{{ formatMAD(row.epargne) }}</span>
                                     <span class="text-[8px] font-black tabular-nums text-right whitespace-nowrap" :class="row.net >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ row.net >= 0 ? '+' : '' }}{{ formatMAD(row.net) }}</span>
                                 </div>
@@ -8806,12 +8808,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return Object.values(ep || {}).reduce((sum, item) => sum + Number((item || {}).valeur || 0), 0);
                     });
                     const surplusMensuelBase = computed(() => {
-                        const arr = surplusParMois.value;
+                        // v26.74 : exclure mois passés (isPast) de la moyenne
+                        const arr = surplusParMois.value.filter(r => !r.isPast);
                         if (!arr.length) return 0;
                         return arr.reduce((s, r) => s + r.brut, 0) / arr.length;
                     });
                     const surplusStats = computed(() => {
-                        const arr = surplusParMois.value;
+                        // v26.74 : exclure mois passés de la moyenne (seulement mois courant + futurs)
+                        const arr = surplusParMois.value.filter(r => !r.isPast);
                         if (!arr.length) return { moyBrut: 0, moyEpargne: 0, moyNet: 0 };
                         const n = arr.length;
                         return {
@@ -8828,8 +8832,50 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return [];
+                        // v26.74 : masquer mois passés — cycle courant = flux réels payés uniquement
+                        const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
+                        const isViewCurYear  = anneeAffichage.value === curA;
+                        const isViewPastYear = anneeAffichage.value < curA;
                         return Array.from({ length: 12 }, (_, i) => {
                             const mNum = i + 1;
+                            const isPast    = isViewPastYear || (isViewCurYear && mNum < curM);
+                            const isCurrent = isViewCurYear && mNum === curM;
+                            if (isPast) return { mNum, brut: null, epargne: null, net: null, isPast: true, isCurrent: false };
+                            const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
+                            if (isCurrent) {
+                                // Cycle courant : uniquement les flux réellement enregistrés (paye:true)
+                                let rev = 0;
+                                Object.values(d.revenus || {}).forEach(r => {
+                                    let v = Number(r?.base || 0);
+                                    (r?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                    if (v > 0 && isItemPaid(r, v)) rev += v;
+                                });
+                                let fix = 0;
+                                Object.values(d.chargesFixes || {}).forEach(f => {
+                                    let v = Number(f?.valeur || 0);
+                                    (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                    if (v > 0 && isItemPaid(f, v)) fix += v;
+                                });
+                                let vari = 0;
+                                Object.values(d.chargesVariables || {}).forEach(c => {
+                                    if ((c?.details || []).length > 0) {
+                                        c.details.forEach(det => { const dv = Number(det.montant || 0); if (isItemPaid(det, dv)) vari += dv; });
+                                    } else {
+                                        let v = getMonthlyVariableValue(c || {});
+                                        (c?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                        if (v > 0 && isItemPaid(c, v)) vari += v;
+                                    }
+                                });
+                                let ep = 0;
+                                epArr.forEach(obj => {
+                                    let v = Number(obj.valeur || 0);
+                                    (obj.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
+                                    if (isItemPaid(obj, v)) ep += v;
+                                });
+                                const brut = rev - fix - vari;
+                                return { mNum, brut, epargne: ep, net: brut - ep, isPast: false, isCurrent: true };
+                            }
+                            // Mois futur : valeurs théoriques
                             let rev = 0;
                             Object.values(d.revenus || {}).forEach(r => {
                                 let v = Number(r?.base || 0);
@@ -8848,7 +8894,6 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 (c?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
                                 vari += v;
                             });
-                            const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
                             let ep = 0;
                             epArr.forEach(obj => {
                                 let v = Number(obj.valeur || 0);
@@ -8856,7 +8901,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 ep += v;
                             });
                             const brut = rev - fix - vari;
-                            return { mNum, brut, epargne: ep, net: brut - ep };
+                            return { mNum, brut, epargne: ep, net: brut - ep, isPast: false, isCurrent: false };
                         });
                     });
                     const showSurplusTooltip = ref(false);
@@ -9801,7 +9846,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Solution : paye: false → moteur inclut le flux comme revenu planifié
                     // L'utilisateur coche manuellement dans Flux Exceptionnels quand reçu
                     const _syncAssuranceCashflow = (item) => {
-                        // v26.73 Releve-Filter-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
+                        // v26.74 Surplus-Real-Fix : ne plus injecter dans depensesIrregulieres (suppression du double-clic)
                         // Les créances Déclarées s'injectent directement dans journalHybridePourReleve via assurances_tracker
                         // Cette fonction nettoie uniquement les anciennes entrées potentiellement existantes
                         Object.values(donneesAnnuelles.value).forEach(d => {
