@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v27.10 KPI-Math-Fix - Finance Master</title>
+    <title>v27.20 Dashboard-Sync-Journal - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "27.10 KPI-Math-Fix";
+                    const CURRENT_VERSION = "27.20 Dashboard-Sync-Journal";
                     const CHANGELOG = [
+        { version: "27.20 Dashboard-Sync-Journal", date: "2026-06-01", changes: [
+            "SSOT (Source Unique de Vérité) : extraction de _getMonthFlux(mNum, annee, mode) — moteur partagé entre journalHybridePourReleve et les computed du Dashboard. Les KPIs lisent la MÊME source mathématique que le journal visible, au centime près.",
+            "mode 'remaining' → flux paye:false uniquement (cycle courant) : revenus non encore encaissés, charges non encore payées (partiellement ou totalement). Miroir exact de la colonne Entrant/Sortant du relevé.",
+            "mode 'full' → 100 % théorique (cycles futurs) : même logique que journalHybridePourReleve pour les mois à venir.",
+            "surplusParMois : suppression du double moteur. Mois courant = _getMonthFlux 'remaining', mois futurs = 'full', mois passés = null (cycle clos). L'épargne reste une colonne séparée (réallocation patrimoniale).",
+            "statsFluxAnnee.totalEntrees / totalSorties : boucle Jan→Déc sur _getMonthFlux — passé ignoré (0), courant = remaining, futurs = full. ENTRÉES/SORTIES 2026 = ce qui figure encore dans le radar du journal.",
+            "Poids sur Surplus (impactSurplus, netAnnuel, top3Chocs) : sémantique inchangée — calculé sur les seuls chocs exceptionnels."
+        ] },
         { version: "27.10 KPI-Math-Fix", date: "2026-06-01", changes: [
             "CHANTIER 1 — SURPLUS MENSUEL : le computed surplusParMois utilise désormais le budget structurel théorique COMPLET pour tous les mois (courant + futurs). Suppression du branch 'isCurrent' qui ne comptait que les éléments isItemPaid(). Formule stricte : Surplus = ΣRevenus − ΣChargesFixes − ΣChargesVariables, aucun filtre paye.",
             "CHANTIER 2 — KPIs ANNUELS : statsFluxAnnee.totalEntrees et totalSorties sommaient uniquement les depensesIrregulieres (chocs exceptionnels). Réécriture : une boucle Jan→Déc accumule la totalité des revenus récurrents (avec exceptions par mois) + toutes les charges fixes + toutes les charges variables + les irréguliers. Le widget 'Poids sur Surplus' (impactSurplus/netAnnuel) reste basé sur les chocs uniquement pour conserver sa sémantique.",
@@ -8743,13 +8751,67 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         };
                     });
 
+                    // ─────────────────────────────────────────────────────────────────────────
+                    // v27.20 Dashboard-Sync-Journal : MOTEUR PARTAGÉ JOURNAL ↔ DASHBOARD (SSOT)
+                    // _getMonthFlux(mNum, annee, mode) reproduit exactement la logique de _mkLegs
+                    // dans journalHybridePourReleve — les KPIs du Dashboard lisent la même source.
+                    //   mode 'remaining' → flux non cochés seulement  (paye:false — cycle courant)
+                    //   mode 'full'      → 100 % théorique            (tous les flux — futurs)
+                    // Retourne { entrants, sortants } hors transferts internes (épargne).
+                    // ─────────────────────────────────────────────────────────────────────────
+                    const _getMonthFlux = (mNum, annee, mode) => {
+                        const dA = (donneesAnnuelles.value || {})[annee] || {};
+                        const _effVal = (item, baseVal) => {
+                            let v = Number(baseVal || 0);
+                            (item?.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
+                            return v;
+                        };
+                        const _amt = (item, baseVal) => {
+                            const v = _effVal(item, baseVal); if (v <= 0) return 0;
+                            if (mode === 'full') return Math.round(v * 100) / 100;
+                            if (isItemPaid(item, v)) return 0;
+                            const r = v - (getPaidAmount(item, v) || 0);
+                            return r > 0 ? Math.round(r * 100) / 100 : 0;
+                        };
+                        let entrants = 0, sortants = 0;
+                        // Revenus → entrants
+                        Object.values(dA.revenus || {}).forEach(r => { const a = _amt(r, r.base); if (a > 0) entrants += a; });
+                        // Charges fixes → sortants
+                        Object.values(dA.chargesFixes || {}).forEach(f => { const a = _amt(f, f.valeur); if (a > 0) sortants += a; });
+                        // Charges variables → sortants (avec détails si présents)
+                        Object.values(dA.chargesVariables || {}).forEach(cv => {
+                            const effV = _effVal(cv, cv.valeur);
+                            let monthly = (cv.periode === 'semaine') ? effV * 4.3 : effV;
+                            monthly = Math.round(monthly * 100) / 100;
+                            if (monthly <= 0) return;
+                            if (mode === 'full') { sortants += monthly; return; }
+                            let paid = 0;
+                            if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, Number(d.montant||0)) || 0; });
+                            else paid = getPaidAmount(cv, effV) || 0;
+                            const rem = monthly - paid;
+                            if (rem > 0) sortants += Math.round(rem * 100) / 100;
+                        });
+                        // Dépenses irrégulières → sortants | créances → entrants
+                        getDepensesCycle(mNum, annee).forEach(dep => {
+                            if (dep.sourceAssurance) return; // géré via assurances_tracker — pas de doublon
+                            const rawDue = Number(dep.montant || 0); if (rawDue === 0) return;
+                            const isCreance = rawDue < 0;
+                            const due = Math.abs(rawDue);
+                            let a;
+                            if (mode === 'full') a = due;
+                            else { if (isItemPaid(dep, due)) a = 0; else { const r = due - (getPaidAmount(dep, due)||0); a = r > 0 ? r : 0; } }
+                            if (a > 0) { if (isCreance) entrants += a; else sortants += a; }
+                        });
+                        return { entrants: Math.round(entrants * 100) / 100, sortants: Math.round(sortants * 100) / 100 };
+                    };
+
                     // v18.40 / v20.95 : Surplus BRUT mois par mois (exceptions incluses, épargne exclue)
                     // L'épargne est une réallocation patrimoniale, pas une charge consommée.
                     // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
                     const surplusParMois = computed(() => {
-                        // v27.10 KPI-Math-Fix : budget structurel théorique COMPLET pour tous les mois
-                        // Règle absolue : Surplus = ΣRevenus − ΣChargesFixes − ΣChargesVariables
-                        // AUCUN filtre paye — le fait qu'une charge soit cochée ne l'efface pas du budget
+                        // v27.20 Dashboard-Sync-Journal : SSOT — branché directement sur _getMonthFlux
+                        // Mois courant → 'remaining' (flux non cochés, miroir exact du journal)
+                        // Mois futurs  → 'full' (100 % théorique, miroir exact du journal)
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return [];
@@ -8762,32 +8824,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const isPast    = isViewPastYear || (isViewCurYear && mNum < curM);
                             const isCurrent = isViewCurYear && mNum === curM;
                             if (isPast) return { mNum, brut: null, epargne: null, net: null, isPast: true, isCurrent: false };
-                            // Mois courant ET futurs : valeurs théoriques complètes — radar de trésorerie séparé
-                            let rev = 0;
-                            Object.values(d.revenus || {}).forEach(r => {
-                                let v = Number(r?.base || 0);
-                                (r?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                rev += v;
-                            });
-                            let fix = 0;
-                            Object.values(d.chargesFixes || {}).forEach(f => {
-                                let v = Number(f?.valeur || 0);
-                                (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                fix += v;
-                            });
-                            let vari = 0;
-                            Object.values(d.chargesVariables || {}).forEach(c => {
-                                let v = getMonthlyVariableValue(c || {});
-                                (c?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                vari += v;
-                            });
+                            const mode = isCurrent ? 'remaining' : 'full';
+                            const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode);
+                            // Épargne : réallocation patrimoniale, colonne dédiée (hors brut)
                             let ep = 0;
                             epArr.forEach(obj => {
                                 let v = Number(obj.valeur || 0);
-                                (obj.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                ep += v;
+                                (obj.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
+                                if (mode === 'full' || !isItemPaid(obj, v)) ep += v;
                             });
-                            const brut = rev - fix - vari;
+                            const brut = entrants - sortants;
                             return { mNum, brut, epargne: ep, net: brut - ep, isPast: false, isCurrent };
                         });
                     });
@@ -8796,36 +8842,32 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const showInlineReleve = ref(false);
 
                     const statsFluxAnnee = computed(() => {
-                        // v27.10 KPI-Math-Fix : totalEntrees/totalSorties = intégralité de l'année
-                        // ENTRÉES = ΣRevenus(Jan→Déc) + créances exceptionnelles
-                        // SORTIES = ΣChargesFixes(Jan→Déc) + ΣChargesVariables(Jan→Déc) + dépenses irrégulières
-                        // Aucun filtre paye — le Dashboard inclut TOUT (passé + futur)
+                        // v27.20 Dashboard-Sync-Journal : SSOT — somme globale des flux encore dans le radar
+                        // ENTRÉES = Σ entrants de tous les mois actifs du journal (passé = 0, courant = remaining, futurs = full)
+                        // SORTIES = Σ sortants de tous les mois actifs du journal (même logique)
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return { totalEntrees: 0, totalSorties: 0, netAnnuel: 0, surplusMensuelMoyen: 0, impactSurplus: 0, montantImpact: 0, top3Chocs: [] };
                         const _inclureLT = parametres.value.inclureLongTermeRuban !== false;
                         const _ltComptes = _inclureLT ? null : new Set(comptes.value.filter(c => /long.term|invest/i.test(c.label || '') || c.type === 'investissement').map(c => 'cpt_' + c.id));
-                        // ── Flux exceptionnels (base pour Poids sur Surplus — inchangé) ──
+                        // Flux exceptionnels — Poids sur Surplus (sémantique inchangée)
                         const chocs = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [])
                             .filter(c => _inclureLT || !_ltComptes.has(c.sourceCompte || ''));
                         let chocsEntrees = 0, chocsSorties = 0;
                         chocs.forEach(c => { const m = Number(c.montant || 0); if (m < 0) chocsEntrees += Math.abs(m); else chocsSorties += m; });
-                        const netAnnuel = chocsSorties - chocsEntrees; // Poids sur Surplus = impact des chocs uniquement
-                        // ── KPIs annuels globaux : Jan→Déc × toutes sources, aucun filtre paye ──
-                        const _effVal = (item, baseVal, m) => {
-                            let v = Number(baseVal || 0);
-                            (item?.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && m >= md && m <= mf) v = Number(e.nouvelleValeur||0); });
-                            return v;
-                        };
-                        let totalEntrees = chocsEntrees, totalSorties = chocsSorties;
+                        const netAnnuel = chocsSorties - chocsEntrees;
+                        // KPIs annuels : agrégation directe sur _getMonthFlux (même moteur que le journal)
+                        const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
+                        const isViewCurYear  = anneeAffichage.value === curA;
+                        const isViewPastYear = anneeAffichage.value < curA;
+                        let totalEntrees = 0, totalSorties = 0;
                         for (let mNum = 1; mNum <= 12; mNum++) {
-                            Object.values(d.revenus || {}).forEach(r => { totalEntrees += _effVal(r, r.base, mNum); });
-                            Object.values(d.chargesFixes || {}).forEach(f => { totalSorties += _effVal(f, f.valeur, mNum); });
-                            Object.values(d.chargesVariables || {}).forEach(c => {
-                                let v = getMonthlyVariableValue(c || {});
-                                (c?.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
-                                totalSorties += v;
-                            });
+                            const isPast = isViewPastYear || (isViewCurYear && mNum < curM);
+                            if (isPast) continue; // cycle clos → rien dans le radar
+                            const mode = (isViewCurYear && mNum === curM) ? 'remaining' : 'full';
+                            const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode);
+                            totalEntrees += entrants;
+                            totalSorties += sortants;
                         }
                         const surplusMensuelMoyen = surplusMensuelBase.value;
                         const impactSurplus = surplusMensuelMoyen > 0 ? ((netAnnuel / 12) / surplusMensuelMoyen) * 100 : 0;
