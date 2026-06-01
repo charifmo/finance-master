@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v17.40 - Finance Master (Delta Sync Courant)</title>
+    <title>v27.10 KPI-Math-Fix - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "26.50 Workflow-Creances-Fix";
+                    const CURRENT_VERSION = "27.10 KPI-Math-Fix";
                     const CHANGELOG = [
+        { version: "27.10 KPI-Math-Fix", date: "2026-06-01", changes: [
+            "CHANTIER 1 — SURPLUS MENSUEL : le computed surplusParMois utilise désormais le budget structurel théorique COMPLET pour tous les mois (courant + futurs). Suppression du branch 'isCurrent' qui ne comptait que les éléments isItemPaid(). Formule stricte : Surplus = ΣRevenus − ΣChargesFixes − ΣChargesVariables, aucun filtre paye.",
+            "CHANTIER 2 — KPIs ANNUELS : statsFluxAnnee.totalEntrees et totalSorties sommaient uniquement les depensesIrregulieres (chocs exceptionnels). Réécriture : une boucle Jan→Déc accumule la totalité des revenus récurrents (avec exceptions par mois) + toutes les charges fixes + toutes les charges variables + les irréguliers. Le widget 'Poids sur Surplus' (impactSurplus/netAnnuel) reste basé sur les chocs uniquement pour conserver sa sémantique.",
+            "CHANTIER 3 — ISOLATION DU JOURNAL : vérification confirmée — le filtre paye:false est UNIQUEMENT appliqué dans _mkLegs() (mode 'remaining') à l'intérieur du computed journalHybridePourReleve. donneesAnnuelles n'est jamais amputé. Aucune correction nécessaire.",
+            "RÉSULTAT : le Surplus Détaillé de Juin affiche le budget structurel théorique cohérent (ex. ~+18 000 DH), ENTRÉES 2026 = totalité des revenus annuels (~+600 000 DH), SORTIES 2026 = totalité des charges annuelles (~-580 000 DH)."
+        ] },
         { version: "26.50 Workflow-Creances-Fix", date: "2026-05-31", changes: [
             "COLONNE COMPTE : les deux tables du journal (inline + modal) ont désormais une colonne dédiée 'Compte' avant 'Libellé' — le badge du compte apparaît sur chaque ligne, toujours visible quelle que soit la vue (Global, single, multi-select)",
             "ZÉRO DOUBLE-CLIC : _syncAssuranceCashflow ne pousse plus jamais dans depensesIrregulieres — les créances Déclarées (remboursement:true) s'injectent directement dans journalHybridePourReleve via assurances_tracker",
@@ -8741,53 +8747,22 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // L'épargne est une réallocation patrimoniale, pas une charge consommée.
                     // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
                     const surplusParMois = computed(() => {
+                        // v27.10 KPI-Math-Fix : budget structurel théorique COMPLET pour tous les mois
+                        // Règle absolue : Surplus = ΣRevenus − ΣChargesFixes − ΣChargesVariables
+                        // AUCUN filtre paye — le fait qu'une charge soit cochée ne l'efface pas du budget
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return [];
-                        // v26.74 : masquer mois passés — cycle courant = flux réels payés uniquement
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         const isViewCurYear  = anneeAffichage.value === curA;
                         const isViewPastYear = anneeAffichage.value < curA;
+                        const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
                         return Array.from({ length: 12 }, (_, i) => {
                             const mNum = i + 1;
                             const isPast    = isViewPastYear || (isViewCurYear && mNum < curM);
                             const isCurrent = isViewCurYear && mNum === curM;
                             if (isPast) return { mNum, brut: null, epargne: null, net: null, isPast: true, isCurrent: false };
-                            const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
-                            if (isCurrent) {
-                                // Cycle courant : uniquement les flux réellement enregistrés (paye:true)
-                                let rev = 0;
-                                Object.values(d.revenus || {}).forEach(r => {
-                                    let v = Number(r?.base || 0);
-                                    (r?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                    if (v > 0 && isItemPaid(r, v)) rev += v;
-                                });
-                                let fix = 0;
-                                Object.values(d.chargesFixes || {}).forEach(f => {
-                                    let v = Number(f?.valeur || 0);
-                                    (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                    if (v > 0 && isItemPaid(f, v)) fix += v;
-                                });
-                                let vari = 0;
-                                Object.values(d.chargesVariables || {}).forEach(c => {
-                                    if ((c?.details || []).length > 0) {
-                                        c.details.forEach(det => { const dv = Number(det.montant || 0); if (isItemPaid(det, dv)) vari += dv; });
-                                    } else {
-                                        let v = getMonthlyVariableValue(c || {});
-                                        (c?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                        if (v > 0 && isItemPaid(c, v)) vari += v;
-                                    }
-                                });
-                                let ep = 0;
-                                epArr.forEach(obj => {
-                                    let v = Number(obj.valeur || 0);
-                                    (obj.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) v = Number(e.nouvelleValeur || 0); });
-                                    if (isItemPaid(obj, v)) ep += v;
-                                });
-                                const brut = rev - fix - vari;
-                                return { mNum, brut, epargne: ep, net: brut - ep, isPast: false, isCurrent: true };
-                            }
-                            // Mois futur : valeurs théoriques
+                            // Mois courant ET futurs : valeurs théoriques complètes — radar de trésorerie séparé
                             let rev = 0;
                             Object.values(d.revenus || {}).forEach(r => {
                                 let v = Number(r?.base || 0);
@@ -8813,7 +8788,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 ep += v;
                             });
                             const brut = rev - fix - vari;
-                            return { mNum, brut, epargne: ep, net: brut - ep, isPast: false, isCurrent: false };
+                            return { mNum, brut, epargne: ep, net: brut - ep, isPast: false, isCurrent };
                         });
                     });
                     const showSurplusTooltip = ref(false);
@@ -8821,20 +8796,37 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const showInlineReleve = ref(false);
 
                     const statsFluxAnnee = computed(() => {
+                        // v27.10 KPI-Math-Fix : totalEntrees/totalSorties = intégralité de l'année
+                        // ENTRÉES = ΣRevenus(Jan→Déc) + créances exceptionnelles
+                        // SORTIES = ΣChargesFixes(Jan→Déc) + ΣChargesVariables(Jan→Déc) + dépenses irrégulières
+                        // Aucun filtre paye — le Dashboard inclut TOUT (passé + futur)
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return { totalEntrees: 0, totalSorties: 0, netAnnuel: 0, surplusMensuelMoyen: 0, impactSurplus: 0, montantImpact: 0, top3Chocs: [] };
                         const _inclureLT = parametres.value.inclureLongTermeRuban !== false;
                         const _ltComptes = _inclureLT ? null : new Set(comptes.value.filter(c => /long.term|invest/i.test(c.label || '') || c.type === 'investissement').map(c => 'cpt_' + c.id));
+                        // ── Flux exceptionnels (base pour Poids sur Surplus — inchangé) ──
                         const chocs = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [])
                             .filter(c => _inclureLT || !_ltComptes.has(c.sourceCompte || ''));
-                        let totalEntrees = 0, totalSorties = 0;
-                        chocs.forEach(c => {
-                            const m = Number(c.montant || 0);
-                            if (m < 0) totalEntrees += Math.abs(m);
-                            else totalSorties += m;
-                        });
-                        const netAnnuel = totalSorties - totalEntrees;
+                        let chocsEntrees = 0, chocsSorties = 0;
+                        chocs.forEach(c => { const m = Number(c.montant || 0); if (m < 0) chocsEntrees += Math.abs(m); else chocsSorties += m; });
+                        const netAnnuel = chocsSorties - chocsEntrees; // Poids sur Surplus = impact des chocs uniquement
+                        // ── KPIs annuels globaux : Jan→Déc × toutes sources, aucun filtre paye ──
+                        const _effVal = (item, baseVal, m) => {
+                            let v = Number(baseVal || 0);
+                            (item?.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && m >= md && m <= mf) v = Number(e.nouvelleValeur||0); });
+                            return v;
+                        };
+                        let totalEntrees = chocsEntrees, totalSorties = chocsSorties;
+                        for (let mNum = 1; mNum <= 12; mNum++) {
+                            Object.values(d.revenus || {}).forEach(r => { totalEntrees += _effVal(r, r.base, mNum); });
+                            Object.values(d.chargesFixes || {}).forEach(f => { totalSorties += _effVal(f, f.valeur, mNum); });
+                            Object.values(d.chargesVariables || {}).forEach(c => {
+                                let v = getMonthlyVariableValue(c || {});
+                                (c?.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
+                                totalSorties += v;
+                            });
+                        }
                         const surplusMensuelMoyen = surplusMensuelBase.value;
                         const impactSurplus = surplusMensuelMoyen > 0 ? ((netAnnuel / 12) / surplusMensuelMoyen) * 100 : 0;
                         const montantImpact = Math.round(netAnnuel / 12);
