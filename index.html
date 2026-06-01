@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v27.20 Dashboard-Sync-Journal - Finance Master</title>
+    <title>v27.30 Brut-Net-Fix - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "27.20 Dashboard-Sync-Journal";
+                    const CURRENT_VERSION = "27.30 Brut-Net-Fix";
                     const CHANGELOG = [
+        { version: "27.30 Brut-Net-Fix", date: "2026-06-01", changes: [
+            "BUG : surplusParMois calculait brut = entrants - sortants (résultat net → pouvait être négatif) au lieu de brut = entrants (revenus purs, toujours ≥ 0).",
+            "FIX ventilation stricte : brut = entrants (revenus + créances restants), sorties = sortants (charges restantes), net = brut - sorties - epargne. Seule la colonne Net a le droit d'être négative.",
+            "FIX surplusMensuelBase : bascule de r.brut (revenus bruts) vers r.net (surplus réel) pour que le Poids sur Surplus reste mathématiquement cohérent.",
+            "statsFluxAnnee.totalEntrees / totalSorties : déjà correct depuis v27.20 (entrants et sortants sont accumulés séparément via _getMonthFlux)."
+        ] },
         { version: "27.20 Dashboard-Sync-Journal", date: "2026-06-01", changes: [
             "SSOT (Source Unique de Vérité) : extraction de _getMonthFlux(mNum, annee, mode) — moteur partagé entre journalHybridePourReleve et les computed du Dashboard. Les KPIs lisent la MÊME source mathématique que le journal visible, au centime près.",
             "mode 'remaining' → flux paye:false uniquement (cycle courant) : revenus non encore encaissés, charges non encore payées (partiellement ou totalement). Miroir exact de la colonne Entrant/Sortant du relevé.",
@@ -8734,10 +8740,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return Object.values(ep || {}).reduce((sum, item) => sum + Number((item || {}).valeur || 0), 0);
                     });
                     const surplusMensuelBase = computed(() => {
-                        // v26.74 : exclure mois passés (isPast) de la moyenne
+                        // v27.30 Brut-Net-Fix : moyenne sur r.net (surplus réel) — brut = revenus seuls depuis v27.30
                         const arr = surplusParMois.value.filter(r => !r.isPast);
                         if (!arr.length) return 0;
-                        return arr.reduce((s, r) => s + r.brut, 0) / arr.length;
+                        return arr.reduce((s, r) => s + r.net, 0) / arr.length;
                     });
                     const surplusStats = computed(() => {
                         // v26.74 : exclure mois passés de la moyenne (seulement mois courant + futurs)
@@ -8833,8 +8839,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 (obj.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
                                 if (mode === 'full' || !isItemPaid(obj, v)) ep += v;
                             });
-                            const brut = entrants - sortants;
-                            return { mNum, brut, epargne: ep, net: brut - ep, isPast: false, isCurrent };
+                            // v27.30 Brut-Net-Fix : ventilation stricte — brut = entrées pures (toujours ≥ 0)
+                            const brut    = entrants;          // revenus + créances restants
+                            const sorties = sortants;          // charges + dépenses restantes
+                            return { mNum, brut, sorties, epargne: ep, net: brut - sorties - ep, isPast: false, isCurrent };
                         });
                     });
                     const showSurplusTooltip = ref(false);
