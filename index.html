@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v27.50 Cumulative-Atterrissage - Finance Master</title>
+    <title>v27.60 Rolling-Cashflow-Macro - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "27.50 Cumulative-Atterrissage";
+                    const CURRENT_VERSION = "27.60 Rolling-Cashflow-Macro";
                     const CHANGELOG = [
+        { version: "27.60 Rolling-Cashflow-Macro", date: "2026-06-02", changes: [
+            "PÉRIMÈTRE STRICT (RÈGLE 1) : le tableau Surplus Détaillé ne surveille QUE le Compte Courant. _getMonthFlux(scope='courant') exclut tous les flux imputés à d'autres comptes (Fonds Urgence, Bourse, Dépenses Annuelles, Épargne LT). Filtres sur revenus.destinationCompte, dépenses.sourceCompte, et les comptes macro charges fixes/variables (soldesInitiaux).",
+            "EFFET DOMINO (RÈGLE 2) : rollingBalance démarre au solde réel du Compte Courant (tresoActuelleCourante) pour le mois en cours, puis le NET du mois N devient le solde de départ du mois N+1, jusqu'à Décembre.",
+            "VENTILATION (RÈGLE 3) : BRUT = soldeDépart + entrants - sortants (Cash Disponible, atterrissage pré-épargne) ; ÉPARGNE = virements d'épargne sortant du Courant ; NET = BRUT - ÉPARGNE (atterrissage final, reporté au mois suivant).",
+            "Épargne filtrée elle aussi sur sourceCompte = Courant pour rester dans le périmètre.",
+            "KPIs annuels ENTRÉES/SORTIES préservés en scope 'all' (tous comptes) — non impactés par le périmètre du tableau.",
+            "v27.40 Atterrissage-Sync + v27.50 Cumulative-Atterrissage consolidées ici : atterrissage Juin = solde réel + flux restants, cascade jusqu'à Décembre."
+        ] },
         { version: "27.30 Brut-Net-Fix", date: "2026-06-01", changes: [
             "BUG : surplusParMois calculait brut = entrants - sortants (résultat net → pouvait être négatif) au lieu de brut = entrants (revenus purs, toujours ≥ 0).",
             "FIX ventilation stricte : brut = entrants (revenus + créances restants), sorties = sortants (charges restantes), net = brut - sorties - epargne. Seule la colonne Net a le droit d'être négative.",
@@ -8758,15 +8766,31 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     // ─────────────────────────────────────────────────────────────────────────
-                    // v27.20 Dashboard-Sync-Journal : MOTEUR PARTAGÉ JOURNAL ↔ DASHBOARD (SSOT)
-                    // _getMonthFlux(mNum, annee, mode) reproduit exactement la logique de _mkLegs
-                    // dans journalHybridePourReleve — les KPIs du Dashboard lisent la même source.
-                    //   mode 'remaining' → flux non cochés seulement  (paye:false — cycle courant)
-                    //   mode 'full'      → 100 % théorique            (tous les flux — futurs)
+                    // v27.60 Rolling-Cashflow-Macro : MOTEUR FLUX — PÉRIMÈTRE COMPTE COURANT STRICT
+                    // _getMonthFlux(mNum, annee, mode) → flux du mois imputés UNIQUEMENT au Compte
+                    // Courant. Les flux d'autres comptes (Fonds Urgence, Bourse, Dépenses Annuelles…)
+                    // sont totalement exclus (RÈGLE 1). Réplique la clé de compte du journal _mkLegs.
+                    //   mode 'remaining' → flux non cochés (paye:false) — cycle courant
+                    //   mode 'full'      → 100 % théorique             — mois futurs
                     // Retourne { entrants, sortants } hors transferts internes (épargne).
                     // ─────────────────────────────────────────────────────────────────────────
-                    const _getMonthFlux = (mNum, annee, mode) => {
+                    const _getMonthFlux = (mNum, annee, mode, scope = 'courant') => {
+                        // scope 'courant' → uniquement les flux imputés au Compte Courant (tableau Surplus)
+                        // scope 'all'     → tous comptes confondus (KPIs annuels ENTRÉES/SORTIES)
                         const dA = (donneesAnnuelles.value || {})[annee] || {};
+                        const _si = soldesInitiaux.value || {};
+                        const _courantOnly = scope === 'courant';
+                        // ── Clé du Compte Courant (identique au journal) ──
+                        const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
+                        const courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
+                        const _normKey = (k) => {
+                            if (!k || k === 'courant') return courantKey;
+                            if (/^\d+$/.test(String(k))) return 'cpt_' + k;
+                            return k;
+                        };
+                        const _isCourant = (k) => _normKey(k) === courantKey;
+                        const _fxSrc  = _normKey(_si.compteChargesFixes || 'courant');
+                        const _varSrc = _normKey(_si.compteChargesVariables || 'courant');
                         const _effVal = (item, baseVal) => {
                             let v = Number(baseVal || 0);
                             (item?.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
@@ -8780,28 +8804,34 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             return r > 0 ? Math.round(r * 100) / 100 : 0;
                         };
                         let entrants = 0, sortants = 0;
-                        // Revenus → entrants
-                        Object.values(dA.revenus || {}).forEach(r => { const a = _amt(r, r.base); if (a > 0) entrants += a; });
-                        // Charges fixes → sortants
-                        Object.values(dA.chargesFixes || {}).forEach(f => { const a = _amt(f, f.valeur); if (a > 0) sortants += a; });
-                        // Charges variables → sortants (avec détails si présents)
-                        Object.values(dA.chargesVariables || {}).forEach(cv => {
-                            const effV = _effVal(cv, cv.valeur);
-                            let monthly = (cv.periode === 'semaine') ? effV * 4.3 : effV;
-                            monthly = Math.round(monthly * 100) / 100;
-                            if (monthly <= 0) return;
-                            if (mode === 'full') { sortants += monthly; return; }
-                            let paid = 0;
-                            if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, Number(d.montant||0)) || 0; });
-                            else paid = getPaidAmount(cv, effV) || 0;
-                            const rem = monthly - paid;
-                            if (rem > 0) sortants += Math.round(rem * 100) / 100;
+                        // Revenus → entrants (filtre destinationCompte = Courant si scope courant)
+                        Object.values(dA.revenus || {}).forEach(r => {
+                            if (_courantOnly && !_isCourant(r.destinationCompte)) return;
+                            const a = _amt(r, r.base); if (a > 0) entrants += a;
                         });
-                        // Dépenses irrégulières → sortants | créances → entrants
-                        // mode 'remaining' : isItemPaid filtre les items déjà payés (déjà dans le solde réel)
-                        // mode 'full'      : tous les flux théoriques futurs inclus
+                        // Charges fixes → sortants (filtre compte macro des fixes si scope courant)
+                        if (!_courantOnly || _fxSrc === courantKey) {
+                            Object.values(dA.chargesFixes || {}).forEach(f => { const a = _amt(f, f.valeur); if (a > 0) sortants += a; });
+                        }
+                        // Charges variables → sortants (filtre compte macro des variables si scope courant)
+                        if (!_courantOnly || _varSrc === courantKey) {
+                            Object.values(dA.chargesVariables || {}).forEach(cv => {
+                                const effV = _effVal(cv, cv.valeur);
+                                let monthly = (cv.periode === 'semaine') ? effV * 4.3 : effV;
+                                monthly = Math.round(monthly * 100) / 100;
+                                if (monthly <= 0) return;
+                                if (mode === 'full') { sortants += monthly; return; }
+                                let paid = 0;
+                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, Number(d.montant||0)) || 0; });
+                                else paid = getPaidAmount(cv, effV) || 0;
+                                const rem = monthly - paid;
+                                if (rem > 0) sortants += Math.round(rem * 100) / 100;
+                            });
+                        }
+                        // Dépenses ponctuelles → sortants | créances → entrants (filtre sourceCompte = Courant si scope courant)
                         getDepensesCycle(mNum, annee).forEach(dep => {
                             if (dep.sourceAssurance) return;
+                            if (_courantOnly && !_isCourant(dep.sourceCompte)) return;
                             const rawDue = Number(dep.montant || 0); if (rawDue === 0) return;
                             const isCreance = rawDue < 0;
                             const due = Math.abs(rawDue);
@@ -8817,20 +8847,25 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // L'épargne est une réallocation patrimoniale, pas une charge consommée.
                     // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
                     const surplusParMois = computed(() => {
-                        // v27.50 Cumulative-Atterrissage (fix) : Rolling Cashflow avec effet domino
-                        //   brut (Cash Disponible)  = rollingBalance + revenus - charges - dépenses ponctuelles
-                        //                           → atterrissage PRÉ-épargne
-                        //   epargne                 = transferts d'épargne du mois
-                        //   net  (Solde Fin de Mois) = brut - epargne
-                        //                           → devient le rollingBalance du mois suivant
-                        //   surplusMensuel          = net sans rolling (flux seul) → pour les moyennes
+                        // v27.60 Rolling-Cashflow-Macro : Rolling Cashflow Compte Courant, effet domino
+                        //   brut (Cash Disponible)   = rollingBalance + entrants - sortants (PRÉ-épargne)
+                        //   epargne                  = virements d'épargne sortant du Courant
+                        //   net  (Solde Fin de Mois) = brut - epargne → rollingBalance du mois suivant
+                        //   surplusMensuel           = flux net du mois seul (hors rolling) → moyennes
+                        //   Périmètre : _getMonthFlux en scope 'courant' (autres comptes exclus)
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return [];
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         const isViewCurYear  = anneeAffichage.value === curA;
                         const isViewPastYear = anneeAffichage.value < curA;
-                        const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
+                        // Épargne : ne compter que les virements sortant DU Compte Courant (RÈGLE 1)
+                        const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
+                        const _courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
+                        const _isCourantSrc = (k) => { if (!k || k === 'courant') return true; if (/^\d+$/.test(String(k))) return ('cpt_' + k) === _courantKey; return k === _courantKey; };
+                        const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {}))
+                            .filter(Boolean)
+                            .filter(obj => _isCourantSrc(obj.sourceCompte));
                         // Solde de départ : trésorerie réelle courante pour l'année en cours, 0 sinon
                         let rollingBalance = isViewCurYear ? (tresoActuelleCourante.value || 0) : 0;
                         return Array.from({ length: 12 }, (_, i) => {
@@ -8886,7 +8921,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const isPast = isViewPastYear || (isViewCurYear && mNum < curM);
                             if (isPast) continue; // cycle clos → rien dans le radar
                             const mode = (isViewCurYear && mNum === curM) ? 'remaining' : 'full';
-                            const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode);
+                            const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode, 'all');
                             totalEntrees += entrants;
                             totalSorties += sortants;
                         }
