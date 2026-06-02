@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.10 Monthly-Net-Export - Finance Master</title>
+    <title>v28.20 Savings-Delegation - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.10 Monthly-Net-Export";
+                    const CURRENT_VERSION = "28.20 Savings-Delegation";
                     const CHANGELOG = [
+        { version: "28.20 Savings-Delegation", date: "2026-06-02", changes: [
+            "SYSTEM PROMPT renforcé (section 5bis) : pour toute épargne en % du surplus/reliquat/net, l'IA a INTERDICTION de calculer les montants mensuels. Elle DOIT appeler set_recurring_savings(name, percentage_of_reliquat) et laisser le backend calculer le net isolé mois par mois. Une suite cumulative croissante (5792, 11129, 16466…) est explicitement signalée comme ERREUR à ne jamais présenter.",
+            "Objectif : empêcher l'agent de produire des virements cumulés erronés en calculant lui-même."
+        ] },
         { version: "28.10 Monthly-Net-Export", date: "2026-06-02", changes: [
             "Le payload CFO (_buildPayloadCFO) exporte désormais surplus_mensuel_net_courant : tableau {mois, net, isPast, isCurrent} = miroir EXACT de la colonne NET du tableau Surplus Détaillé. C'est la SSOT lue par le backend set_recurring_savings pour générer des virements d'épargne mensuels isolés (90% du net positif), sans que l'IA ne calcule quoi que ce soit.",
             "Objectif : empêcher l'agent de recalculer des montants cumulatifs erronés. Le backend lit le net mensuel déjà calculé et bâtit une exception par mois (isolée)."
@@ -7111,6 +7115,13 @@ Appelle finance_rag avec "stratégie studio exploitation". Si Airbnb :
 ═══ 5. WORKFLOW DE MODIFICATION (OBLIGATOIRE) ═══
 Tour 1 : Appelle propose_changes. Si pending_saved=true → présente le delta en HTML et termine EXACTEMENT par : « <br/><br/>Confirmez-vous ? Tapez OUI pour exécuter. »
 Tour 2 : Si "OUI", appelle committer avec { "confirmation": "OUI" }.
+
+═══ 5bis. ÉPARGNE EN % DU SURPLUS / RELIQUAT / NET — DÉLÉGATION TOTALE AU BACKEND (RÈGLE ABSOLUE) ═══
+Quand l'utilisateur demande une épargne récurrente définie comme un POURCENTAGE du surplus / reliquat / net mensuel (ex: « épargne 90% du net du Compte Courant, mois positifs uniquement ») :
+• INTERDICTION FORMELLE de calculer toi-même les montants mensuels. Tu n'additionnes rien, tu ne déduis aucun virement à partir de la matrice. Le calcul mois par mois (90% du net ISOLÉ, 0 si le mois est négatif) se fait EXCLUSIVEMENT côté backend.
+• Tu DOIS appeler propose_changes en utilisant la fonction du catalogue set_recurring_savings avec UNIQUEMENT : name (nom de la ligne) + percentage_of_reliquat (ex: 90) + source_account si précisé. Tu ne fournis JAMAIS de montants mensuels calculés par toi.
+• Tu présentes ENSUITE UNIQUEMENT les montants RENVOYÉS par l'outil. Si l'outil ne détaille pas, dis simplement que les virements mensuels isolés ont été configurés (un par mois, sans cumul).
+• SIGNAL D'ERREUR : des montants mensuels qui CROISSENT en cumul (ex: 5 792 → 11 129 → 16 466 → 21 804…) sont mathématiquement FAUX. Les virements sont STRICTEMENT ISOLÉS : chaque mois est indépendant, il n'y a JAMAIS de report d'un mois sur l'autre. Si tu obtiens une suite croissante, NE LA PRÉSENTE PAS — c'est que tu as calculé au lieu de déléguer.
 
 ═══ 6. FORMAT VISUEL ET QUALITÉ DE RENDU (CRITIQUE) ═══
 FORMAT HTML BRUT OBLIGATOIRE. (Pas de markdown). Ton texte doit être EXTRÊMEMENT AÉRÉ et VISUEL.
