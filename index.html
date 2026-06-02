@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v27.80 Mixed-Surplus-Logic - Finance Master</title>
+    <title>v28.00 Payload-Sync - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "27.80 Mixed-Surplus-Logic";
+                    const CURRENT_VERSION = "28.00 Payload-Sync";
                     const CHANGELOG = [
+        { version: "28.00 Payload-Sync", date: "2026-06-02", changes: [
+            "DÉSYNCHRO CORRIGÉE : le payload JSON envoyé à n8n (matrice_cash_flow_calculee dans obtenirEtatVisuelComplet) lisait spEntry.surplus — champ INEXISTANT depuis le renommage de surplusParMois — et retombait sur dc[cptKey] (solde cumulatif). L'IA recevait donc des soldes cumulés au lieu des surplus mensuels isolés.",
+            "FIX : la ligne Compte Courant de la matrice lit désormais spEntry.net (miroir EXACT du tableau Surplus Détaillé v27.80). Mois en cours = atterrissage réel (-1 205 DH) ; mois futurs = potentiel isolé. Plus aucun fallback cumulatif (0 si pas de valeur isolée).",
+            "Texte d'instruction de lecture renforcé : interdiction explicite d'additionner les mois entre eux ; chaque mois est autonome. Les autres comptes (épargne, CTO) restent en solde cumulatif projeté (inchangé).",
+            "L'IA lit maintenant exactement les mêmes chiffres que l'interface."
+        ] },
         { version: "27.80 Mixed-Surplus-Logic", date: "2026-06-02", changes: [
             "COLONNES redéfinies : BRUT = Surplus avant épargne (= entrants - sortants), ÉPARGNE = épargne du mois, NET = BRUT - ÉPARGNE. Le BRUT n'est PLUS la somme brute des revenus.",
             "MOIS COURANT (Juin) : BRUT = solde réel du Compte Courant (tresoActuelleCourante) + entrants restants - sortants restants → atterrissage de fin de mois réel (ex. -1 205 DH).",
@@ -6167,8 +6173,8 @@
                             lines.push('');
 
                             lines.push('[MATRICE DES COMPTES MOIS PAR MOIS (Moteur Cash-Flow) — Année ' + aNum + ']');
-                            lines.push('RÈGLE DE LECTURE : Ces données sont calculées par le moteur Vue.js. Ne recalcule JAMAIS par toi-même.');
-                            lines.push('  • Compte Courant → EXCÉDENT MENSUEL NET (revenus − charges − épargne pour CE mois). Valeur positive = surplus généré. Valeur négative = mois déficitaire.');
+                            lines.push('RÈGLE DE LECTURE : Ces données sont calculées par le moteur Vue.js. Ne recalcule JAMAIS, n\'additionne JAMAIS les mois entre eux.');
+                            lines.push('  • Compte Courant → SURPLUS MENSUEL ISOLÉ (miroir exact du tableau "Surplus Détaillé"). Mois en cours = atterrissage réel de fin de mois (solde actuel + entrants restants − sortants restants − épargne). Mois futurs = potentiel intrinsèque du mois (entrants − sortants − épargne), SANS report du mois précédent. Chaque mois est autonome.');
                             lines.push('  • Autres comptes (épargne, CTO…) → SOLDE CUMULATIF projeté en fin de mois.');
                             const rowsAnnee = (bilanLignes.value || []).filter(b => Number(b.annee) === Number(aNum));
                             // Clé du compte courant physique (pour mapper sourceCompte='courant')
@@ -6212,10 +6218,12 @@
                                             const lbl = c.label || getCompteLabel(cptKey) || cptKey;
                                             let solde;
                                             if (c.type === 'courant') {
-                                                // v20.62 : Compte Courant = excédent mensuel net (revenus − charges − épargne)
-                                                // Source : surplusParMois (même moteur que popup "SURPLUS RÉEL")
+                                                // v28.00 Payload-Sync : MIROIR EXACT de surplusParMois (champ net isolé)
+                                                //   Mois courant → atterrissage réel (solde actuel + entrants - sortants - épargne)
+                                                //   Mois futurs  → potentiel intrinsèque isolé (entrants - sortants - épargne)
+                                                //   AUCUN cumul, AUCUN report — on NE retombe JAMAIS sur dc[cptKey] (cumulatif)
                                                 const spEntry = _surplusMois.find(s => s.mNum === r.numMois);
-                                                solde = spEntry !== undefined ? Math.round(spEntry.surplus) : Math.round(dc[cptKey]);
+                                                solde = (spEntry && spEntry.net != null) ? Math.round(spEntry.net) : 0;
                                             } else {
                                                 // Autres comptes : solde cumulatif projeté (inchangé)
                                                 solde = Math.round(dc[cptKey]);
