@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v27.30 Brut-Net-Fix - Finance Master</title>
+    <title>v27.40 Atterrissage-Sync - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,7 +5388,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "27.30 Brut-Net-Fix";
+                    const CURRENT_VERSION = "27.40 Atterrissage-Sync";
                     const CHANGELOG = [
         { version: "27.30 Brut-Net-Fix", date: "2026-06-01", changes: [
             "BUG : surplusParMois calculait brut = entrants - sortants (résultat net → pouvait être négatif) au lieu de brut = entrants (revenus purs, toujours ≥ 0).",
@@ -8797,17 +8797,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const rem = monthly - paid;
                             if (rem > 0) sortants += Math.round(rem * 100) / 100;
                         });
-                        // Dépenses irrégulières → sortants | créances → entrants
-                        getDepensesCycle(mNum, annee).forEach(dep => {
-                            if (dep.sourceAssurance) return; // géré via assurances_tracker — pas de doublon
-                            const rawDue = Number(dep.montant || 0); if (rawDue === 0) return;
-                            const isCreance = rawDue < 0;
-                            const due = Math.abs(rawDue);
-                            let a;
-                            if (mode === 'full') a = due;
-                            else { if (isItemPaid(dep, due)) a = 0; else { const r = due - (getPaidAmount(dep, due)||0); a = r > 0 ? r : 0; } }
-                            if (a > 0) { if (isCreance) entrants += a; else sortants += a; }
-                        });
+                        // Les dépenses irrégulières sont exclues du surplus structurel — elles
+                        // sont mesurées séparément par le widget "Poids sur Surplus" (statsFluxAnnee.netAnnuel)
                         return { entrants: Math.round(entrants * 100) / 100, sortants: Math.round(sortants * 100) / 100 };
                     };
 
@@ -8839,10 +8830,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 (obj.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
                                 if (mode === 'full' || !isItemPaid(obj, v)) ep += v;
                             });
-                            // v27.30 Brut-Net-Fix : ventilation stricte — brut = entrées pures (toujours ≥ 0)
-                            const brut    = entrants;          // revenus + créances restants
-                            const sorties = sortants;          // charges + dépenses restantes
-                            return { mNum, brut, sorties, epargne: ep, net: brut - sorties - ep, isPast: false, isCurrent };
+                            // v27.40 Atterrissage-Sync : NET = miroir exact du journal
+                            const brut    = entrants;   // revenus restants (toujours ≥ 0)
+                            const sorties = sortants;   // charges restantes
+                            // Mois courant : atterrissage projeté = solde réel + flux restants (= journal)
+                            // Mois futurs  : surplus théorique du mois (pas de solde initial connu)
+                            const net = isCurrent
+                                ? (tresoActuelleCourante.value || 0) + entrants - sortants - ep
+                                : entrants - sortants - ep;
+                            return { mNum, brut, sorties, epargne: ep, net, isPast: false, isCurrent };
                         });
                     });
                     const showSurplusTooltip = ref(false);
@@ -8864,11 +8860,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let chocsEntrees = 0, chocsSorties = 0;
                         chocs.forEach(c => { const m = Number(c.montant || 0); if (m < 0) chocsEntrees += Math.abs(m); else chocsSorties += m; });
                         const netAnnuel = chocsSorties - chocsEntrees;
-                        // KPIs annuels : agrégation directe sur _getMonthFlux (même moteur que le journal)
+                        // KPIs annuels : réguliers (_getMonthFlux) + irréguliers (chocs) séparés
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         const isViewCurYear  = anneeAffichage.value === curA;
                         const isViewPastYear = anneeAffichage.value < curA;
-                        let totalEntrees = 0, totalSorties = 0;
+                        let totalEntrees = chocsEntrees, totalSorties = chocsSorties; // irréguliers inclus
                         for (let mNum = 1; mNum <= 12; mNum++) {
                             const isPast = isViewPastYear || (isViewCurYear && mNum < curM);
                             if (isPast) continue; // cycle clos → rien dans le radar
