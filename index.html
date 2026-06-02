@@ -8797,8 +8797,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const rem = monthly - paid;
                             if (rem > 0) sortants += Math.round(rem * 100) / 100;
                         });
-                        // Les dépenses irrégulières sont exclues du surplus structurel — elles
-                        // sont mesurées séparément par le widget "Poids sur Surplus" (statsFluxAnnee.netAnnuel)
+                        // Dépenses irrégulières → sortants | créances → entrants
+                        // mode 'remaining' : isItemPaid filtre les items déjà payés (déjà dans le solde réel)
+                        // mode 'full'      : tous les flux théoriques futurs inclus
+                        getDepensesCycle(mNum, annee).forEach(dep => {
+                            if (dep.sourceAssurance) return;
+                            const rawDue = Number(dep.montant || 0); if (rawDue === 0) return;
+                            const isCreance = rawDue < 0;
+                            const due = Math.abs(rawDue);
+                            let a;
+                            if (mode === 'full') a = due;
+                            else { if (isItemPaid(dep, due)) a = 0; else { const r = due - (getPaidAmount(dep, due)||0); a = r > 0 ? r : 0; } }
+                            if (a > 0) { if (isCreance) entrants += a; else sortants += a; }
+                        });
                         return { entrants: Math.round(entrants * 100) / 100, sortants: Math.round(sortants * 100) / 100 };
                     };
 
@@ -8806,10 +8817,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // L'épargne est une réallocation patrimoniale, pas une charge consommée.
                     // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
                     const surplusParMois = computed(() => {
-                        // v27.50 Cumulative-Atterrissage : NET = atterrissage cumulé mois par mois
-                        // Juin  : tresoActuelleCourante + flux restants  → atterrissage réel (= journal)
-                        // Juil+ : atterrissage du mois précédent + flux théoriques → projection enchaînée
-                        // surplusMensuel = flux net du mois seul (non cumulatif, pour les moyennes)
+                        // v27.50 Cumulative-Atterrissage (fix) : Rolling Cashflow avec effet domino
+                        //   brut (Cash Disponible)  = rollingBalance + revenus - charges - dépenses ponctuelles
+                        //                           → atterrissage PRÉ-épargne
+                        //   epargne                 = transferts d'épargne du mois
+                        //   net  (Solde Fin de Mois) = brut - epargne
+                        //                           → devient le rollingBalance du mois suivant
+                        //   surplusMensuel          = net sans rolling (flux seul) → pour les moyennes
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return [];
@@ -8817,27 +8831,31 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const isViewCurYear  = anneeAffichage.value === curA;
                         const isViewPastYear = anneeAffichage.value < curA;
                         const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
-                        // Solde de départ : trésorerie réelle pour l'année en cours, 0 sinon
-                        let runningBalance = isViewCurYear ? (tresoActuelleCourante.value || 0) : 0;
+                        // Solde de départ : trésorerie réelle courante pour l'année en cours, 0 sinon
+                        let rollingBalance = isViewCurYear ? (tresoActuelleCourante.value || 0) : 0;
                         return Array.from({ length: 12 }, (_, i) => {
                             const mNum = i + 1;
                             const isPast    = isViewPastYear || (isViewCurYear && mNum < curM);
                             const isCurrent = isViewCurYear && mNum === curM;
-                            if (isPast) return { mNum, brut: null, sorties: null, epargne: null, surplusMensuel: null, net: null, isPast: true, isCurrent: false };
+                            if (isPast) return { mNum, brut: null, epargne: null, surplusMensuel: null, net: null, isPast: true, isCurrent: false };
                             const mode = isCurrent ? 'remaining' : 'full';
                             const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode);
-                            // Épargne : réallocation patrimoniale, colonne dédiée (hors brut)
+                            // Épargne du mois
                             let ep = 0;
                             epArr.forEach(obj => {
                                 let v = Number(obj.valeur || 0);
                                 (obj.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
                                 if (mode === 'full' || !isItemPaid(obj, v)) ep += v;
                             });
-                            const brut          = entrants;                   // revenus du mois (≥ 0)
-                            const sorties       = sortants;                   // charges du mois
-                            const surplusMensuel = entrants - sortants - ep;  // flux net mensuel (non cumulatif)
-                            runningBalance      += surplusMensuel;             // chaînage : balance fin de mois
-                            return { mNum, brut, sorties, epargne: ep, surplusMensuel, net: runningBalance, isPast: false, isCurrent };
+                            // Atterrissage pré-épargne = solde initial du mois + revenus - toutes charges
+                            const brut = rollingBalance + entrants - sortants;
+                            // Solde fin de mois = atterrissage - épargne virée
+                            const net  = brut - ep;
+                            // Flux mensuel seul (sans rolling) → pour les moyennes du bas
+                            const surplusMensuel = entrants - sortants - ep;
+                            // Report domino : le net de ce mois est le solde de départ du suivant
+                            rollingBalance = net;
+                            return { mNum, brut, epargne: ep, surplusMensuel, net, isPast: false, isCurrent };
                         });
                     });
                     const showSurplusTooltip = ref(false);
@@ -8863,7 +8881,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         const isViewCurYear  = anneeAffichage.value === curA;
                         const isViewPastYear = anneeAffichage.value < curA;
-                        let totalEntrees = chocsEntrees, totalSorties = chocsSorties; // irréguliers inclus
+                        let totalEntrees = 0, totalSorties = 0; // _getMonthFlux inclut déjà les irréguliers
                         for (let mNum = 1; mNum <= 12; mNum++) {
                             const isPast = isViewPastYear || (isViewCurYear && mNum < curM);
                             if (isPast) continue; // cycle clos → rien dans le radar
