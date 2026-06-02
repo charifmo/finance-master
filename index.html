@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.00 Payload-Sync - Finance Master</title>
+    <title>v28.10 Monthly-Net-Export - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.00 Payload-Sync";
+                    const CURRENT_VERSION = "28.10 Monthly-Net-Export";
                     const CHANGELOG = [
+        { version: "28.10 Monthly-Net-Export", date: "2026-06-02", changes: [
+            "Le payload CFO (_buildPayloadCFO) exporte désormais surplus_mensuel_net_courant : tableau {mois, net, isPast, isCurrent} = miroir EXACT de la colonne NET du tableau Surplus Détaillé. C'est la SSOT lue par le backend set_recurring_savings pour générer des virements d'épargne mensuels isolés (90% du net positif), sans que l'IA ne calcule quoi que ce soit.",
+            "Objectif : empêcher l'agent de recalculer des montants cumulatifs erronés. Le backend lit le net mensuel déjà calculé et bâtit une exception par mois (isolée)."
+        ] },
         { version: "28.00 Payload-Sync", date: "2026-06-02", changes: [
             "DÉSYNCHRO CORRIGÉE : le payload JSON envoyé à n8n (matrice_cash_flow_calculee dans obtenirEtatVisuelComplet) lisait spEntry.surplus — champ INEXISTANT depuis le renommage de surplusParMois — et retombait sur dc[cptKey] (solde cumulatif). L'IA recevait donc des soldes cumulés au lieu des surplus mensuels isolés.",
             "FIX : la ligne Compte Courant de la matrice lit désormais spEntry.net (miroir EXACT du tableau Surplus Détaillé v27.80). Mois en cours = atterrissage réel (-1 205 DH) ; mois futurs = potentiel isolé. Plus aucun fallback cumulatif (0 si pas de valeur isolée).",
@@ -6352,10 +6356,21 @@
                             },
                         };
 
+                        // v28.10 : net mensuel ISOLÉ du Compte Courant (SSOT pour set_recurring_savings)
+                        //   miroir exact de la colonne NET du tableau "Surplus Détaillé"
+                        //   isPast=true → cycle clos (pas de prélèvement) ; net = surplus isolé du mois
+                        const surplus_mensuel_net_courant = (surplusParMois.value || []).map(r => ({
+                            mois: r.mNum,
+                            net: r.isPast ? null : Math.round(Number(r.net) || 0),
+                            isPast: !!r.isPast,
+                            isCurrent: !!r.isCurrent,
+                        }));
+
                         return {
                             annee: aNum,
                             instruction_lecture: 'La clé matrice_cash_flow_calculee contient les soldes RÉELS calculés par le moteur Vue.js. Tous les montants y sont déjà prélevés sur le bon compte. Les evenements_exceptionnels sont fournis à titre informatif uniquement — ils sont DÉJÀ inclus dans la matrice. Ne jamais recalculer.',
                             matrice_cash_flow_calculee,
+                            surplus_mensuel_net_courant,
                             comptes_actuels,
                             revenus_fixes,
                             charges_fixes,
