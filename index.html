@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v27.40 Atterrissage-Sync - Finance Master</title>
+    <title>v27.50 Cumulative-Atterrissage - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,7 +5388,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "27.40 Atterrissage-Sync";
+                    const CURRENT_VERSION = "27.50 Cumulative-Atterrissage";
                     const CHANGELOG = [
         { version: "27.30 Brut-Net-Fix", date: "2026-06-01", changes: [
             "BUG : surplusParMois calculait brut = entrants - sortants (résultat net → pouvait être négatif) au lieu de brut = entrants (revenus purs, toujours ≥ 0).",
@@ -8740,20 +8740,20 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return Object.values(ep || {}).reduce((sum, item) => sum + Number((item || {}).valeur || 0), 0);
                     });
                     const surplusMensuelBase = computed(() => {
-                        // v27.30 Brut-Net-Fix : moyenne sur r.net (surplus réel) — brut = revenus seuls depuis v27.30
+                        // v27.50 : moyenne sur surplusMensuel (flux net mensuel, non cumulatif)
                         const arr = surplusParMois.value.filter(r => !r.isPast);
                         if (!arr.length) return 0;
-                        return arr.reduce((s, r) => s + r.net, 0) / arr.length;
+                        return arr.reduce((s, r) => s + r.surplusMensuel, 0) / arr.length;
                     });
                     const surplusStats = computed(() => {
-                        // v26.74 : exclure mois passés de la moyenne (seulement mois courant + futurs)
+                        // v27.50 : moyNet basé sur surplusMensuel (flux mensuel) — net est cumulatif
                         const arr = surplusParMois.value.filter(r => !r.isPast);
                         if (!arr.length) return { moyBrut: 0, moyEpargne: 0, moyNet: 0 };
                         const n = arr.length;
                         return {
                             moyBrut:    arr.reduce((s, r) => s + r.brut, 0) / n,
                             moyEpargne: arr.reduce((s, r) => s + r.epargne, 0) / n,
-                            moyNet:     arr.reduce((s, r) => s + r.net, 0) / n,
+                            moyNet:     arr.reduce((s, r) => s + r.surplusMensuel, 0) / n,
                         };
                     });
 
@@ -8806,9 +8806,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // L'épargne est une réallocation patrimoniale, pas une charge consommée.
                     // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
                     const surplusParMois = computed(() => {
-                        // v27.20 Dashboard-Sync-Journal : SSOT — branché directement sur _getMonthFlux
-                        // Mois courant → 'remaining' (flux non cochés, miroir exact du journal)
-                        // Mois futurs  → 'full' (100 % théorique, miroir exact du journal)
+                        // v27.50 Cumulative-Atterrissage : NET = atterrissage cumulé mois par mois
+                        // Juin  : tresoActuelleCourante + flux restants  → atterrissage réel (= journal)
+                        // Juil+ : atterrissage du mois précédent + flux théoriques → projection enchaînée
+                        // surplusMensuel = flux net du mois seul (non cumulatif, pour les moyennes)
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
                         if (!d) return [];
@@ -8816,11 +8817,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const isViewCurYear  = anneeAffichage.value === curA;
                         const isViewPastYear = anneeAffichage.value < curA;
                         const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
+                        // Solde de départ : trésorerie réelle pour l'année en cours, 0 sinon
+                        let runningBalance = isViewCurYear ? (tresoActuelleCourante.value || 0) : 0;
                         return Array.from({ length: 12 }, (_, i) => {
                             const mNum = i + 1;
                             const isPast    = isViewPastYear || (isViewCurYear && mNum < curM);
                             const isCurrent = isViewCurYear && mNum === curM;
-                            if (isPast) return { mNum, brut: null, epargne: null, net: null, isPast: true, isCurrent: false };
+                            if (isPast) return { mNum, brut: null, sorties: null, epargne: null, surplusMensuel: null, net: null, isPast: true, isCurrent: false };
                             const mode = isCurrent ? 'remaining' : 'full';
                             const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode);
                             // Épargne : réallocation patrimoniale, colonne dédiée (hors brut)
@@ -8830,15 +8833,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 (obj.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
                                 if (mode === 'full' || !isItemPaid(obj, v)) ep += v;
                             });
-                            // v27.40 Atterrissage-Sync : NET = miroir exact du journal
-                            const brut    = entrants;   // revenus restants (toujours ≥ 0)
-                            const sorties = sortants;   // charges restantes
-                            // Mois courant : atterrissage projeté = solde réel + flux restants (= journal)
-                            // Mois futurs  : surplus théorique du mois (pas de solde initial connu)
-                            const net = isCurrent
-                                ? (tresoActuelleCourante.value || 0) + entrants - sortants - ep
-                                : entrants - sortants - ep;
-                            return { mNum, brut, sorties, epargne: ep, net, isPast: false, isCurrent };
+                            const brut          = entrants;                   // revenus du mois (≥ 0)
+                            const sorties       = sortants;                   // charges du mois
+                            const surplusMensuel = entrants - sortants - ep;  // flux net mensuel (non cumulatif)
+                            runningBalance      += surplusMensuel;             // chaînage : balance fin de mois
+                            return { mNum, brut, sorties, epargne: ep, surplusMensuel, net: runningBalance, isPast: false, isCurrent };
                         });
                     });
                     const showSurplusTooltip = ref(false);
