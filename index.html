@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v27.70 Isolated-Monthly-Potential - Finance Master</title>
+    <title>v27.80 Mixed-Surplus-Logic - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "27.70 Isolated-Monthly-Potential";
+                    const CURRENT_VERSION = "27.80 Mixed-Surplus-Logic";
                     const CHANGELOG = [
+        { version: "27.80 Mixed-Surplus-Logic", date: "2026-06-02", changes: [
+            "COLONNES redéfinies : BRUT = Surplus avant épargne (= entrants - sortants), ÉPARGNE = épargne du mois, NET = BRUT - ÉPARGNE. Le BRUT n'est PLUS la somme brute des revenus.",
+            "MOIS COURANT (Juin) : BRUT = solde réel du Compte Courant (tresoActuelleCourante) + entrants restants - sortants restants → atterrissage de fin de mois réel (ex. -1 205 DH).",
+            "MOIS FUTURS (Juil+) : BRUT = entrants - sortants du mois, sans solde de départ → potentiel intrinsèque pur (ex. ~+7 320 DH). Aucun rolling balance, aucun cumul entre les mois.",
+            "Périmètre Compte Courant strict conservé (scope 'courant'). KPIs annuels ENTRÉES/SORTIES inchangés (scope 'all')."
+        ] },
         { version: "27.70 Isolated-Monthly-Potential", date: "2026-06-02", changes: [
             "MARCHE ARRIÈRE sur v27.60 : suppression totale du rollingBalance et de l'effet domino. Le tableau Surplus Détaillé redevient un P&L mensuel ISOLÉ — chaque mois part de zéro, aucun report de solde. Le suivi de trésorerie cumulée reste géré exclusivement par le Journal.",
             "Plus aucune injection du solde bancaire (tresoActuelleCourante) dans le mois en cours.",
@@ -8854,11 +8860,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // L'épargne est une réallocation patrimoniale, pas une charge consommée.
                     // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
                     const surplusParMois = computed(() => {
-                        // v27.70 Isolated-Monthly-Potential : P&L mensuel ISOLÉ, Compte Courant strict
-                        //   Aucun report de solde — chaque mois part de zéro (pas de rolling balance).
-                        //   brut (Entrées)      = entrants du mois (revenus + créances) — toujours ≥ 0
-                        //   epargne             = virements d'épargne sortant du Courant
-                        //   net (Surplus mois)  = brut - sortants - epargne  (seul champ pouvant être < 0)
+                        // v27.80 Mixed-Surplus-Logic : surplus mensuel isolé, Compte Courant strict
+                        //   brut (Surplus avant épargne) = entrants - sortants ; PLUS le solde réel du
+                        //        Compte Courant UNIQUEMENT pour le mois en cours (atterrissage réel).
+                        //   epargne                      = virements d'épargne sortant du Courant
+                        //   net  (Surplus final)         = brut - epargne
+                        //   Aucun rolling balance entre les mois (mois futurs = potentiel intrinsèque pur).
                         //   Périmètre : _getMonthFlux en scope 'courant' (autres comptes exclus)
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
@@ -8887,10 +8894,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 (obj.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
                                 if (mode === 'full' || !isItemPaid(obj, v)) ep += v;
                             });
-                            // P&L isolé — aucun solde initial injecté
-                            const brut = entrants;                       // entrées pures du mois (≥ 0)
-                            const net  = brut - sortants - ep;           // surplus/déficit intrinsèque du mois
-                            const surplusMensuel = net;                  // identique : pas de cumul
+                            // Surplus avant épargne = (entrées - sorties), + solde réel UNIQUEMENT pour le mois courant
+                            const soldeDepart = isCurrent ? (tresoActuelleCourante.value || 0) : 0;
+                            const brut = soldeDepart + entrants - sortants;  // Juin = atterrissage réel ; futurs = potentiel pur
+                            const net  = brut - ep;                          // surplus final après épargne
+                            const surplusMensuel = net;                      // pas de cumul entre les mois
                             return { mNum, brut, epargne: ep, surplusMensuel, net, isPast: false, isCurrent };
                         });
                     });
