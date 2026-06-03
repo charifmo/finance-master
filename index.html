@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.20 Savings-Delegation - Finance Master</title>
+    <title>v28.30 Creances-Bilan-Sync - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.20 Savings-Delegation";
+                    const CURRENT_VERSION = "28.30 Creances-Bilan-Sync";
                     const CHANGELOG = [
+        { version: "28.30 Creances-Bilan-Sync", date: "2026-06-02", changes: [
+            "BUG : la Répartition du Patrimoine Projeté (et tout ce qui lit detailsComptesFinal / bilan) n'incluait PAS les créances assurance (assurances_tracker, remboursement:true), alors que le journal les crédite. Résultat : le compte de dépôt apparaissait faux de la somme des créances (ex. depenses annuels affiché -7 400 au lieu de +8 840, écart = 16 240 DH de créances).",
+            "FIX : passe d'injection dans le computed bilan — chaque créance Déclarée est créditée à son compteDepot (même résolution _normKey que le journal), en cumulatif à partir de son mois de remboursement. etatFinal reconstruit depuis la dernière ligne. Le bilan et le journal sont désormais alignés au centime."
+        ] },
         { version: "28.20 Savings-Delegation", date: "2026-06-02", changes: [
             "SYSTEM PROMPT renforcé (section 5bis) : pour toute épargne en % du surplus/reliquat/net, l'IA a INTERDICTION de calculer les montants mensuels. Elle DOIT appeler set_recurring_savings(name, percentage_of_reliquat) et laisser le backend calculer le net isolé mois par mois. Une suite cumulative croissante (5792, 11129, 16466…) est explicitement signalée comme ERREUR à ne jamais présenter.",
             "Objectif : empêcher l'agent de produire des virements cumulés erronés en calculant lui-même."
@@ -10518,8 +10522,44 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 };
                             }
                         });
-                        // v17.37 : Capturer l'état final (SSOT pour l'UI)
-                        const etatFinal = { courant: curSolde, comptes: { ...soldesComptes }, epargne: { ...soldesEpargne } };
+                        // ── v28.30 : INJECTION DES CRÉANCES (assurances_tracker) — alignement bilan ↔ journal ──
+                        // Le journal crédite chaque créance Déclarée (remboursement:true) à son compteDepot.
+                        // Le bilan les ignorait → divergence (patrimoine projeté faux de la somme des créances).
+                        // On crédite ici, en CUMULATIF, à partir du mois de remboursement (même logique forward,
+                        // même résolution _normKey que journalHybridePourReleve).
+                        (function _injectCreancesBilan() {
+                            const _creances = (soldesInitiaux.value.assurances_tracker || [])
+                                .filter(c => c && c.remboursement)
+                                .map(c => {
+                                    let cm = moisActuel, ca = anneeActuelle; // secours : cycle courant si pas de date
+                                    if (c.dateRemboursement) { const dr = new Date(c.dateRemboursement); if (!isNaN(dr.getTime())) { cm = dr.getMonth() + 1; ca = dr.getFullYear(); } }
+                                    const amt = Math.round(Number(c.montantRembourse || c.montant || 0) * 100) / 100;
+                                    const tgt = _normKey(c.compteDepot || 'courant');
+                                    return { idx: ca * 12 + cm, amt, tgt };
+                                })
+                                .filter(c => c.amt > 0);
+                            if (!_creances.length) return;
+                            _bilanResult.forEach(row => {
+                                const rowIdx = Number(row.annee) * 12 + Number(row.numMois);
+                                _creances.forEach(c => {
+                                    if (rowIdx < c.idx) return; // créance pas encore encaissée à ce mois
+                                    if (c.tgt === courantCptKey || c.tgt === 'courant') {
+                                        row.soldeCourant = Math.round((Number(row.soldeCourant || 0) + c.amt) * 100) / 100;
+                                        if (courantCptKey && row.detailsComptes && courantCptKey in row.detailsComptes) {
+                                            row.detailsComptes[courantCptKey] = Math.round((Number(row.detailsComptes[courantCptKey]) + c.amt) * 100) / 100;
+                                        }
+                                    } else if (row.detailsComptes && c.tgt in row.detailsComptes) {
+                                        row.detailsComptes[c.tgt] = Math.round((Number(row.detailsComptes[c.tgt]) + c.amt) * 100) / 100;
+                                    }
+                                });
+                            });
+                        })();
+
+                        // v17.37 / v28.30 : état final reconstruit depuis la dernière ligne (créances incluses)
+                        const _lastRow = _bilanResult[_bilanResult.length - 1];
+                        const etatFinal = _lastRow
+                            ? { courant: _lastRow.soldeCourant, comptes: { ...(_lastRow.detailsComptes || {}) }, epargne: { ...soldesEpargne } }
+                            : { courant: curSolde, comptes: { ...soldesComptes }, epargne: { ...soldesEpargne } };
                         return { lignes: _bilanResult, journal: _journal, etatFinal };
                     });
                     // v17.32 : Accesseurs propres — plus de side-effect dans la computed
