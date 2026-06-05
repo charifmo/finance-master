@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.30 Creances-Bilan-Sync - Finance Master</title>
+    <title>v28.40 Realized-Prorata - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.30 Creances-Bilan-Sync";
+                    const CURRENT_VERSION = "28.40 Realized-Prorata";
                     const CHANGELOG = [
+        { version: "28.40 Realized-Prorata", date: "2026-06-02", changes: [
+            "RÈGLE 1 — CHARGES FIXES (Reste à Payer réel) : partout dans le Mode Réalisé, le reste à payer d'une charge non soldée = Montant Prévu − Avance saisie (getPaidAmount), et non plus le budget plein. Appliqué à resteAPayerFixes, resteAPayerIrregulier, resteAPayerDetailParCompte (fixes, chocs, virements, épargne) et provisionsFuturesT0. Ex. Électricité prévue 1 000, avance 300 → reste 700 partout (DÉTAIL PAR COMPTE, Obligations du DISPONIBLE RÉEL). Le journal appliquait déjà cette règle.",
+            "RÈGLE 2 — CHARGES VARIABLES (Prorata Temporis) : l'enveloppe variable restante = Budget variable mensuel × (jours restants dans le mois / jours du mois), sans attendre de saisie. Nouveaux getters joursDansMoisCourant, joursRestantsMois, budgetVariableMensuelTotal, enveloppeVariableProrata. budgetConsoRestant et resteAPayerVariables consomment cette enveloppe. Dans le DÉTAIL PAR COMPTE, les variables apparaissent en UNE ligne 'Conso variable — prorata Xj/Yj' (plus de saisie ligne à ligne).",
+            "SSOT : ces changements sont dans les getters (computed), donc TOUS les widgets du Mode Réalisé s'alignent automatiquement. Le journal/surplus Prévisionnel n'est pas modifié (périmètre Mode Réalisé)."
+        ] },
         { version: "28.30 Creances-Bilan-Sync", date: "2026-06-02", changes: [
             "BUG : la Répartition du Patrimoine Projeté (et tout ce qui lit detailsComptesFinal / bilan) n'incluait PAS les créances assurance (assurances_tracker, remboursement:true), alors que le journal les crédite. Résultat : le compte de dépôt apparaissait faux de la somme des créances (ex. depenses annuels affiché -7 400 au lieu de +8 840, écart = 16 240 DH de créances).",
             "FIX : passe d'injection dans le computed bilan — chaque créance Déclarée est créditée à son compteDepot (même résolution _normKey que le journal), en cumulatif à partir de son mois de remboursement. etatFinal reconstruit depuis la dernière ligne. Le bilan et le journal sont désormais alignés au centime."
@@ -8983,12 +8988,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return { totalEntrees, totalSorties, netAnnuel, surplusMensuelMoyen, impactSurplus, montantImpact, top3Chocs };
                     });
 
-                    const budgetConsoRestant = computed(() => {
-                        calculationTick.value; const semRest = Number((soldesInitiaux.value || {}).semainesRestantes || 0);
-                        const dActuelle = donneesAnnuelles.value[soldesInitiaux.value.anneeActuelle];
-                        if (!dActuelle) return 0;
-                        return Object.values(dActuelle.chargesVariables || {}).filter(c => c?.periode === 'semaine').reduce((acc, curr) => acc + (Number(curr?.valeur||0)*semRest), 0);
-                    });
+                    // v28.40 : Budget conso restant = enveloppe variable au prorata temporis (RÈGLE 2)
+                    const budgetConsoRestant = computed(() => enveloppeVariableProrata.value);
 
                     // v22.30 — Trésorerie actuelle du mois (entrées cochées − sorties cochées)
                     const tresoActuelleMois = computed(() => {
@@ -9034,6 +9035,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const prorataSemainesRestantes = computed(() => budgetSemaineReel?.value ?? null);
 
                     // v22.40 — Reste à Payer (non cochés du mois courant)
+                    // v28.40 RÈGLE 1 : Reste fixe = Montant prévu − Avance saisie (getPaidAmount)
                     const resteAPayerFixes = computed(() => {
                         calculationTick.value;
                         const an = soldesInitiaux.value.anneeActuelle;
@@ -9042,28 +9044,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let total = 0;
                         Object.values(dActuelle.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, an);
-                            if (due > 0 && !isItemPaid(f, due)) total += due;
+                            if (due > 0) total += Math.max(0, due - getPaidAmount(f, due));
                         });
                         return total;
                     });
-                    const resteAPayerVariables = computed(() => {
-                        calculationTick.value;
-                        const an = soldesInitiaux.value.anneeActuelle;
-                        const dActuelle = donneesAnnuelles.value[an];
-                        if (!dActuelle) return 0;
-                        let total = 0;
-                        Object.values(dActuelle.chargesVariables || {}).filter(c => c?.periode === 'mois').forEach(cat => {
-                            if (cat.details && cat.details.length) {
-                                cat.details.forEach(f => {
-                                    if (!isItemPaid(f, Number(f.montant || 0))) total += Number(f.montant || 0);
-                                });
-                            } else {
-                                // Pas de détail → budget entier considéré non pointé
-                                total += Number(cat.valeur || 0);
-                            }
-                        });
-                        return total;
-                    });
+                    // v28.40 RÈGLE 2 : Reste variable = enveloppe prorata temporis (plus de saisie manuelle)
+                    const resteAPayerVariables = computed(() => enveloppeVariableProrata.value);
+                    // v28.40 RÈGLE 1 : Reste irrégulier = dû − avance saisie
                     const resteAPayerIrregulier = computed(() => {
                         calculationTick.value;
                         const an = soldesInitiaux.value.anneeActuelle;
@@ -9071,7 +9058,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let total = 0;
                         getDepensesMois(mois, an).forEach(dep => {
                             const m = Number(dep.montant || 0);
-                            if (m > 0 && !isItemPaid(dep, m)) total += m;
+                            if (m > 0) total += Math.max(0, m - getPaidAmount(dep, m));
                         });
                         return total;
                     });
@@ -9277,52 +9264,43 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             return groupsMap[key];
                         };
 
-                        // Charges fixes non payées
+                        // v28.40 RÈGLE 1 : Charges fixes → reste = dû − avance saisie (montantPaye)
                         Object.values(dActuelle.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, an);
-                            if (due > 0 && !isItemPaid(f, due) && ok(f)) {
+                            const reste = Math.max(0, due - getPaidAmount(f, due));
+                            if (reste > 0 && ok(f)) {
                                 const grp = getOrCreate(soldesInitiaux.value.compteChargesFixes || 'courant');
-                                grp.montant += due; grp.parNature.fix += due;
-                                grp.lignes.push({ nom: f.label || '?', montant: due, type: 'fix' });
+                                grp.montant += reste; grp.parNature.fix += reste;
+                                grp.lignes.push({ nom: f.label || '?', montant: reste, type: 'fix' });
                             }
                         });
-                        // Charges variables mensuelles non payées
-                        Object.values(dActuelle.chargesVariables || {}).filter(c => c?.periode === 'mois').forEach(cat => {
-                            const src = soldesInitiaux.value.compteChargesVariables || 'courant';
-                            if (cat.details && cat.details.length) {
-                                cat.details.forEach(f => {
-                                    const m = Number(f.montant || 0);
-                                    if (m > 0 && !isItemPaid(f, m) && ok(cat)) {
-                                        const grp = getOrCreate(src);
-                                        grp.montant += m; grp.parNature.var += m;
-                                        grp.lignes.push({ nom: f.nom || cat.label || '?', montant: m, type: 'var' });
-                                    }
-                                });
-                            } else {
-                                const m = Number(cat.valeur || 0);
-                                if (m > 0) {
-                                    const grp = getOrCreate(src);
-                                    grp.montant += m; grp.parNature.var += m;
-                                    grp.lignes.push({ nom: cat.label || '?', montant: m, type: 'var' });
-                                }
-                            }
-                        });
-                        // Dépenses irrégulières — v24.50 filtre cycle-aware (règle du 27)
+                        // v28.40 RÈGLE 2 : Charges variables → enveloppe au prorata temporis (1 ligne,
+                        // PAS une obligation par saisie). Imputée sur le compte macro des variables.
+                        if (enveloppeVariableProrata.value > 0) {
+                            const srcVar = soldesInitiaux.value.compteChargesVariables || 'courant';
+                            const envVar = enveloppeVariableProrata.value;
+                            const grp = getOrCreate(srcVar);
+                            grp.montant += envVar; grp.parNature.var += envVar;
+                            grp.lignes.push({ nom: 'Conso variable — prorata ' + joursRestantsMois.value + 'j / ' + joursDansMoisCourant.value + 'j', montant: envVar, type: 'var' });
+                        }
+                        // v28.40 RÈGLE 1 : Dépenses irrégulières → reste = dû − avance (filtre cycle-aware règle du 27)
                         getDepensesCycle(mois, an).forEach(dep => {
                             const m = Number(dep.montant || 0);
-                            if (m > 0 && !isItemPaid(dep, m) && ok(dep)) {
+                            const reste = Math.max(0, m - getPaidAmount(dep, m));
+                            if (m > 0 && reste > 0 && ok(dep)) {
                                 const grp = getOrCreate(dep.sourceCompte || 'courant');
-                                grp.montant += m; grp.parNature.choc += m;
-                                grp.lignes.push({ nom: dep.nom || '?', montant: m, type: 'choc' });
+                                grp.montant += reste; grp.parNature.choc += reste;
+                                grp.lignes.push({ nom: dep.nom || '?', montant: reste, type: 'choc' });
                             }
                         });
-                        // Virements sortants du mois non payés
+                        // v28.40 RÈGLE 1 : Virements sortants → reste = dû − avance
                         getVirementsMois(mois, an).forEach(vir => {
                             const m = Number(vir.montant || 0);
-                            if (m > 0 && !isItemPaid(vir, m) && ok(vir)) {
+                            const reste = Math.max(0, m - getPaidAmount(vir, m));
+                            if (m > 0 && reste > 0 && ok(vir)) {
                                 const grp = getOrCreate(vir.sourceCompte || 'courant');
-                                grp.montant += m; grp.parNature.virement += m;
-                                grp.lignes.push({ nom: vir.label || vir.nom || '?', montant: m, type: 'virement' });
+                                grp.montant += reste; grp.parNature.virement += reste;
+                                grp.lignes.push({ nom: vir.label || vir.nom || '?', montant: reste, type: 'virement' });
                             }
                         });
                         // ── v22.80 : Épargne mensuelle (allocations non cochées) ─────────
@@ -9332,14 +9310,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         epargneArr.forEach(ep => {
                             const m = Number(ep.valeur || 0);
                             if (m <= 0) return;
-                            // Inclure toujours (obligation de virement épargne)
-                            // sauf si explicitement marqué payé dans la checklist
-                            if (isItemPaid(ep, m)) return;
+                            // v28.40 RÈGLE 1 : reste = virement prévu − avance déjà effectuée
+                            const reste = Math.max(0, m - getPaidAmount(ep, m));
+                            if (reste <= 0) return;
                             if (!ok(ep)) return;
                             const src = ep.sourceCompte || 'courant';
                             const grp = getOrCreate(src);
-                            grp.montant += m; grp.parNature.epargne += m;
-                            grp.lignes.push({ nom: ep.nom || ep.label || '?', montant: m, type: 'epargne', jourPrevu: ep.jourPrevu || null });
+                            grp.montant += reste; grp.parNature.epargne += reste;
+                            grp.lignes.push({ nom: ep.nom || ep.label || '?', montant: reste, type: 'epargne', jourPrevu: ep.jourPrevu || null });
                         });
 
                         // Courant en premier, puis par montant décroissant
@@ -9416,20 +9394,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!d) return 0;
                         const today = new Date().getDate();
                         let total = 0;
+                        // v28.40 RÈGLE 1 : provisions futures fixes = dû − avance (jourPrevu futur)
                         Object.values(d.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, mb.an);
-                            if (due > 0 && !isItemPaid(f, due) && f.jourPrevu && f.jourPrevu > today) total += due;
+                            if (due > 0 && f.jourPrevu && f.jourPrevu > today) total += Math.max(0, due - getPaidAmount(f, due));
                         });
-                        Object.values(d.chargesVariables || {}).forEach(cat => {
-                            if (cat.periode !== 'mois') return;
-                            const m = cat.details?.length
-                                ? cat.details.reduce((s, dt) => s + Number(dt.montant || 0), 0)
-                                : Number(cat.valeur || 0);
-                            if (m > 0 && !isItemPaid(cat, m) && cat.jourPrevu && cat.jourPrevu > today) total += m;
-                        });
+                        // v28.40 RÈGLE 2 : les variables ne sont plus provisionnées par saisie — elles
+                        // relèvent de l'enveloppe prorata (prorataVariableT0), donc exclues d'ici (anti double-compte).
                         (d.epargne || []).forEach(ep => {
                             const m = Number(ep.valeur || 0);
-                            if (m > 0 && !isItemPaid(ep, m) && ep.jourPrevu && ep.jourPrevu > today) total += m;
+                            if (m > 0 && ep.jourPrevu && ep.jourPrevu > today) total += Math.max(0, m - getPaidAmount(ep, m));
                         });
                         return total;
                     });
@@ -9592,6 +9566,35 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const semaines = totalCycleJours / 7;
                         if (!semaines) return 0;
                         return budgetConsoTheoriqueMois.value / semaines;
+                    });
+
+                    // ════════════════════════════════════════════════════════════════════
+                    // v28.40 Realized-Prorata : RÈGLE 2 — Charges variables = Prorata Temporis
+                    //   Enveloppe variable restante = Budget mensuel × (jours restants / jours du mois)
+                    //   (calendaire : ex. 10 000 × 20/30 si 20 jours restent sur un mois de 30)
+                    // ════════════════════════════════════════════════════════════════════
+                    const joursDansMoisCourant = computed(() => {
+                        const d = new Date();
+                        return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); // dernier jour du mois
+                    });
+                    const joursRestantsMois = computed(() => {
+                        const d = new Date();
+                        return Math.max(0, joursDansMoisCourant.value - d.getDate()); // jours restants (aujourd'hui consommé)
+                    });
+                    // Budget variable mensuel total (mois + hebdo converti ×4.3) du cycle courant
+                    const budgetVariableMensuelTotal = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an];
+                        if (!d) return 0;
+                        return Object.values(d.chargesVariables || {}).reduce((s, c) => s + getMonthlyVariableValue(c || {}), 0);
+                    });
+                    // Enveloppe variable RESTANTE (prorata temporis) — 0 si cycle clos
+                    const enveloppeVariableProrata = computed(() => {
+                        calculationTick.value;
+                        if (isCyclePasse.value) return 0;
+                        const jt = joursDansMoisCourant.value || 1;
+                        return Math.round(budgetVariableMensuelTotal.value * (joursRestantsMois.value / jt));
                     });
 
                     // Listes en lecture seule pour la vue théorique (groupées par compte)
