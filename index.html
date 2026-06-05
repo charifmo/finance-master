@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.40 Realized-Prorata - Finance Master</title>
+    <title>v28.50 Journal-Mirror - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.40 Realized-Prorata";
+                    const CURRENT_VERSION = "28.50 Journal-Mirror";
                     const CHANGELOG = [
+        { version: "28.50 Journal-Mirror", date: "2026-06-02", changes: [
+            "JOURNAL = MIROIR DES WIDGETS : la ligne '🛒 Total Charges Variables' du Relevé de Comptes (cycle courant, mode 'remaining' de _mkLegs) affiche désormais EXACTEMENT enveloppeVariableProrata (prorata temporis jours restants/jours du mois) au lieu de mensuel−payé. Les cycles futurs ('full') gardent le budget mensuel plein.",
+            "Charges fixes : aucune correction nécessaire — _mkLegs utilisait déjà due−avance (getPaidAmount) en mode 'remaining', donc '💳 Total Charges Fixes' reflète déjà le widget Reste à Payer.",
+            "Conséquence : l'Atterrissage Projeté du journal intègre le prorata temps réel et colle aux cartes du Mode Réalisé. Le payload de l'IA (surplusParMois/_getMonthFlux/matrice_cash_flow_calculee) est un moteur SÉPARÉ et reste inchangé — aucune régression côté agent."
+        ] },
         { version: "28.40 Realized-Prorata", date: "2026-06-02", changes: [
             "RÈGLE 1 — CHARGES FIXES (Reste à Payer réel) : partout dans le Mode Réalisé, le reste à payer d'une charge non soldée = Montant Prévu − Avance saisie (getPaidAmount), et non plus le budget plein. Appliqué à resteAPayerFixes, resteAPayerIrregulier, resteAPayerDetailParCompte (fixes, chocs, virements, épargne) et provisionsFuturesT0. Ex. Électricité prévue 1 000, avance 300 → reste 700 partout (DÉTAIL PAR COMPTE, Obligations du DISPONIBLE RÉEL). Le journal appliquait déjà cette règle.",
             "RÈGLE 2 — CHARGES VARIABLES (Prorata Temporis) : l'enveloppe variable restante = Budget variable mensuel × (jours restants dans le mois / jours du mois), sans attendre de saisie. Nouveaux getters joursDansMoisCourant, joursRestantsMois, budgetVariableMensuelTotal, enveloppeVariableProrata. budgetConsoRestant et resteAPayerVariables consomment cette enveloppe. Dans le DÉTAIL PAR COMPTE, les variables apparaissent en UNE ligne 'Conso variable — prorata Xj/Yj' (plus de saisie ligne à ligne).",
@@ -8600,13 +8605,21 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             }, {});
                             Object.keys(_fixByAcc).forEach(k => { if (_fixByAcc[k] > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _fixByAcc[k], type: 'debit', jourPrevu: 10, internal: false }); });
 
-                            // ===== CHARGES VARIABLES : VRAIE AGRÉGATION MATHÉMATIQUE (reduce) → UNE seule ligne par compte =====
-                            const _varByAcc = Object.values(dA.chargesVariables || {}).reduce((acc, cv) => {
-                                const amt = _varAmt(cv);
-                                if (amt > 0) acc[_varSrc] = Math.round(((acc[_varSrc] || 0) + amt) * 100) / 100;
-                                return acc;
-                            }, {});
-                            Object.keys(_varByAcc).forEach(k => { if (_varByAcc[k] > 0) out.push({ account: k, libelle: '🛒 Total Charges Variables', montant: _varByAcc[k], type: 'debit', jourPrevu: 15, internal: false }); });
+                            // ===== CHARGES VARIABLES =====
+                            // v28.50 : cycle courant ('remaining') → MIROIR EXACT du widget Mode Réalisé =
+                            //   enveloppe au prorata temporis (jours restants / jours du mois). Plus de
+                            //   soustraction mensuel−payé. Cycles futurs ('full') → budget mensuel plein agrégé.
+                            if (mode === 'remaining') {
+                                const _envVar = Math.round((enveloppeVariableProrata.value || 0) * 100) / 100;
+                                if (_envVar > 0) out.push({ account: _varSrc, libelle: '🛒 Total Charges Variables', montant: _envVar, type: 'debit', jourPrevu: 15, internal: false });
+                            } else {
+                                const _varByAcc = Object.values(dA.chargesVariables || {}).reduce((acc, cv) => {
+                                    const amt = _varAmt(cv);
+                                    if (amt > 0) acc[_varSrc] = Math.round(((acc[_varSrc] || 0) + amt) * 100) / 100;
+                                    return acc;
+                                }, {});
+                                Object.keys(_varByAcc).forEach(k => { if (_varByAcc[k] > 0) out.push({ account: k, libelle: '🛒 Total Charges Variables', montant: _varByAcc[k], type: 'debit', jourPrevu: 15, internal: false }); });
+                            }
 
                             // ===== CHOCS EXCEPTIONNELS : DÉTAILLÉS ligne par ligne (créances via assurances_tracker) =====
                             getDepensesCycle(m, a).forEach(dep => {
