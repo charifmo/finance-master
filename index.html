@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.70 Journal-Cycle-Fix - Finance Master</title>
+    <title>v28.80 Journal-Direct-Sync - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.70 Journal-Cycle-Fix";
+                    const CURRENT_VERSION = "28.80 Journal-Direct-Sync";
                     const CHANGELOG = [
+        { version: "28.80 Journal-Direct-Sync", date: "2026-06-02", changes: [
+            "Diagnostic architecte : Il y a DEUX journaux indépendants. Le journal visible (journalHybride) calcule les charges directement en ligne (ligne 8457+), indépendant de _mkLegs. Ce journal ne lisait JAMAIS les getters resteAPayerFixes/enveloppeVariableProrata.",
+            "FIX : Modifier journalHybride pour que le mois courant (_isCurM = mois === moisBudgetaire && an === moisBudgetaire) lise les getters directement. Charges fixes : une seule ligne '💳 Total Charges Fixes' = resteAPayerFixes.value (Prévu - Avance). Charges variables : une seule ligne '🛒 Total Charges Variables' = enveloppeVariableProrata.value (prorata temporis). Mois futurs gardent le calcul théorique.",
+            "Résultat : le journal Pilotage affiche maintenant 700 DH (reste) au lieu de 300 DH (avance), et les variables au prorata, exactement comme les cartes KPI."
+        ] },
         { version: "28.70 Journal-Cycle-Fix", date: "2026-06-02", changes: [
             "BUG v28.60 : _isCurM = (m === curM) évaluait à false car l'info 'cycle courant' n'était pas passée explicitement à _mkLegs — la comparaison pouvait échouer selon les call-sites.",
             "FIX triple sécurité : 1) param isCurrentCycle passé explicitement depuis les deux call-sites (dispLegs + _impacted) qui calculent déjà isCurrent/_isCur correctement ; 2) Number() coercion sur m/curM/a/curA ; 3) fallback mode==='remaining'. Si AU MOINS UN des trois est vrai → getter activé.",
@@ -8453,42 +8458,73 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                         });
 
-                        // Charges fixes
-                        Object.values(dAnnee.chargesFixes || {}).forEach(f => {
-                            const due = Number(f.valeur || 0);
-                            if (!due) return;
-                            const paid = isItemPaid(f, due);
-                            const amt = paid ? (getPaidAmount(f, due) || due) : due;
-                            (paid ? paidItems : unpaidItems).push({
-                                libelle: f.label || 'Charge fixe',
-                                montant: amt, type: 'debit',
-                                jourPrevu: Number(f.jourPrevu || 10),
-                                etat: paid ? 'realise' : 'prevu',
-                                sourceCompte: soldesInitiaux.value.compteChargesFixes || 'courant'
-                            });
-                        });
-
-                        // Charges variables — v24.90 : agrégé par catégorie (détails groupés)
-                        Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
-                            const _cvSrc = soldesInitiaux.value.compteChargesVariables || 'courant';
-                            if ((cv.details || []).length > 0) {
-                                let _paidAmt = 0, _unpaidAmt = 0;
-                                cv.details.forEach(d => {
-                                    const due = Number(d.montant || 0);
-                                    if (!due) return;
-                                    if (isItemPaid(d, due)) _paidAmt += getPaidAmount(d, due) || due;
-                                    else _unpaidAmt += due;
+                        // ═══ v28.80 : Charges fixes ═══
+                        // Mois courant → lire resteAPayerFixes.value (SSOT, Mode Réalisé)
+                        // Mois futurs → calcul théorique inchangé
+                        const _isCurM = (mois === moisBudgetaire.value.mois && an === moisBudgetaire.value.an);
+                        if (_isCurM) {
+                            const resteFixe = Number(resteAPayerFixes.value || 0);
+                            if (resteFixe > 0) {
+                                unpaidItems.push({
+                                    libelle: '💳 Total Charges Fixes',
+                                    montant: resteFixe, type: 'debit',
+                                    jourPrevu: 10,
+                                    etat: 'prevu',
+                                    sourceCompte: soldesInitiaux.value.compteChargesFixes || 'courant'
                                 });
-                                if (_paidAmt > 0) paidItems.push({ libelle: cv.label || 'Variable', montant: _paidAmt, type: 'debit', jourPrevu: 15, etat: 'realise', sourceCompte: _cvSrc });
-                                if (_unpaidAmt > 0) unpaidItems.push({ libelle: cv.label || 'Variable', montant: _unpaidAmt, type: 'debit', jourPrevu: 15, etat: 'prevu', sourceCompte: _cvSrc });
-                            } else {
-                                const due = Number(cv.valeur || 0);
-                                if (!due) return;
-                                const paid = isItemPaid(cv, due);
-                                const amt = paid ? (getPaidAmount(cv, due) || due) : due;
-                                (paid ? paidItems : unpaidItems).push({ libelle: cv.label || 'Variable', montant: amt, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu', sourceCompte: _cvSrc });
                             }
-                        });
+                        } else {
+                            Object.values(dAnnee.chargesFixes || {}).forEach(f => {
+                                const due = Number(f.valeur || 0);
+                                if (!due) return;
+                                const paid = isItemPaid(f, due);
+                                const amt = paid ? (getPaidAmount(f, due) || due) : due;
+                                (paid ? paidItems : unpaidItems).push({
+                                    libelle: f.label || 'Charge fixe',
+                                    montant: amt, type: 'debit',
+                                    jourPrevu: Number(f.jourPrevu || 10),
+                                    etat: paid ? 'realise' : 'prevu',
+                                    sourceCompte: soldesInitiaux.value.compteChargesFixes || 'courant'
+                                });
+                            });
+                        }
+
+                        // ═══ v28.80 : Charges variables ═══
+                        // Mois courant → lire enveloppeVariableProrata.value (SSOT, prorata temporis)
+                        // Mois futurs → calcul théorique inchangé
+                        if (_isCurM) {
+                            const envVar = Number(enveloppeVariableProrata.value || 0);
+                            if (envVar > 0) {
+                                unpaidItems.push({
+                                    libelle: '🛒 Total Charges Variables',
+                                    montant: envVar, type: 'debit',
+                                    jourPrevu: 15,
+                                    etat: 'prevu',
+                                    sourceCompte: soldesInitiaux.value.compteChargesVariables || 'courant'
+                                });
+                            }
+                        } else {
+                            Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
+                                const _cvSrc = soldesInitiaux.value.compteChargesVariables || 'courant';
+                                if ((cv.details || []).length > 0) {
+                                    let _paidAmt = 0, _unpaidAmt = 0;
+                                    cv.details.forEach(d => {
+                                        const due = Number(d.montant || 0);
+                                        if (!due) return;
+                                        if (isItemPaid(d, due)) _paidAmt += getPaidAmount(d, due) || due;
+                                        else _unpaidAmt += due;
+                                    });
+                                    if (_paidAmt > 0) paidItems.push({ libelle: cv.label || 'Variable', montant: _paidAmt, type: 'debit', jourPrevu: 15, etat: 'realise', sourceCompte: _cvSrc });
+                                    if (_unpaidAmt > 0) unpaidItems.push({ libelle: cv.label || 'Variable', montant: _unpaidAmt, type: 'debit', jourPrevu: 15, etat: 'prevu', sourceCompte: _cvSrc });
+                                } else {
+                                    const due = Number(cv.valeur || 0);
+                                    if (!due) return;
+                                    const paid = isItemPaid(cv, due);
+                                    const amt = paid ? (getPaidAmount(cv, due) || due) : due;
+                                    (paid ? paidItems : unpaidItems).push({ libelle: cv.label || 'Variable', montant: amt, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu', sourceCompte: _cvSrc });
+                                }
+                            });
+                        }
 
                         // Dépenses irrégulières — v24.60 règle du 27 (cycle-aware)
                         getDepensesCycle(mois, an).forEach(dep => {
