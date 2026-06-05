@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.60 Journal-Getter-Sync - Finance Master</title>
+    <title>v28.70 Journal-Cycle-Fix - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.60 Journal-Getter-Sync";
+                    const CURRENT_VERSION = "28.70 Journal-Cycle-Fix";
                     const CHANGELOG = [
+        { version: "28.70 Journal-Cycle-Fix", date: "2026-06-02", changes: [
+            "BUG v28.60 : _isCurM = (m === curM) évaluait à false car l'info 'cycle courant' n'était pas passée explicitement à _mkLegs — la comparaison pouvait échouer selon les call-sites.",
+            "FIX triple sécurité : 1) param isCurrentCycle passé explicitement depuis les deux call-sites (dispLegs + _impacted) qui calculent déjà isCurrent/_isCur correctement ; 2) Number() coercion sur m/curM/a/curA ; 3) fallback mode==='remaining'. Si AU MOINS UN des trois est vrai → getter activé.",
+            "console.log('[v28.70 DEBUG JOURNAL]' ajouté une seule fois (window.__DEBUG_JOURNAL guard) : permet de tracer {m, curM, a, curA, mode, isCurrentCycle, _isCurM} en cas de régression."
+        ] },
         { version: "28.60 Journal-Getter-Sync", date: "2026-06-02", changes: [
             "BUG v28.50 corrigé : la condition 'if (mode === remaining)' échouait quand le journal est ouvert depuis l'onglet Bilan/Prévisionnel (mode='full' même pour le mois courant). Résultat : fixes plein budget, variables plein budget.",
             "FIX : la détection du mois courant est désormais basée sur _isCurM = (m === curM && a === curA), INDÉPENDANTE du mode. Pour le mois courant : Fixes lus depuis resteAPayerFixes.value (due−avance, SSOT) ; Variables lues depuis enveloppeVariableProrata.value (prorata temporis, SSOT). Pour les mois futurs : calcul local _amt/_varAmt inchangé.",
@@ -8557,9 +8562,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         };
 
                         // ── Génère les "legs" d'un cycle (m, a) ──
-                        //   mode 'remaining' : cycle courant → uniquement le reste non payé (paye:false)
-                        //   mode 'full'      : cycle futur   → tous les flux théoriques valides
-                        const _mkLegs = (m, a, mode) => {
+                        //   mode 'remaining'    : cycle courant → uniquement le reste non payé (paye:false)
+                        //   mode 'full'         : cycle futur   → tous les flux théoriques valides
+                        //   isCurrentCycle=true : force la lecture des getters Mode Réalisé (indépendant du mode)
+                        const _mkLegs = (m, a, mode, isCurrentCycle = false) => {
                             const dA = donneesAnnuelles.value[a] || {};
                             // v25.97 Strict-Radar : UN LEG PAR FLUX individuel — aucune agrégation, aucun reduce de fusion
                             const out = [];
@@ -8603,9 +8609,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (mode === 'realized-in') return out;
 
                             // ===== CHARGES FIXES =====
-                            // v28.60 : mois courant → getter resteAPayerFixes (SSOT, indépendant du mode)
-                            //          mois futurs  → calcul local _amt (due théorique)
-                            const _isCurM = (m === curM && a === curA);
+                            // v28.70 : détection cycle courant — triple sécurité :
+                            //   1. isCurrentCycle passé explicitement par le caller (source de vérité)
+                            //   2. Number() coercion (évite === strict sur types mixtes)
+                            //   3. mode === 'remaining' (fallback : le mode est déjà calculé par l'outer scope)
+                            const _isCurM = isCurrentCycle
+                                || (Number(m) === Number(curM) && Number(a) === Number(curA))
+                                || mode === 'remaining';
+                            if (typeof __DEBUG_JOURNAL === 'undefined') {
+                                // eslint-disable-next-line no-unused-vars
+                                window.__DEBUG_JOURNAL = true;
+                                console.log('[v28.70 DEBUG JOURNAL]', { m, curM, a, curA, mode, isCurrentCycle, _isCurM });
+                            }
                             if (_isCurM) {
                                 const _resteFix = Math.round((resteAPayerFixes.value || 0) * 100) / 100;
                                 if (_resteFix > 0) out.push({ account: _fxSrc, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
@@ -8730,7 +8745,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const _impacted = new Set();
                         _activeCycles.forEach(cyc => {
                             const _isCur = (cyc.m === curM && cyc.a === curA);
-                            _viewLegs(_mkLegs(cyc.m, cyc.a, _isCur ? 'remaining' : 'full')).forEach(l => _impacted.add(l.account));
+                            _viewLegs(_mkLegs(cyc.m, cyc.a, _isCur ? 'remaining' : 'full', _isCur)).forEach(l => _impacted.add(l.account));
                         });
 
                         const entries = [];
@@ -8766,7 +8781,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             }
 
                             // ── Flux futurs (paye:false) ── soldes[compte] += flux → Solde = soldes[compte] ──
-                            const dispLegs = _viewLegs(_mkLegs(cyc.m, cyc.a, isCurrent ? 'remaining' : 'full'));
+                            const dispLegs = _viewLegs(_mkLegs(cyc.m, cyc.a, isCurrent ? 'remaining' : 'full', isCurrent));
                             dispLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu));
                             dispLegs.forEach(l => {
                                 const soldeCompteApres = _apply(l.account, l.montant, l.type);
