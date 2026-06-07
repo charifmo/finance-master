@@ -8645,21 +8645,21 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (mode === 'realized-in') return out;
 
                             // ═══════════════════════════════════════════════════════════════════
-                            // v28.80 SOURCE-OF-TRUTH-BRIDGE : pour le cycle COURANT en mode 'remaining',
-                            //   on lit EXACTEMENT la même donnée réactive que la carte KPI "Reste à Payer"
-                            //   (resteAPayerDetailParCompte), au lieu de recomputer en parallèle.
-                            //   Les chocs et l'épargne restent traités en lignes détaillées plus bas.
-                            //   Pour les cycles futurs (mode 'full'), l'ancienne logique reste appliquée.
+                            // v28.81 SSOT-FIX : pour le cycle COURANT en mode 'remaining', lire les
+                            //   getters NON FILTRÉS par vueTemporelle :
+                            //     - resteAPayerFixes.value         → KPI "Reste à Payer" (Prévu − Avance)
+                            //     - enveloppeVariableProrata.value → KPI "Budget Conso Restant" (Prorata)
+                            //   resteAPayerDetailParCompte est filtré par ok()/vueTemporelle → inutilisable
+                            //   ici car le Relevé doit afficher TOUT le cycle, indépendamment de la vue.
+                            //   Routage : compteChargesFixes / compteChargesVariables (paramètres globaux).
+                            //   Les chocs et l'épargne restent en lignes détaillées plus bas.
                             // ═══════════════════════════════════════════════════════════════════
                             const _isCurrentCycle = (mode === 'remaining' && m === curM && a === curA);
                             if (_isCurrentCycle) {
-                                resteAPayerDetailParCompte.value.forEach(grp => {
-                                    const acc = _normKey(grp.key);
-                                    const fix = Math.round(Number(grp.parNature.fix || 0) * 100) / 100;
-                                    const varM = Math.round(Number(grp.parNature.var || 0) * 100) / 100;
-                                    if (fix > 0) out.push({ account: acc, libelle: '💳 Total Charges Fixes', montant: fix, type: 'debit', jourPrevu: 10, internal: false });
-                                    if (varM > 0) out.push({ account: acc, libelle: '🛒 Total Charges Variables', montant: varM, type: 'debit', jourPrevu: 15, internal: false });
-                                });
+                                const _resteFix = Math.round(Number(resteAPayerFixes.value || 0) * 100) / 100;
+                                if (_resteFix > 0) out.push({ account: _fxSrc, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
+                                const _envVar = Math.round(Number(enveloppeVariableProrata.value || 0) * 100) / 100;
+                                if (_envVar > 0) out.push({ account: _varSrc, libelle: '🛒 Total Charges Variables', montant: _envVar, type: 'debit', jourPrevu: 15, internal: false });
                             } else {
                                 // ===== CHARGES FIXES (cycles futurs) : reduce → UNE seule ligne par compte =====
                                 const _fixByAcc = Object.values(dA.chargesFixes || {}).reduce((acc, f) => {
