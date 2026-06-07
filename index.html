@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.80 Journal-Direct-Sync - Finance Master</title>
+    <title>v28.81 SSOT-Fix - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,9 +5388,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.80 Journal-Direct-Sync";
+                    const CURRENT_VERSION = "28.81 SSOT-Fix";
                     const CHANGELOG = [
-        { version: "28.80 Journal-Direct-Sync", date: "2026-06-02", changes: [
+        { version: "28.81 SSOT-Fix", date: "2026-06-07", changes: [
+            "DIAGNOSTIC : v28.80 lisait resteAPayerDetailParCompte, qui est FILTRÉ par vueTemporelle.value via ok(item). En vue 'at0', seuls les items dont jourPrevu <= today passent → le Relevé affichait 300 (slice 'déjà dus') au lieu de 700 (cycle complet).",
+            "FIX SSOT : le cycle courant en mode 'remaining' lit maintenant les getters NON FILTRÉS : resteAPayerFixes.value (KPI Reste à Payer = 700) et enveloppeVariableProrata.value (KPI Budget Conso Restant, prorata). Routage : _fxSrc / _varSrc (compteChargesFixes / compteChargesVariables des paramètres globaux).",
+            "Cycles futurs (mode 'full') et lignes chocs/épargne inchangés."
+        ] },
+        { version: "28.80 Journal-Direct-Sync", date: "2026-06-07", changes: [
+            "Résolution d'un conflit Git non résolu (<<<<<<<, =======, >>>>>>>) laissé par v28.50→v28.70 en plein milieu de _mkLegs : le parsing JS du computed journalHybridePourReleve cassait silencieusement, d'où les valeurs aberrantes (300 DH fixes / 13924 DH variables).",
+            "Premier pont via resteAPayerDetailParCompte — finalement révisé en v28.81 car ce computed est filtré par vueTemporelle.",
             "Diagnostic architecte : Il y a DEUX journaux indépendants. Le journal visible (journalHybride) calcule les charges directement en ligne (ligne 8457+), indépendant de _mkLegs. Ce journal ne lisait JAMAIS les getters resteAPayerFixes/enveloppeVariableProrata.",
             "FIX : Modifier journalHybride pour que le mois courant (_isCurM = mois === moisBudgetaire && an === moisBudgetaire) lise les getters directement. Charges fixes : une seule ligne '💳 Total Charges Fixes' = resteAPayerFixes.value (Prévu - Avance). Charges variables : une seule ligne '🛒 Total Charges Variables' = enveloppeVariableProrata.value (prorata temporis). Mois futurs gardent le calcul théorique.",
             "Résultat : le journal Pilotage affiche maintenant 700 DH (reste) au lieu de 300 DH (avance), et les variables au prorata, exactement comme les cartes KPI."
