@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.83 Dump - Finance Master</title>
+    <title>v28.90 Factures-Fix - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -4206,7 +4206,8 @@
                                                      class="flex justify-between gap-2 pl-3 text-[10px]">
                                                     <span class="text-slate-400 truncate max-w-[150px]">
                                                         <span v-if="ligne.type==='fix'">🏢</span>
-                                                        <span v-else-if="ligne.type==='var'">🧾</span>
+                                                        <span v-else-if="ligne.type==='factures'">🧾</span>
+                                                        <span v-else-if="ligne.type==='var'">🛒</span>
                                                         <span v-else-if="ligne.type==='choc'">⚠️</span>
                                                         <span v-else-if="ligne.type==='epargne'">💰</span>
                                                         <span v-else>🔄</span>
@@ -5388,8 +5389,17 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.83 Dump";
+                    const CURRENT_VERSION = "28.90 Factures-Fix";
                     const CHANGELOG = [
+        { version: "28.90 Factures-Fix", date: "2026-06-07", changes: [
+            "CAUSE RACINE (révélée par le dump v28.83) : la catégorie 'Factures' (cat_cv_factures : élec, tel, internet, eau…) est stockée sous chargesVariables. Elle subissait donc la Règle 2 (prorata temporis), ce qui écrasait les avances saisies. Les vraies charges fixes (femmeMenage) ne totalisaient que 300, et les 899 de factures non payées (tel 99 + élec villa 800) étaient noyés dans le prorata.",
+            "LOGIQUE MÉTIER : une facture est un montant EXACT, pas une consommation au prorata du temps. Elle obéit désormais à la Règle 1 (due − avance), exactement comme une charge fixe.",
+            "enveloppeVariableProrata : nouvelle base budgetVariableProrataBase qui EXCLUT cat_cv_factures. Le prorata ne s'applique plus qu'à Alimentation, Santé, Sorties, Voiture.",
+            "Nouveau getter resteAPayerFactures (Règle 1, due − avance, ligne par ligne). Intégré à resteAPayerIncompressible (fixes + factures + chocs).",
+            "Journal Relevé (_mkLegs) cycle courant : 3 lignes distinctes — 💳 Total Charges Fixes (resteAPayerFixes) + 🧾 Total Factures (resteAPayerFactures) + 🛒 Total Charges Variables (prorata hors factures).",
+            "Mini-journal KPI (journalHybride) + popup Disponible Réel (resteAPayerDetailParCompte) : factures ajoutées en lignes Règle 1, routées sur compteChargesVariables. Icône 🧾 pour les factures, 🛒 pour le prorata variable.",
+            "Nettoyage : suppression du dump console v28.83 et des marqueurs [SSOT] de debug."
+        ] },
         { version: "28.83 Dump", date: "2026-06-07", changes: [
             "PREUVE v28.82 : la console a confirmé _isCurrentCycle=true, [SSOT] visible, MAIS resteAPayerFixes.value=300. Le journal mirroite donc fidèlement le getter — le bug n'est PAS dans _mkLegs. resteAPayerFixes calcule due−getPaidAmount (Prévu−Avance) : Femme de ménage 600−300=300.",
             "DUMP COMPLET : console.table de chaque charge fixe (valeur, getDueFixe, montantPaye, getPaidAmount, isItemPaid, reste) + chaque variable + totaux des getters. Objectif : voir d'où devraient venir les 700 attendus et trancher entre 'le getter est faux' vs 'l'attente diffère du getter'."
@@ -8488,6 +8498,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     sourceCompte: soldesInitiaux.value.compteChargesFixes || 'courant'
                                 });
                             }
+                            // v28.90 Factures-Fix : ligne Factures (Règle 1, due − avance), routée variables
+                            const resteFact = Number(resteAPayerFactures.value || 0);
+                            if (resteFact > 0) {
+                                unpaidItems.push({
+                                    libelle: '🧾 Total Factures',
+                                    montant: resteFact, type: 'debit',
+                                    jourPrevu: 6,
+                                    etat: 'prevu',
+                                    sourceCompte: soldesInitiaux.value.compteChargesVariables || 'courant'
+                                });
+                            }
                         } else {
                             Object.values(dAnnee.chargesFixes || {}).forEach(f => {
                                 const due = Number(f.valeur || 0);
@@ -8670,53 +8691,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //   Les chocs et l'épargne restent en lignes détaillées plus bas.
                             // ═══════════════════════════════════════════════════════════════════
                             const _isCurrentCycle = (mode === 'remaining' && m === curM && a === curA);
-                            // v28.82 DIAGNOSTIC : trace dans la console + marqueur visuel pour identifier
-                            //   si le chemin SSOT est bien exécuté pour le cycle courant.
-                            if (typeof window !== 'undefined' && !window.__V2883_LOGGED) {
-                                window.__V2883_LOGGED = true;
-                                try {
-                                    // ── Dump détaillé de CHAQUE charge fixe ──
-                                    const _fixesDump = Object.values(dA.chargesFixes || {}).map(f => {
-                                        const due = getDueFixe(f, a);
-                                        return {
-                                            label: f.label || f.nom || '?',
-                                            valeur: f.valeur,
-                                            getDueFixe: due,
-                                            montantPaye: f.montantPaye,
-                                            paye: f.paye,
-                                            getPaidAmount: getPaidAmount(f, due),
-                                            isItemPaid: isItemPaid(f, due),
-                                            'reste(due-paid)': Math.max(0, due - getPaidAmount(f, due)),
-                                            jourPrevu: f.jourPrevu,
-                                        };
-                                    });
-                                    console.log('%c[v28.83 DUMP] === CHARGES FIXES ===', 'color:#0af;font-weight:bold');
-                                    console.table(_fixesDump);
-                                    // ── Dump de CHAQUE charge variable ──
-                                    const _varsDump = Object.values(dA.chargesVariables || {}).map(cv => ({
-                                        label: cv.label || cv.nom || '?',
-                                        periode: cv.periode,
-                                        valeur: cv.valeur,
-                                        nbDetails: (cv.details || []).length,
-                                        sommeDetails: (cv.details || []).reduce((s, d) => s + Number(d.montant || 0), 0),
-                                    }));
-                                    console.log('%c[v28.83 DUMP] === CHARGES VARIABLES ===', 'color:#0fa;font-weight:bold');
-                                    console.table(_varsDump);
-                                    // ── Totaux des getters vs ce que l'utilisateur attend ──
-                                    console.log('%c[v28.83 DUMP] === GETTERS ===', 'color:#fa0;font-weight:bold', {
-                                        'resteAPayerFixes (due-avance)': resteAPayerFixes.value,
-                                        'enveloppeVariableProrata': enveloppeVariableProrata.value,
-                                        'budgetVariableMensuelTotal (plein)': (typeof budgetVariableMensuelTotal !== 'undefined' ? budgetVariableMensuelTotal.value : 'n/a'),
-                                        'resteAPayerTotalGlobal (KPI carte)': resteAPayerTotalGlobal.value,
-                                        'somme due pleine fixes': _fixesDump.reduce((s, f) => s + (f.getDueFixe > 0 ? f.getDueFixe : 0), 0),
-                                    });
-                                } catch (e) { console.warn('[v28.83 DUMP ERROR]', e); }
-                            }
                             if (_isCurrentCycle) {
+                                // 💳 Charges fixes — Règle 1 (due − avance)
                                 const _resteFix = Math.round(Number(resteAPayerFixes.value || 0) * 100) / 100;
-                                if (_resteFix > 0) out.push({ account: _fxSrc, libelle: '💳 [SSOT] Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
+                                if (_resteFix > 0) out.push({ account: _fxSrc, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
+                                // 🧾 Factures — Règle 1 (due − avance), même traitement que les fixes (v28.90)
+                                const _resteFact = Math.round(Number(resteAPayerFactures.value || 0) * 100) / 100;
+                                if (_resteFact > 0) out.push({ account: _varSrc, libelle: '🧾 Total Factures', montant: _resteFact, type: 'debit', jourPrevu: 6, internal: false });
+                                // 🛒 Variables consommables — Règle 2 (prorata temporis, HORS factures)
                                 const _envVar = Math.round(Number(enveloppeVariableProrata.value || 0) * 100) / 100;
-                                if (_envVar > 0) out.push({ account: _varSrc, libelle: '🛒 [SSOT] Total Charges Variables', montant: _envVar, type: 'debit', jourPrevu: 15, internal: false });
+                                if (_envVar > 0) out.push({ account: _varSrc, libelle: '🛒 Total Charges Variables', montant: _envVar, type: 'debit', jourPrevu: 15, internal: false });
                             } else {
                                 // ===== CHARGES FIXES (cycles futurs) : reduce → UNE seule ligne par compte =====
                                 const _fixByAcc = Object.values(dA.chargesFixes || {}).reduce((acc, f) => {
@@ -9177,6 +9161,26 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
                     // v28.40 RÈGLE 2 : Reste variable = enveloppe prorata temporis (plus de saisie manuelle)
                     const resteAPayerVariables = computed(() => enveloppeVariableProrata.value);
+                    // v28.90 Factures-Fix : RÈGLE 1 appliquée aux Factures (cat_cv_factures), bien
+                    //   qu'elles soient stockées sous chargesVariables. Une facture est un montant EXACT
+                    //   (élec, tel, internet…) → reste = dû − avance saisie, comme une charge fixe.
+                    const resteAPayerFactures = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an];
+                        if (!d) return 0;
+                        let total = 0;
+                        Object.values(d.chargesVariables || {})
+                            .filter(cv => cv && cv.categorieId === 'cat_cv_factures')
+                            .forEach(cv => {
+                                const items = (cv.details || []).length ? cv.details : [cv];
+                                items.forEach(det => {
+                                    const due = Number(det.montant ?? det.valeur ?? 0);
+                                    if (due > 0) total += Math.max(0, due - getPaidAmount(det, due));
+                                });
+                            });
+                        return Math.round(total * 100) / 100;
+                    });
                     // v28.40 RÈGLE 1 : Reste irrégulier = dû − avance saisie
                     const resteAPayerIrregulier = computed(() => {
                         calculationTick.value;
@@ -9189,9 +9193,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
                         return total;
                     });
-// v22.41 — Reste à Payer INCOMPRESSIBLE = Fixes + Chocs uniquement (PAS les variables)
+// v22.41 — Reste à Payer INCOMPRESSIBLE = Fixes + Factures + Chocs (PAS les variables prorata)
                     const resteAPayerIncompressible = computed(() => {
-                        return resteAPayerFixes.value + resteAPayerIrregulier.value;
+                        return resteAPayerFixes.value + resteAPayerFactures.value + resteAPayerIrregulier.value;
                     });
                     // ─── v22.50 Cycle de Paie ────────────────────────────────────────
                     // v23.00 ERP-Edition — refs ERP
@@ -9401,8 +9405,25 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 grp.lignes.push({ nom: f.label || '?', montant: reste, type: 'fix' });
                             }
                         });
-                        // v28.40 RÈGLE 2 : Charges variables → enveloppe au prorata temporis (1 ligne,
-                        // PAS une obligation par saisie). Imputée sur le compte macro des variables.
+                        // v28.90 Factures-Fix : RÈGLE 1 sur les Factures (cat_cv_factures) → reste = dû − avance,
+                        //   ligne par ligne (élec, tel…), imputées sur le compte macro des variables.
+                        Object.values(dActuelle.chargesVariables || {})
+                            .filter(cv => cv && cv.categorieId === 'cat_cv_factures')
+                            .forEach(cv => {
+                                const srcFac = soldesInitiaux.value.compteChargesVariables || 'courant';
+                                const items = (cv.details || []).length ? cv.details : [cv];
+                                items.forEach(det => {
+                                    const due = Number(det.montant ?? det.valeur ?? 0);
+                                    const reste = Math.max(0, due - getPaidAmount(det, due));
+                                    if (reste > 0 && ok(det)) {
+                                        const grp = getOrCreate(srcFac);
+                                        grp.montant += reste; grp.parNature.var += reste;
+                                        grp.lignes.push({ nom: det.nom || det.label || cv.label || 'Facture', montant: reste, type: 'factures', jourPrevu: det.jourPrevu || cv.jourPrevu || null });
+                                    }
+                                });
+                            });
+                        // v28.40 RÈGLE 2 : Charges variables CONSOMMABLES → enveloppe au prorata temporis
+                        // (1 ligne, PAS une obligation par saisie ; HORS factures). Compte macro des variables.
                         if (enveloppeVariableProrata.value > 0) {
                             const srcVar = soldesInitiaux.value.compteChargesVariables || 'courant';
                             const envVar = enveloppeVariableProrata.value;
@@ -9716,12 +9737,25 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!d) return 0;
                         return Object.values(d.chargesVariables || {}).reduce((s, c) => s + getMonthlyVariableValue(c || {}), 0);
                     });
-                    // Enveloppe variable RESTANTE (prorata temporis) — 0 si cycle clos
+                    // v28.90 Factures-Fix : base du PRORATA = variables consommables UNIQUEMENT.
+                    //   Les "Factures" (cat_cv_factures) sont des montants EXACTS (élec, tel, internet…)
+                    //   qui ne se consomment pas au prorata du temps → EXCLUES de cette base.
+                    //   Elles obéissent à la Règle 1 (due − avance) via resteAPayerFactures.
+                    const budgetVariableProrataBase = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an];
+                        if (!d) return 0;
+                        return Object.values(d.chargesVariables || {})
+                            .filter(c => c && c.categorieId !== 'cat_cv_factures')
+                            .reduce((s, c) => s + getMonthlyVariableValue(c || {}), 0);
+                    });
+                    // Enveloppe variable RESTANTE (prorata temporis, HORS factures) — 0 si cycle clos
                     const enveloppeVariableProrata = computed(() => {
                         calculationTick.value;
                         if (isCyclePasse.value) return 0;
                         const jt = joursDansMoisCourant.value || 1;
-                        return Math.round(budgetVariableMensuelTotal.value * (joursRestantsMois.value / jt));
+                        return Math.round(budgetVariableProrataBase.value * (joursRestantsMois.value / jt));
                     });
 
                     // Listes en lecture seule pour la vue théorique (groupées par compte)
@@ -11207,7 +11241,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, appMode, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio,
-                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
+                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerFactures, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
                         // v22.90 Double-Pilotage
                         revenusTheoriquesMois, engagementsTheoriquesMois, engagementsTheoriquesDetail,
                         budgetConsoTheoriqueMois, rythmeTheoriqueSemaine, pilotageTheoLignes,
