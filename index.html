@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v28.82 Diag - Finance Master</title>
+    <title>v28.83 Dump - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5388,8 +5388,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "28.82 Diag";
+                    const CURRENT_VERSION = "28.83 Dump";
                     const CHANGELOG = [
+        { version: "28.83 Dump", date: "2026-06-07", changes: [
+            "PREUVE v28.82 : la console a confirmé _isCurrentCycle=true, [SSOT] visible, MAIS resteAPayerFixes.value=300. Le journal mirroite donc fidèlement le getter — le bug n'est PAS dans _mkLegs. resteAPayerFixes calcule due−getPaidAmount (Prévu−Avance) : Femme de ménage 600−300=300.",
+            "DUMP COMPLET : console.table de chaque charge fixe (valeur, getDueFixe, montantPaye, getPaidAmount, isItemPaid, reste) + chaque variable + totaux des getters. Objectif : voir d'où devraient venir les 700 attendus et trancher entre 'le getter est faux' vs 'l'attente diffère du getter'."
+        ] },
         { version: "28.82 Diag", date: "2026-06-07", changes: [
             "DIAGNOSTIC : valeur 300 DH persistante malgré le pont SSOT v28.81. Ajout d'un console.log('[v28.82 _mkLegs DIAG]') unique au premier appel de _mkLegs, exposant {m, a, curM, curA, mode, _isCurrentCycle, resteAPayerFixes.value, enveloppeVariableProrata.value, _fxSrc, _varSrc}.",
             "Marqueur visuel '[SSOT]' ajouté aux libellés des deux lignes pour vérifier dans le Relevé si la branche cycle courant est bien empruntée. Si tu ne vois PAS [SSOT] dans le libellé, c'est que _isCurrentCycle évalue false → bug de comparaison."
@@ -8668,17 +8672,45 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const _isCurrentCycle = (mode === 'remaining' && m === curM && a === curA);
                             // v28.82 DIAGNOSTIC : trace dans la console + marqueur visuel pour identifier
                             //   si le chemin SSOT est bien exécuté pour le cycle courant.
-                            if (typeof window !== 'undefined' && !window.__V2882_LOGGED) {
-                                window.__V2882_LOGGED = true;
+                            if (typeof window !== 'undefined' && !window.__V2883_LOGGED) {
+                                window.__V2883_LOGGED = true;
                                 try {
-                                    console.log('[v28.82 _mkLegs DIAG]', {
-                                        m, a, curM, curA, mode,
-                                        _isCurrentCycle,
-                                        resteAPayerFixes: (typeof resteAPayerFixes !== 'undefined' ? resteAPayerFixes.value : 'UNDEFINED'),
-                                        enveloppeVariableProrata: (typeof enveloppeVariableProrata !== 'undefined' ? enveloppeVariableProrata.value : 'UNDEFINED'),
-                                        _fxSrc, _varSrc,
+                                    // ── Dump détaillé de CHAQUE charge fixe ──
+                                    const _fixesDump = Object.values(dA.chargesFixes || {}).map(f => {
+                                        const due = getDueFixe(f, a);
+                                        return {
+                                            label: f.label || f.nom || '?',
+                                            valeur: f.valeur,
+                                            getDueFixe: due,
+                                            montantPaye: f.montantPaye,
+                                            paye: f.paye,
+                                            getPaidAmount: getPaidAmount(f, due),
+                                            isItemPaid: isItemPaid(f, due),
+                                            'reste(due-paid)': Math.max(0, due - getPaidAmount(f, due)),
+                                            jourPrevu: f.jourPrevu,
+                                        };
                                     });
-                                } catch (e) { console.warn('[v28.82 DIAG ERROR]', e); }
+                                    console.log('%c[v28.83 DUMP] === CHARGES FIXES ===', 'color:#0af;font-weight:bold');
+                                    console.table(_fixesDump);
+                                    // ── Dump de CHAQUE charge variable ──
+                                    const _varsDump = Object.values(dA.chargesVariables || {}).map(cv => ({
+                                        label: cv.label || cv.nom || '?',
+                                        periode: cv.periode,
+                                        valeur: cv.valeur,
+                                        nbDetails: (cv.details || []).length,
+                                        sommeDetails: (cv.details || []).reduce((s, d) => s + Number(d.montant || 0), 0),
+                                    }));
+                                    console.log('%c[v28.83 DUMP] === CHARGES VARIABLES ===', 'color:#0fa;font-weight:bold');
+                                    console.table(_varsDump);
+                                    // ── Totaux des getters vs ce que l'utilisateur attend ──
+                                    console.log('%c[v28.83 DUMP] === GETTERS ===', 'color:#fa0;font-weight:bold', {
+                                        'resteAPayerFixes (due-avance)': resteAPayerFixes.value,
+                                        'enveloppeVariableProrata': enveloppeVariableProrata.value,
+                                        'budgetVariableMensuelTotal (plein)': (typeof budgetVariableMensuelTotal !== 'undefined' ? budgetVariableMensuelTotal.value : 'n/a'),
+                                        'resteAPayerTotalGlobal (KPI carte)': resteAPayerTotalGlobal.value,
+                                        'somme due pleine fixes': _fixesDump.reduce((s, f) => s + (f.getDueFixe > 0 ? f.getDueFixe : 0), 0),
+                                    });
+                                } catch (e) { console.warn('[v28.83 DUMP ERROR]', e); }
                             }
                             if (_isCurrentCycle) {
                                 const _resteFix = Math.round(Number(resteAPayerFixes.value || 0) * 100) / 100;
