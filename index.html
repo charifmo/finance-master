@@ -8644,38 +8644,32 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             // v26.20 Ledger-Math-Sync : realized-in = revenus encaissés uniquement (déjà poussés ci-dessus) → AUCUNE sortie
                             if (mode === 'realized-in') return out;
 
-                            // ===== CHARGES FIXES =====
-                            // v28.70 : détection cycle courant — triple sécurité :
-                            //   1. isCurrentCycle passé explicitement par le caller (source de vérité)
-                            //   2. Number() coercion (évite === strict sur types mixtes)
-                            //   3. mode === 'remaining' (fallback : le mode est déjà calculé par l'outer scope)
-                            const _isCurM = isCurrentCycle
-                                || (Number(m) === Number(curM) && Number(a) === Number(curA))
-                                || mode === 'remaining';
-                            if (typeof __DEBUG_JOURNAL === 'undefined') {
-                                // eslint-disable-next-line no-unused-vars
-                                window.__DEBUG_JOURNAL = true;
-                                console.log('[v28.70 DEBUG JOURNAL]', { m, curM, a, curA, mode, isCurrentCycle, _isCurM });
-                            }
-                            if (_isCurM) {
-                                const _resteFix = Math.round((resteAPayerFixes.value || 0) * 100) / 100;
-                                if (_resteFix > 0) out.push({ account: _fxSrc, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
+                            // ═══════════════════════════════════════════════════════════════════
+                            // v28.80 SOURCE-OF-TRUTH-BRIDGE : pour le cycle COURANT en mode 'remaining',
+                            //   on lit EXACTEMENT la même donnée réactive que la carte KPI "Reste à Payer"
+                            //   (resteAPayerDetailParCompte), au lieu de recomputer en parallèle.
+                            //   Les chocs et l'épargne restent traités en lignes détaillées plus bas.
+                            //   Pour les cycles futurs (mode 'full'), l'ancienne logique reste appliquée.
+                            // ═══════════════════════════════════════════════════════════════════
+                            const _isCurrentCycle = (mode === 'remaining' && m === curM && a === curA);
+                            if (_isCurrentCycle) {
+                                resteAPayerDetailParCompte.value.forEach(grp => {
+                                    const acc = _normKey(grp.key);
+                                    const fix = Math.round(Number(grp.parNature.fix || 0) * 100) / 100;
+                                    const varM = Math.round(Number(grp.parNature.var || 0) * 100) / 100;
+                                    if (fix > 0) out.push({ account: acc, libelle: '💳 Total Charges Fixes', montant: fix, type: 'debit', jourPrevu: 10, internal: false });
+                                    if (varM > 0) out.push({ account: acc, libelle: '🛒 Total Charges Variables', montant: varM, type: 'debit', jourPrevu: 15, internal: false });
+                                });
                             } else {
+                                // ===== CHARGES FIXES (cycles futurs) : reduce → UNE seule ligne par compte =====
                                 const _fixByAcc = Object.values(dA.chargesFixes || {}).reduce((acc, f) => {
                                     const amt = _amt(f, f.valeur);
                                     if (amt > 0) acc[_fxSrc] = Math.round(((acc[_fxSrc] || 0) + amt) * 100) / 100;
                                     return acc;
                                 }, {});
                                 Object.keys(_fixByAcc).forEach(k => { if (_fixByAcc[k] > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _fixByAcc[k], type: 'debit', jourPrevu: 10, internal: false }); });
-                            }
 
-                            // ===== CHARGES VARIABLES =====
-                            // v28.60 : mois courant → getter enveloppeVariableProrata (prorata temporis, SSOT, indépendant du mode)
-                            //          mois futurs  → calcul local _varAmt (budget mensuel plein)
-                            if (_isCurM) {
-                                const _envVar = Math.round((enveloppeVariableProrata.value || 0) * 100) / 100;
-                                if (_envVar > 0) out.push({ account: _varSrc, libelle: '🛒 Total Charges Variables', montant: _envVar, type: 'debit', jourPrevu: 15, internal: false });
-                            } else {
+                                // ===== CHARGES VARIABLES (cycles futurs) : reduce → UNE seule ligne par compte =====
                                 const _varByAcc = Object.values(dA.chargesVariables || {}).reduce((acc, cv) => {
                                     const amt = _varAmt(cv);
                                     if (amt > 0) acc[_varSrc] = Math.round(((acc[_varSrc] || 0) + amt) * 100) / 100;
