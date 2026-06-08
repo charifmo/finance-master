@@ -110,6 +110,33 @@ if ($method === 'POST') {
         exit;
     }
 
+    // ── v31.00 : Abort / Cancel ─────────────────────────────────────────────
+    // Si action = cancel_pending : supprime le cache et court-circuite le reste.
+    if (isset($body['action']) && $body['action'] === 'cancel_pending') {
+        $cancelSid = (string)($body['session_id'] ?? '');
+        if ($cancelSid === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing session_id for cancel_pending']);
+            exit;
+        }
+        $cancelFile = session_file($cancelSid, $pendingDir);
+        if (!$cancelFile) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid session_id for cancel_pending']);
+            exit;
+        }
+        $existed = file_exists($cancelFile);
+        if ($existed) { @unlink($cancelFile); }
+        echo json_encode([
+            'status'      => 'cancelled',
+            'session_id'  => $cancelSid,
+            'was_pending' => $existed,
+            'cancelled_at' => date('c'),
+        ]);
+        exit;
+    }
+    // ── Fin Abort ───────────────────────────────────────────────────────────
+
     if (empty($body['finance_data']) || !is_array($body['finance_data'])) {
         http_response_code(400);
         echo json_encode(['error' => 'Missing finance_data (the simulated state)']);
