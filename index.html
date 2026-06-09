@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v31.30 Obligations-Fix - Finance Master</title>
+    <title>v31.40 State-Lock-Confirmed - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -5389,8 +5389,24 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "31.30 Obligations-Fix";
+                    const CURRENT_VERSION = "31.40 State-Lock-Confirmed";
                     const CHANGELOG = [
+        { version: "31.40 State-Lock-Confirmed", date: "2026-06-09", changes: [
+            "Vérification de non-régression de la v31.00 (State Machine Abort). Les 3 couches (PHP cancel route, Committer JS ABORT block, LLM Tour 2b) sont confirmées en prod. Aucun code modifié — seul le numéro de version est bumped pour tracer la demande."
+        ] },
+        { version: "31.30 Obligations-Fix", date: "2026-06-09", changes: [
+            "BUG 1 — DISPARITION OBLIGATIONS KPI : resteAPayerTotalGlobal héritait du filtre vueTemporelle via resteAPayerDetailParCompte.reduce(). En vue 'at0', items à jourPrevu futur (épargne, factures, dépenses non échues) étaient exclus. Fix : resteAPayerTotalGlobal recalculé depuis 5 getters atomiques NON filtrés (resteAPayerFixes + resteAPayerFactures + resteAPayerIrregulier + enveloppeVariableProrata + resteAPayerEpargne). Nouveau getter resteAPayerEpargne décorrélé de vueTemporelle.",
+            "BUG 2 — PRORATA T0 AFFICHÉ 3900% : progressCyclePaie est un entier 0-100 (ex : 39) mais était multiplié directement au lieu d'être divisé par 100. Fix : / 100 ajouté dans prorataVariableT0. Tooltip template corrigé (progressCyclePaie % affiché sans × 100).",
+            "BUG 3 — BASE PRORATA INCORRECTE : prorataVariableT0 utilisait budgetConsoTheoriqueMois qui ne contient que les variables période=mois (= uniquement les Factures, 2247 DH). Fix : base remplacée par budgetVariableProrataBase qui exclut cat_cv_factures et inclut hebdo × 4.3."
+        ] },
+        { version: "31.00 State-Machine-Abort", date: "2026-06-09", changes: [
+            "PROBLÈME : State Lock — quand une simulation est en attente (pending_commit.php) et l'utilisateur change de sujet, le LLM boucle en demandant 'tapez OUI pour confirmer'.",
+            "FIX 3 couches : (1) pending_commit.php — nouvelle route POST { action: cancel_pending } qui purge le fichier cache de façon idempotente et retourne { status: cancelled }. (2) Committer n8n — bloc ABORT injecté avant GARDE 1 : détecte confirmation=NON ou action=cancel_pending, appelle le PHP et retourne { status: cancelled } sans committer. (3) System prompt AI Agent — Tour 2b ajouté : RÈGLE ABSOLUE de déclencher cancel_pending si l'utilisateur dit NON ou change de sujet."
+        ] },
+        { version: "29.00 Cache-Busting", date: "2026-06-09", changes: [
+            "PROBLÈME multi-devices : sur mobile/tablette, le navigateur servait la version cachée de finance_data.json au lieu des données fraîches du serveur.",
+            "FIX : fetch initial (onMounted) complété avec headers HTTP Cache-Control: no-cache / Pragma: no-cache en plus du ?t=Date.now() déjà présent. Assure que tous les appareils lisent toujours l'état serveur le plus récent au chargement."
+        ] },
         { version: "28.90 Factures-Fix", date: "2026-06-07", changes: [
             "CAUSE RACINE (révélée par le dump v28.83) : la catégorie 'Factures' (cat_cv_factures : élec, tel, internet, eau…) est stockée sous chargesVariables. Elle subissait donc la Règle 2 (prorata temporis), ce qui écrasait les avances saisies. Les vraies charges fixes (femmeMenage) ne totalisaient que 300, et les 899 de factures non payées (tel 99 + élec villa 800) étaient noyés dans le prorata.",
             "LOGIQUE MÉTIER : une facture est un montant EXACT, pas une consommation au prorata du temps. Elle obéit désormais à la Règle 1 (due − avance), exactement comme une charge fixe.",
