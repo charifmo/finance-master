@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v31.00 State-Machine-Abort - Finance Master</title>
+    <title>v31.30 Obligations-Fix - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -4297,7 +4297,7 @@
                                             <div class="space-y-1.5 mb-2 border-t border-violet-800 pt-2">
                                                 <p class="text-[9px] font-black text-violet-300 uppercase tracking-widest">📐 Besoin Théorique T0</p>
                                                 <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-purple-300">Prorata variables ({{ Math.round(progressCyclePaie * 100) }}% cycle)</span>
+                                                    <span class="text-purple-300">Prorata variables ({{ progressCyclePaie }}% cycle)</span>
                                                     <span class="font-black text-white">{{ formatMAD(prorataVariableT0) }}</span>
                                                 </div>
                                                 <div v-if="provisionsFuturesT0 > 0" class="flex justify-between gap-3 pl-2">
@@ -5389,7 +5389,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "31.00 State-Machine-Abort";
+                    const CURRENT_VERSION = "31.30 Obligations-Fix";
                     const CHANGELOG = [
         { version: "28.90 Factures-Fix", date: "2026-06-07", changes: [
             "CAUSE RACINE (révélée par le dump v28.83) : la catégorie 'Factures' (cat_cv_factures : élec, tel, internet, eau…) est stockée sous chargesVariables. Elle subissait donc la Règle 2 (prorata temporis), ce qui écrasait les avances saisies. Les vraies charges fixes (femmeMenage) ne totalisaient que 300, et les 899 de factures non payées (tel 99 + élec villa 800) étaient noyés dans le prorata.",
@@ -9197,6 +9197,24 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const resteAPayerIncompressible = computed(() => {
                         return resteAPayerFixes.value + resteAPayerFactures.value + resteAPayerIrregulier.value;
                     });
+                    // v31.30 BUG1-FIX : getter épargne non filtré (indépendant de vueTemporelle)
+                    //   Avant : épargne calculée inline dans resteAPayerDetailParCompte avec ok()
+                    //           → en vue 'at0', items avec jourPrevu futur exclus = oubli des virements épargne
+                    const resteAPayerEpargne = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an];
+                        if (!d) return 0;
+                        const epArr = Array.isArray(d.epargne)
+                            ? d.epargne
+                            : Object.values(d.epargne || {});
+                        let total = 0;
+                        epArr.forEach(ep => {
+                            const m = Number(ep.valeur || 0);
+                            if (m > 0) total += Math.max(0, m - getPaidAmount(ep, m));
+                        });
+                        return total;
+                    });
                     // ─── v22.50 Cycle de Paie ────────────────────────────────────────
                     // v23.00 ERP-Edition — refs ERP
                     const vueTemporelle = ref('cycle'); // 'cycle' | 'semaine' | 'at0'
@@ -9505,8 +9523,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const grp = resteAPayerDetailParCompte.value.find(g => g.key === 'courant');
                         return grp ? grp.montant : 0;
                     });
+                    // v31.30 BUG1-FIX : total calculé depuis les getters atomiques NON filtrés.
+                    //   Avant : sum(resteAPayerDetailParCompte) → héritait du filtre ok()/vueTemporelle
+                    //           → épargne, factures et dépenses irrégulières avec jourPrevu futur disparaissaient
+                    //           en vue 'at0', et le KPI "Reste à Payer" affichait 15 000 DH de moins.
+                    //   Après : addition directe des 5 getters (tous indépendants de vueTemporelle).
                     const resteAPayerTotalGlobal = computed(() => {
-                        return resteAPayerDetailParCompte.value.reduce((s, g) => s + g.montant, 0);
+                        return resteAPayerFixes.value
+                            + resteAPayerFactures.value
+                            + resteAPayerIrregulier.value
+                            + enveloppeVariableProrata.value
+                            + resteAPayerEpargne.value;
                     });
                     // v22.50 — Cash dispo = tréso courant − obligations courant
                     // ── v23.00 : Revenus non encore reçus → compte courant ──────────────────
@@ -9528,11 +9555,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     // ── v23.10 : Computeds Prorata-T0 ──────────────────────────────────────
-                    // v24.40 Freeze-Retro : 100% du budget consomme en cycle passe (pas de prorata temporel)
+                    // v31.30 FIX BUG2+BUG3 : base = budgetVariableProrataBase (HORS factures, hebdo × 4.3 inclus)
+                    //   Avant : budgetConsoTheoriqueMois (période=mois seulement = Factures seules = 2 247 DH)
+                    //            × progressCyclePaie (entier ex. 39) → 2 247 × 39 = 87 633 DH ❌
+                    //   Après : budgetVariableProrataBase × (progressCyclePaie / 100) → ratio décimal ✓
                     const prorataVariableT0 = computed(() =>
                         isCyclePasse.value
-                            ? budgetConsoTheoriqueMois.value
-                            : budgetConsoTheoriqueMois.value * progressCyclePaie.value
+                            ? budgetVariableProrataBase.value
+                            : Math.round(budgetVariableProrataBase.value * (progressCyclePaie.value / 100))
                     );
 
                     const provisionsFuturesT0 = computed(() => {
