@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v32.20 Bulles-Comptes - Finance Master</title>
+    <title>v32.30 Couverture-Courant - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -4229,6 +4229,32 @@
                                                     <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']">{{ formatMAD(ligne.montant) }}</span>
                                                 </div>
                                             </div>
+                                            <!-- v32.30 : bilan de couverture, symétrique des comptes annexes -->
+                                            <div class="border-t border-slate-700 pt-2 mt-2 space-y-1.5">
+                                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🏦 Couverture</p>
+                                                <div class="flex justify-between gap-3 pl-2">
+                                                    <span class="text-emerald-400">Tréso courante</span>
+                                                    <span class="font-black text-white">{{ formatMAD(tresoActuelleCourante) }}</span>
+                                                </div>
+                                                <div v-if="revenusEnAttenteCourantCycle > 0" class="flex justify-between gap-3 pl-2">
+                                                    <span class="text-sky-400">+ Revenus attendus du cycle</span>
+                                                    <span class="font-black text-sky-200">+ {{ formatMAD(revenusEnAttenteCourantCycle) }}</span>
+                                                </div>
+                                                <div class="flex justify-between gap-3 pl-2">
+                                                    <span :class="resteAPayerCourantCycle >= 0 ? 'text-orange-400' : 'text-emerald-400'">{{ resteAPayerCourantCycle >= 0 ? '− Engagements du cycle' : '+ Financement net du cycle' }}</span>
+                                                    <span :class="['font-black', resteAPayerCourantCycle >= 0 ? 'text-orange-200' : 'text-emerald-200']">{{ resteAPayerCourantCycle >= 0 ? '−' : '+' }} {{ formatMAD(Math.abs(resteAPayerCourantCycle)) }}</span>
+                                                </div>
+                                                <div :class="['flex justify-between gap-3 rounded-lg px-3 py-2 font-black text-[12px] mt-1', couvertureCourant >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/50 text-red-300']">
+                                                    <span>{{ couvertureCourant >= 0 ? '✅ Couvert' : '⚠️ Découvert projeté' }}</span>
+                                                    <span>{{ formatMAD(couvertureCourant) }}</span>
+                                                </div>
+                                                <!-- La conso est une prévision, pas une dette : on le dit quand c'est elle qui creuse l'écart -->
+                                                <p v-if="couvertureCourant < 0 && enveloppeConsoRestante > 0" class="text-[9px] text-slate-500 leading-snug">
+                                                    Dont {{ formatMAD(enveloppeConsoRestante) }} de conso variable
+                                                    <template v-if="!consoT0Renseigne"> <span class="text-amber-400">estimée</span></template> —
+                                                    c'est un budget prévisionnel, pas une facture. Réduisez-le et l'écart se résorbe.
+                                                </p>
+                                            </div>
                                             <!-- v32.10 : rappel du hors-courant, sans le mélanger au total -->
                                             <div v-if="resteAPayerAutresComptes.length" class="border-t border-slate-700 pt-1.5 mt-1.5 space-y-1">
                                                 <div class="flex justify-between gap-3 text-[10px]">
@@ -5601,8 +5627,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "32.20 Bulles-Comptes";
+                    const CURRENT_VERSION = "32.30 Couverture-Courant";
                     const CHANGELOG = [
+        { version: "32.30 Couverture-Courant", date: "2026-08-06", changes: [
+            "La bulle du Compte Courant n'avait pas le bilan de couverture ajouté aux comptes annexes en v32.20 : elle listait les engagements sans jamais dire si le compte pouvait les honorer. Bloc 🏦 Couverture ajouté, symétrique des autres comptes — Tréso courante + Revenus attendus du cycle − Engagements du cycle = Couvert / Découvert projeté.",
+            "COHÉRENCE DE PÉRIODE : nouveau getter revenusEnAttenteCourantCycle, non filtré par vueTemporelle. resteAPayerCourantCycle porte sur tout le cycle ; lui opposer revenusEnAttenteCourant (filtré par le toggle À T0 / Cette sem.) aurait produit un bilan faux, variable selon la vue. Le getter filtré reste utilisé pour le cash instantané du KPI3, qui lui doit suivre le toggle.",
+            "NUANCE AFFICHÉE : quand le découvert vient de l'enveloppe de conso variable, une ligne le rappelle explicitement — c'est un budget prévisionnel, pas une facture, et le réduire résorbe l'écart. La mention « estimée » apparaît tant que le réalisé T0 n'est pas saisi."
+        ] },
         { version: "32.20 Bulles-Comptes", date: "2026-08-06", changes: [
             "BULLE DE DÉTAIL sur chaque compte annexe (Dépenses Annuelles, Épargne…), au même niveau que celle du Compte Courant. La carte devient compacte (libellé + montant + verdict) et le détail passe dans la bulle : lignes imputées, sous-total, puis diagnostic de couverture.",
             "DIAGNOSTIC DE COUVERTURE : sur un compte annexe, la question utile n'est pas « combien reste-t-il à payer » mais « ce compte a-t-il de quoi payer ce qu'on lui impute ». La bulle affiche Solde du compte − Engagements du cycle = Couvert / Découvert. Le verdict est repris en une ligne sur la carte (✅ Couvert — reste X / ⚠️ Manque X).",
@@ -9847,6 +9878,29 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             };
                         });
                     });
+                    // ── v32.30 : même bilan de couverture pour le COMPTE COURANT ─────
+                    //   Les deux termes doivent couvrir la MÊME période, sinon le bilan est
+                    //   faux : resteAPayerCourantCycle porte sur tout le cycle, on lui oppose
+                    //   donc les revenus attendus sur tout le cycle — et non le getter filtré
+                    //   par vueTemporelle qui sert, lui, au cash instantané du KPI3.
+                    const revenusEnAttenteCourantCycle = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an];
+                        if (!d) return 0;
+                        return Object.values(d.revenus || {}).reduce((s, r) => {
+                            const due = getDueRevenu(r, mb.an);
+                            if (due <= 0 || isItemPaid(r, due)) return s;
+                            if ((r.destinationCompte || 'courant') !== 'courant') return s;
+                            return s + due;
+                        }, 0);
+                    });
+                    const couvertureCourant = computed(() =>
+                        tresoActuelleCourante.value
+                        + revenusEnAttenteCourantCycle.value
+                        - resteAPayerCourantCycle.value
+                    );
+
                     // Bulle ouverte au tap (mobile) — le survol suffit sur desktop
                     const compteBulleOuverte = ref(null);
                     const toggleCompteBulle = (key) => {
@@ -11872,6 +11926,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         resteAPayerAutresComptes, resteAPayerAutresTotal,
                         // v32.20 : bulles de détail + couverture par compte annexe
                         resteAPayerAutresDetail, compteBulleOuverte, toggleCompteBulle,
+                        // v32.30 : bilan de couverture du compte courant
+                        revenusEnAttenteCourantCycle, couvertureCourant,
                         // v24.0 Journal-Hybride
                         journalHybride,
                         // v24.20 Journal-Hybride-Universel
