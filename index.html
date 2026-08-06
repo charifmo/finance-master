@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v32.10 Reste-Par-Compte - Finance Master</title>
+    <title>v32.20 Bulles-Comptes - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -4434,30 +4434,81 @@
                                 </p>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                <div v-for="grp in resteAPayerAutresComptes" :key="'rap_' + grp.key"
-                                     :class="['p-3 rounded-2xl border transition-all', grp.montant < 0 ? 'bg-emerald-900/20 border-emerald-700/70 hover:border-emerald-500' : 'bg-slate-800/60 border-slate-700 hover:border-violet-500']">
-                                    <div class="flex items-start justify-between gap-2">
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-300 truncate min-w-0">{{ grp.icon }} {{ grp.label }}</p>
-                                        <p :class="['text-sm font-black tracking-tighter shrink-0', grp.montant < 0 ? 'text-emerald-400' : 'text-violet-300']">{{ formatMAD(grp.montant) }}</p>
-                                    </div>
-                                    <!-- Lignes du compte -->
-                                    <div class="mt-2 pt-2 border-t border-slate-700/70 space-y-1">
-                                        <div v-for="(ligne, li) in grp.lignes" :key="'rap_' + grp.key + '_' + li" class="flex justify-between gap-2 text-[10px]">
-                                            <span class="text-slate-400 truncate min-w-0">
-                                                <span v-if="ligne.type==='fix'">🏢</span>
-                                                <span v-else-if="ligne.type==='factures'">🧾</span>
-                                                <span v-else-if="ligne.type==='var'">🛒</span>
-                                                <span v-else-if="ligne.type==='choc'">⚠️</span>
-                                                <span v-else-if="ligne.type==='injection'">💵</span>
-                                                <span v-else-if="ligne.type==='epargne'">💰</span>
-                                                <span v-else>🔄</span>
-                                                {{ ligne.nom }}
-                                                <span v-if="ligne.jourPrevu" class="text-[8px] text-slate-600 font-bold ml-0.5">j.{{ ligne.jourPrevu }}</span>
-                                            </span>
-                                            <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']">{{ formatMAD(ligne.montant) }}</span>
+                                <!-- v32.20 : carte compacte + bulle de détail (survol desktop / tap mobile) -->
+                                <div v-for="grp in resteAPayerAutresDetail" :key="'rap_' + grp.key" class="relative group cursor-pointer"
+                                     @click="toggleCompteBulle(grp.key)">
+                                    <div :class="['p-3 rounded-2xl border transition-all', grp.montant < 0 ? 'bg-emerald-900/20 border-emerald-700/70 group-hover:border-emerald-500' : 'bg-slate-800/60 border-slate-700 group-hover:border-violet-500']">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-300 truncate min-w-0">{{ grp.icon }} {{ grp.label }}</p>
+                                            <p :class="['text-sm font-black tracking-tighter shrink-0', grp.montant < 0 ? 'text-emerald-400' : 'text-violet-300']">{{ formatMAD(grp.montant) }}</p>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 mt-1.5">
+                                            <!-- Verdict de couverture -->
+                                            <p v-if="grp.montant < 0" class="text-[8px] font-black text-emerald-400/90 truncate">✅ Financement excédentaire</p>
+                                            <p v-else-if="grp.couverture === null" class="text-[8px] font-bold text-slate-500 truncate">🔗 Aucun compte rattaché</p>
+                                            <p v-else-if="grp.couverture >= 0" class="text-[8px] font-black text-emerald-400/90 truncate">✅ Couvert — reste {{ formatMAD(grp.couverture) }}</p>
+                                            <p v-else class="text-[8px] font-black text-red-400 truncate">⚠️ Manque {{ formatMAD(Math.abs(grp.couverture)) }}</p>
+                                            <span class="text-[8px] font-black text-slate-500 shrink-0">{{ grp.lignes.length }} ligne{{ grp.lignes.length > 1 ? 's' : '' }} ⓘ</span>
                                         </div>
                                     </div>
-                                    <p v-if="grp.montant < 0" class="text-[8px] font-bold text-emerald-400/80 mt-1.5">✅ Financement excédentaire sur ce compte</p>
+                                    <!-- ── Bulle de détail du compte ── -->
+                                    <div :class="['absolute top-full left-0 right-0 mt-1.5 z-50 transition-opacity duration-150',
+                                                  compteBulleOuverte === grp.key ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100']">
+                                        <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
+                                        <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
+                                            <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px] border-b border-slate-700 pb-1.5">{{ grp.icon }} {{ grp.label }}</p>
+                                            <!-- Lignes imputées -->
+                                            <div class="space-y-1 mb-2">
+                                                <div v-for="(ligne, li) in grp.lignes" :key="'rapb_' + grp.key + '_' + li" class="flex justify-between gap-2 text-[10px]">
+                                                    <span class="text-slate-400 truncate min-w-0">
+                                                        <span v-if="ligne.type==='fix'">🏢</span>
+                                                        <span v-else-if="ligne.type==='factures'">🧾</span>
+                                                        <span v-else-if="ligne.type==='var'">🛒</span>
+                                                        <span v-else-if="ligne.type==='choc'">⚠️</span>
+                                                        <span v-else-if="ligne.type==='injection'">💵</span>
+                                                        <span v-else-if="ligne.type==='epargne'">💰</span>
+                                                        <span v-else>🔄</span>
+                                                        {{ ligne.nom }}
+                                                        <span v-if="ligne.jourPrevu" class="text-[8px] text-slate-600 font-bold ml-0.5">j.{{ ligne.jourPrevu }}</span>
+                                                    </span>
+                                                    <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']">{{ formatMAD(ligne.montant) }}</span>
+                                                </div>
+                                                <div :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', grp.montant < 0 ? 'text-emerald-300' : 'text-violet-300']">
+                                                    <span>= Reste à payer</span>
+                                                    <span>{{ formatMAD(grp.montant) }}</span>
+                                                </div>
+                                            </div>
+                                            <!-- Couverture par le solde du compte -->
+                                            <div class="border-t border-slate-700 pt-2 space-y-1.5">
+                                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🏦 Couverture</p>
+                                                <template v-if="grp.couverture !== null">
+                                                    <div class="flex justify-between gap-3 pl-2">
+                                                        <span class="text-emerald-400">
+                                                            Solde du compte
+                                                            <span v-if="grp.soldeVia === 'lie'" class="text-[9px] text-slate-500">(via {{ grp.compteLie }})</span>
+                                                        </span>
+                                                        <span class="font-black text-white">{{ formatMAD(grp.solde) }}</span>
+                                                    </div>
+                                                    <!-- v32.20 : un montant négatif est un encaissement net, pas une charge
+                                                         — sinon la ligne affichait « − -4 760 DH ». -->
+                                                    <div class="flex justify-between gap-3 pl-2">
+                                                        <span :class="grp.montant >= 0 ? 'text-orange-400' : 'text-emerald-400'">{{ grp.montant >= 0 ? '− Engagements du cycle' : '+ Financement net du cycle' }}</span>
+                                                        <span :class="['font-black', grp.montant >= 0 ? 'text-orange-200' : 'text-emerald-200']">{{ grp.montant >= 0 ? '−' : '+' }} {{ formatMAD(Math.abs(grp.montant)) }}</span>
+                                                    </div>
+                                                    <div :class="['flex justify-between gap-3 rounded-lg px-3 py-2 font-black text-[12px] mt-1', grp.couverture >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/50 text-red-300']">
+                                                        <span>{{ grp.couverture >= 0 ? '✅ Couvert' : '⚠️ Découvert' }}</span>
+                                                        <span>{{ formatMAD(grp.couverture) }}</span>
+                                                    </div>
+                                                </template>
+                                                <template v-else>
+                                                    <p class="text-slate-400 text-[10px] pl-2">
+                                                        🔗 Cet objectif d'épargne n'est rattaché à aucun compte bancaire — impossible de vérifier s'il est provisionné.
+                                                        <span class="text-slate-500">Liez-le à un compte dans l'onglet Trésorerie pour activer ce contrôle.</span>
+                                                    </p>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -5550,8 +5601,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "32.10 Reste-Par-Compte";
+                    const CURRENT_VERSION = "32.20 Bulles-Comptes";
                     const CHANGELOG = [
+        { version: "32.20 Bulles-Comptes", date: "2026-08-06", changes: [
+            "BULLE DE DÉTAIL sur chaque compte annexe (Dépenses Annuelles, Épargne…), au même niveau que celle du Compte Courant. La carte devient compacte (libellé + montant + verdict) et le détail passe dans la bulle : lignes imputées, sous-total, puis diagnostic de couverture.",
+            "DIAGNOSTIC DE COUVERTURE : sur un compte annexe, la question utile n'est pas « combien reste-t-il à payer » mais « ce compte a-t-il de quoi payer ce qu'on lui impute ». La bulle affiche Solde du compte − Engagements du cycle = Couvert / Découvert. Le verdict est repris en une ligne sur la carte (✅ Couvert — reste X / ⚠️ Manque X).",
+            "OBJECTIFS D'ÉPARGNE : le modèle ne leur donne aucun solde propre, seulement un linkedAccountId optionnel. Quand le lien existe, le solde du compte rattaché est utilisé (mention « via <compte> ») ; sinon la bulle dit explicitement que le contrôle est impossible et invite à lier le compte, au lieu d'afficher un 0 trompeur.",
+            "ACCESSIBILITÉ MOBILE : les bulles existantes ne s'ouvraient qu'au survol, inutilisable au doigt. Les nouvelles s'ouvrent au survol ET au tap (compteBulleOuverte / toggleCompteBulle)."
+        ] },
         { version: "32.10 Reste-Par-Compte", date: "2026-08-06", changes: [
             "PROBLÈME : le KPI « Reste à Payer » agrégeait TOUS les comptes, alors que ses deux voisins (« Tréso Courante » et « Budget Conso Restant ») portent sur le seul compte courant. Le total de 11 783 DH mélangeait 12 343 DH d'engagements sur le courant avec −4 760 DH sur l'Épargne Long Terme — deux poches qu'on ne peut pas payer l'une avec l'autre. Le chiffre n'était donc actionnable pour aucune décision.",
             "KPI2 recentré sur le COMPTE COURANT SEUL (resteAPayerCourantCycle). Son tooltip ne liste plus que les lignes du courant, et rappelle en pied le sous-total des autres comptes puis le total général — sans les confondre.",
@@ -9751,6 +9808,51 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         resteAPayerAutresComptes.value.reduce((s, g) => s + g.montant, 0)
                     );
 
+                    // ── v32.20 : diagnostic de COUVERTURE par compte non-courant ──────
+                    //   La vraie question sur un compte annexe n'est pas « combien reste-t-il
+                    //   à payer » mais « ce compte a-t-il de quoi payer ce qu'on lui impute ».
+                    //   Un objectif d'épargne (ep_) n'a pas de solde propre dans le modèle :
+                    //   seulement un linkedAccountId optionnel vers un compte réel. Sans lien,
+                    //   on affiche « non rattaché » plutôt que d'inventer un solde.
+                    const _soldeDuCompteKey = (key) => {
+                        if (key === 'courant') return { solde: tresoActuelleCourante.value, via: 'courant' };
+                        if (key.startsWith('cpt_')) {
+                            const raw = key.slice(4);
+                            const c = (comptes.value || []).find(x => String(x.id) === raw);
+                            return c ? { solde: Number(c.solde || 0), via: 'compte' } : { solde: null, via: null };
+                        }
+                        if (key.startsWith('ep_')) {
+                            const id = key.slice(3);
+                            const d = donneesAnnuelles.value[moisBudgetaire.value.an];
+                            const arr = Array.isArray(d?.epargne) ? d.epargne : Object.values(d?.epargne || {});
+                            const ep = arr.find(e => String(e.id) === id);
+                            if (ep && ep.linkedAccountId) {
+                                const c = (comptes.value || []).find(x => String(x.id) === String(ep.linkedAccountId));
+                                if (c) return { solde: Number(c.solde || 0), via: 'lie', compteLie: c.label };
+                            }
+                            return { solde: null, via: null };
+                        }
+                        return { solde: null, via: null };
+                    };
+                    const resteAPayerAutresDetail = computed(() => {
+                        calculationTick.value;
+                        return resteAPayerAutresComptes.value.map(g => {
+                            const s = _soldeDuCompteKey(g.key);
+                            return {
+                                ...g,
+                                solde: s.solde,
+                                soldeVia: s.via,
+                                compteLie: s.compteLie || null,
+                                couverture: s.solde === null ? null : s.solde - g.montant,
+                            };
+                        });
+                    });
+                    // Bulle ouverte au tap (mobile) — le survol suffit sur desktop
+                    const compteBulleOuverte = ref(null);
+                    const toggleCompteBulle = (key) => {
+                        compteBulleOuverte.value = compteBulleOuverte.value === key ? null : key;
+                    };
+
                     // v23.00 : Rapprochement bancaire ──────────────────────────────────────────
                     const ecartRapprochement = computed(() => {
                         const saisi = Number(soldeBancaireReel.value || 0);
@@ -11768,6 +11870,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v32.10 Reste-Par-Compte : découpage courant / autres comptes
                         resteAPayerGroupes, resteAPayerGroupeCourant, resteAPayerCourantCycle,
                         resteAPayerAutresComptes, resteAPayerAutresTotal,
+                        // v32.20 : bulles de détail + couverture par compte annexe
+                        resteAPayerAutresDetail, compteBulleOuverte, toggleCompteBulle,
                         // v24.0 Journal-Hybride
                         journalHybride,
                         // v24.20 Journal-Hybride-Universel
