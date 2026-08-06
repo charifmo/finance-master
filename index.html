@@ -3760,6 +3760,20 @@
                         </summary>
                         <div class="p-4 border-t border-gray-100 space-y-4">
                             <p class="text-[10px] text-gray-500 italic">Pour signaler un paiement, utilisez la <b>Checklist</b> ci-dessus.</p>
+                            <!-- v32.10 : réglage global (v24.80), absent de la vue mobile jusqu'ici —
+                                 c'est LUI qui pilote réellement le compte de toutes les charges fixes. -->
+                            <div class="p-3 bg-orange-50 rounded-xl border border-orange-200">
+                                <label class="text-[10px] font-black text-orange-700 uppercase tracking-widest block mb-1.5">🏦 Prélever toutes les charges fixes sur :</label>
+                                <select v-model="soldesInitiaux.compteChargesFixes" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-orange-300 rounded-lg bg-white outline-none">
+                                    <option value="courant">💳 Compte Courant</option>
+                                    <optgroup label="── Comptes bancaires ──">
+                                        <option v-for="c in comptesSelectOptions" :key="'gmcf_'+c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                    </optgroup>
+                                    <optgroup label="── Objectifs épargne ──">
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'gmcfe_'+ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label }}</option>
+                                    </optgroup>
+                                </select>
+                            </div>
                             <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesFixes" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
@@ -3774,29 +3788,21 @@
                                             <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold">✕</button>
                                         </div>
                                         <div class="flex gap-2">
-                                            <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="flex-1 p-2 text-sm font-black text-orange-700 text-right border border-gray-200 rounded bg-white outline-none"/>
-                                            <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-orange-200 rounded bg-orange-50 p-1.5 outline-none flex-1">
-                                                <option value="courant">💳 Courant</option>
-                                                <option v-for="c in comptesSelectOptions" :key="'mpcf_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                                <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'mpcfe_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
-                                            </select>
+                                            <!-- v32.10 : parts-routing supprimé en v24.80 — sélecteur mort retiré -->
+                                            <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="w-full p-2 text-sm font-black text-orange-700 text-right border border-gray-200 rounded bg-white outline-none"/>
                                         </div>
                                     </div>
                                     <button @click="ajouterPart(item)" class="w-full py-1.5 text-[9px] text-orange-600 font-bold uppercase tracking-widest bg-orange-50 rounded border border-orange-200">+ Ajouter une partie</button>
                                     <p class="text-[9px] text-gray-400 font-bold text-right">Total : {{ formatMAD(partsTotal(item)) }}</p>
                                 </div>
-                                <!-- Source (masqué si parts) -->
-                                <div v-if="!item.parts || !item.parts.length" class="mt-2">
-                                    <label class="text-[9px] font-black text-orange-700 uppercase tracking-widest block mb-1">← Prélever sur :</label>
-                                    <select v-model="item.sourceCompte" @change="handleDataChange" class="w-full p-2 text-sm font-bold border border-orange-200 rounded-lg bg-orange-50 outline-none">
-                                        <option value="courant">💳 Compte Courant</option>
-                                        <optgroup label="── Comptes bancaires ──">
-                                            <option v-for="c in comptesSelectOptions" :key="'mcf_'+c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
-                                        </optgroup>
-                                        <optgroup label="── Objectifs épargne ──">
-                                            <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'mcfe_'+ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label }}</option>
-                                        </optgroup>
-                                    </select>
+                                <!-- v32.10 : le sélecteur par ligne écrivait item.sourceCompte, que
+                                     plus rien ne lit depuis la v24.80 Macro-Accounts (routage unifié
+                                     via soldesInitiaux.compteChargesFixes, moteur ET pilotage).
+                                     Remplacé par un rappel en lecture seule du compte réellement utilisé. -->
+                                <div v-if="!item.parts || !item.parts.length" class="mt-2 flex items-center gap-2 bg-orange-50/70 border border-orange-200 rounded-lg px-2.5 py-2">
+                                    <span class="text-[9px] font-black text-orange-700 uppercase tracking-widest shrink-0">← Prélevé sur</span>
+                                    <span class="text-[11px] font-black text-orange-800 truncate min-w-0">🏦 {{ getNomCompte(soldesInitiaux.compteChargesFixes || 'courant') }}</span>
+                                    <span class="text-[8px] text-orange-500 font-bold ml-auto shrink-0 text-right leading-tight">réglage global<br/>Charges Fixes</span>
                                 </div>
                                 <div class="flex gap-2 mt-2">
                                     <button @click="item.showExceptions = !item.showExceptions" class="flex-1 py-2 text-[10px] text-orange-600 font-bold uppercase tracking-widest bg-orange-50 rounded-lg">
@@ -3843,6 +3849,19 @@
                             <span class="text-red-600 text-sm font-black bg-red-100 px-2 py-1 rounded">{{ formatMAD(totalVariables) }}</span>
                         </summary>
                         <div class="p-4 border-t border-gray-100 space-y-4">
+                            <!-- v32.10 : réglage global (v24.80), absent de la vue mobile jusqu'ici. -->
+                            <div class="p-3 bg-red-50 rounded-xl border border-red-200">
+                                <label class="text-[10px] font-black text-red-700 uppercase tracking-widest block mb-1.5">🏦 Prélever toutes les charges variables sur :</label>
+                                <select v-model="soldesInitiaux.compteChargesVariables" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-red-300 rounded-lg bg-white outline-none">
+                                    <option value="courant">💳 Compte Courant</option>
+                                    <optgroup label="── Comptes bancaires ──">
+                                        <option v-for="c in comptesSelectOptions" :key="'gmcv_'+c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                    </optgroup>
+                                    <optgroup label="── Objectifs épargne ──">
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'gmcve_'+ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label }}</option>
+                                    </optgroup>
+                                </select>
+                            </div>
                             <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesVariables" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
@@ -3866,29 +3885,19 @@
                                             <button @click="supprimerPart(item, pi)" class="text-red-400 hover:text-red-600 px-1.5 font-bold">✕</button>
                                         </div>
                                         <div class="flex gap-2">
-                                            <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="flex-1 p-2 text-sm font-black text-red-700 text-right border border-gray-200 rounded bg-white outline-none"/>
-                                            <select v-model="part.sourceCompte" @change="handleDataChange" class="text-[10px] font-bold border border-red-200 rounded bg-red-50 p-1.5 outline-none flex-1">
-                                                <option value="courant">💳 Courant</option>
-                                                <option v-for="c in comptesSelectOptions" :key="'mpcv_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
-                                                <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'mpcve_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.label }}</option>
-                                            </select>
+                                            <!-- v32.10 : parts-routing supprimé en v24.80 — sélecteur mort retiré -->
+                                            <input type="number" v-model.number="part.valeur" @input="handleDataChange" class="w-full p-2 text-sm font-black text-red-700 text-right border border-gray-200 rounded bg-white outline-none"/>
                                         </div>
                                     </div>
                                     <button @click="ajouterPart(item)" class="w-full py-1.5 text-[9px] text-red-600 font-bold uppercase tracking-widest bg-red-50 rounded border border-red-200">+ Ajouter une partie</button>
                                     <p class="text-[9px] text-gray-400 font-bold text-right">Total : {{ formatMAD(partsTotal(item)) }}</p>
                                 </div>
-                                <!-- Source (masqué si parts) -->
-                                <div v-if="!item.parts || !item.parts.length" class="mt-2">
-                                    <label class="text-[9px] font-black text-red-700 uppercase tracking-widest block mb-1">← Prélever sur :</label>
-                                    <select v-model="item.sourceCompte" @change="handleDataChange" class="w-full p-2 text-sm font-bold border border-red-200 rounded-lg bg-red-50 outline-none">
-                                        <option value="courant">💳 Compte Courant</option>
-                                        <optgroup label="── Comptes bancaires ──">
-                                            <option v-for="c in comptesSelectOptions" :key="'mcv_'+c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
-                                        </optgroup>
-                                        <optgroup label="── Objectifs épargne ──">
-                                            <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'mcve_'+ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label }}</option>
-                                        </optgroup>
-                                    </select>
+                                <!-- v32.10 : idem charges fixes — sélecteur mort depuis la v24.80,
+                                     routage réel via soldesInitiaux.compteChargesVariables. -->
+                                <div v-if="!item.parts || !item.parts.length" class="mt-2 flex items-center gap-2 bg-red-50/70 border border-red-200 rounded-lg px-2.5 py-2">
+                                    <span class="text-[9px] font-black text-red-700 uppercase tracking-widest shrink-0">← Prélevé sur</span>
+                                    <span class="text-[11px] font-black text-red-800 truncate min-w-0">🏦 {{ getNomCompte(soldesInitiaux.compteChargesVariables || 'courant') }}</span>
+                                    <span class="text-[8px] text-red-500 font-bold ml-auto shrink-0 text-right leading-tight">réglage global<br/>Charges Variables</span>
                                 </div>
                                 <div class="flex gap-2 mt-2">
                                     <button @click="item.showDetails = !item.showDetails" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
@@ -5548,7 +5557,10 @@
             "KPI2 recentré sur le COMPTE COURANT SEUL (resteAPayerCourantCycle). Son tooltip ne liste plus que les lignes du courant, et rappelle en pied le sous-total des autres comptes puis le total général — sans les confondre.",
             "NOUVELLE BANDE « Reste à payer — autres comptes » sous la grille KPI : une carte par compte (grille responsive 1/2/3 colonnes), avec son total et le détail de ses lignes. Un compte au solde négatif (financement excédentaire, ex. déblocage de crédit supérieur au décaissement) s'affiche en vert avec la mention explicite.",
             "REFACTO : le constructeur de groupes devient la fabrique _buildResteGroupes(applyFilter), appelée dans deux modes. applyFilter=true → resteAPayerDetailParCompte, qui suit le toggle temporel (À T0 / Cette sem. / Fin cycle) et alimente le cash disponible instantané. applyFilter=false → resteAPayerGroupes, périmètre complet du cycle, source unique des cartes KPI. Les deux usages étaient auparavant servis par un seul computed filtré, d'où l'ambiguïté corrigée en urgence par la v31.30.",
-            "resteAPayerTotalGlobal = resteAPayerCourantCycle + resteAPayerAutresTotal (au lieu de la somme des 5 getters atomiques). Le total est désormais égal par construction à la somme des cartes affichées — elles ne peuvent plus diverger. Effet de bord corrigé : les virements internes, présents dans les groupes mais absents des 5 getters, cessent d'être oubliés du total."
+            "resteAPayerTotalGlobal = resteAPayerCourantCycle + resteAPayerAutresTotal (au lieu de la somme des 5 getters atomiques). Le total est désormais égal par construction à la somme des cartes affichées — elles ne peuvent plus diverger. Effet de bord corrigé : les virements internes, présents dans les groupes mais absents des 5 getters, cessent d'être oubliés du total.",
+            "CONTRÔLES MORTS SUPPRIMÉS (vue mobile) : la v24.80 avait unifié le routage des charges fixes et variables sur deux réglages globaux, mais 4 sélecteurs « ← Prélever sur : » par ligne subsistaient dans les accordéons mobiles (chargesFixes item + parts, chargesVariables item + parts). Ils écrivaient item.sourceCompte / part.sourceCompte, que plus aucun moteur ne lit depuis. L'utilisateur croyait router une charge vers un compte : il ne se passait rien. Remplacés par un rappel en lecture seule du compte réellement utilisé (getNomCompte).",
+            "RÉGLAGE GLOBAL AJOUTÉ À LA VUE MOBILE : les deux sélecteurs macro n'existaient que dans le Budget Structurel desktop. Retirer les contrôles par ligne aurait donc privé la vue mobile de tout moyen de changer le routage. Les accordéons mobiles Charges Fixes et Consommation Variable portent maintenant le vrai sélecteur global.",
+            "PÉRIMÈTRE ASSUMÉ : le découpage par compte est aussi fin que le permet la v24.80 — toutes les charges fixes sur un compte, toutes les variables sur un autre. Seuls les dépenses exceptionnelles, virements et épargne ont un compte par ligne. Pilotage et moteur de projection appliquent la même règle."
         ] },
         { version: "32.00 Realized-T0", date: "2026-08-05", changes: [
             "REFONTE DU RÉALISÉ — le reste du cycle vient désormais de ce qui a été DÉPENSÉ, plus de ce qui s'est ÉCOULÉ. Depuis la v28.40 (Règle 2), la conso variable restante était une pure fonction du calendrier : elle fondait toute seule jour après jour, que l'utilisateur ait dépensé 0 ou 15 000 DH. Aucun point d'entrée n'existait pour le réalisé.",
