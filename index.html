@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v32.00 Realized-T0 - Finance Master</title>
+    <title>v32.10 Reste-Par-Compte - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -4180,25 +4180,25 @@
                                     <p class="text-2xl font-black tracking-tighter text-emerald-300">{{ formatMAD(0) }}</p>
                                     <p class="text-[9px] mt-1 font-bold text-emerald-400">🏁 Finito — Cycle Clos</p>
                                 </div>
-                                <!-- Carte KPI2 normale (cycle actuel) -->
-                                <div v-else :class="['p-4 rounded-2xl border text-center transition-all', resteAPayerTotalGlobal > 0 ? 'bg-orange-900/20 border-orange-700 group-hover:border-orange-500' : 'bg-green-900/20 border-green-700 group-hover:border-green-500']">
+                                <!-- Carte KPI2 normale (cycle actuel) — v32.10 : COMPTE COURANT SEUL -->
+                                <div v-else :class="['p-4 rounded-2xl border text-center transition-all', resteAPayerCourantCycle > 0 ? 'bg-orange-900/20 border-orange-700 group-hover:border-orange-500' : 'bg-green-900/20 border-green-700 group-hover:border-green-500']">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">🔴 Reste à Payer</p>
-                                    <p :class="['text-2xl font-black tracking-tighter', resteAPayerTotalGlobal > 0 ? 'text-orange-400' : 'text-green-400']">{{ formatMAD(resteAPayerTotalGlobal) }}</p>
-                                    <p class="text-[9px] mt-1 font-bold" :class="resteAPayerTotalGlobal === 0 ? 'text-emerald-400' : 'text-gray-500'">
-                                    <template v-if="resteAPayerTotalGlobal === 0">✅ Tout est réglé</template>
-                                    <template v-else>Tous comptes — non payés</template>
+                                    <p :class="['text-2xl font-black tracking-tighter', resteAPayerCourantCycle > 0 ? 'text-orange-400' : 'text-green-400']">{{ formatMAD(resteAPayerCourantCycle) }}</p>
+                                    <p class="text-[9px] mt-1 font-bold" :class="resteAPayerCourantCycle === 0 ? 'text-emerald-400' : 'text-gray-500'">
+                                    <template v-if="resteAPayerCourantCycle === 0">✅ Compte courant à jour</template>
+                                    <template v-else>💳 Compte courant uniquement</template>
                                 </p>
                                 </div>
                                 <div class="absolute top-full left-0 right-0 mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                                     <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
                                     <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
-                                        <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail par compte</p>
+                                        <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail — Compte Courant</p>
                                         <div class="space-y-3">
-                                            <div v-if="!resteAPayerDetailParCompte.length" class="text-center text-emerald-400 py-1">✅ Tout est payé !</div>
-                                            <div v-for="grp in resteAPayerDetailParCompte" :key="grp.key" class="space-y-1">
+                                            <div v-if="!resteAPayerGroupeCourant" class="text-center text-emerald-400 py-1">✅ Compte courant à jour !</div>
+                                            <div v-for="grp in (resteAPayerGroupeCourant ? [resteAPayerGroupeCourant] : [])" :key="grp.key" class="space-y-1">
                                                 <!-- En-tête du compte -->
                                                 <div class="flex justify-between gap-3 font-black">
-                                                    <span :class="grp.key === 'courant' ? 'text-orange-300' : 'text-violet-300'">{{ grp.icon }} {{ grp.label }}</span>
+                                                    <span class="text-orange-300">{{ grp.icon }} {{ grp.label }}</span>
                                                     <span class="text-white">{{ formatMAD(grp.montant) }}</span>
                                                 </div>
                                                 <!-- Lignes nominatives -->
@@ -4220,9 +4220,16 @@
                                                     <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']">{{ formatMAD(ligne.montant) }}</span>
                                                 </div>
                                             </div>
-                                            <div v-if="resteAPayerDetailParCompte.length > 1" class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-orange-300">
-                                                <span>= Total tous comptes</span>
-                                                <span>{{ formatMAD(resteAPayerTotalGlobal) }}</span>
+                                            <!-- v32.10 : rappel du hors-courant, sans le mélanger au total -->
+                                            <div v-if="resteAPayerAutresComptes.length" class="border-t border-slate-700 pt-1.5 mt-1.5 space-y-1">
+                                                <div class="flex justify-between gap-3 text-[10px]">
+                                                    <span class="text-slate-500">+ Autres comptes ({{ resteAPayerAutresComptes.length }})</span>
+                                                    <span :class="['font-bold', resteAPayerAutresTotal < 0 ? 'text-emerald-400' : 'text-slate-300']">{{ formatMAD(resteAPayerAutresTotal) }}</span>
+                                                </div>
+                                                <div class="flex justify-between gap-3 font-black text-orange-300">
+                                                    <span>= Total tous comptes</span>
+                                                    <span>{{ formatMAD(resteAPayerTotalGlobal) }}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -4407,6 +4414,44 @@
                             </div>
 
                         </div><!-- /KPI Grid v22.50 -->
+
+                        <!-- ═══ v32.10 Reste-Par-Compte : une carte par compte hors courant ═══ -->
+                        <div v-if="!isCyclePasse && resteAPayerAutresComptes.length" class="mt-3">
+                            <div class="flex items-baseline justify-between gap-3 mb-2 px-1">
+                                <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">🏦 Reste à payer — autres comptes</p>
+                                <p class="text-[9px] font-bold text-slate-500">
+                                    Total tous comptes
+                                    <span :class="['font-black ml-1', resteAPayerTotalGlobal > 0 ? 'text-orange-400' : 'text-emerald-400']">{{ formatMAD(resteAPayerTotalGlobal) }}</span>
+                                </p>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <div v-for="grp in resteAPayerAutresComptes" :key="'rap_' + grp.key"
+                                     :class="['p-3 rounded-2xl border transition-all', grp.montant < 0 ? 'bg-emerald-900/20 border-emerald-700/70 hover:border-emerald-500' : 'bg-slate-800/60 border-slate-700 hover:border-violet-500']">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-300 truncate min-w-0">{{ grp.icon }} {{ grp.label }}</p>
+                                        <p :class="['text-sm font-black tracking-tighter shrink-0', grp.montant < 0 ? 'text-emerald-400' : 'text-violet-300']">{{ formatMAD(grp.montant) }}</p>
+                                    </div>
+                                    <!-- Lignes du compte -->
+                                    <div class="mt-2 pt-2 border-t border-slate-700/70 space-y-1">
+                                        <div v-for="(ligne, li) in grp.lignes" :key="'rap_' + grp.key + '_' + li" class="flex justify-between gap-2 text-[10px]">
+                                            <span class="text-slate-400 truncate min-w-0">
+                                                <span v-if="ligne.type==='fix'">🏢</span>
+                                                <span v-else-if="ligne.type==='factures'">🧾</span>
+                                                <span v-else-if="ligne.type==='var'">🛒</span>
+                                                <span v-else-if="ligne.type==='choc'">⚠️</span>
+                                                <span v-else-if="ligne.type==='injection'">💵</span>
+                                                <span v-else-if="ligne.type==='epargne'">💰</span>
+                                                <span v-else>🔄</span>
+                                                {{ ligne.nom }}
+                                                <span v-if="ligne.jourPrevu" class="text-[8px] text-slate-600 font-bold ml-0.5">j.{{ ligne.jourPrevu }}</span>
+                                            </span>
+                                            <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']">{{ formatMAD(ligne.montant) }}</span>
+                                        </div>
+                                    </div>
+                                    <p v-if="grp.montant < 0" class="text-[8px] font-bold text-emerald-400/80 mt-1.5">✅ Financement excédentaire sur ce compte</p>
+                                </div>
+                            </div>
+                        </div>
                     </div><!-- /header -->
 
                     <div v-if="anneeAffichage === moisBudgetaire.an" class="space-y-6">
@@ -5496,8 +5541,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "32.00 Realized-T0";
+                    const CURRENT_VERSION = "32.10 Reste-Par-Compte";
                     const CHANGELOG = [
+        { version: "32.10 Reste-Par-Compte", date: "2026-08-06", changes: [
+            "PROBLÈME : le KPI « Reste à Payer » agrégeait TOUS les comptes, alors que ses deux voisins (« Tréso Courante » et « Budget Conso Restant ») portent sur le seul compte courant. Le total de 11 783 DH mélangeait 12 343 DH d'engagements sur le courant avec −4 760 DH sur l'Épargne Long Terme — deux poches qu'on ne peut pas payer l'une avec l'autre. Le chiffre n'était donc actionnable pour aucune décision.",
+            "KPI2 recentré sur le COMPTE COURANT SEUL (resteAPayerCourantCycle). Son tooltip ne liste plus que les lignes du courant, et rappelle en pied le sous-total des autres comptes puis le total général — sans les confondre.",
+            "NOUVELLE BANDE « Reste à payer — autres comptes » sous la grille KPI : une carte par compte (grille responsive 1/2/3 colonnes), avec son total et le détail de ses lignes. Un compte au solde négatif (financement excédentaire, ex. déblocage de crédit supérieur au décaissement) s'affiche en vert avec la mention explicite.",
+            "REFACTO : le constructeur de groupes devient la fabrique _buildResteGroupes(applyFilter), appelée dans deux modes. applyFilter=true → resteAPayerDetailParCompte, qui suit le toggle temporel (À T0 / Cette sem. / Fin cycle) et alimente le cash disponible instantané. applyFilter=false → resteAPayerGroupes, périmètre complet du cycle, source unique des cartes KPI. Les deux usages étaient auparavant servis par un seul computed filtré, d'où l'ambiguïté corrigée en urgence par la v31.30.",
+            "resteAPayerTotalGlobal = resteAPayerCourantCycle + resteAPayerAutresTotal (au lieu de la somme des 5 getters atomiques). Le total est désormais égal par construction à la somme des cartes affichées — elles ne peuvent plus diverger. Effet de bord corrigé : les virements internes, présents dans les groupes mais absents des 5 getters, cessent d'être oubliés du total."
+        ] },
         { version: "32.00 Realized-T0", date: "2026-08-05", changes: [
             "REFONTE DU RÉALISÉ — le reste du cycle vient désormais de ce qui a été DÉPENSÉ, plus de ce qui s'est ÉCOULÉ. Depuis la v28.40 (Règle 2), la conso variable restante était une pure fonction du calendrier : elle fondait toute seule jour après jour, que l'utilisateur ait dépensé 0 ou 15 000 DH. Aucun point d'entrée n'existait pour le réalisé.",
             "NOUVEAU PANNEAU « Réalisé à T0 — conso engagée » (onglet Pilotage) : une saisie par catégorie consommable (Alimentation, Santé, Sorties, Voiture — hors Factures), avec barre de progression, rythme attendu à J+n et total. Bouton ⚡ Depuis le réel : agrège en un clic les transactionsReelles datées dans la fenêtre du cycle [jourDePaie M−1 ; jourDePaie−1 du mois M], en mappant categorieId (y compris celles des détails) vers la charge variable. Bouton ↩ pour effacer la saisie du cycle.",
@@ -9519,8 +9571,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     // ─── v22.60 Détail des charges restantes : moisBudgetaire + parNature ─
-                    const resteAPayerDetailParCompte = computed(() => {
-                        calculationTick.value;
+                    // v32.10 Reste-Par-Compte : le constructeur de groupes devient une fabrique
+                    //   appelée dans DEUX modes, pour lever l'ambiguïté héritée de la v31.30 :
+                    //     • applyFilter = true  → suit le toggle temporel (À T0 / Cette sem. / Fin cycle).
+                    //       Sert au calcul de la trésorerie disponible à l'instant considéré.
+                    //     • applyFilter = false → périmètre complet du cycle, indépendant de la vue.
+                    //       Sert aux cartes KPI « Reste à Payer », qui doivent afficher le même
+                    //       montant quel que soit le toggle (sinon les obligations à jourPrevu
+                    //       futur disparaissaient de l'écran — BUG1 v31.30).
+                    const _buildResteGroupes = (applyFilter) => {
                         const mb = moisBudgetaire.value;
                         const an = mb.an;
                         const mois = mb.mois;
@@ -9531,6 +9590,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // v23.10 : filtre temporel (at0 | semaine | cycle)
                         const _todayDayOk = new Date().getDate();
                         const ok = (item) => {
+                            if (!applyFilter) return true;
                             if (vueTemporelle.value === 'at0')
                                 return !item.jourPrevu || item.jourPrevu <= _todayDayOk;
                             if (vueTemporelle.value === 'semaine')
@@ -9649,7 +9709,35 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (b.key === 'courant') return 1;
                             return b.montant - a.montant;
                         });
+                    };
+
+                    // Vue FILTRÉE (suit le toggle temporel) — base du cash dispo instantané
+                    const resteAPayerDetailParCompte = computed(() => {
+                        calculationTick.value;
+                        return _buildResteGroupes(true);
                     });
+                    // Vue COMPLÈTE du cycle — source unique des cartes KPI « Reste à Payer »
+                    const resteAPayerGroupes = computed(() => {
+                        calculationTick.value;
+                        return _buildResteGroupes(false);
+                    });
+                    // ── v32.10 : découpage par compte ────────────────────────────────
+                    //   « Tréso Courante » et « Budget Conso » portent sur le seul compte
+                    //   courant. Agréger tous les comptes dans « Reste à Payer » mélangeait
+                    //   des engagements qu'on ne peut pas payer les uns avec les autres
+                    //   (ex. 12 343 DH de courant + −4 760 DH d'épargne long terme).
+                    const resteAPayerGroupeCourant = computed(() =>
+                        resteAPayerGroupes.value.find(g => g.key === 'courant') || null
+                    );
+                    const resteAPayerCourantCycle = computed(() =>
+                        resteAPayerGroupeCourant.value ? resteAPayerGroupeCourant.value.montant : 0
+                    );
+                    const resteAPayerAutresComptes = computed(() =>
+                        resteAPayerGroupes.value.filter(g => g.key !== 'courant')
+                    );
+                    const resteAPayerAutresTotal = computed(() =>
+                        resteAPayerAutresComptes.value.reduce((s, g) => s + g.montant, 0)
+                    );
 
                     // v23.00 : Rapprochement bancaire ──────────────────────────────────────────
                     const ecartRapprochement = computed(() => {
@@ -9680,18 +9768,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const grp = resteAPayerDetailParCompte.value.find(g => g.key === 'courant');
                         return grp ? grp.montant : 0;
                     });
-                    // v31.30 BUG1-FIX : total calculé depuis les getters atomiques NON filtrés.
-                    //   Avant : sum(resteAPayerDetailParCompte) → héritait du filtre ok()/vueTemporelle
-                    //           → épargne, factures et dépenses irrégulières avec jourPrevu futur disparaissaient
-                    //           en vue 'at0', et le KPI "Reste à Payer" affichait 15 000 DH de moins.
-                    //   Après : addition directe des 5 getters (tous indépendants de vueTemporelle).
-                    const resteAPayerTotalGlobal = computed(() => {
-                        return resteAPayerFixes.value
-                            + resteAPayerFactures.value
-                            + resteAPayerIrregulier.value
-                            + enveloppeVariableProrata.value
-                            + resteAPayerEpargne.value;
-                    });
+                    // v31.30 BUG1-FIX : total calculé hors filtre vueTemporelle (sinon les
+                    //   obligations à jourPrevu futur disparaissaient du KPI en vue 'at0').
+                    // v32.10 : la somme des 5 getters atomiques est remplacée par la somme des
+                    //   groupes NON FILTRÉS. Même périmètre, deux gains :
+                    //     • le total est par construction égal à courant + autres comptes,
+                    //       donc les cartes ne peuvent plus diverger de leur total ;
+                    //     • les virements internes, présents dans les groupes mais absents des
+                    //       5 getters, cessent d'être oubliés du total.
+                    const resteAPayerTotalGlobal = computed(() =>
+                        resteAPayerCourantCycle.value + resteAPayerAutresTotal.value
+                    );
                     // v22.50 — Cash dispo = tréso courant − obligations courant
                     // ── v23.00 : Revenus non encore reçus → compte courant ──────────────────
                     const revenusEnAttenteCourant = computed(() => {
@@ -11666,6 +11753,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         consoT0Renseigne, budgetConsoCycle, enveloppeConsoRestante, enveloppeConsoProrataTemps,
                         setConsoT0, resetConsoT0, remplirConsoT0DepuisReel,
                         obligationsCourantHorsConso, budgetConsoRestantReel, contrainteConso,
+                        // v32.10 Reste-Par-Compte : découpage courant / autres comptes
+                        resteAPayerGroupes, resteAPayerGroupeCourant, resteAPayerCourantCycle,
+                        resteAPayerAutresComptes, resteAPayerAutresTotal,
                         // v24.0 Journal-Hybride
                         journalHybride,
                         // v24.20 Journal-Hybride-Universel
