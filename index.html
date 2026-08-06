@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v32.30 Couverture-Courant - Finance Master</title>
+    <title>v32.40 Conso-Ventilee - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -4226,7 +4226,7 @@
                                                         <span v-if="ligne.jourPrevu" class="text-[8px] text-slate-500 font-bold ml-0.5">j.{{ligne.jourPrevu}}</span>
                                                     </span>
                                                     <!-- v32.00 : flux négatif = injection de cash, affichée en vert -->
-                                                    <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']">{{ formatMAD(ligne.montant) }}</span>
+                                                    <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']"><span v-if="ligne.estim" class="text-slate-500 font-normal" title="Estimation au prorata du temps — saisissez votre réalisé T0">≈ </span>{{ formatMAD(ligne.montant) }}</span>
                                                 </div>
                                             </div>
                                             <!-- v32.30 : bilan de couverture, symétrique des comptes annexes -->
@@ -4497,7 +4497,7 @@
                                                         {{ ligne.nom }}
                                                         <span v-if="ligne.jourPrevu" class="text-[8px] text-slate-600 font-bold ml-0.5">j.{{ ligne.jourPrevu }}</span>
                                                     </span>
-                                                    <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']">{{ formatMAD(ligne.montant) }}</span>
+                                                    <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']"><span v-if="ligne.estim" class="text-slate-500 font-normal" title="Estimation au prorata du temps — saisissez votre réalisé T0">≈ </span>{{ formatMAD(ligne.montant) }}</span>
                                                 </div>
                                                 <div :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', grp.montant < 0 ? 'text-emerald-300' : 'text-violet-300']">
                                                     <span>= Reste à payer</span>
@@ -5627,8 +5627,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "32.30 Couverture-Courant";
+                    const CURRENT_VERSION = "32.40 Conso-Ventilee";
                     const CHANGELOG = [
+        { version: "32.40 Conso-Ventilee", date: "2026-08-06", changes: [
+            "La ligne « Conso variable » des bulles était un bloc opaque — le plus gros poste du compte courant (10 123 DH sur 12 343 DH) sans aucun détail. Elle est désormais ventilée par catégorie : Alimentation, Santé, Sorties, Voiture.",
+            "RÉCONCILIATION EXACTE : la somme des lignes tombe au dirham près sur enveloppeConsoRestante. Deux pièges traités. (1) Une catégorie en dépassement produit un reste négatif : il n'est PAS clampé ici, contrairement à consoCategoriesT0 qui sert au panneau de saisie — sinon sum(lignes) aurait dépassé budget − engagé. Le négatif est d'ailleurs l'information utile : cette poche est à sec. (2) Les arrondis : le reliquat est reporté sur la plus grosse ligne.",
+            "Les lignes suivent la même source que le total : reste réel par catégorie si le T0 est saisi, sinon prorata temporel du cycle. Dans ce second cas un « ≈ » précède chaque montant pour signaler l'estimation, avec l'explication au survol.",
+            "Repli conservé : si aucune catégorie n'est exploitable, la ligne agrégée d'origine est réaffichée."
+        ] },
         { version: "32.30 Couverture-Courant", date: "2026-08-06", changes: [
             "La bulle du Compte Courant n'avait pas le bilan de couverture ajouté aux comptes annexes en v32.20 : elle listait les engagements sans jamais dire si le compte pouvait les honorer. Bloc 🏦 Couverture ajouté, symétrique des autres comptes — Tréso courante + Revenus attendus du cycle − Engagements du cycle = Couvert / Découvert projeté.",
             "COHÉRENCE DE PÉRIODE : nouveau getter revenusEnAttenteCourantCycle, non filtré par vueTemporelle. resteAPayerCourantCycle porte sur tout le cycle ; lui opposer revenusEnAttenteCourant (filtré par le toggle À T0 / Cette sem.) aurait produit un bilan faux, variable selon la vue. Le getter filtré reste utilisé pour le cash instantané du KPI3, qui lui doit suivre le toggle.",
@@ -9755,13 +9761,22 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const envVar = enveloppeVariableProrata.value;
                             const grp = getOrCreate(srcVar);
                             grp.montant += envVar; grp.parNature.var += envVar;
-                            // v32.00 : le libellé dit d'où vient le chiffre (réel saisi vs estimation)
-                            grp.lignes.push({
-                                nom: consoT0Renseigne.value
-                                    ? 'Conso variable — reste réel (' + formatMAD(consoEngageeT0.value) + ' engagés)'
-                                    : 'Conso variable — estimation ' + joursCycleRestants.value + 'j / ' + joursCycleTotal.value + 'j de cycle',
-                                montant: envVar, type: 'var'
-                            });
+                            // v32.40 : ventilation par catégorie (Alimentation, Santé, Sorties…)
+                            //   au lieu d'une ligne agrégée opaque. Repli sur la ligne unique
+                            //   si aucune catégorie n'est exploitable.
+                            const detailConso = consoResteParCategorie.value;
+                            if (detailConso.length) {
+                                detailConso.forEach(dc => grp.lignes.push({
+                                    nom: dc.nom, montant: dc.montant, type: 'var', estim: dc.estim
+                                }));
+                            } else {
+                                grp.lignes.push({
+                                    nom: consoT0Renseigne.value
+                                        ? 'Conso variable — reste réel (' + formatMAD(consoEngageeT0.value) + ' engagés)'
+                                        : 'Conso variable — estimation ' + joursCycleRestants.value + 'j / ' + joursCycleTotal.value + 'j de cycle',
+                                    montant: envVar, type: 'var', estim: !consoT0Renseigne.value
+                                });
+                            }
                         }
                         // v28.40 RÈGLE 1 : Dépenses irrégulières → reste = dû − avance (filtre cycle-aware règle du 27)
                         // v32.00 : netting des injections de cash (montant < 0) sur le compte
@@ -10350,6 +10365,36 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Nom historique conservé : tout le moteur (journal, reste à payer, relevé)
                     // consomme ce getter — il pointe maintenant sur l'enveloppe réelle.
                     const enveloppeVariableProrata = computed(() => enveloppeConsoRestante.value);
+
+                    // ── v32.40 : ventilation de l'enveloppe conso par catégorie ──────
+                    //   La somme des lignes doit tomber EXACTEMENT sur enveloppeConsoRestante,
+                    //   sinon le détail contredit son propre total. Deux pièges traités :
+                    //     • une catégorie en dépassement donne un reste négatif. On ne le
+                    //       clampe PAS ici (contrairement à consoCategoriesT0, qui sert à
+                    //       l'affichage par catégorie) : sinon sum(lignes) > budget − engagé.
+                    //       Le négatif est l'information utile — cette poche est à sec.
+                    //     • les arrondis. Le reliquat est reporté sur la plus grosse ligne.
+                    const consoResteParCategorie = computed(() => {
+                        calculationTick.value;
+                        const total = enveloppeConsoRestante.value;
+                        if (total <= 0) return [];
+                        const cats = consoCategoriesT0.value;
+                        if (!cats.length) return [];
+                        const reel = consoT0Renseigne.value;
+                        const ratio = joursCycleRestants.value / joursCycleTotal.value;
+                        const lignes = cats.map(c => ({
+                            nom: c.label,
+                            montant: Math.round(reel ? (c.budget - c.engage) : (c.budget * ratio)),
+                            estim: !reel,
+                        }));
+                        const ecart = total - lignes.reduce((s, l) => s + l.montant, 0);
+                        if (ecart !== 0) {
+                            let idx = 0;
+                            lignes.forEach((l, i) => { if (Math.abs(l.montant) > Math.abs(lignes[idx].montant)) idx = i; });
+                            lignes[idx].montant += ecart;
+                        }
+                        return lignes;
+                    });
 
                     // Écriture d'une saisie T0 (par catégorie)
                     const setConsoT0 = (catKey, montant) => {
@@ -11926,6 +11971,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         resteAPayerAutresComptes, resteAPayerAutresTotal,
                         // v32.20 : bulles de détail + couverture par compte annexe
                         resteAPayerAutresDetail, compteBulleOuverte, toggleCompteBulle,
+                        // v32.40 : ventilation de l'enveloppe conso par catégorie
+                        consoResteParCategorie,
                         // v32.30 : bilan de couverture du compte courant
                         revenusEnAttenteCourantCycle, couvertureCourant,
                         // v24.0 Journal-Hybride
