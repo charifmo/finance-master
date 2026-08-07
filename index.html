@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v32.50 Comptes-Entrants - Finance Master</title>
+    <title>v32.60 Auto-Categorisation - Finance Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -4986,12 +4986,32 @@
                         <!-- Feedback discret (apparaît quand on tape) -->
                         <div v-if="saisieRapide || saisieForm.montant" class="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
                             <span v-if="saisieForm.montant" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">💵 {{ formatMAD(saisieForm.montant) }}</span>
-                            <span v-if="saisieForm.categorieId" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">🏷️ {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}</span>
+                            <!-- v32.60 : la catégorie devinée dit d'où elle vient -->
+                            <span v-if="saisieForm.categorieId"
+                                  :title="saisieCatSource === 'historique' ? 'Déduit de vos saisies passées' : (saisieCatSource === 'alias' ? 'Déduit du vocabulaire courant' : (saisieCatSource === 'manuel' ? 'Choisi par vous' : 'Trouvé dans le nom de la catégorie'))"
+                                  :class="['text-[10px] font-black px-2 py-0.5 rounded-full border', saisieCatSource === 'manuel' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200']">
+                                🏷️ {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}
+                                <span v-if="saisieCatSource === 'historique'" class="font-bold opacity-60">· appris</span>
+                                <span v-else-if="saisieCatSource === 'alias'" class="font-bold opacity-60">· deviné</span>
+                                <span v-else-if="saisieCatSource === 'manuel'" class="font-bold opacity-60">· vous</span>
+                            </span>
                             <span v-if="saisieForm.compteId" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200">🏦 {{ (comptes.find(c => c.id === saisieForm.compteId) || {}).label || '—' }}</span>
                             <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">📅 {{ saisieDateLabel }}</span>
                             <button @click="showSaisieDetails = !showSaisieDetails" class="ml-auto text-[10px] font-black text-gray-400 hover:text-emerald-600 transition-colors">
                                 {{ showSaisieDetails ? '× Fermer' : '⚙️ Ajuster' }}
                             </button>
+                        </div>
+                        <!-- v32.60 : aucune catégorie trouvée → propositions cliquables.
+                             Le clic n'est pas obligatoire : sans choix la tx part en Non catégorisé. -->
+                        <div v-if="saisieForm.montant && !saisieForm.categorieId && saisieCatSuggestions.length"
+                             class="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            <span class="text-[10px] font-bold text-gray-400">Catégorie ?</span>
+                            <button v-for="cid in saisieCatSuggestions" :key="'sug_' + cid"
+                                    @click="choisirCategorieSaisie(cid)"
+                                    class="text-[10px] font-black px-2 py-0.5 rounded-full bg-gray-50 text-gray-600 border border-gray-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors">
+                                {{ getCategorieLabel(cid) }}
+                            </button>
+                            <button @click="showSaisieDetails = true" class="text-[10px] font-bold text-gray-400 hover:text-emerald-600 underline">autre…</button>
                         </div>
 
                         <!-- Form détaillé (caché par défaut) -->
@@ -5646,8 +5666,17 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "32.50 Comptes-Entrants";
+                    const CURRENT_VERSION = "32.60 Auto-Categorisation";
                     const CHANGELOG = [
+        { version: "32.60 Auto-Categorisation", date: "2026-08-07", changes: [
+            "CONSTAT : le nœud n8n « Tool: Transactions Réelles » contient un resolveCategorieId qui est la COPIE EXACTE du _guessCategorieId de l'app (match exact, puis tokenisation, puis sous-chaîne ≥ 4). L'agent ne devine donc pas mieux — c'est Gemini qui traduit « courses » en « Alimentation » AVANT d'appeler le resolver. Le saut sémantique vient du LLM, pas du matcher.",
+            "DIAGNOSTIC : le matcher est LEXICAL, il ne trouve que si le mot tapé figure dans un label. Or les catégories portent un vocabulaire personnel (Tqdya, samak, khdra, ghsil, essence picanto). « 200 courses » ne matchait rien → cat_misc, alors que « 200 essence » fonctionnait déjà. Problème de vocabulaire, pas d'intelligence — donc traité en local, sans aller-retour réseau ni coût LLM sur une saisie qui doit prendre deux secondes et marcher hors ligne.",
+            "COUCHE 1 — HISTORIQUE : index mot → catégorie construit depuis vos transactionsReelles déjà catégorisées, avec vote pondéré par fréquence sur tous les mots du libellé. Chaque correction manuelle enrichit la couche : « courses » corrigé une fois est reconnu pour toujours. cat_misc exclu de l'apprentissage.",
+            "COUCHE 2 — ALIAS : dictionnaire darija/français (courses, souk, marjane → alimentation ; gasoil, ghsil, vidange → voiture ; pharmacie, medoc → sante ; cafe, resto, barber → sorties…). Il TRADUIT le mot vers un terme susceptible d'exister dans vos labels, puis relance le matcher lexical — aucun id codé en dur, donc renommer une catégorie ne crée jamais de faux positif figé.",
+            "COUCHE 3 — LEXICAL : le matcher v22.10 d'origine, inchangé, en dernier recours. Normalisation des accents ajoutée aux trois couches.",
+            "FEEDBACK : le badge de catégorie indique sa provenance (· appris / · deviné / · vous). Si aucune couche ne tranche, trois catégories les plus utilisées sont proposées en un clic, plus un lien « autre… ». Le clic reste optionnel — sans choix la transaction part en Non catégorisé, la saisie éclair n'est jamais bloquée.",
+            "Un choix manuel n'est plus écrasé par la frappe suivante, et il est réinitialisé après validation."
+        ] },
         { version: "32.50 Comptes-Entrants", date: "2026-08-07", changes: [
             "PROBLÈME : le compte Urgence n'apparaissait nulle part dans la bande. _buildResteGroupes ne suit que les sourceCompte — ce qui SORT d'un compte. Un compte qui ne fait qu'encaisser (fonds d'urgence alimenté chaque mois, épargne de précaution) n'existait donc dans aucun groupe et restait invisible, alors que c'est justement un compte qu'on veut surveiller.",
             "Nouveau getter fluxEntrantsParCompte : indexe les DESTINATIONS. Allocations d'épargne (la poche ep_<id> est alimentée depuis son sourceCompte) et virements internes (destinationCompte). Montants nets de l'avance déjà versée (dû − getPaidAmount).",
@@ -6152,25 +6181,58 @@
                         return { montant, libelle };
                     };
 
-                    // Devine la catégorieId par match mot-par-mot (v22.10)
-                    // Retourne null si pas de match (l'appelant garde le choix précédent)
-                    const _guessCategorieId = (libelle) => {
-                        const target = String(libelle || '').toLowerCase().trim();
-                        if (!target) return null;
-                        const tokenize = (s) => String(s).toLowerCase().split(/[\s,;.()\-_/&]+/).filter(w => w.length >= 3);
-                        const targetWords = tokenize(target);
-                        const cats = (soldesInitiaux.value.categories || []).filter(c => c && !c.archive);
+                    // ════════════════════════════════════════════════════════════════
+                    // v32.60 Auto-Categorisation — 3 couches, 100% local
+                    //
+                    //   Constat : le matcher v22.10 (conservé en couche 3) est LEXICAL. Il ne
+                    //   trouve que si le mot tapé figure dans un label de catégorie. Or vos
+                    //   catégories portent votre vocabulaire (Tqdya, samak, khdra, ghsil…) :
+                    //   « 200 courses » ne matchait rien et finissait en cat_misc.
+                    //   Le nœud n8n « Tool: Transactions Réelles » a EXACTEMENT le même
+                    //   resolveCategorieId — l'agent ne devine pas mieux, c'est Gemini qui
+                    //   traduit « courses » en « Alimentation » avant de l'appeler.
+                    //
+                    //   Plutôt que de payer un aller-retour LLM sur chaque saisie, on ajoute
+                    //   le vocabulaire manquant en local :
+                    //     1. HISTORIQUE — vos propres transactions déjà catégorisées. Chaque
+                    //        correction que vous faites enrichit la couche automatiquement.
+                    //     2. ALIAS — dictionnaire darija/français qui TRADUIT le mot tapé vers
+                    //        un mot présent dans vos labels, puis relance le matcher lexical.
+                    //        Il ne code aucun id en dur : si vous renommez une catégorie, il
+                    //        continue de fonctionner ou se tait, jamais de faux positif figé.
+                    //     3. LEXICAL — le matcher d'origine, inchangé.
+                    // ════════════════════════════════════════════════════════════════
+                    const _normTxt = (s) => String(s || '').toLowerCase()
+                        .normalize('NFD').replace(/[̀-ͯ]/g, '');
+                    const _tokens = (s) => _normTxt(s).split(/[\s,;.()\-_/&'"]+/).filter(w => w.length >= 3);
 
+                    // Traduit un mot du quotidien vers un mot susceptible d'exister dans les labels
+                    const ALIAS_CATEGORIES = [
+                        { cible: 'alimentation', mots: ['course','courses','souk','marjane','marjan','carrefour','acima','bim','epicerie','superette','legume','legumes','fruit','fruits','viande','poulet','poisson','pain','lait','oeuf','oeufs','tqdya','khdra','samak','djaj','kfta','boucherie','patisserie','gateau'] },
+                        { cible: 'sante', mots: ['pharmacie','pharma','medicament','medicaments','medoc','docteur','medecin','dentiste','analyse','analyses','laboratoire','labo','clinique','hopital','psy','kine','vaccin','lunette','lunettes','opticien','radio'] },
+                        { cible: 'sorties', mots: ['cafe','resto','restaurant','cinema','sortie','sorties','glace','barber','coiffeur','hammam','loisir','parc','pizza','snack'] },
+                        { cible: 'voiture', mots: ['essence','gasoil','diesel','carburant','station','afriquia','shell','vidange','pneu','pneus','garage','mecanicien','lavage','ghsil','parking','peage','autoroute','vignette'] },
+                        { cible: 'elect', mots: ['electricite','electricity','lydec','redal','amendis'] },
+                        { cible: 'internet', mots: ['internet','wifi','fibre','adsl'] },
+                        { cible: 'tel', mots: ['telephone','recharge','forfait','iam','inwi'] },
+                    ];
+
+                    // Couche 3 (historique v22.10) : match lexical sur les labels de catégories
+                    const _matchCategorieLexical = (libelle) => {
+                        const target = _normTxt(libelle).trim();
+                        if (!target) return null;
+                        const targetWords = _tokens(target);
+                        const cats = (soldesInitiaux.value.categories || []).filter(c => c && !c.archive);
                         // 1. Match exact du libellé complet ou d'un mot avec le label d'une cat
                         for (const c of cats) {
-                            const lab = String(c.label || '').toLowerCase().trim();
+                            const lab = _normTxt(c.label).trim();
                             if (!lab) continue;
                             if (lab === target) return c.id;
                             for (const w of targetWords) if (lab === w) return c.id;
                         }
                         // 2. Match mot-à-mot (au moins 1 mot du target = 1 mot d'une cat)
                         for (const c of cats) {
-                            const labWords = tokenize(c.label);
+                            const labWords = _tokens(c.label);
                             for (const tw of targetWords) {
                                 for (const lw of labWords) {
                                     if (tw === lw) return c.id;
@@ -6180,6 +6242,51 @@
                             }
                         }
                         return null;
+                    };
+
+                    // Couche 1 : index mot → catégorie, construit depuis VOS transactions passées
+                    const _histoCategories = computed(() => {
+                        calculationTick.value;
+                        const map = {};
+                        Object.values(donneesAnnuelles.value || {}).forEach(d => {
+                            (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).forEach(t => {
+                                if (!t || !t.categorieId || t.categorieId === 'cat_misc') return;
+                                _tokens(t.libelle).forEach(w => {
+                                    if (!map[w]) map[w] = {};
+                                    map[w][t.categorieId] = (map[w][t.categorieId] || 0) + 1;
+                                });
+                            });
+                        });
+                        return map;
+                    });
+
+                    // Devine la catégorie. Retourne { id, source } — source sert au feedback UI.
+                    // null si aucune couche ne tranche (l'appelant garde le choix précédent).
+                    const _guessCategorieId = (libelle) => {
+                        const mots = _tokens(libelle);
+                        if (!mots.length) return null;
+
+                        // ── 1. Historique : vote pondéré des mots déjà vus ──
+                        const votes = {};
+                        const histo = _histoCategories.value;
+                        mots.forEach(w => {
+                            const parCat = histo[w];
+                            if (!parCat) return;
+                            Object.entries(parCat).forEach(([cat, n]) => { votes[cat] = (votes[cat] || 0) + n; });
+                        });
+                        const gagnant = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+                        if (gagnant) return { id: gagnant[0], source: 'historique' };
+
+                        // ── 2. Alias : on traduit puis on relance le matcher lexical ──
+                        for (const alias of ALIAS_CATEGORIES) {
+                            if (!mots.some(w => alias.mots.includes(w))) continue;
+                            const id = _matchCategorieLexical(alias.cible);
+                            if (id) return { id, source: 'alias' };
+                        }
+
+                        // ── 3. Matcher lexical d'origine ──
+                        const id = _matchCategorieLexical(libelle);
+                        return id ? { id, source: 'libellé' } : null;
                     };
 
                     const ajouterTransactionReelle = (data) => {
@@ -6221,6 +6328,12 @@
                         compteId: null,
                     });
 
+                    // v32.60 : d'où vient la catégorie affichée ('historique' | 'alias' | 'libellé'
+                    //   | 'manuel'), et propositions de repli quand rien n'est trouvé.
+                    //   Déclarés avant resetSaisieForm, qui les remet à zéro.
+                    const saisieCatSource = ref(null);
+                    const saisieCatSuggestions = ref([]);
+
                     const resetSaisieForm = () => {
                         saisieForm.value = {
                             datetime: _nowLocalDateTime(),
@@ -6230,21 +6343,62 @@
                             compteId: saisieCompteDefaut.value || (Array.isArray(comptes.value) && comptes.value[0] ? comptes.value[0].id : null),
                         };
                         saisieRapide.value = '';
+                        // v32.60 : sinon le 'manuel' de la saisie précédente bloquerait la suivante
+                        if (saisieCatSource) saisieCatSource.value = null;
+                        if (saisieCatSuggestions) saisieCatSuggestions.value = [];
+                    };
+
+                    // Choisir une catégorie à la main coupe l'auto-détection pour cette saisie
+                    const choisirCategorieSaisie = (catId) => {
+                        saisieForm.value.categorieId = catId;
+                        saisieCatSource.value = 'manuel';
+                        saisieCatSuggestions.value = [];
                     };
 
                     // Watch sur smart input → remplit le formulaire en temps réel
                     watch(saisieRapide, (txt) => {
                         const s = String(txt || '').trim();
-                        if (!s) return;
+                        if (!s) { saisieCatSource.value = null; saisieCatSuggestions.value = []; return; }
                         const parsed = _parseSaisieRapide(s);
-                        if (parsed) {
-                            if (parsed.montant > 0) saisieForm.value.montant = parsed.montant;
-                            if (parsed.libelle && parsed.libelle !== 'Sans libellé') {
-                                saisieForm.value.libelle = parsed.libelle;
-                                const guess = _guessCategorieId(parsed.libelle);
-                                if (guess) saisieForm.value.categorieId = guess;
+                        if (!parsed) return;
+                        if (parsed.montant > 0) saisieForm.value.montant = parsed.montant;
+                        if (parsed.libelle && parsed.libelle !== 'Sans libellé') {
+                            saisieForm.value.libelle = parsed.libelle;
+                            // Un choix manuel de l'utilisateur n'est jamais écrasé
+                            if (saisieCatSource.value === 'manuel') return;
+                            const guess = _guessCategorieId(parsed.libelle);
+                            if (guess) {
+                                saisieForm.value.categorieId = guess.id;
+                                saisieCatSource.value = guess.source;
+                                saisieCatSuggestions.value = [];
+                            } else {
+                                saisieForm.value.categorieId = '';
+                                saisieCatSource.value = null;
+                                // Rien de sûr → on propose les 3 catégories les plus utilisées
+                                saisieCatSuggestions.value = categoriesLesPlusUtilisees.value.slice(0, 3);
                             }
                         }
+                    });
+
+                    // Catégories les plus fréquentes dans l'historique (repli quand aucun match)
+                    const categoriesLesPlusUtilisees = computed(() => {
+                        calculationTick.value;
+                        const compte = {};
+                        Object.values(donneesAnnuelles.value || {}).forEach(d => {
+                            (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).forEach(t => {
+                                if (!t || !t.categorieId || t.categorieId === 'cat_misc') return;
+                                compte[t.categorieId] = (compte[t.categorieId] || 0) + 1;
+                            });
+                        });
+                        const tries = Object.entries(compte).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+                        // Historique vide (premier usage) → on propose les catégories de conso variable
+                        if (!tries.length) {
+                            return (soldesInitiaux.value.categories || [])
+                                .filter(c => c && !c.archive && c.type === 'charge_variable' && !c.parent)
+                                .slice(0, 3)
+                                .map(c => c.id);
+                        }
+                        return tries;
                     });
 
                     const validerSaisieForm = () => {
@@ -12115,6 +12269,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v22.00 P3 / v22.10 / v22.20 : saisie transactions réelles (hybride + FAB mobile)
                         saisieRapide, saisieCompteDefaut,
                         saisieForm, validerSaisieForm, resetSaisieForm, categoriesForSelect,
+                        // v32.60 Auto-Categorisation
+                        saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         showSaisieQuickModal, openSaisieQuickModal, closeSaisieQuickModal, validerSaisieFormFromQuick,
                         showSaisieDetails, saisieDateLabel,
