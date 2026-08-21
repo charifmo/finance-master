@@ -375,7 +375,7 @@
                             <div :class="['border rounded-xl px-2 py-1.5 lg:px-3 lg:py-2 cursor-pointer select-none', kpiDepensesAnnuelles.soldeFinal < 0 ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-200']">
                                 <p class="text-[8px] lg:text-[9px] font-black uppercase tracking-widest text-gray-500">{{ kpiDepensesAnnuelles.icone }} Dépenses Annuelles ⓘ</p>
                                 <p :class="['text-xs lg:text-sm font-black', kpiDepensesAnnuelles.soldeFinal < 0 ? 'text-red-600' : 'text-amber-700']">{{ formatMAD(kpiDepensesAnnuelles.soldeFinal) }}</p>
-                                <p class="text-[8px] font-bold uppercase text-gray-400">Reste -{{ formatMAD(kpiDepensesAnnuelles.totalSorties) }}</p>
+                                <p class="text-[8px] font-bold uppercase text-gray-400">Reste -{{ formatMAD(kpiDepensesAnnuelles.totalSorties) }} · fin {{ kpiDepensesAnnuelles.anneeCible }}</p>
                             </div>
                             <div v-if="showDepAnnuellesTooltip" class="absolute right-0 top-full mt-2 z-[300] w-[340px] bg-gray-950 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden" @click.stop>
                                 <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
@@ -2705,7 +2705,7 @@
                         <div :class="['rounded-lg px-2 py-1.5 border flex items-center justify-between gap-2 cursor-pointer select-none', kpiDepensesAnnuelles.soldeFinal < 0 ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-200']">
                             <p class="text-[7px] font-black uppercase tracking-widest text-gray-500">{{ kpiDepensesAnnuelles.icone }} Dépenses Annuelles ⓘ</p>
                             <div class="flex items-baseline gap-2">
-                                <span class="text-[7px] font-black uppercase text-gray-400">Reste -{{ formatMAD(kpiDepensesAnnuelles.totalSorties) }}</span>
+                                <span class="text-[7px] font-black uppercase text-gray-400">Reste -{{ formatMAD(kpiDepensesAnnuelles.totalSorties) }} · fin {{ kpiDepensesAnnuelles.anneeCible }}</span>
                                 <span :class="['text-[11px] font-black tabular-nums', kpiDepensesAnnuelles.soldeFinal < 0 ? 'text-red-600' : 'text-amber-700']">{{ formatMAD(kpiDepensesAnnuelles.soldeFinal) }}</span>
                             </div>
                         </div>
@@ -5762,8 +5762,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "32.70 Depenses-Annuelles";
+                    const CURRENT_VERSION = "32.71 Depenses-Annuelles-Annee";
                     const CHANGELOG = [
+        { version: "32.71 Depenses-Annuelles-Annee", date: "2026-08-21", changes: [
+            "FIX : le KPI Topbar « Dépenses Annuelles » ignorait le sélecteur d'année — l'horizon était figé sur Décembre de l'exercice courant. Il suit désormais anneeAffichage : passer la Topbar sur 2027 projette le compte du cycle courant jusqu'à Décembre 2027 (chaînage cumulatif des cycles, le solde se reportant d'un cycle au suivant).",
+            "Une année passée sélectionnée ne déclenche aucune projection arrière : l'horizon reste l'exercice courant (Math.max).",
+            "Tooltip : suffixe d'année ('27) sur les dates dès que la projection déborde de l'exercice courant, et l'atterrissage affiche « Décembre <année cible> ». Les cartes KPI (desktop + mobile) affichent « Reste -X · fin <année> ».",
+            "Le bouton « Ouvrir le relevé complet » pré-sélectionne désormais la plage d'années courante→cible dans le popup RELEVÉ DE COMPTES, pour un horizon strictement identique à celui du KPI."
+        ] },
         { version: "32.70 Depenses-Annuelles", date: "2026-08-21", changes: [
             "NOUVEAU KPI TOPBAR « Dépenses Annuelles » : carte dédiée dans le ruban d'en-tête (desktop + mobile), à côté de Surplus / Mensualités / Entrées / Sorties. Valeur principale = ATTERRISSAGE PROJETÉ (solde final) du seul compte « depenses annuels », rouge si négatif. Sous-titre = reste à payer sur ce compte.",
             "TOOLTIP AU SURVOL (tap sur mobile) : résumé condensé du journal de ce compte — solde instantané (T0), mini-liste des obligations non soldées imputées au compte (mois + jour + libellé + montant), alimentations prévues, Σ reste à payer, et atterrissage Décembre. Bouton « Ouvrir le relevé complet » qui pré-filtre le popup RELEVÉ DE COMPTES sur ce compte et sur les cycles courant→Décembre.",
@@ -9499,13 +9505,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const key = compteDepensesAnnuellesKey.value;
                         if (!key) return { exists: false, key: null, label: 'Dépenses Annuelles', icone: '📅',
                                            soldeActuel: 0, sorties: [], entrees: [], nbSorties: 0,
-                                           totalSorties: 0, totalEntrees: 0, soldeFinal: 0, moisFin: '' };
+                                           totalSorties: 0, totalEntrees: 0, soldeFinal: 0, moisFin: '', anneeCible: 0 };
 
                         const cpt = compteDepensesAnnuelles.value;
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
-                        // Cycles projetés : cycle courant → Décembre de l'exercice en cours
+                        // v32.71 : l'horizon SUIT le sélecteur d'année de la Topbar (anneeAffichage).
+                        //   Le solde se reporte de cycle en cycle : on chaîne donc TOUS les cycles
+                        //   du cycle courant jusqu'à Décembre de l'exercice affiché.
+                        //   Exercice passé sélectionné → on reste sur l'exercice courant (pas de projection arrière).
+                        const cibleA = Math.max(Number(anneeAffichage.value) || curA, curA);
                         const cycles = [];
-                        for (let m = curM; m <= 12; m++) cycles.push(m + '-' + curA);
+                        for (let a = curA; a <= cibleA; a++) {
+                            for (let m = (a === curA ? curM : 1); m <= 12; m++) cycles.push(m + '-' + a);
+                        }
 
                         const j = _buildJournalReleve([key], cycles);
 
@@ -9515,14 +9527,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         (j.entries || []).forEach(e => {
                             if (e.type === 'cycle_sep') { _ci++; return; }
                             if (e.type === 'initial') { soldeActuel = Number(e.montant) || 0; return; }
-                            const mCyc = Number(String(cycles[_ci] || (curM + '-' + curA)).split('-')[0]) || curM;
+                            const _pc = String(cycles[_ci] || (curM + '-' + curA)).split('-').map(Number);
+                            const mCyc = _pc[0] || curM, aCyc = _pc[1] || curA;
                             const row = {
                                 libelle: e.libelle,
                                 montant: Number(e.montant) || 0,
                                 jour: e.jourPrevu || null,
                                 mois: mCyc,
+                                annee: aCyc,
                                 moisLabel: _mAB[mCyc] || '',
-                                dateLabel: (e.jourPrevu ? e.jourPrevu + ' ' : '') + (_mAB[mCyc] || ''),
+                                // v32.71 : suffixe d'année dès que la projection déborde de l'exercice courant
+                                dateLabel: (e.jourPrevu ? e.jourPrevu + ' ' : '') + (_mAB[mCyc] || '')
+                                           + (cibleA > curA ? " '" + String(aCyc).slice(-2) : ''),
                                 soldeApres: Number(e.soldeCompteApres) || 0
                             };
                             (e.type === 'credit' ? entrees : sorties).push(row);
@@ -9541,7 +9557,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             totalSorties: _r2(sorties.reduce((a, r) => a + r.montant, 0)),  // = reste à payer
                             totalEntrees: _r2(entrees.reduce((a, r) => a + r.montant, 0)),
                             soldeFinal: _r2(Number(j.soldeAtterrissage || 0)),  // atterrissage projeté
-                            moisFin: 'Décembre ' + curA
+                            moisFin: 'Décembre ' + cibleA,
+                            anneeCible: cibleA
                         };
                     });
 
@@ -9550,10 +9567,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const ouvrirReleveDepensesAnnuelles = () => {
                         const key = compteDepensesAnnuellesKey.value;
                         if (!key) return;
-                        const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
+                        const curA = moisBudgetaire.value.an;
+                        const cibleA = kpiDepensesAnnuelles.value.anneeCible || curA;
                         ouvrirReleve(key);
-                        anneesSelectionnees.value = [curA];
-                        moisSelectionnes.value = Array.from({ length: 12 - curM + 1 }, (_, i) => curM + i);
+                        // v32.71 : même horizon que le KPI. cyclesReleveActifs fait le produit
+                        // mois × années puis élague le passé → cycle courant … Décembre cibleA.
+                        anneesSelectionnees.value = Array.from({ length: cibleA - curA + 1 }, (_, i) => curA + i);
+                        moisSelectionnes.value = [1,2,3,4,5,6,7,8,9,10,11,12];
                         showDepAnnuellesTooltip.value = false;
                     };
 
