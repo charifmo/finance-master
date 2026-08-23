@@ -73,6 +73,7 @@ patch(findBy(/studio/i), {
     frais_cohost_pct: 20,
     maintenance_pct: 5,
     syndic: 250, internet: 250, electricite_eau: 350, consommables: 200, assurance_pno: 100,
+    regime_fiscal: 'foncier_bareme',
 }, 'Studio Airbnb');
 
 // 3. Appartement Almaz
@@ -105,7 +106,7 @@ patch(findBy(/wafabourse|cto/i), {
 console.log('── Actifs ajoutés ──');
 const nouveaux = [
     ['ma_terrain_nord', 'Terrain Nord (Ouahat Sidi Brahim)', 'Terrain', 11200000, '35%', /ouahat|terrain nord|foncier nord/i],
-    ['ma_terrain_est', 'Terrain Est (Al Ouidane)', 'Terrain', 12600000, '35%', /ouidane|terrain est|foncier est/i],
+    ['ma_terrain_est', 'Terrain Est (Al Ouidane)', 'Terrain', 1260000, '35%', /ouidane|terrain est|foncier est/i],
     ['ma_villa_riad_salam', 'Villa Riad Salam', 'Résidentiel', 1050000, '35%', /riad salam/i],
 ];
 for (const [id, name, type, valeur, qp, re] of nouveaux) {
@@ -145,7 +146,7 @@ console.log('  Dette totale      :', fmt(detteTotale));
 console.log('  PATRIMOINE NET    :', fmt(valeurTotale - detteTotale));
 console.log('  + liquidités      :', fmt(liquide), '→ net global', fmt(valeurTotale - detteTotale + liquide));
 
-const OUT = path.join(path.dirname(SRC), 'finance_v33_equity_maj.json');
+const OUT = process.argv[3] || path.join(process.cwd(), 'finance_v33_equity_maj.json');
 fs.writeFileSync(OUT, JSON.stringify(data, null, 2), 'utf8');
 console.log('\nBackup :', backup);
 console.log('Sortie :', OUT);

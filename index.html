@@ -6156,9 +6156,16 @@
                                    class="w-full bg-indigo-50 border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-black text-indigo-800 outline-none focus:border-indigo-500 text-right"/>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">🏦 Crédit Restant (DH)</label>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5 flex items-center justify-between">
+                                <span>🏦 Crédit Restant (DH)</span>
+                                <span v-if="masterAssetPiloteParCapital" class="text-[8px] bg-rose-600 text-white px-1.5 py-0.5 rounded normal-case tracking-normal">calculé</span>
+                            </label>
                             <input v-model.number="masterAssetForm.montant_credit" type="number" min="0" step="5000"
-                                   class="w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right"/>
+                                   :readonly="masterAssetPiloteParCapital"
+                                   :class="masterAssetPiloteParCapital
+                                       ? 'w-full bg-gray-100 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-600 outline-none cursor-not-allowed text-right'
+                                       : 'w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right'"/>
+                            <p v-if="masterAssetPiloteParCapital" class="text-[9px] text-rose-400 font-bold mt-0.5">Déduit du capital initial après {{ masterAssetForm.mois_deja_payes || 0 }} mois</p>
                         </div>
                     </div>
                     <!-- Apport + Montant crédit (productifs seulement) -->
@@ -6170,10 +6177,17 @@
                                    class="w-full bg-indigo-50 border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-black text-indigo-800 outline-none focus:border-indigo-500 text-right"/>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">Montant crédit (DH)</label>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5 flex items-center justify-between">
+                                <span>Crédit restant (DH)</span>
+                                <span v-if="masterAssetPiloteParCapital" class="text-[8px] bg-rose-600 text-white px-1.5 py-0.5 rounded normal-case tracking-normal">calculé</span>
+                            </label>
                             <input v-model.number="masterAssetForm.montant_credit" type="number" min="0" step="5000"
                                    @input="calculerCapital"
-                                   class="w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right"/>
+                                   :readonly="masterAssetPiloteParCapital"
+                                   :class="masterAssetPiloteParCapital
+                                       ? 'w-full bg-gray-100 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-600 outline-none cursor-not-allowed text-right'
+                                       : 'w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right'"/>
+                            <p v-if="masterAssetPiloteParCapital" class="text-[9px] text-rose-400 font-bold mt-0.5">Déduit du capital initial après {{ masterAssetForm.mois_deja_payes || 0 }} mois</p>
                         </div>
                     </div>
                     <!-- Crédit (productifs seulement) -->
@@ -6238,6 +6252,17 @@
 
                         <!-- ── FINANCEMENT ── -->
                         <div v-show="masterAssetTab === 'financement'" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <div class="col-span-2 md:col-span-3">
+                                <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">💰 Capital initial emprunté (DH)</label>
+                                <input v-model.number="masterAssetForm.capital_initial" type="number" min="0" step="10000"
+                                       placeholder="Renseigne-le et le crédit restant se calcule tout seul"
+                                       class="w-full bg-rose-50 border-2 border-rose-300 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right"/>
+                                <p class="text-[9px] font-bold mt-0.5" :class="masterAssetPiloteParCapital ? 'text-emerald-600' : 'text-gray-400'">
+                                    {{ masterAssetPiloteParCapital
+                                        ? '✅ Base de l’échéancier — le crédit restant, la marge et le taux en découlent'
+                                        : 'Vide : le moteur retombe sur le crédit restant saisi à la main' }}
+                                </p>
+                            </div>
                             <div>
                                 <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">Type de crédit</label>
                                 <select v-model="masterAssetForm.type_credit" class="w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500">
@@ -6266,6 +6291,7 @@
                                 <div>
                                     <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5">Marge totale (0 = auto)</label>
                                     <input v-model.number="masterAssetForm.marge_totale" type="number" min="0" step="1000" class="w-full bg-teal-50 border-2 border-teal-200 rounded-lg px-3 py-2 text-sm font-black text-teal-800 outline-none focus:border-teal-500 text-right"/>
+                                    <p class="text-[9px] text-teal-500 font-bold mt-0.5">auto : {{ formatMAD(masterAssetCredit.marge) }}</p>
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5">Répartition marge</label>
@@ -6279,7 +6305,10 @@
                                     <input v-model.number="masterAssetForm.taux_ibraa" type="number" min="0" max="100" step="5" class="w-full bg-teal-50 border-2 border-teal-200 rounded-lg px-3 py-2 text-sm font-black text-teal-800 outline-none focus:border-teal-500 text-right"/>
                                 </div>
                             </template>
-                            <div class="col-span-2 md:col-span-3 grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                            <div class="col-span-2 md:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                                <div class="bg-rose-50 rounded-lg px-2 py-1.5 border border-rose-200"><p class="text-[9px] font-black uppercase text-rose-400">Crédit restant calculé</p><p class="text-sm font-black text-rose-800 tabular-nums">{{ formatMAD(masterAssetCRD) }}</p></div>
+                                <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Taux effectif</p><p class="text-sm font-black text-gray-800 tabular-nums">{{ masterAssetCredit.taux.toFixed(2) }} %</p></div>
+                                <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Marge / intérêts totaux</p><p class="text-sm font-black text-gray-800 tabular-nums">{{ formatMAD(masterAssetCredit.estMourabaha ? masterAssetCredit.marge : masterAssetCredit.mens * masterAssetCredit.n - masterAssetCredit.capInit) }}</p></div>
                                 <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Service dette / an</p><p class="text-sm font-black text-gray-800 tabular-nums">{{ formatMAD(masterAssetPreview.serviceDette) }}</p></div>
                                 <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Capital an 1</p><p class="text-sm font-black text-emerald-700 tabular-nums">{{ formatMAD(masterAssetPreview.capitalRembourse) }}</p></div>
                                 <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Intérêts/marge an 1</p><p class="text-sm font-black text-rose-700 tabular-nums">{{ formatMAD(masterAssetPreview.interetsOuMarge) }}</p></div>
@@ -6563,8 +6592,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.10 Exit-Simulator";
+                    const CURRENT_VERSION = "33.30 Credit-Dynamique";
                     const CHANGELOG = [
+        { version: "33.30 Credit-Dynamique", date: "2026-08-23", changes: [
+            "NOUVEAU CHAMP capital_initial : la base absolue de l'échéancier. Dès qu'il est renseigné, le champ « Crédit restant » passe en lecture seule (badge « calculé », fond gris) et se remplit tout seul — plus aucune saisie manuelle du CRD mois après mois.",
+            "creditParams(actif) déduit tout ce qui manque : marge Mourabaha « auto » = mensualité × durée − capital initial (le calcul plantait sur un crédit en cours car le moteur ne connaissait que le solde) ; mensualité déduite du taux ou de (capital + marge) / durée ; ET taux implicite déduit de la mensualité par bissection — le cas courant d'un prêt classique dont on ne connaît que capital, échéance et durée.",
+            "creditRestantCalcule(actif) fait tourner l'échéancier jusqu'au mois « mois_deja_payes » et renvoie le solde exact. Un watcher Vue l'écrit dans le formulaire pour qu'il soit persisté.",
+            "CORRECTION DE SÉMANTIQUE : montant_credit servait à la fois de capital de départ de l'échéancier ET de solde restant, tout en étant décalé de mois_deja_payes — les mensualités passées étaient comptées deux fois. Désormais : capital_initial > 0 → échéancier depuis le capital initial, décalé de mois_deja_payes ; capital_initial = 0 → comportement legacy strictement inchangé (montant_credit = solde d'aujourd'hui, aucun décalage).",
+            "Bandeau de synthèse de l'onglet Financement enrichi : crédit restant calculé, taux effectif, marge ou intérêts totaux, service de la dette.",
+            "Vérifié sur l'Appartement Almaz — capital initial 1 000 000, mensualité 7 548, 240 mois, 60 mois payés : taux implicite déduit 6,6562 %, intérêts totaux 811 520, CRD calculé 857 998 DH. Mourabaha auto sur crédit en cours : marge = 6 000 × 240 − 1 000 000 = 440 000. Non-régression legacy confirmée au centime."
+        ] },
         { version: "33.10 Exit-Simulator", date: "2026-08-22", changes: [
             "SCÉNARIO DE REVENTE : nouvel accordéon « 🔮 Simuler une revente (Exit) » dans chaque carte d'actif — productifs (ROI Tracker) comme non productifs (tableau Stress Test, en ligne dépliable). Un curseur choisit l'année de revente, de 1 à duree_mois/12, ou de 1 à 20 ans pour un actif sans crédit.",
             "Quatre KPI recalculés en direct au déplacement du curseur. A · Valeur de revente = valeur_actuelle × (1 + taux_revalorisation)^N, avec le détail de la plus-value et des frais de sortie. B · Reste à la banque = capital restant dû à la fin de l'année N via amortissementAnnuel ; pour une Mourabaha c'est le solde anticipé réel (capital restant + marge non échue − Ibra'a), avec son décomposé. C · Cash sorti = apport + échéances effectivement versées + frais et travaux initiaux. D · Net dans la poche = valeur × (1 − frais de revente) − CRD, affiché en très gros, vert au-dessus du cash sorti et rouge en dessous, avec l'écart chiffré.",
@@ -8043,7 +8080,7 @@
                         taux_revalorisation: 3,
                         frais_revente_pct: 3,   // v33.10 : frais de sortie (agence, notaire acheteur…)
                         // FINANCEMENT
-                        apport_personnel: 0, montant_credit: 0, type_credit: 'classique',
+                        apport_personnel: 0, capital_initial: 0, montant_credit: 0, type_credit: 'classique',
                         taux_credit: 0, duree_mois: 0, mensualite: 0, assurance_mensuelle: 0,
                         marge_totale: 0, mode_marge: 'lineaire', taux_ibraa: 0, mois_deja_payes: 0,
                         // EXPLOITATION
@@ -8120,6 +8157,50 @@
                         return (lo + hi) / 2;
                     };
 
+                    // ── v33.30 : PARAMÈTRES DE CRÉDIT DÉDUITS ──────────────────────────
+                    //   Le moteur complète tout seul ce que l'utilisateur n'a pas saisi.
+                    //   capInit  : capital_initial si présent, sinon montant_credit (legacy)
+                    //   marge    : Mourabaha → mensualite × durée − capital initial
+                    //   mens     : déduite du taux, ou de (capital + marge) / durée
+                    //   taux     : déduit de la mensualité par bissection quand il manque
+                    //              (cas d'un prêt classique connu par sa seule échéance)
+                    const creditParams = (asset) => {
+                        const a = asset || {};
+                        const pilotageCapitalInitial = N(a.capital_initial) > 0;
+                        const capInit = pilotageCapitalInitial ? N(a.capital_initial) : N(a.montant_credit);
+                        const n = Math.round(N(a.duree_mois));
+                        const estMourabaha = String(a.type_credit || 'classique') === 'mourabaha';
+                        let mens = N(a.mensualite);
+                        let taux = N(a.taux_credit);
+                        let marge = N(a.marge_totale);
+
+                        if (estMourabaha) {
+                            // Marge « auto » : elle se déduit de l'échéance et du capital INITIAL.
+                            if (marge <= 0) {
+                                if (mens > 0 && n > 0 && capInit > 0) marge = mens * n - capInit;
+                                else if (taux > 0 && capInit > 0 && n > 0) marge = mensualiteClassique(capInit, taux, n) * n - capInit;
+                            }
+                            if (marge < 0) marge = 0;
+                            if (mens <= 0 && n > 0) mens = (capInit + marge) / n;
+                        } else if (mens <= 0) {
+                            mens = mensualiteClassique(capInit, taux, n);
+                        }
+                        // Taux implicite : dernier recours, mais c'est LE cas courant d'un
+                        // prêt en cours dont on ne connaît que capital, échéance et durée.
+                        if (taux <= 0 && mens > 0 && capInit > 0 && n > 0 && mens * n > capInit) {
+                            taux = tauxImplicite(capInit, mens, n) * 12 * 100;
+                        }
+                        return {
+                            capInit, n, estMourabaha,
+                            mens: Math.round(mens * 100) / 100,
+                            taux: Math.round(taux * 10000) / 10000,
+                            marge: Math.round(marge * 100) / 100,
+                            // décalage : n'a de sens que si l'échéancier part du capital initial
+                            offset: pilotageCapitalInitial ? Math.max(0, Math.round(N(a.mois_deja_payes))) : 0,
+                            pilotageCapitalInitial,
+                        };
+                    };
+
                     // ── Tableau d'amortissement mensuel complet ────────────────────────
                     //   Classique  : annuité constante, intérêt = solde × i
                     //   Mourabaha  : échéance = (capital + marge) / n
@@ -8128,16 +8209,15 @@
                     //   Retourne [{ mois, echeance, capital, interet, soldeApres }]
                     const tableauAmortissement = (asset) => {
                         const a = asset || {};
-                        const C = N(a.montant_credit);
-                        const n = Math.round(N(a.duree_mois));
+                        const p = creditParams(a);
+                        const C = p.capInit, n = p.n, estMourabaha = p.estMourabaha;
                         if (C <= 0 || n <= 0) return [];
-                        const estMourabaha = String(a.type_credit || 'classique') === 'mourabaha';
                         const rows = [];
                         let solde = C;
 
                         if (!estMourabaha) {
-                            const i = N(a.taux_credit) / 100 / 12;
-                            const M = N(a.mensualite) > 0 ? N(a.mensualite) : mensualiteClassique(C, a.taux_credit, n);
+                            const i = p.taux / 100 / 12;
+                            const M = p.mens > 0 ? p.mens : mensualiteClassique(C, p.taux, n);
                             for (let m = 1; m <= n && solde > 0.005; m++) {
                                 const interet = solde * i;
                                 let capital = M - interet;
@@ -8148,10 +8228,9 @@
                             return rows;
                         }
 
-                        // Mourabaha
-                        let MT = N(a.marge_totale);
-                        if (MT <= 0 && N(a.taux_credit) > 0) MT = mensualiteClassique(C, a.taux_credit, n) * n - C;
-                        const ech = (C + MT) / n;
+                        // Mourabaha — marge et échéance issues de creditParams
+                        const MT = p.marge;
+                        const ech = p.mens > 0 ? p.mens : (C + MT) / n;
                         const mode = String(a.mode_marge || 'lineaire');
                         if (mode === 'actuarielle') {
                             const i = tauxImplicite(C, ech, n);
@@ -8180,7 +8259,7 @@
                         const tab = tableauAmortissement(a);
                         const vide = { capitalRembourse: 0, interetsOuMarge: 0, capitalRestant: N(a.montant_credit), echeances: 0 };
                         if (!tab.length) return vide;
-                        const offset = Math.max(0, Math.round(N(a.mois_deja_payes)));
+                        const offset = creditParams(a).offset;
                         const debut = offset + Math.max(0, Math.round(N(anneeIndex))) * 12;
                         const fin = debut + 12;
                         const tranche = tab.filter(r => r.mois > debut && r.mois <= fin);
@@ -8196,6 +8275,21 @@
                         };
                     };
 
+                    // ── v33.30 : CRÉDIT RESTANT DÛ CALCULÉ ─────────────────────────────
+                    //   Fait tourner l'échéancier jusqu'au mois « mois_deja_payes »
+                    //   et renvoie le solde exact. Aucune saisie manuelle.
+                    const creditRestantCalcule = (asset) => {
+                        const a = asset || {};
+                        const p = creditParams(a);
+                        if (!p.pilotageCapitalInitial) return N(a.montant_credit);
+                        if (p.capInit <= 0 || p.n <= 0) return 0;
+                        const tab = tableauAmortissement(a);
+                        if (!tab.length) return p.capInit;
+                        const k = Math.min(tab.length, p.offset);
+                        const solde = k <= 0 ? p.capInit : tab[k - 1].soldeApres;
+                        return Math.round(Math.max(0, solde) * 100) / 100;
+                    };
+
                     // ── Solde de remboursement anticipé (Mourabaha avec Ibra'a) ────────
                     //   capital_restant + marge_non_echue × (1 − taux_ibraa)
                     const soldeAnticipe = (asset, apresMois) => {
@@ -8203,7 +8297,7 @@
                         const tab = tableauAmortissement(a);
                         if (!tab.length) return { capitalRestant: 0, margeNonEchue: 0, ibraa: 0, solde: 0 };
                         const k = Math.max(0, Math.min(tab.length, Math.round(N(apresMois))));
-                        const capitalRestant = k === 0 ? N(a.montant_credit) : tab[k - 1].soldeApres;
+                        const capitalRestant = k === 0 ? creditParams(a).capInit : tab[k - 1].soldeApres;
                         const margeTotale = tab.reduce((x, r) => x + r.interet, 0);
                         const margeCourue = tab.slice(0, k).reduce((x, r) => x + r.interet, 0);
                         const margeNonEchue = Math.max(0, margeTotale - margeCourue);
@@ -8402,11 +8496,6 @@
                         return Math.round((revenus - fixes - variables - irr) * 100) / 100;
                     };
 
-                    // v33.03 : aperçu live de l'économie de l'actif en cours d'édition
-                    const masterAssetPreview = computed(() => assetEconomics(masterAssetForm.value, 0));
-                    const masterAssetMensualiteAuto = computed(() =>
-                        Math.round(mensualiteClassique(masterAssetForm.value.montant_credit, masterAssetForm.value.taux_credit, masterAssetForm.value.duree_mois) * 100) / 100);
-
                     // ── v17.0 : Master Asset Engine (source unique de vérité) ──
                     const masterAssets = ref([
                         { id: 'ma_1', name: 'Local Bouskoura (Hadri Parfums)', type: 'Commercial', isProductive: true,  value: 1200000, revenue: 84000,  taux_credit: 4.5,  annees_total: 15, annees_restantes: 12, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%', apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0 },
@@ -8448,6 +8537,31 @@
                     const masterAssetTab = ref('acquisition');
                     const _emptyMasterAssetForm = () => migrateAssetV19({ name: '', type: 'Commercial', isProductive: true, value: 0, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0, val_pessimiste: 0, val_optimiste: 0, quotePart: '100%', apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0 });
                     const masterAssetForm = ref(_emptyMasterAssetForm());
+
+                    // v33.03 : aperçu live de l'économie de l'actif en cours d'édition
+                    const masterAssetPreview = computed(() => assetEconomics(masterAssetForm.value, 0));
+                    const masterAssetCredit = computed(() => creditParams(masterAssetForm.value));
+                    const masterAssetMensualiteAuto = computed(() => masterAssetCredit.value.mens);
+                    const masterAssetCRD = computed(() => creditRestantCalcule(masterAssetForm.value));
+                    const masterAssetPiloteParCapital = computed(() => N(masterAssetForm.value.capital_initial) > 0);
+
+                    // v33.30 : dès que le capital initial pilote le crédit, le champ
+                    // « Crédit restant » devient un résultat — on l'écrit dans le
+                    // formulaire pour qu'il soit persisté tel quel à l'enregistrement.
+                    watch(
+                        () => [masterAssetForm.value.capital_initial, masterAssetForm.value.duree_mois,
+                               masterAssetForm.value.mois_deja_payes, masterAssetForm.value.mensualite,
+                               masterAssetForm.value.taux_credit, masterAssetForm.value.type_credit,
+                               masterAssetForm.value.marge_totale, masterAssetForm.value.mode_marge].join('|'),
+                        () => {
+                            if (!masterAssetPiloteParCapital.value) return;
+                            const crd = masterAssetCRD.value;
+                            if (Math.abs(N(masterAssetForm.value.montant_credit) - crd) > 0.01) {
+                                masterAssetForm.value.montant_credit = crd;
+                            }
+                        }
+                    );
+
 
                     const calculerCapital = () => {
                         masterAssetForm.value.value = (Number(masterAssetForm.value.apport_personnel) || 0) + (Number(masterAssetForm.value.montant_credit) || 0);
@@ -8517,6 +8631,7 @@
                             taux_revalorisation: Number(f.taux_revalorisation) || 0,
                             frais_revente_pct: Number(f.frais_revente_pct) || 0,
                             // ── FINANCEMENT ──
+                            capital_initial: Number(f.capital_initial) || 0,
                             type_credit: String(f.type_credit || 'classique'),
                             duree_mois: Number(f.duree_mois) || 0,
                             mensualite: Number(f.mensualite) || 0,
@@ -14210,6 +14325,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         sandboxProjection, addSandboxEvent, removeSandboxEvent, resetSandbox, applySandbox, sandboxEventLabel,
                         showMasterAssetModal, editingMasterAssetId, masterAssetForm,
                         masterAssetTab, masterAssetPreview, masterAssetMensualiteAuto,
+                        masterAssetCredit, masterAssetCRD, masterAssetPiloteParCapital,
+                        creditParams, creditRestantCalcule,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
