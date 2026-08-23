@@ -65,14 +65,16 @@ const MOTEUR = String.raw`
                         if (!N(a.mois_deja_payes) && N(raw && raw.annees_total)) {
                             a.mois_deja_payes = Math.max(0, (N(raw.annees_total) - N(raw.annees_restantes)) * 12);
                         }
+                        // v33.11 : déductions réservées aux actifs jamais passés en v19
+                        const dejaV19 = Number(raw && raw._v) === 19;
                         // Exploitation : l'ancien "revenue" (annuel brut) devient un loyer mensuel
                         const legacyRevenue = N(raw && raw.revenue);
-                        if (a.mode_exploitation === 'aucun' && legacyRevenue > 0) {
+                        if (!dejaV19 && a.mode_exploitation === 'aucun' && legacyRevenue > 0) {
                             a.mode_exploitation = (String(a.type || '').toLowerCase().indexOf('commerc') >= 0) ? 'commercial' : 'longue_duree';
                             if (!N(a.loyer_mensuel)) a.loyer_mensuel = Math.round((legacyRevenue / 12) * 100) / 100;
                         }
                         // Fiscalité : par défaut foncier au barème pour un actif productif loué
-                        if (a.regime_fiscal === 'exonere' && a.isProductive && a.mode_exploitation !== 'aucun') {
+                        if (!dejaV19 && a.regime_fiscal === 'exonere' && a.isProductive && a.mode_exploitation !== 'aucun') {
                             a.regime_fiscal = 'foncier_bareme';
                         }
                         // Cohérence apport / crédit / valeur
