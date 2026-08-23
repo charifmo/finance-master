@@ -105,8 +105,8 @@ patch(findBy(/wafabourse|cto/i), {
 // 1. Terrains et indivision — créés seulement s'ils n'existent pas déjà
 console.log('── Actifs ajoutés ──');
 const nouveaux = [
-    ['ma_terrain_nord', 'Terrain Nord (Ouahat Sidi Brahim)', 'Terrain', 11200000, '35%', /ouahat|terrain nord|foncier nord/i],
-    ['ma_terrain_est', 'Terrain Est (Al Ouidane)', 'Terrain', 1260000, '35%', /ouidane|terrain est|foncier est/i],
+    ['ma_terrain_nord', 'Terrain Nord (Ouahat Sidi Brahim)', 'Terrain Nu', 11200000, '35%', /ouahat|terrain nord|foncier nord/i],
+    ['ma_terrain_est', 'Terrain Est (Al Ouidane)', 'Terrain Nu', 1260000, '35%', /ouidane|terrain est|foncier est/i],
     ['ma_villa_riad_salam', 'Villa Riad Salam', 'Résidentiel', 1050000, '35%', /riad salam/i],
 ];
 for (const [id, name, type, valeur, qp, re] of nouveaux) {
