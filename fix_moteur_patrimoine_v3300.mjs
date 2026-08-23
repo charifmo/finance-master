@@ -59,7 +59,7 @@ const MOTEUR = String.raw`
                         // Acquisition : prix d'acquisition hérite de l'ancien "value" (capital investi)
                         if (!N(a.prix_acquisition) && legacyValue) a.prix_acquisition = legacyValue;
                         if (!N(a.valeur_actuelle)) a.valeur_actuelle = legacyValue || N(a.prix_acquisition);
-                        if (!N(a.taux_revalorisation)) a.taux_revalorisation = 3;
+                        if (!N(a.taux_revalorisation) && Number(raw && raw._v) !== 19) a.taux_revalorisation = 3;
                         // Financement : durée en mois dérivée des années legacy
                         if (!N(a.duree_mois) && N(raw && raw.annees_total)) a.duree_mois = N(raw.annees_total) * 12;
                         if (!N(a.mois_deja_payes) && N(raw && raw.annees_total)) {

@@ -2239,7 +2239,7 @@
                                     <template v-for="sim in [exitSim(asset, exitYears[asset.id] || 1)]" :key="'ex'+asset.id">
                                     <div class="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white flex items-center justify-between flex-wrap gap-2">
                                         <p class="font-black uppercase tracking-widest text-[11px]">🔮 Scénario de revente — année {{ sim.annee }}</p>
-                                        <p class="text-[10px] opacity-80">Revalo {{ asset.taux_revalorisation }} %/an · frais de sortie {{ asset.frais_revente_pct }} %</p>
+                                        <p class="text-[10px] opacity-80">Revalo {{ asset.taux_revalorisation }} %/an · {{ sim.estTerrain ? "frais réels : Semsar + TNB + TPI" : "frais de sortie " + asset.frais_revente_pct + " %" }}</p>
                                     </div>
                                     <div class="p-4 bg-white space-y-4">
                                         <!-- Curseur -->
@@ -2262,7 +2262,12 @@
                                             <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
                                                 <p class="text-[9px] font-black uppercase tracking-widest text-teal-600">A · Valeur de revente</p>
                                                 <p class="text-lg font-black text-teal-800 tabular-nums">{{ formatMAD(sim.valeurRevente) }}</p>
-                                                <p class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
+                                                <p v-if="!sim.estTerrain" class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
+                                        <p v-else class="text-[9px] font-bold text-teal-500 leading-tight">
+                                            +{{ formatMAD(sim.plusValueLatente) }} de revalorisation ({{ asset.taux_revalorisation }} %/an)<br/>
+                                            − {{ formatMAD(sim.semsar) }} Semsar · − {{ formatMAD(sim.tnb) }} TNB<span v-if="!sim.tnbManuelle"> ({{ (asset.annees_tnb || 0) + sim.annee }} ans)</span> · − {{ formatMAD(sim.tpi) }} TPI<span v-if="sim.tpiDetail && !sim.tpiManuelle"> ({{ sim.tpiDetail.regle }})</span><br/>
+                                            <span class="text-teal-400">soit {{ formatMAD(sim.fraisRevente) }} de frais réels</span>
+                                        </p>
                                             </div>
                                             <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
                                                 <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
@@ -2585,7 +2590,7 @@
                                                     <template v-for="sim in [exitSim(asset, exitYears[asset.id] || 1)]" :key="'ex'+asset.id">
                                                     <div class="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white flex items-center justify-between flex-wrap gap-2">
                                                         <p class="font-black uppercase tracking-widest text-[11px]">🔮 Scénario de revente — année {{ sim.annee }}</p>
-                                                        <p class="text-[10px] opacity-80">Revalo {{ asset.taux_revalorisation }} %/an · frais de sortie {{ asset.frais_revente_pct }} %</p>
+                                                        <p class="text-[10px] opacity-80">Revalo {{ asset.taux_revalorisation }} %/an · {{ sim.estTerrain ? "frais réels : Semsar + TNB + TPI" : "frais de sortie " + asset.frais_revente_pct + " %" }}</p>
                                                     </div>
                                                     <div class="p-4 bg-white space-y-4">
                                                         <!-- Curseur -->
@@ -2608,7 +2613,12 @@
                                                             <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
                                                                 <p class="text-[9px] font-black uppercase tracking-widest text-teal-600">A · Valeur de revente</p>
                                                                 <p class="text-lg font-black text-teal-800 tabular-nums">{{ formatMAD(sim.valeurRevente) }}</p>
-                                                                <p class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
+                                                                <p v-if="!sim.estTerrain" class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
+                                        <p v-else class="text-[9px] font-bold text-teal-500 leading-tight">
+                                            +{{ formatMAD(sim.plusValueLatente) }} de revalorisation ({{ asset.taux_revalorisation }} %/an)<br/>
+                                            − {{ formatMAD(sim.semsar) }} Semsar · − {{ formatMAD(sim.tnb) }} TNB<span v-if="!sim.tnbManuelle"> ({{ (asset.annees_tnb || 0) + sim.annee }} ans)</span> · − {{ formatMAD(sim.tpi) }} TPI<span v-if="sim.tpiDetail && !sim.tpiManuelle"> ({{ sim.tpiDetail.regle }})</span><br/>
+                                            <span class="text-teal-400">soit {{ formatMAD(sim.fraisRevente) }} de frais réels</span>
+                                        </p>
                                                             </div>
                                                             <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
                                                                 <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
@@ -6813,8 +6823,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.60 Moteur-Foncier";
+                    const CURRENT_VERSION = "33.70 Exit-Foncier";
                     const CHANGELOG = [
+        { version: "33.70 Exit-Foncier", date: "2026-08-23", changes: [
+            "L'EXIT SIMULATOR CONSOMME LE MOTEUR FISCAL FONCIER. Sur un terrain nu, le forfait générique « frais de revente » cède la place aux frais réels : Semsar sur le prix de cession + TNB projetée + TPI selon la règle du plus élevé entre 20 % de la plus-value et 3 % du prix.",
+            "TNB PROJETÉE : les années de retard grandissent avec l'horizon de simulation (annees_tnb + N). Sur un terrain de 8 000 m² à 50 % taxable et 8 DH/m², la TNB passe de 56 000 DH à l'année 1 à 156 800 DH à l'année 10 — le forfait précédent l'ignorait totalement.",
+            "PRIX D'ACQUISITION REVALORISÉ PRIS À L'ANNÉE DE CESSION (détention + N) et non à aujourd'hui : le coefficient de réévaluation suit l'année de vente, sans quoi la plus-value taxable enflerait artificiellement avec l'horizon.",
+            "Bloc A détaillé pour le foncier : « + X de revalorisation (3 %/an) − X Semsar · − X TNB (N ans) · − X TPI (règle retenue) · soit X de frais réels ».",
+            "AMPLEUR DE LA CORRECTION : le forfait de 3 % coïncidait numériquement avec la seule cotisation minimale de TPI, si bien que le simulateur omettait purement et simplement le Semsar et la TNB. Sur l'exemple ci-dessus, le net vendeur à 10 ans passe de 14 600 307 à 14 067 211 DH, soit 533 096 DH de frais jusque-là invisibles.",
+            "Revalorisation : vérifié, chaque projection lit déjà le taux propre à la fiche de l'actif — aucun taux global n'existe dans l'application. Correction connexe : un taux explicitement fixé à 0 % était réécrit à 3 % par la migration ; le défaut ne s'applique plus qu'aux actifs jamais passés en v19."
+        ] },
         { version: "33.60 Moteur-Foncier", date: "2026-08-23", changes: [
             "REQUALIFICATION : zonage actuel et zonage cible (Agricole, RB, Ra, SHL2, SA2, Immeuble, Autre) + prix au m² espéré après requalification, avec l'écart en % affiché face au prix actuel.",
             "SCÉNARIOS CALCULÉS : les trois hypothèses ne se saisissent plus. Médian = prix m² cible × surface × quote-part ; pessimiste et optimiste = médian ∓ un écart ajustable au curseur (15 % par défaut).",
@@ -8364,7 +8382,9 @@
                         // Acquisition : prix d'acquisition hérite de l'ancien "value" (capital investi)
                         if (!N(a.prix_acquisition) && legacyValue) a.prix_acquisition = legacyValue;
                         if (!N(a.valeur_actuelle)) a.valeur_actuelle = legacyValue || N(a.prix_acquisition);
-                        if (!N(a.taux_revalorisation)) a.taux_revalorisation = 3;
+                        // v33.70 : ne forcer le défaut que sur un actif jamais migré — un
+                        //   0 % explicite (actif qui se déprécie) doit être respecté.
+                        if (!N(a.taux_revalorisation) && Number(raw && raw._v) !== 19) a.taux_revalorisation = 3;
                         // Financement : durée en mois dérivée des années legacy
                         if (!N(a.duree_mois) && N(raw && raw.annees_total)) a.duree_mois = N(raw.annees_total) * 12;
                         if (!N(a.mois_deja_payes) && N(raw && raw.annees_total)) {
@@ -8855,15 +8875,39 @@
                         const cashSorti = N(a.apport_personnel) + echeanceTotale * moisEcheances + fraisInit;
 
                         // D — net vendeur
-                        const fraisRevente = valeurRevente * (N(a.frais_revente_pct) / 100);
+                        //   v33.70 : sur un terrain nu, le forfait « frais de revente »
+                        //   cède la place aux frais réels — Semsar + TNB projetée + TPI.
+                        const terrain = estTerrainNu(a);
+                        let fraisRevente, semsar = 0, tnbProjetee = 0, tpi = 0, tpiDetail = null, revaloriseN = 0;
+                        if (terrain) {
+                            const qp = quotePartPct(a) / 100;
+                            semsar = valeurRevente * (N(a.commission_semsar_pct) / 100);
+                            // La TNB s'accumule : les années de retard grandissent avec l'horizon
+                            tnbProjetee = N(a.arrieres_tnb) > 0
+                                ? N(a.arrieres_tnb)
+                                : N(a.surface_totale) * (N(a.pct_surface_taxable) / 100)
+                                  * N(a.tarif_tnb_m2) * (N(a.annees_tnb) + An) * qp;
+                            // Prix d'acquisition revalorisé À L'ANNÉE DE CESSION (détention + N)
+                            const baseAcq = N(a.prix_acquisition) || N(a.value);
+                            revaloriseN = baseAcq * Math.pow(1 + N(a.taux_revalorisation) / 100, anneesDetention(a) + An);
+                            tpiDetail = tpiCalculee(valeurRevente, revaloriseN);
+                            tpi = N(a.provision_tpi) > 0 ? N(a.provision_tpi) : tpiDetail.montant;
+                            fraisRevente = semsar + tnbProjetee + tpi;
+                        } else {
+                            fraisRevente = valeurRevente * (N(a.frais_revente_pct) / 100);
+                        }
                         const netPoche = valeurRevente - fraisRevente - crd;
 
                         const r0 = (v) => Math.round(v);
                         return {
                             annee: An,
+                            estTerrain: terrain,
                             valeurRevente: r0(valeurRevente),
                             plusValueLatente: r0(valeurRevente - base),
                             fraisRevente: r0(fraisRevente),
+                            semsar: r0(semsar), tnb: r0(tnbProjetee), tpi: r0(tpi),
+                            tpiDetail, revaloriseN: r0(revaloriseN),
+                            tnbManuelle: N(a.arrieres_tnb) > 0, tpiManuelle: N(a.provision_tpi) > 0,
                             crd: r0(crd), detailIbraa,
                             cashSorti: r0(cashSorti), mensualite: r0(mens),
                             moisEcheances, moisDejaPayes, moisFuturs, estMourabaha,
