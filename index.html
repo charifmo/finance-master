@@ -2159,10 +2159,16 @@
                         <div class="p-6 cfo-collapsible-body">
                             <div class="space-y-3 mb-5">
                                 <div v-for="asset in roiAssets" :key="asset.id"
-                                     class="p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-violet-300 transition-colors">
+                                     :class="['p-4 rounded-xl border transition-colors', asset.is_included_in_net_worth === false ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-gray-50 border-gray-200 hover:border-violet-300']">
                                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-black text-gray-800">{{ asset.name }}</p>
+                                        <p class="text-sm font-black text-gray-800 flex items-center gap-2">
+                                            <button @click="asset.is_included_in_net_worth = asset.is_included_in_net_worth === false; handleDataChange()"
+                                                    :title="asset.is_included_in_net_worth === false ? 'Exclu du patrimoine net — cliquer pour inclure' : 'Compté dans le patrimoine net — cliquer pour exclure'"
+                                                    class="text-base leading-none shrink-0">{{ asset.is_included_in_net_worth === false ? '🙈' : '👁️' }}</button>
+                                            <span :class="asset.is_included_in_net_worth === false ? 'text-gray-400 line-through' : ''">{{ asset.name }}</span>
+                                            <span v-if="asset.is_included_in_net_worth === false" class="text-[8px] font-black uppercase tracking-widest bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">hors patrimoine</span>
+                                        </p>
                                         <div class="flex flex-wrap gap-4 mt-1.5">
                                             <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
                                                 Achat : <span class="text-gray-800 font-black">{{ formatMAD(asset.value) }}</span>
@@ -2226,76 +2232,10 @@
                                             </span>
                                             <span class="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-1">brut {{ ((assetEcoById[asset.id] || {}).rendementBrut || 0).toFixed(2) }}%</span>
                                         </div>
-                                        <button @click="toggleExit(asset.id, asset)" :class="['p-1.5 rounded-lg transition-colors text-sm', exitOpen[asset.id] ? 'bg-fuchsia-100 text-fuchsia-700' : 'hover:bg-fuchsia-100 text-gray-400 hover:text-fuchsia-600']" title="Simuler une revente">🔮</button>
+                                        <button @click="ouvrirSimulationRevente(asset.id)" class="p-1.5 rounded-lg transition-colors text-sm hover:bg-fuchsia-100 text-gray-400 hover:text-fuchsia-600" title="Simuler une revente">🔮</button>
                                         <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-sm" title="Éditer">✏️</button>
                                         <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-sm" title="Supprimer">🗑️</button>
                                     </div>
-                                </div>
-                                <button v-if="!exitOpen[asset.id]" @click="toggleExit(asset.id, asset)"
-                                        class="mt-3 w-full py-2 rounded-xl border-2 border-dashed border-fuchsia-300 hover:border-fuchsia-500 hover:bg-fuchsia-50 text-fuchsia-700 font-black uppercase text-[10px] tracking-widest transition-colors">
-                                    🔮 Simuler une revente (Exit)
-                                </button>
-                                <div v-if="exitOpen[asset.id]" class="mt-3 rounded-2xl border-2 border-fuchsia-200 overflow-hidden">
-                                    <template v-for="sim in [exitSim(asset, exitYears[asset.id] || 1)]" :key="'ex'+asset.id">
-                                    <div class="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white flex items-center justify-between flex-wrap gap-2">
-                                        <p class="font-black uppercase tracking-widest text-[11px]">🔮 Scénario de revente — année {{ sim.annee }}</p>
-                                        <p class="text-[10px] opacity-80">Revalo {{ asset.taux_revalorisation }} %/an · {{ sim.estTerrain ? "frais réels : Semsar + TNB + TPI" : "frais de sortie " + asset.frais_revente_pct + " %" }}</p>
-                                    </div>
-                                    <div class="p-4 bg-white space-y-4">
-                                        <!-- Curseur -->
-                                        <div>
-                                            <div class="flex items-center justify-between mb-1.5">
-                                                <label class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700">Année de revente</label>
-                                                <span class="text-sm font-black text-fuchsia-800 tabular-nums">Année {{ sim.annee }} / {{ exitMaxAnnees(asset) }}</span>
-                                            </div>
-                                            <input type="range" min="1" :max="exitMaxAnnees(asset)" step="1"
-                                                   :value="exitYears[asset.id] || 1"
-                                                   @input="setExitYear(asset.id, $event.target.value)"
-                                                   class="w-full accent-fuchsia-600 cursor-pointer"/>
-                                            <div class="flex justify-between text-[9px] font-bold text-gray-400 mt-0.5">
-                                                <span>1 an</span><span>{{ exitMaxAnnees(asset) }} ans</span>
-                                            </div>
-                                        </div>
-                                
-                                        <!-- A / B / C -->
-                                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                            <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
-                                                <p class="text-[9px] font-black uppercase tracking-widest text-teal-600">A · Valeur de revente</p>
-                                                <p class="text-lg font-black text-teal-800 tabular-nums">{{ formatMAD(sim.valeurRevente) }}</p>
-                                                <p v-if="!sim.estTerrain" class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
-                                        <p v-else class="text-[9px] font-bold text-teal-500 leading-tight">
-                                            +{{ formatMAD(sim.plusValueLatente) }} de revalorisation ({{ asset.taux_revalorisation }} %/an)<br/>
-                                            − {{ formatMAD(sim.semsar) }} Semsar · − {{ formatMAD(sim.tnb) }} TNB<span v-if="!sim.tnbManuelle"> ({{ (asset.annees_tnb || 0) + sim.annee }} ans)</span> · − {{ formatMAD(sim.tpi) }} TPI<span v-if="sim.tpiDetail && !sim.tpiManuelle"> ({{ sim.tpiDetail.regle }})</span><br/>
-                                            <span class="text-teal-400">soit {{ formatMAD(sim.fraisRevente) }} de frais réels</span>
-                                        </p>
-                                            </div>
-                                            <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
-                                                <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
-                                                <p class="text-lg font-black text-rose-800 tabular-nums">{{ formatMAD(sim.crd) }}</p>
-                                                <p v-if="sim.detailIbraa" class="text-[9px] font-bold text-rose-500">Mourabaha : capital {{ formatMAD(sim.detailIbraa.capitalRestant) }} + marge non échue {{ formatMAD(sim.detailIbraa.margeNonEchue) }} − Ibra'a {{ formatMAD(sim.detailIbraa.ibraa) }}</p>
-                                                <p v-else-if="sim.crd === 0" class="text-[9px] font-bold text-rose-400">Aucun crédit en cours</p>
-                                                <p v-else class="text-[9px] font-bold text-rose-500">Capital restant dû fin d'année {{ sim.annee }}</p>
-                                            </div>
-                                            <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
-                                                <p class="text-[9px] font-black uppercase tracking-widest text-indigo-600">C · Cash sorti (effort)</p>
-                                                <p class="text-lg font-black text-indigo-800 tabular-nums">{{ formatMAD(sim.cashSorti) }}</p>
-                                                <p class="text-[9px] font-bold text-indigo-500">Apport {{ formatMAD(asset.apport_personnel) }}<span v-if="sim.fraisInit"> + frais &amp; travaux {{ formatMAD(sim.fraisInit) }}</span><span v-if="sim.moisEcheances"> + {{ sim.moisEcheances }} échéances de {{ formatMAD(sim.echeanceTotale) }}</span></p>
-                                <p v-if="sim.moisDejaPayes" class="text-[9px] font-bold text-indigo-400">dont {{ sim.moisDejaPayes }} déjà versées ({{ formatMAD(sim.dejaVerse) }}) et {{ sim.moisFuturs }} à venir</p>
-                                            </div>
-                                        </div>
-                                
-                                        <!-- D -->
-                                        <div :class="['p-4 rounded-2xl text-white', sim.gagnant ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : 'bg-gradient-to-r from-rose-600 to-red-700']">
-                                            <p class="text-[10px] font-black uppercase tracking-widest opacity-75">D · Net dans la poche</p>
-                                            <p class="text-3xl sm:text-4xl font-black tabular-nums leading-tight">{{ formatMAD(sim.netPoche) }}</p>
-                                            <p class="text-[11px] font-bold opacity-90 mt-1">
-                                                {{ sim.gagnant ? '✅ Supérieur au cash sorti' : '⚠️ Inférieur au cash sorti' }}
-                                                de <span class="font-black">{{ formatMAD(Math.abs(sim.gain)) }}</span>
-                                                <span class="opacity-70">(effort {{ formatMAD(sim.cashSorti) }})</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                    </template>
                                 </div>
                                 </div>
                             </div>
@@ -2563,10 +2503,18 @@
                                     </thead>
                                     <tbody>
                                         <template v-for="asset in stressAssets" :key="asset.id">
-                                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                        <tr :class="['border-b border-gray-100 transition-colors', asset.is_included_in_net_worth === false ? 'bg-gray-100/70 opacity-60' : 'hover:bg-gray-50']">
                                             <td class="px-4 py-3">
-                                                <p class="text-sm font-black text-gray-800">{{ asset.name }}</p>
-                                                <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">{{ asset.type }}</p>
+                                                <p class="text-sm font-black text-gray-800 flex items-center gap-2">
+                                                    <button @click="asset.is_included_in_net_worth = asset.is_included_in_net_worth === false; handleDataChange()"
+                                                            :title="asset.is_included_in_net_worth === false ? 'Exclu du patrimoine net — cliquer pour inclure' : 'Compté dans le patrimoine net — cliquer pour exclure'"
+                                                            class="text-base leading-none shrink-0">{{ asset.is_included_in_net_worth === false ? '🙈' : '👁️' }}</button>
+                                                    <span :class="asset.is_included_in_net_worth === false ? 'text-gray-400 line-through' : ''">{{ asset.name }}</span>
+                                                </p>
+                                                <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
+                                                    {{ asset.type }}
+                                                    <span v-if="asset.is_included_in_net_worth === false" class="ml-1 bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded normal-case">hors patrimoine net</span>
+                                                </p>
                                             </td>
                                             <td class="px-4 py-3 text-center whitespace-nowrap">
                                                 <span :class="['text-xs font-black px-2 py-1 rounded-lg border', asset.quotePart === '100%' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200']">{{ asset.quotePart }}</span>
@@ -2577,76 +2525,13 @@
                                             <td class="px-4 py-3 text-right text-emerald-700 font-black bg-emerald-50/50 whitespace-nowrap">{{ formatMAD((Number(asset.valeur_actuelle || asset.value) || 0) - (Number(asset.montant_credit) || 0)) }}</td>
                                             <td class="px-4 py-3 text-center whitespace-nowrap">
                                                 <div class="flex items-center justify-center gap-1.5">
-                                                    <button @click="toggleExit(asset.id, asset)" :class="['p-1.5 rounded-lg transition-colors', exitOpen[asset.id] ? 'bg-fuchsia-100 text-fuchsia-700' : 'hover:bg-fuchsia-100 text-fuchsia-600']" title="Simuler une revente">🔮</button>
+                                                    <button @click="ouvrirSimulationRevente(asset.id)" class="p-1.5 rounded-lg transition-colors hover:bg-fuchsia-100 text-fuchsia-600" title="Simuler une revente">🔮</button>
                                                     <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="Éditer">✏️</button>
                                                     <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors" title="Supprimer">🗑️</button>
                                                 </div>
                                             </td>
                                         </tr>
-                                        <!-- v33.10 : ligne dépliable — simulateur de sortie -->
-                                        <tr v-if="exitOpen[asset.id]" class="bg-fuchsia-50/30">
-                                            <td colspan="7" class="px-4 pb-4 pt-0">
-                                                <div v-if="exitOpen[asset.id]" class="mt-3 rounded-2xl border-2 border-fuchsia-200 overflow-hidden">
-                                                    <template v-for="sim in [exitSim(asset, exitYears[asset.id] || 1)]" :key="'ex'+asset.id">
-                                                    <div class="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white flex items-center justify-between flex-wrap gap-2">
-                                                        <p class="font-black uppercase tracking-widest text-[11px]">🔮 Scénario de revente — année {{ sim.annee }}</p>
-                                                        <p class="text-[10px] opacity-80">Revalo {{ asset.taux_revalorisation }} %/an · {{ sim.estTerrain ? "frais réels : Semsar + TNB + TPI" : "frais de sortie " + asset.frais_revente_pct + " %" }}</p>
-                                                    </div>
-                                                    <div class="p-4 bg-white space-y-4">
-                                                        <!-- Curseur -->
-                                                        <div>
-                                                            <div class="flex items-center justify-between mb-1.5">
-                                                                <label class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700">Année de revente</label>
-                                                                <span class="text-sm font-black text-fuchsia-800 tabular-nums">Année {{ sim.annee }} / {{ exitMaxAnnees(asset) }}</span>
-                                                            </div>
-                                                            <input type="range" min="1" :max="exitMaxAnnees(asset)" step="1"
-                                                                   :value="exitYears[asset.id] || 1"
-                                                                   @input="setExitYear(asset.id, $event.target.value)"
-                                                                   class="w-full accent-fuchsia-600 cursor-pointer"/>
-                                                            <div class="flex justify-between text-[9px] font-bold text-gray-400 mt-0.5">
-                                                                <span>1 an</span><span>{{ exitMaxAnnees(asset) }} ans</span>
-                                                            </div>
-                                                        </div>
-                                                
-                                                        <!-- A / B / C -->
-                                                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                                            <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
-                                                                <p class="text-[9px] font-black uppercase tracking-widest text-teal-600">A · Valeur de revente</p>
-                                                                <p class="text-lg font-black text-teal-800 tabular-nums">{{ formatMAD(sim.valeurRevente) }}</p>
-                                                                <p v-if="!sim.estTerrain" class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
-                                        <p v-else class="text-[9px] font-bold text-teal-500 leading-tight">
-                                            +{{ formatMAD(sim.plusValueLatente) }} de revalorisation ({{ asset.taux_revalorisation }} %/an)<br/>
-                                            − {{ formatMAD(sim.semsar) }} Semsar · − {{ formatMAD(sim.tnb) }} TNB<span v-if="!sim.tnbManuelle"> ({{ (asset.annees_tnb || 0) + sim.annee }} ans)</span> · − {{ formatMAD(sim.tpi) }} TPI<span v-if="sim.tpiDetail && !sim.tpiManuelle"> ({{ sim.tpiDetail.regle }})</span><br/>
-                                            <span class="text-teal-400">soit {{ formatMAD(sim.fraisRevente) }} de frais réels</span>
-                                        </p>
-                                                            </div>
-                                                            <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
-                                                                <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
-                                                                <p class="text-lg font-black text-rose-800 tabular-nums">{{ formatMAD(sim.crd) }}</p>
-                                                                <p v-if="sim.detailIbraa" class="text-[9px] font-bold text-rose-500">Mourabaha : capital {{ formatMAD(sim.detailIbraa.capitalRestant) }} + marge non échue {{ formatMAD(sim.detailIbraa.margeNonEchue) }} − Ibra'a {{ formatMAD(sim.detailIbraa.ibraa) }}</p>
-                                                                <p v-else-if="sim.crd === 0" class="text-[9px] font-bold text-rose-400">Aucun crédit en cours</p>
-                                                                <p v-else class="text-[9px] font-bold text-rose-500">Capital restant dû fin d'année {{ sim.annee }}</p>
-                                                            </div>
-                                                            <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
-                                                                <p class="text-[9px] font-black uppercase tracking-widest text-indigo-600">C · Cash sorti (effort)</p>
-                                                                <p class="text-lg font-black text-indigo-800 tabular-nums">{{ formatMAD(sim.cashSorti) }}</p>
-                                                                <p class="text-[9px] font-bold text-indigo-500">Apport {{ formatMAD(asset.apport_personnel) }}<span v-if="sim.fraisInit"> + frais &amp; travaux {{ formatMAD(sim.fraisInit) }}</span><span v-if="sim.moisEcheances"> + {{ sim.moisEcheances }} échéances de {{ formatMAD(sim.echeanceTotale) }}</span></p>
-                                <p v-if="sim.moisDejaPayes" class="text-[9px] font-bold text-indigo-400">dont {{ sim.moisDejaPayes }} déjà versées ({{ formatMAD(sim.dejaVerse) }}) et {{ sim.moisFuturs }} à venir</p>
-                                                            </div>
-                                                        </div>
-                                                
-                                                        <!-- D -->
-                                                        <div :class="['p-4 rounded-2xl text-white', sim.gagnant ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : 'bg-gradient-to-r from-rose-600 to-red-700']">
-                                                            <p class="text-[10px] font-black uppercase tracking-widest opacity-75">D · Net dans la poche</p>
-                                                            <p class="text-3xl sm:text-4xl font-black tabular-nums leading-tight">{{ formatMAD(sim.netPoche) }}</p>
-                                                            <p class="text-[11px] font-bold opacity-90 mt-1">
-                                                                {{ sim.gagnant ? '✅ Supérieur au cash sorti' : '⚠️ Inférieur au cash sorti' }}
-                                                                de <span class="font-black">{{ formatMAD(Math.abs(sim.gain)) }}</span>
-                                                                <span class="opacity-70">(effort {{ formatMAD(sim.cashSorti) }})</span>
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    </template>
+                                        </template>
                                                 </div>
                                             </td>
                                         </tr>
@@ -2660,6 +2545,13 @@
                                             <td class="px-4 py-3 text-right font-black text-base text-indigo-300 whitespace-nowrap">{{ formatMAD(stressTotalApport) }}</td>
                                             <td class="px-4 py-3 text-right font-black text-base text-emerald-300 whitespace-nowrap">{{ formatMAD(stressTotalNet) }}</td>
                                             <td class="px-4 py-3"></td>
+                                        </tr>
+                                        <tr v-if="assetsExclus.length" class="bg-gray-100">
+                                            <td colspan="7" class="px-4 py-2 text-[11px] font-bold text-gray-500">
+                                                🙈 {{ assetsExclus.length }} actif{{ assetsExclus.length > 1 ? 's' : '' }} hors patrimoine net
+                                                — {{ formatMAD(valeurExclue) }} non comptabilisés :
+                                                <span class="text-gray-600">{{ assetsExclus.map(a => a.name).join(' · ') }}</span>
+                                            </td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -6473,6 +6365,46 @@
                             </div>
                         </div>
 
+                        <!-- ── v33.80 : SIMULATEUR DE REVENTE (dans la modale) ── -->
+                        <div v-show="masterAssetTab === 'revente' && !masterAssetEstTerrain" class="space-y-4">
+                            <template v-for="sim in [masterAssetExit]" :key="'exm'">
+                            <div>
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700">Année de revente</label>
+                                    <span class="text-sm font-black text-fuchsia-800 tabular-nums">Année {{ sim.annee }} / {{ masterAssetExitMax }}</span>
+                                </div>
+                                <input type="range" min="1" :max="masterAssetExitMax" step="1" v-model.number="masterAssetExitAnnee" class="w-full accent-fuchsia-600 cursor-pointer"/>
+                                <div class="flex justify-between text-[9px] font-bold text-gray-400 mt-0.5"><span>1 an</span><span>{{ masterAssetExitMax }} ans</span></div>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-teal-600">A · Valeur de revente</p>
+                                    <p class="text-lg font-black text-teal-800 tabular-nums">{{ formatMAD(sim.valeurRevente) }}</p>
+                                    <p class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
+                                </div>
+                                <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
+                                    <p class="text-lg font-black text-rose-800 tabular-nums">{{ formatMAD(sim.crd) }}</p>
+                                    <p v-if="sim.detailIbraa" class="text-[9px] font-bold text-rose-500">capital {{ formatMAD(sim.detailIbraa.capitalRestant) }} + marge non échue {{ formatMAD(sim.detailIbraa.margeNonEchue) }} − Ibra'a {{ formatMAD(sim.detailIbraa.ibraa) }}</p>
+                                    <p v-else-if="!sim.crd" class="text-[9px] font-bold text-rose-400">Aucun crédit en cours</p>
+                                </div>
+                                <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-indigo-600">C · Cash sorti (effort)</p>
+                                    <p class="text-lg font-black text-indigo-800 tabular-nums">{{ formatMAD(sim.cashSorti) }}</p>
+                                    <p v-if="sim.moisDejaPayes" class="text-[9px] font-bold text-indigo-400">dont {{ sim.moisDejaPayes }} échéances déjà versées ({{ formatMAD(sim.dejaVerse) }})</p>
+                                </div>
+                            </div>
+                            <div :class="['p-4 rounded-2xl text-white', sim.gagnant ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : 'bg-gradient-to-r from-rose-600 to-red-700']">
+                                <p class="text-[10px] font-black uppercase tracking-widest opacity-75">D · Net dans la poche</p>
+                                <p class="text-3xl font-black tabular-nums leading-tight">{{ formatMAD(sim.netPoche) }}</p>
+                                <p class="text-[11px] font-bold opacity-90 mt-1">
+                                    {{ sim.gagnant ? '✅ Supérieur au cash sorti' : '⚠️ Inférieur au cash sorti' }}
+                                    de <span class="font-black">{{ formatMAD(Math.abs(sim.gain)) }}</span>
+                                </p>
+                            </div>
+                            </template>
+                        </div>
+
                         <!-- ── v33.60 : SCÉNARIOS DE VENTE — entièrement calculés ── -->
                         <div v-show="masterAssetTab === 'scenarios' && masterAssetEstTerrain" class="space-y-3">
                             <div class="flex flex-wrap items-end gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
@@ -6823,8 +6755,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.70 Exit-Foncier";
+                    const CURRENT_VERSION = "33.80 Filtre-Patrimoine";
                     const CHANGELOG = [
+        { version: "33.80 Filtre-Patrimoine", date: "2026-08-23", changes: [
+            "TOGGLE D'INCLUSION : nouveau champ is_included_in_net_worth (défaut true) avec un œil 👁️/🙈 sur chaque ligne d'actif. Décoché, l'actif se grise, son nom se barre, et sa valeur comme son crédit sortent de TOUS les agrégats — patrimoine net global, totaux du tableau, projection pluriannuelle et revenus passifs.",
+            "Le cash-flow d'un actif exclu sort lui aussi des agrégats : le compter tout en retirant sa valeur du bilan donnerait une projection incohérente, où l'actif alimenterait la trésorerie sans exister au patrimoine.",
+            "Un bandeau sous les totaux récapitule ce qui est mis de côté : « 🙈 2 actifs hors patrimoine net — 12 460 000 DH non comptabilisés : Terrain Nord · Terrain Est ». Rien ne disparaît en silence.",
+            "NETTOYAGE DE LA LISTE : le panneau violet de revente ne s'affiche plus sous les lignes. Il vit désormais dans la modale d'édition — onglet « 💰 Scénarios de Vente » pour un terrain, nouvel onglet « 🔮 Revente » pour les autres actifs. L'icône 🔮 de la liste ouvre directement la modale sur le bon onglet.",
+            "Le bouton pleine largeur « Simuler une revente » disparaît des cartes d'actifs productifs et la ligne dépliable du tableau foncier est supprimée : la liste redevient compacte."
+        ] },
         { version: "33.70 Exit-Foncier", date: "2026-08-23", changes: [
             "L'EXIT SIMULATOR CONSOMME LE MOTEUR FISCAL FONCIER. Sur un terrain nu, le forfait générique « frais de revente » cède la place aux frais réels : Semsar sur le prix de cession + TNB projetée + TPI selon la règle du plus élevé entre 20 % de la plus-value et 3 % du prix.",
             "TNB PROJETÉE : les années de retard grandissent avec l'horizon de simulation (annees_tnb + N). Sur un terrain de 8 000 m² à 50 % taxable et 8 DH/m², la TNB passe de 56 000 DH à l'année 1 à 156 800 DH à l'année 10 — le forfait précédent l'ignorait totalement.",
@@ -8343,6 +8282,8 @@
 
                     // ── Valeurs par défaut du schéma v19 ───────────────────────────────
                     const _assetDefaultsV19 = () => ({
+                        // v33.80 : compte-t-il dans le patrimoine net ?
+                        is_included_in_net_worth: true,
                         // ACQUISITION
                         prix_acquisition: 0, frais_acquisition: 0, travaux: 0, valeur_actuelle: 0,
                         taux_revalorisation: 3,
@@ -8930,7 +8871,8 @@
                     // Revenus passifs nets = Σ cash-flow net des actifs productifs
                     const revenusPassifsNetsAnnuel = computed(() =>
                         assetsEconomics.value
-                            .filter(e => (masterAssets.value.find(a => a.id === e.id) || {}).isProductive)
+                            .filter(e => { const a = masterAssets.value.find(x => x.id === e.id) || {};
+                                           return a.isProductive && a.is_included_in_net_worth !== false; })
                             .reduce((s, e) => s + e.cashflowNet, 0));
                     const revenusPassifsNetsMensuel = computed(() => revenusPassifsNetsAnnuel.value / 12);
 
@@ -8961,21 +8903,31 @@
                     // v33.00 : les actifs par défaut sont eux aussi normalisés au schéma v19
                     masterAssets.value = migrateAssetsV19(masterAssets.value);
 
+                    // v33.80 : seuls les actifs cochés alimentent les agrégats globaux
+                    const estInclus = (a) => (a || {}).is_included_in_net_worth !== false;
+                    const assetsInclus = computed(() => masterAssets.value.filter(estInclus));
+                    const assetsExclus = computed(() => masterAssets.value.filter(a => !estInclus(a)));
+                    const valeurExclue = computed(() => assetsExclus.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
+
+                    // Les listes affichées gardent TOUS les actifs (grisés si exclus) ;
+                    // ce sont les totaux qui filtrent.
                     const roiAssets    = computed(() => masterAssets.value.filter(a => a.isProductive));
                     const stressAssets = computed(() => masterAssets.value.filter(a => !a.isProductive));
-                    const totalConservateur = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
-                    const totalPessimiste   = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.val_pessimiste) || 0), 0));
-                    const totalOptimiste    = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.val_optimiste) || 0), 0));
+                    const roiAssetsInclus    = computed(() => assetsInclus.value.filter(a => a.isProductive));
+                    const stressAssetsInclus = computed(() => assetsInclus.value.filter(a => !a.isProductive));
+                    const totalConservateur = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
+                    const totalPessimiste   = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.val_pessimiste) || 0), 0));
+                    const totalOptimiste    = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.val_optimiste) || 0), 0));
 
                     // ── v20.00 : Totaux Patrimoine de Jouissance (non-productifs) ──
-                    const stressTotalValeur = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
-                    const stressTotalCredit = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0));
-                    const stressTotalApport = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.apport_personnel) || 0), 0));
-                    const stressTotalNet    = computed(() => stressAssets.value.reduce((s, a) => s + ((Number(a.valeur_actuelle || a.value) || 0) - (Number(a.montant_credit) || 0)), 0));
+                    const stressTotalValeur = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
+                    const stressTotalCredit = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0));
+                    const stressTotalApport = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.apport_personnel) || 0), 0));
+                    const stressTotalNet    = computed(() => stressAssetsInclus.value.reduce((s, a) => s + ((Number(a.valeur_actuelle || a.value) || 0) - (Number(a.montant_credit) || 0)), 0));
 
                     // ── v20.10 : Synthèse Globale du Patrimoine (NET WORTH) ──
-                    const globalValeurProductifs   = computed(() => roiAssets.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
-                    const globalDetteProductifs    = computed(() => roiAssets.value.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0));
+                    const globalValeurProductifs   = computed(() => roiAssetsInclus.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
+                    const globalDetteProductifs    = computed(() => roiAssetsInclus.value.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0));
                     const globalValeurJouissance   = computed(() => stressTotalValeur.value);
                     const globalDetteJouissance    = computed(() => stressTotalCredit.value);
                     const globalValeurTotale       = computed(() => globalValeurProductifs.value + globalValeurJouissance.value);
@@ -9007,7 +8959,11 @@
                     const masterAssetDetention = computed(() => anneesDetention(masterAssetForm.value));
                     const masterAssetOngletsDispos = computed(() => masterAssetEstTerrain.value
                         ? [['acquisition','🏞️ Origine & Valorisation'],['scenarios','💰 Scénarios de Vente'],['fiscalite','🧾 Fiscalité & Frais de Sortie']]
-                        : [['acquisition','🏗️ Acquisition'],['financement','🏦 Financement'],['exploitation','🔑 Exploitation'],['fiscalite','🧾 Fiscalité']]);
+                        : [['acquisition','🏗️ Acquisition'],['financement','🏦 Financement'],['exploitation','🔑 Exploitation'],['fiscalite','🧾 Fiscalité'],['revente','🔮 Revente']]);
+                    // v33.80 : simulateur de revente hébergé par la modale
+                    const masterAssetExitAnnee = ref(5);
+                    const masterAssetExit = computed(() => exitSim(masterAssetForm.value, masterAssetExitAnnee.value));
+                    const masterAssetExitMax = computed(() => exitMaxAnnees(masterAssetForm.value));
 
                     // Synchronisations explicites (pas de watcher croisé : aucune boucle)
                     const syncPrixM2 = () => {
@@ -9081,7 +9037,7 @@
                         () => {
                             const dispos = (estTerrainNu(masterAssetForm.value)
                                 ? ['acquisition', 'scenarios', 'fiscalite']
-                                : ['acquisition', 'financement', 'exploitation', 'fiscalite']);
+                                : ['acquisition', 'financement', 'exploitation', 'fiscalite', 'revente']);
                             if (!dispos.includes(masterAssetTab.value)) masterAssetTab.value = 'acquisition';
                         }
                     );
@@ -9110,6 +9066,15 @@
                         });
                         showMasterAssetModal.value = true;
                     };
+                    // v33.80 : l'icône 🔮 de la liste ouvre la modale sur l'onglet de revente
+                    const ouvrirSimulationRevente = (id) => {
+                        const asset = masterAssets.value.find(a => a.id === id);
+                        if (!asset) return;
+                        editMasterAsset(id);
+                        masterAssetTab.value = estTerrainNu(asset) ? 'scenarios' : 'revente';
+                        masterAssetExitAnnee.value = Math.min(5, exitMaxAnnees(asset));
+                    };
+
                     const deleteMasterAsset = (id) => {
                         const asset = masterAssets.value.find(a => a.id === id);
                         if (!asset) return;
@@ -9132,6 +9097,7 @@
                             name: String(f.name).trim(),
                             type: String(f.type || 'Commercial').trim(),
                             isProductive: !!f.isProductive,
+                            is_included_in_net_worth: f.is_included_in_net_worth !== false,
                             value: Number(f.value) || 0,
                             revenue: Number(f.revenue) || 0,
                             taux_credit: Number(f.taux_credit) || 0,
@@ -9290,9 +9256,11 @@
                         const courant = cloneComptes
                             .filter(c => c.inclureLiquidite !== false)
                             .reduce((s, c) => s + (Number(c.solde) || 0), 0);
-                        const dette = cloneAssets.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0);
-                        const valeurActifs = cloneAssets.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0);
-                        return { courant, dette, valeurActifs, comptes: cloneComptes, assets: cloneAssets, donneesAnnuelles: cloneAnnuel };
+                        // v33.80 : la projection ignore les actifs décochés
+                        const retenus = cloneAssets.filter(a => a.is_included_in_net_worth !== false);
+                        const dette = retenus.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0);
+                        const valeurActifs = retenus.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0);
+                        return { courant, dette, valeurActifs, comptes: cloneComptes, assets: retenus, donneesAnnuelles: cloneAnnuel };
                     };
 
                     // ═══════════════════════════════════════════════════════════════
@@ -14870,6 +14838,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         masterAssetEstTerrain, masterAssetQuotePct, masterAssetMaPart,
                         masterAssetScenarios, masterAssetOngletsDispos, syncPrixM2, syncValeurGlobale,
                         masterAssetTNB, masterAssetRevalorise, masterAssetDetention,
+                        estInclus, assetsInclus, assetsExclus, valeurExclue, roiAssetsInclus, stressAssetsInclus,
                         estTerrainNu, quotePartPct, terrainScenarios, ZONAGES,
                         tnbCalculee, tpiCalculee, anneesDetention, prixAcquisitionRevalorise,
                         creditParams, creditRestantCalcule, moisEcoulesCredit, moisPayesEffectifs,
@@ -14886,6 +14855,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         migrateAssetV19, migrateAssetsV19, coutTotalRevient, mensualiteClassique,
                         tableauAmortissement, amortissementAnnuel, soldeAnticipe, assetEconomics,
                         exitOpen, exitYears, exitMaxAnnees, toggleExit, setExitYear, exitSim,
+                        ouvrirSimulationRevente, masterAssetExitAnnee, masterAssetExit, masterAssetExitMax,
                         assetsEconomics, assetEcoById, revenusPassifsNetsAnnuel, revenusPassifsNetsMensuel,
                         surplusBudgetaireAnnuel,
                         sandboxSurplusAuto, sandboxInflationOn, sandboxRevaloOn,
