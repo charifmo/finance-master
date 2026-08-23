@@ -2144,365 +2144,36 @@
                         </div>
                     </div>
 
-                    <!-- ── Section 2 : ROI Tracker ── -->
-                    <div data-cfo-collapse="wealth-roi" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
+                    <!-- ══ v33.90 : SYNTHÈSE DU PATRIMOINE — table unique ══ -->
+                    <div data-cfo-collapse="wealth-master" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+                        <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-violet-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
                             <div>
-                                <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">📈 Actifs de Rendement (Productifs)</h3>
-                                <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Yield & ROI par actif productif — Revenus annuels affichés</p>
+                                <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">🏛️ Synthèse du Patrimoine</h3>
+                                <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Actifs productifs et de jouissance réunis</p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="text-xs font-bold text-violet-600 bg-violet-100 px-3 py-1 rounded-full border border-violet-200">{{ roiAssets.length }} actif{{ roiAssets.length > 1 ? 's' : '' }}</span>
-                                <span class="cfo-chevron text-gray-400 text-xs">▼</span>
-                            </div>
-                        </div>
-                        <div class="p-6 cfo-collapsible-body">
-                            <div class="space-y-3 mb-5">
-                                <div v-for="asset in roiAssets" :key="asset.id"
-                                     :class="['p-4 rounded-xl border transition-colors', asset.is_included_in_net_worth === false ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-gray-50 border-gray-200 hover:border-violet-300']">
-                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-black text-gray-800 flex items-center gap-2">
-                                            <button @click="asset.is_included_in_net_worth = asset.is_included_in_net_worth === false; handleDataChange()"
-                                                    :title="asset.is_included_in_net_worth === false ? 'Exclu du patrimoine net — cliquer pour inclure' : 'Compté dans le patrimoine net — cliquer pour exclure'"
-                                                    class="text-base leading-none shrink-0">{{ asset.is_included_in_net_worth === false ? '🙈' : '👁️' }}</button>
-                                            <span :class="asset.is_included_in_net_worth === false ? 'text-gray-400 line-through' : ''">{{ asset.name }}</span>
-                                            <span v-if="asset.is_included_in_net_worth === false" class="text-[8px] font-black uppercase tracking-widest bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">hors patrimoine</span>
-                                        </p>
-                                        <div class="flex flex-wrap gap-4 mt-1.5">
-                                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                                                Achat : <span class="text-gray-800 font-black">{{ formatMAD(asset.value) }}</span>
-                                            </p>
-                                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1.5 flex-wrap">
-                                                Estimé : <span class="text-teal-700 font-black">{{ formatMAD(asset.valeur_actuelle || asset.value) }}</span>
-                                                <span v-if="asset.valeur_actuelle && asset.valeur_actuelle !== asset.value"
-                                                      :class="['text-[9px] font-black px-1.5 py-0.5 rounded border', asset.valeur_actuelle > asset.value ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-red-100 text-red-700 border-red-200']">
-                                                    {{ asset.valeur_actuelle > asset.value ? '▲' : '▼' }} {{ asset.value > 0 ? (Math.abs(asset.valeur_actuelle - asset.value) / asset.value * 100).toFixed(1) + '%' : '' }}
-                                                </span>
-                                            </p>
-                                            <!-- v33.02 : chaîne CA → REX → cash-flow net (moteur assetEconomics) -->
-                                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                                                CA : <span class="text-gray-800 font-black">{{ formatMAD((assetEcoById[asset.id] || {}).ca || 0) }}/an</span>
-                                            </p>
-                                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                                                REX : <span class="text-emerald-700 font-black">{{ formatMAD((assetEcoById[asset.id] || {}).rex || 0) }}/an</span>
-                                            </p>
-                                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                                                Cash-flow net :
-                                                <span :class="[((assetEcoById[asset.id] || {}).cashflowNet || 0) >= 0 ? 'text-emerald-700' : 'text-red-600', 'font-black']">{{ formatMAD((assetEcoById[asset.id] || {}).cashflowNet || 0) }}/an</span>
-                                                <span class="text-gray-400"> · {{ formatMAD(Math.round((assetEcoById[asset.id] || {}).cashflowNetMensuel || 0)) }}/mois</span>
-                                            </p>
-                                        </div>
-                                        <p v-if="asset.taux_credit > 0" class="text-[10px] text-amber-700 font-bold mt-1.5 flex flex-wrap items-center gap-2">
-                                            <span class="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">🏦 Crédit : <span class="text-amber-900 font-black">{{ asset.taux_credit }}%</span></span>
-                                            <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">Durée : <span class="text-slate-800 font-black">{{ asset.annees_total }} ans</span></span>
-                                            <span class="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-md text-violet-600">Reste : <span class="text-violet-800 font-black">{{ asset.annees_restantes }} ans</span></span>
-                                        </p>
-                                        <p v-if="asset.montant_credit > 0" class="text-[10px] font-bold mt-1.5 flex flex-wrap items-center gap-2">
-                                            <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md text-indigo-700">💼 Apport : <span class="font-black">{{ formatMAD(asset.apport_personnel) }}</span></span>
-                                            <span class="inline-flex items-center gap-1 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md text-rose-700">🏛️ Banque : <span class="font-black">{{ formatMAD(asset.montant_credit) }}</span></span>
-                                            <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md text-slate-700">Service dette : <span class="font-black">{{ formatMAD((assetEcoById[asset.id] || {}).serviceDette || 0) }}/an</span></span>
-                                            <span class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-emerald-700">📊 ROE : <span class="font-black">{{ asset.apport_personnel > 0 ? ((assetEcoById[asset.id] || {}).roe || 0).toFixed(1) : '—' }}%</span></span>
-                                        </p>
-                                        <!-- v33.02 : exploitation & fiscalité -->
-                                        <p class="text-[10px] font-bold mt-1.5 flex flex-wrap items-center gap-2">
-                                            <span class="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md text-sky-700">
-                                                {{ asset.mode_exploitation === 'courte_duree' ? '🏨 Courte durée' : asset.mode_exploitation === 'longue_duree' ? '🔑 Longue durée' : asset.mode_exploitation === 'commercial' ? '🏪 Commercial' : '⏸️ Non exploité' }}
-                                            </span>
-                                            <span v-if="asset.mode_exploitation === 'courte_duree'" class="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md text-sky-700">
-                                                {{ formatMAD(asset.adr) }}/nuit · {{ asset.taux_occupation }}% occ. · {{ (assetEcoById[asset.id] || {}).nuitsAn || 0 }} nuits/an
-                                            </span>
-                                            <span v-if="((assetEcoById[asset.id] || {}).impot || 0) > 0" class="inline-flex items-center gap-1 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md text-orange-700">
-                                                🧾 Impôt : <span class="font-black">{{ formatMAD((assetEcoById[asset.id] || {}).impot) }}</span>
-                                                <span class="text-orange-400">({{ asset.regime_fiscal }})</span>
-                                            </span>
-                                            <span v-if="((assetEcoById[asset.id] || {}).seuilCA || 0) > 0" class="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md text-gray-600">
-                                                ⚖️ Seuil : <span class="font-black">{{ formatMAD((assetEcoById[asset.id] || {}).seuilCA) }}/an</span>
-                                            </span>
-                                        </p>
-                                    </div>
-                                    <div class="shrink-0 flex items-center gap-2">
-                                        <div class="text-right">
-                                            <span :class="['block text-sm font-black px-3 py-1.5 rounded-xl border',
-                                                ((assetEcoById[asset.id] || {}).rendementNet || 0) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                                ((assetEcoById[asset.id] || {}).rendementNet || 0) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                                'bg-amber-100 text-amber-700 border-amber-200']"
-                                                  :title="'Rendement NET = REX / valeur actuelle'">
-                                                {{ ((assetEcoById[asset.id] || {}).rendementNet || 0).toFixed(2) }}% net
-                                            </span>
-                                            <span class="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-1">brut {{ ((assetEcoById[asset.id] || {}).rendementBrut || 0).toFixed(2) }}%</span>
-                                        </div>
-                                        <button @click="ouvrirSimulationRevente(asset.id)" class="p-1.5 rounded-lg transition-colors text-sm hover:bg-fuchsia-100 text-gray-400 hover:text-fuchsia-600" title="Simuler une revente">🔮</button>
-                                        <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-sm" title="Éditer">✏️</button>
-                                        <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-sm" title="Supprimer">🗑️</button>
-                                    </div>
-                                </div>
-                                </div>
-                            </div>
-
-                            <!-- Bouton ajout actif -->
-                            <div class="flex justify-end mb-4">
-                                <button @click="openMasterAssetModal" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-violet-900/20 transition-colors">
-                                    <span class="text-base leading-none">＋</span> Nouvel Actif Productif
-                                </button>
-                            </div>
-
-                            <!-- Synthèse globale pondérée -->
-                            <div class="bg-gradient-to-r from-violet-600 to-purple-700 rounded-2xl p-5 text-white shadow-lg shadow-purple-900/20">
-                                <p class="text-[10px] font-black uppercase tracking-widest opacity-70 mb-4">📊 Synthèse Globale — Patrimoine Productif</p>
-                                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center mb-4">
-                                    <div>
-                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Valeur Actuelle</p>
-                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(globalValeurProductifs) }}</p>
-                                    </div>
-                                    <div>
-                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">CA Annuel</p>
-                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(assetsEconomics.reduce((s, e) => s + e.ca, 0)) }}</p>
-                                    </div>
-                                    <div>
-                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">REX Annuel</p>
-                                        <p class="text-base lg:text-lg font-black text-emerald-300">{{ formatMAD(assetsEconomics.reduce((s, e) => s + e.rex, 0)) }}</p>
-                                    </div>
-                                    <div>
-                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Rendement Net Pondéré</p>
-                                        <p class="text-base lg:text-lg font-black text-yellow-300">
-                                            {{ globalValeurProductifs > 0
-                                                ? (assetsEconomics.reduce((s, e) => s + e.rex, 0) / globalValeurProductifs * 100).toFixed(2)
-                                                : '0.00' }}%
-                                        </p>
-                                    </div>
-                                </div>
-                                <div class="pt-3 border-t border-white/20 text-center">
-                                    <p class="text-[11px] opacity-70">Revenus passifs NETS (après crédit et impôt) :
-                                        <span :class="['font-black text-sm', revenusPassifsNetsMensuel >= 0 ? 'text-yellow-200' : 'text-red-300']"> {{ formatMAD(Math.round(revenusPassifsNetsMensuel)) }}/mois</span>
-                                        <span class="opacity-60"> · {{ formatMAD(Math.round(revenusPassifsNetsAnnuel)) }}/an</span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ── Section 3 : Simulateur Arbitrage ── -->
-                    <div data-cfo-collapse="wealth-arbitrage" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
-                            <div>
-                                <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">⚖️ Simulateur Arbitrage : Rembourser ou Investir ?</h3>
-                                <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Dette vs Investissement — Intérêts composés sur la durée</p>
-                            </div>
-                            <span class="cfo-chevron text-gray-400 text-xs">▼</span>
-                        </div>
-                        <div class="p-6 cfo-collapsible-body">
-                            <!-- Inputs -->
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                                <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                                    <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-2">💰 Montant (DH)</label>
-                                    <input type="number" v-model.number="arbitrageCash" min="0" step="5000"
-                                           class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-blue-500 text-right"/>
-                                </div>
-                                <div class="bg-red-50 rounded-xl p-4 border border-red-200">
-                                    <label class="text-[10px] font-black uppercase tracking-widest text-red-600 block mb-2">📉 Taux Crédit (%)</label>
-                                    <input type="number" v-model.number="arbitrageDebtRate" min="0" max="30" step="0.1"
-                                           class="w-full bg-white border-2 border-red-200 rounded-lg px-3 py-2 text-sm font-black text-red-700 outline-none focus:border-red-500 text-right"/>
-                                </div>
-                                <div class="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-                                    <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-2">📈 Taux Placement (%)</label>
-                                    <input type="number" v-model.number="arbitrageInvestRate" min="0" max="50" step="0.1"
-                                           class="w-full bg-white border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-black text-emerald-700 outline-none focus:border-emerald-500 text-right"/>
-                                </div>
-                                <div class="bg-blue-50 rounded-xl p-4 border border-blue-200">
-                                    <label class="text-[10px] font-black uppercase tracking-widest text-blue-600 block mb-2">📅 Durée (années)</label>
-                                    <input type="number" v-model.number="arbitrageYears" min="1" max="30" step="1"
-                                           class="w-full bg-white border-2 border-blue-200 rounded-lg px-3 py-2 text-sm font-black text-blue-700 outline-none focus:border-blue-500 text-right"/>
-                                </div>
-                            </div>
-
-                            <!-- Résultats A vs B -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-                                <!-- Scénario A : Rembourser -->
-                                <div class="bg-red-50 border-2 border-red-200 rounded-2xl p-5">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-red-600 mb-3">🅰 Scénario A — Rembourser par anticipation</p>
-                                    <div class="space-y-2">
-                                        <div class="flex justify-between items-center">
-                                            <span class="text-xs text-gray-600 font-bold">Capital utilisé</span>
-                                            <span class="text-sm font-black text-gray-800">{{ formatMAD(arbitrageCash) }}</span>
-                                        </div>
-                                        <div class="flex justify-between items-center">
-                                            <span class="text-xs text-gray-600 font-bold">Intérêts économisés</span>
-                                            <span class="text-sm font-black text-emerald-600">+ {{ formatMAD(Math.round(arbitrageCash * (Math.pow(1 + arbitrageDebtRate / 100, arbitrageYears) - 1))) }}</span>
-                                        </div>
-                                        <div class="flex justify-between items-center border-t border-red-200 pt-2 mt-2">
-                                            <span class="text-xs font-black uppercase tracking-widest text-gray-700">Gain net</span>
-                                            <span class="text-base font-black text-emerald-700">{{ formatMAD(Math.round(arbitrageCash * (Math.pow(1 + arbitrageDebtRate / 100, arbitrageYears) - 1))) }}</span>
-                                        </div>
-                                        <p class="text-[9px] text-red-500 font-bold mt-1">Taux: {{ arbitrageDebtRate }}% / {{ arbitrageYears }} ans</p>
-                                    </div>
-                                </div>
-                                <!-- Scénario B : Investir -->
-                                <div class="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-3">🅱 Scénario B — Placer l'argent</p>
-                                    <div class="space-y-2">
-                                        <div class="flex justify-between items-center">
-                                            <span class="text-xs text-gray-600 font-bold">Capital placé</span>
-                                            <span class="text-sm font-black text-gray-800">{{ formatMAD(arbitrageCash) }}</span>
-                                        </div>
-                                        <div class="flex justify-between items-center">
-                                            <span class="text-xs text-gray-600 font-bold">Gains générés</span>
-                                            <span class="text-sm font-black text-emerald-600">+ {{ formatMAD(Math.round(arbitrageCash * (Math.pow(1 + arbitrageInvestRate / 100, arbitrageYears) - 1))) }}</span>
-                                        </div>
-                                        <div class="flex justify-between items-center border-t border-emerald-200 pt-2 mt-2">
-                                            <span class="text-xs font-black uppercase tracking-widest text-gray-700">Gain net</span>
-                                            <span class="text-base font-black text-emerald-700">{{ formatMAD(Math.round(arbitrageCash * (Math.pow(1 + arbitrageInvestRate / 100, arbitrageYears) - 1))) }}</span>
-                                        </div>
-                                        <p class="text-[9px] text-emerald-600 font-bold mt-1">Taux: {{ arbitrageInvestRate }}% / {{ arbitrageYears }} ans</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Verdict -->
-                            <div :class="['rounded-2xl p-5 text-center border-2 transition-all',
-                                Math.round(arbitrageCash * (Math.pow(1 + arbitrageInvestRate / 100, arbitrageYears) - 1)) - Math.round(arbitrageCash * (Math.pow(1 + arbitrageDebtRate / 100, arbitrageYears) - 1)) > 0
-                                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 border-emerald-400 text-white shadow-lg shadow-emerald-900/20'
-                                    : 'bg-gradient-to-r from-red-500 to-rose-600 border-red-400 text-white shadow-lg shadow-red-900/20']">
-                                <p class="text-[10px] font-black uppercase tracking-widest opacity-80 mb-2">⚖️ Verdict de l'Arbitrage</p>
-                                <p v-if="Math.round(arbitrageCash * (Math.pow(1 + arbitrageInvestRate / 100, arbitrageYears) - 1)) - Math.round(arbitrageCash * (Math.pow(1 + arbitrageDebtRate / 100, arbitrageYears) - 1)) > 0"
-                                   class="text-xl lg:text-2xl font-black tracking-tight">
-                                    🏆 Gagnant : INVESTIR
-                                </p>
-                                <p v-else class="text-xl lg:text-2xl font-black tracking-tight">
-                                    🏆 Gagnant : REMBOURSER LA DETTE
-                                </p>
-                                <p class="text-sm font-bold opacity-90 mt-2">
-                                    <template v-if="Math.round(arbitrageCash * (Math.pow(1 + arbitrageInvestRate / 100, arbitrageYears) - 1)) - Math.round(arbitrageCash * (Math.pow(1 + arbitrageDebtRate / 100, arbitrageYears) - 1)) > 0">
-                                        + {{ formatMAD(Math.abs(Math.round(arbitrageCash * (Math.pow(1 + arbitrageInvestRate / 100, arbitrageYears) - 1)) - Math.round(arbitrageCash * (Math.pow(1 + arbitrageDebtRate / 100, arbitrageYears) - 1)))) }} de création de valeur sur {{ arbitrageYears }} ans
-                                    </template>
-                                    <template v-else>
-                                        {{ formatMAD(Math.abs(Math.round(arbitrageCash * (Math.pow(1 + arbitrageInvestRate / 100, arbitrageYears) - 1)) - Math.round(arbitrageCash * (Math.pow(1 + arbitrageDebtRate / 100, arbitrageYears) - 1)))) }} d'économies en remboursant sur {{ arbitrageYears }} ans
-                                    </template>
-                                </p>
-                                <p class="text-[10px] opacity-70 mt-1">Écart net : Placement {{ arbitrageInvestRate }}% vs Crédit {{ arbitrageDebtRate }}% sur {{ arbitrageYears }} ans</p>
-                            </div>
-                        <!-- ═══ v33.11 : ARBITRAGE AVANCÉ — Mourabaha, Ibra'a, DH constants ═══ -->
-                        <div class="mt-5 rounded-2xl border-2 border-teal-200 overflow-hidden">
-                            <div class="px-5 py-3 bg-gradient-to-r from-teal-600 to-cyan-700 text-white flex items-center justify-between flex-wrap gap-2">
-                                <div>
-                                    <p class="font-black uppercase tracking-widest text-xs">⚖️ Arbitrage avancé — Rembourser vs Placer</p>
-                                    <p class="text-[10px] opacity-70">Crédit classique ou Mourabaha, avec Ibra'a, inflation et fiscalité</p>
-                                </div>
-                                <div class="inline-flex rounded-xl bg-white/15 p-1">
-                                    <button @click="arbitrageMode = 'classique'" :class="['px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors', arbitrageMode === 'classique' ? 'bg-white text-teal-700' : 'text-white/70 hover:text-white']">Classique</button>
-                                    <button @click="arbitrageMode = 'mourabaha'" :class="['px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors', arbitrageMode === 'mourabaha' ? 'bg-white text-teal-700' : 'text-white/70 hover:text-white']">Mourabaha</button>
-                                </div>
-                            </div>
-                            <div class="p-4 bg-white space-y-4">
-                                <!-- Paramètres spécifiques -->
-                                <div v-if="arbitrageMode === 'mourabaha'" class="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-teal-50 rounded-xl border border-teal-200">
-                                    <div>
-                                        <label class="text-[10px] font-black uppercase tracking-widest text-teal-700 block mb-1.5">Crédit ciblé</label>
-                                        <select v-model="arbitrageAssetId" class="w-full bg-white border-2 border-teal-200 rounded-lg px-3 py-2 text-xs font-bold text-teal-800 outline-none">
-                                            <option value="">— Exemple type (300 000 / 240 mois) —</option>
-                                            <option v-for="a in masterAssets.filter(x => x.montant_credit > 0)" :key="a.id" :value="a.id">{{ a.name }} — {{ formatMAD(a.montant_credit) }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] font-black uppercase tracking-widest text-teal-700 block mb-1.5">Mois déjà écoulés</label>
-                                        <input type="number" v-model.number="arbitrageMoisEcoules" min="0" max="360" step="6" class="w-full bg-white border-2 border-teal-200 rounded-lg px-3 py-2 text-xs font-black text-teal-800 outline-none text-right"/>
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] font-black uppercase tracking-widest text-teal-700 block mb-1.5 flex items-center justify-between">
-                                            <span>Taux d'Ibra'a</span><span class="text-teal-900 font-black">{{ arbitrageIbraa }} %</span>
-                                        </label>
-                                        <input type="range" v-model.number="arbitrageIbraa" min="0" max="100" step="5" class="w-full accent-teal-600"/>
-                                        <p class="text-[9px] text-teal-500 font-bold">Pratique courante au Maroc : 60–80 %</p>
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <label class="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer p-2 rounded-lg border border-gray-200">
-                                        <input type="checkbox" v-model="arbitrageDeductible" class="accent-orange-600"/>
-                                        Intérêts / marge déductibles
-                                    </label>
-                                    <div v-if="arbitrageDeductible">
-                                        <label class="text-[10px] font-black uppercase tracking-widest text-orange-600 block mb-1">Taux marginal (%)</label>
-                                        <input type="number" v-model.number="arbitrageTauxMarginal" min="0" max="60" step="1" class="w-full bg-orange-50 border-2 border-orange-200 rounded-lg px-3 py-1.5 text-xs font-black text-orange-800 outline-none text-right"/>
-                                    </div>
-                                    <label class="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer p-2 rounded-lg border border-gray-200">
-                                        <input type="checkbox" v-model="arbitrageInflationOn" class="accent-amber-600"/>
-                                        Afficher aussi en DH constants
-                                    </label>
-                                </div>
-
-                                <!-- Détail du solde anticipé (Mourabaha) -->
-                                <div v-if="arbitrageMode === 'mourabaha' && arbitrageResult.detailIbraa" class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                    <div class="p-2 rounded-lg bg-gray-50 border border-gray-200"><p class="text-[9px] font-black uppercase text-gray-400">Capital restant</p><p class="text-sm font-black text-gray-800 tabular-nums">{{ formatMAD(arbitrageResult.detailIbraa.capitalRestant) }}</p></div>
-                                    <div class="p-2 rounded-lg bg-gray-50 border border-gray-200"><p class="text-[9px] font-black uppercase text-gray-400">Marge non échue</p><p class="text-sm font-black text-rose-700 tabular-nums">{{ formatMAD(arbitrageResult.detailIbraa.margeNonEchue) }}</p></div>
-                                    <div class="p-2 rounded-lg bg-gray-50 border border-gray-200"><p class="text-[9px] font-black uppercase text-gray-400">Ibra'a accordée</p><p class="text-sm font-black text-emerald-700 tabular-nums">−{{ formatMAD(arbitrageResult.detailIbraa.ibraa) }}</p></div>
-                                    <div class="p-2 rounded-lg bg-teal-50 border border-teal-200"><p class="text-[9px] font-black uppercase text-teal-500">Solde anticipé</p><p class="text-sm font-black text-teal-800 tabular-nums">{{ formatMAD(arbitrageResult.detailIbraa.solde) }}</p></div>
-                                </div>
-
-                                <!-- Résultat -->
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div class="p-3 rounded-xl bg-rose-50 border-2 border-rose-200">
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-rose-600 mb-1">🏦 Rembourser</p>
-                                        <p class="text-xl font-black text-rose-800 tabular-nums">+{{ formatMAD(arbitrageResult.gainRemboursementNet) }}</p>
-                                        <div class="mt-1.5 space-y-0.5 text-[10px] font-bold text-rose-500">
-                                            <p v-if="arbitrageMode === 'mourabaha'">Capital libéré : <span class="font-black">{{ formatMAD(arbitrageResult.capitalLibere) }}</span></p>
-                                            <p v-if="arbitrageMode === 'mourabaha'">Marge évitée : {{ formatMAD(arbitrageResult.margeEvitee) }} − marge payée {{ formatMAD(arbitrageResult.margePayee) }}</p>
-                                            <p v-else>Intérêts composés évités sur {{ arbitrageYears }} ans</p>
-                                            <p v-if="arbitrageResult.impotPerdu > 0" class="text-orange-600">− économie d'impôt perdue : {{ formatMAD(arbitrageResult.impotPerdu) }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-emerald-50 border-2 border-emerald-200">
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">📈 Placer</p>
-                                        <p class="text-xl font-black text-emerald-800 tabular-nums">+{{ formatMAD(arbitrageResult.gainPlacement) }}</p>
-                                        <p class="mt-1.5 text-[10px] font-bold text-emerald-500">{{ formatMAD(arbitrageResult.cash) }} à {{ arbitrageInvestRate }} % sur {{ arbitrageYears }} ans</p>
-                                    </div>
-                                </div>
-
-                                <div :class="['p-3 rounded-xl text-white', arbitrageResult.gagnant === 'placer' ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : arbitrageResult.gagnant === 'rembourser' ? 'bg-gradient-to-r from-rose-600 to-red-700' : 'bg-gray-600']">
-                                    <p class="text-[10px] font-black uppercase tracking-widest opacity-70">Verdict</p>
-                                    <p class="text-base font-black">
-                                        {{ arbitrageResult.gagnant === 'placer' ? '📈 Placer est plus rentable' : arbitrageResult.gagnant === 'rembourser' ? '🏦 Rembourser est plus rentable' : '⚖️ Équivalent' }}
-                                        <span class="tabular-nums"> · écart {{ formatMAD(Math.abs(arbitrageResult.ecart)) }}</span>
-                                    </p>
-                                    <p v-if="arbitrageInflationOn" class="text-[11px] opacity-80 mt-1">
-                                        En DH constants (déflateur {{ arbitrageResult.deflateur }}) :
-                                        placer {{ formatMAD(arbitrageResult.constants.gainPlacement) }} vs rembourser {{ formatMAD(arbitrageResult.constants.gainRemboursementNet) }} — écart {{ formatMAD(Math.abs(arbitrageResult.constants.ecart)) }}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        </div>
-                    </div>
-
-                    <!-- ── Section 4 : Stress Test Foncier & Indivision ── -->
-                    <div data-cfo-collapse="wealth-stress" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-gray-100 flex items-center justify-between cfo-collapse-header">
-                            <div>
-                                <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">🏡 Patrimoine de Jouissance & Foncier (Non-Productifs)</h3>
-                                <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">Résidence, terrains nus · Valeur Actuelle, Crédit Restant, Apport — aucun ROI imposé</p>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">{{ stressAssets.length }} actif{{ stressAssets.length > 1 ? 's' : '' }}</span>
+                                <span class="text-xs font-bold text-violet-600 bg-violet-100 px-3 py-1 rounded-full border border-violet-200">{{ masterAssets.length }} actif{{ masterAssets.length > 1 ? 's' : '' }}</span>
                                 <span class="cfo-chevron text-gray-400 text-xs">▼</span>
                             </div>
                         </div>
                         <div class="p-6 cfo-collapsible-body">
                             <div class="overflow-x-auto rounded-xl border border-gray-200">
-                                <table class="w-full text-sm">
-                                    <thead class="bg-gray-50 border-b-2 border-gray-200">
+                                <table class="w-full text-sm min-w-[900px]">
+                                    <thead class="bg-slate-800 text-white">
                                         <tr>
-                                            <th class="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-700">Actif</th>
-                                            <th class="px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-700 whitespace-nowrap">Quote-part</th>
-                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 whitespace-nowrap">Valeur Actuelle</th>
-                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-rose-700 bg-rose-50 whitespace-nowrap">Crédit Restant</th>
-                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-indigo-700 bg-indigo-50 whitespace-nowrap">Apport</th>
-                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 whitespace-nowrap">Patrimoine Net</th>
-                                            <th class="px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-700 whitespace-nowrap">Actions</th>
+                                            <th class="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest">Actif</th>
+                                            <th class="px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest">Quote-part</th>
+                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Valeur actuelle</th>
+                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Crédit restant</th>
+                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Apport</th>
+                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Net</th>
+                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Cash-flow / mois</th>
+                                            <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Rdt net</th>
+                                            <th class="px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <template v-for="asset in stressAssets" :key="asset.id">
+                                        <template v-for="asset in masterAssets" :key="asset.id">
                                         <tr :class="['border-b border-gray-100 transition-colors', asset.is_included_in_net_worth === false ? 'bg-gray-100/70 opacity-60' : 'hover:bg-gray-50']">
                                             <td class="px-4 py-3">
                                                 <p class="text-sm font-black text-gray-800 flex items-center gap-2">
@@ -2511,43 +2182,110 @@
                                                             class="text-base leading-none shrink-0">{{ asset.is_included_in_net_worth === false ? '🙈' : '👁️' }}</button>
                                                     <span :class="asset.is_included_in_net_worth === false ? 'text-gray-400 line-through' : ''">{{ asset.name }}</span>
                                                 </p>
-                                                <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
-                                                    {{ asset.type }}
-                                                    <span v-if="asset.is_included_in_net_worth === false" class="ml-1 bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded normal-case">hors patrimoine net</span>
+                                                <p class="text-[10px] font-bold uppercase tracking-widest mt-0.5 flex items-center gap-2 flex-wrap">
+                                                    <span :class="['px-1.5 py-0.5 rounded-full border', asset.isProductive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200']">
+                                                        {{ asset.isProductive ? '🟢 Productif' : '🟠 Jouissance / Foncier' }}
+                                                    </span>
+                                                    <span class="text-gray-400">{{ asset.type }}</span>
+                                                    <span v-if="asset.is_included_in_net_worth === false" class="bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded normal-case">hors patrimoine net</span>
                                                 </p>
                                             </td>
                                             <td class="px-4 py-3 text-center whitespace-nowrap">
                                                 <span :class="['text-xs font-black px-2 py-1 rounded-lg border', asset.quotePart === '100%' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200']">{{ asset.quotePart }}</span>
                                             </td>
-                                            <td class="px-4 py-3 text-right text-blue-700 font-black bg-blue-50/50 whitespace-nowrap">{{ formatMAD(asset.valeur_actuelle || asset.value) }}</td>
-                                            <td class="px-4 py-3 text-right text-rose-700 font-black bg-rose-50/50 whitespace-nowrap">{{ formatMAD(asset.montant_credit || 0) }}</td>
-                                            <td class="px-4 py-3 text-right text-indigo-700 font-black bg-indigo-50/50 whitespace-nowrap">{{ formatMAD(asset.apport_personnel || 0) }}</td>
-                                            <td class="px-4 py-3 text-right text-emerald-700 font-black bg-emerald-50/50 whitespace-nowrap">{{ formatMAD((Number(asset.valeur_actuelle || asset.value) || 0) - (Number(asset.montant_credit) || 0)) }}</td>
+                                            <td class="px-4 py-3 text-right text-blue-700 font-black bg-blue-50/40 whitespace-nowrap">{{ formatMAD(asset.valeur_actuelle || asset.value) }}</td>
+                                            <td class="px-4 py-3 text-right text-rose-700 font-black bg-rose-50/40 whitespace-nowrap">{{ formatMAD(asset.montant_credit || 0) }}</td>
+                                            <td class="px-4 py-3 text-right text-indigo-700 font-black bg-indigo-50/40 whitespace-nowrap">{{ formatMAD(asset.apport_personnel || 0) }}</td>
+                                            <td class="px-4 py-3 text-right text-emerald-700 font-black bg-emerald-50/40 whitespace-nowrap">{{ formatMAD((Number(asset.valeur_actuelle || asset.value) || 0) - (Number(asset.montant_credit) || 0)) }}</td>
+                                            <td class="px-4 py-3 text-right whitespace-nowrap">
+                                                <span v-if="asset.isProductive" :class="['font-black', ((assetEcoById[asset.id] || {}).cashflowNetMensuel || 0) >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(Math.round((assetEcoById[asset.id] || {}).cashflowNetMensuel || 0)) }}</span>
+                                                <span v-else class="text-gray-300">—</span>
+                                            </td>
+                                            <td class="px-4 py-3 text-right whitespace-nowrap">
+                                                <span v-if="asset.isProductive" class="font-black text-violet-700">{{ ((assetEcoById[asset.id] || {}).rendementNet || 0).toFixed(2) }} %</span>
+                                                <span v-else class="text-gray-300">—</span>
+                                            </td>
                                             <td class="px-4 py-3 text-center whitespace-nowrap">
                                                 <div class="flex items-center justify-center gap-1.5">
-                                                    <button @click="ouvrirSimulationRevente(asset.id)" class="p-1.5 rounded-lg transition-colors hover:bg-fuchsia-100 text-fuchsia-600" title="Simuler une revente">🔮</button>
+                                                    <button @click="toggleExit(asset.id, asset)" :class="['p-1.5 rounded-lg transition-colors', exitOpen[asset.id] ? 'bg-fuchsia-100 text-fuchsia-700' : 'hover:bg-fuchsia-100 text-fuchsia-600']" title="Simuler une revente">🔮</button>
                                                     <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="Éditer">✏️</button>
                                                     <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors" title="Supprimer">🗑️</button>
                                                 </div>
                                             </td>
                                         </tr>
-                                        </template>
+                                        <!-- v33.90 : Exit Simulator en accordéon sous la ligne -->
+                                        <tr v-if="exitOpen[asset.id]" class="bg-fuchsia-50/30">
+                                            <td colspan="9" class="px-4 pb-4 pt-0">
+                                            <div class="rounded-2xl border-2 border-fuchsia-200 overflow-hidden">
+                                                <template v-for="sim in [exitSim(asset, exitYears[asset.id] || 1)]" :key="'ex'+asset.id">
+                                                <div class="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white flex items-center justify-between flex-wrap gap-2">
+                                                    <p class="font-black uppercase tracking-widest text-[11px]">🔮 Scénario de revente — {{ asset.name }} · année {{ sim.annee }}</p>
+                                                    <p class="text-[10px] opacity-80">Revalo {{ asset.taux_revalorisation }} %/an · {{ sim.estTerrain ? 'frais réels : Semsar + TNB + TPI' : 'frais de sortie ' + asset.frais_revente_pct + ' %' }}</p>
                                                 </div>
+                                                <div class="p-4 bg-white space-y-4">
+                                                    <div>
+                                                        <div class="flex items-center justify-between mb-1.5">
+                                                            <label class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700">Année de revente</label>
+                                                            <span class="text-sm font-black text-fuchsia-800 tabular-nums">Année {{ sim.annee }} / {{ exitMaxAnnees(asset) }}</span>
+                                                        </div>
+                                                        <input type="range" min="1" :max="exitMaxAnnees(asset)" step="1"
+                                                               :value="exitYears[asset.id] || 1"
+                                                               @input="setExitYear(asset.id, $event.target.value)"
+                                                               class="w-full accent-fuchsia-600 cursor-pointer"/>
+                                                        <div class="flex justify-between text-[9px] font-bold text-gray-400 mt-0.5"><span>1 an</span><span>{{ exitMaxAnnees(asset) }} ans</span></div>
+                                                    </div>
+                                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                        <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
+                                                            <p class="text-[9px] font-black uppercase tracking-widest text-teal-600">A · Valeur de revente</p>
+                                                            <p class="text-lg font-black text-teal-800 tabular-nums">{{ formatMAD(sim.valeurRevente) }}</p>
+                                                            <p v-if="!sim.estTerrain" class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
+                                                            <p v-else class="text-[9px] font-bold text-teal-500 leading-tight">
+                                                                +{{ formatMAD(sim.plusValueLatente) }} de revalorisation ({{ asset.taux_revalorisation }} %/an)<br/>
+                                                                − {{ formatMAD(sim.semsar) }} Semsar · − {{ formatMAD(sim.tnb) }} TNB<span v-if="!sim.tnbManuelle"> ({{ (asset.annees_tnb || 0) + sim.annee }} ans)</span> · − {{ formatMAD(sim.tpi) }} TPI<span v-if="sim.tpiDetail && !sim.tpiManuelle"> ({{ sim.tpiDetail.regle }})</span><br/>
+                                                                <span class="text-teal-400">soit {{ formatMAD(sim.fraisRevente) }} de frais réels</span>
+                                                            </p>
+                                                        </div>
+                                                        <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                                                            <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
+                                                            <p class="text-lg font-black text-rose-800 tabular-nums">{{ formatMAD(sim.crd) }}</p>
+                                                            <p v-if="sim.detailIbraa" class="text-[9px] font-bold text-rose-500">capital {{ formatMAD(sim.detailIbraa.capitalRestant) }} + marge non échue {{ formatMAD(sim.detailIbraa.margeNonEchue) }} − Ibra'a {{ formatMAD(sim.detailIbraa.ibraa) }}</p>
+                                                            <p v-else-if="!sim.crd" class="text-[9px] font-bold text-rose-400">Aucun crédit en cours</p>
+                                                        </div>
+                                                        <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
+                                                            <p class="text-[9px] font-black uppercase tracking-widest text-indigo-600">C · Cash sorti (effort)</p>
+                                                            <p class="text-lg font-black text-indigo-800 tabular-nums">{{ formatMAD(sim.cashSorti) }}</p>
+                                                            <p class="text-[9px] font-bold text-indigo-500">Apport {{ formatMAD(asset.apport_personnel) }}<span v-if="sim.fraisInit"> + frais &amp; travaux {{ formatMAD(sim.fraisInit) }}</span><span v-if="sim.moisEcheances"> + {{ sim.moisEcheances }} échéances</span></p>
+                                                            <p v-if="sim.moisDejaPayes" class="text-[9px] font-bold text-indigo-400">dont {{ sim.moisDejaPayes }} déjà versées ({{ formatMAD(sim.dejaVerse) }})</p>
+                                                        </div>
+                                                    </div>
+                                                    <div :class="['p-4 rounded-2xl text-white', sim.gagnant ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : 'bg-gradient-to-r from-rose-600 to-red-700']">
+                                                        <p class="text-[10px] font-black uppercase tracking-widest opacity-75">D · Net dans la poche</p>
+                                                        <p class="text-3xl font-black tabular-nums leading-tight">{{ formatMAD(sim.netPoche) }}</p>
+                                                        <p class="text-[11px] font-bold opacity-90 mt-1">
+                                                            {{ sim.gagnant ? '✅ Supérieur au cash sorti' : '⚠️ Inférieur au cash sorti' }}
+                                                            de <span class="font-black">{{ formatMAD(Math.abs(sim.gain)) }}</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                </template>
+                                            </div>
                                             </td>
                                         </tr>
                                         </template>
                                     </tbody>
                                     <tfoot>
                                         <tr class="bg-gradient-to-r from-slate-800 to-violet-900 text-white">
-                                            <td class="px-4 py-3 font-black text-sm uppercase tracking-widest" colspan="2">📊 Totaux</td>
-                                            <td class="px-4 py-3 text-right font-black text-base text-blue-300 whitespace-nowrap">{{ formatMAD(stressTotalValeur) }}</td>
-                                            <td class="px-4 py-3 text-right font-black text-base text-rose-300 whitespace-nowrap">{{ formatMAD(stressTotalCredit) }}</td>
-                                            <td class="px-4 py-3 text-right font-black text-base text-indigo-300 whitespace-nowrap">{{ formatMAD(stressTotalApport) }}</td>
-                                            <td class="px-4 py-3 text-right font-black text-base text-emerald-300 whitespace-nowrap">{{ formatMAD(stressTotalNet) }}</td>
+                                            <td class="px-4 py-3 font-black text-sm uppercase tracking-widest" colspan="2">📊 Totaux retenus</td>
+                                            <td class="px-4 py-3 text-right font-black text-base text-blue-300 whitespace-nowrap">{{ formatMAD(globalValeurTotale) }}</td>
+                                            <td class="px-4 py-3 text-right font-black text-base text-rose-300 whitespace-nowrap">{{ formatMAD(globalDetteTotale) }}</td>
+                                            <td class="px-4 py-3 text-right font-black text-base text-indigo-300 whitespace-nowrap">{{ formatMAD(assetsInclus.reduce((s, a) => s + (Number(a.apport_personnel) || 0), 0)) }}</td>
+                                            <td class="px-4 py-3 text-right font-black text-base text-emerald-300 whitespace-nowrap">{{ formatMAD(globalPatrimoineNet) }}</td>
+                                            <td class="px-4 py-3 text-right font-black text-base text-yellow-300 whitespace-nowrap">{{ formatMAD(Math.round(revenusPassifsNetsMensuel)) }}</td>
+                                            <td class="px-4 py-3 text-right font-black text-base text-yellow-200 whitespace-nowrap">{{ globalValeurProductifs > 0 ? (assetsEconomics.filter(e => (masterAssets.find(a => a.id === e.id) || {}).isProductive && (masterAssets.find(a => a.id === e.id) || {}).is_included_in_net_worth !== false).reduce((s, e) => s + e.rex, 0) / globalValeurProductifs * 100).toFixed(2) : '0.00' }} %</td>
                                             <td class="px-4 py-3"></td>
                                         </tr>
                                         <tr v-if="assetsExclus.length" class="bg-gray-100">
-                                            <td colspan="7" class="px-4 py-2 text-[11px] font-bold text-gray-500">
+                                            <td colspan="9" class="px-4 py-2 text-[11px] font-bold text-gray-500">
                                                 🙈 {{ assetsExclus.length }} actif{{ assetsExclus.length > 1 ? 's' : '' }} hors patrimoine net
                                                 — {{ formatMAD(valeurExclue) }} non comptabilisés :
                                                 <span class="text-gray-600">{{ assetsExclus.map(a => a.name).join(' · ') }}</span>
@@ -2557,157 +2295,37 @@
                                 </table>
                             </div>
 
-                            <button @click="openMasterAssetModal" class="mt-4 w-full py-3 rounded-xl border-2 border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-50 text-amber-700 font-black uppercase text-xs tracking-widest transition-colors">
-                                ➕ Nouvel Actif Non-Productif (Résidence / Terrain)
-                            </button>
+                            <div class="flex flex-col sm:flex-row gap-3 mt-4">
+                                <button @click="openMasterAssetModal" class="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-violet-900/20 transition-colors">
+                                    ＋ Nouvel Actif
+                                </button>
+                            </div>
 
-                            <!-- Synthèse Patrimoine de Jouissance -->
-                            <div class="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-center">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">📘 Valeur Actuelle Totale</p>
-                                    <p class="text-lg font-black text-blue-800">{{ formatMAD(stressTotalValeur) }}</p>
-                                </div>
-                                <div class="bg-rose-50 border-2 border-rose-200 rounded-xl p-4 text-center">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-rose-600 mb-1">🏦 Dette Restante</p>
-                                    <p class="text-lg font-black text-rose-800">{{ formatMAD(stressTotalCredit) }}</p>
-                                </div>
-                                <div class="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 text-center">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">💎 Patrimoine Net (Jouissance)</p>
-                                    <p class="text-lg font-black text-emerald-800">{{ formatMAD(stressTotalNet) }}</p>
+                            <!-- Synthèse chiffrée -->
+                            <div class="mt-4 bg-gradient-to-r from-violet-600 to-purple-700 rounded-2xl p-5 text-white shadow-lg shadow-purple-900/20">
+                                <p class="text-[10px] font-black uppercase tracking-widest opacity-70 mb-4">🏛️ Patrimoine retenu</p>
+                                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                                    <div>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Valeur des actifs</p>
+                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(globalValeurTotale) }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Dette totale</p>
+                                        <p class="text-base lg:text-lg font-black text-rose-300">{{ formatMAD(globalDetteTotale) }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Patrimoine net</p>
+                                        <p class="text-base lg:text-lg font-black text-emerald-300">{{ formatMAD(globalPatrimoineNet) }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Revenus passifs nets</p>
+                                        <p :class="['text-base lg:text-lg font-black', revenusPassifsNetsMensuel >= 0 ? 'text-yellow-300' : 'text-red-300']">{{ formatMAD(Math.round(revenusPassifsNetsMensuel)) }}<span class="text-[10px]">/mois</span></p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- ── v20.10 : Synthèse Globale du Patrimoine (NET WORTH) ── -->
-                    <div class="bg-gradient-to-br from-slate-800 via-gray-900 to-slate-900 rounded-2xl shadow-xl border border-slate-700">
-                        <div class="px-6 py-4 border-b border-slate-700/60 flex items-center justify-between">
-                            <div>
-                                <h3 class="font-black uppercase tracking-widest text-white text-sm">💎 SYNTHÈSE GLOBALE DU PATRIMOINE (NET WORTH)</h3>
-                                <p class="text-[10px] text-slate-400 mt-0.5 uppercase tracking-widest">Tous actifs confondus · Passez la souris sur une carte pour le détail du calcul</p>
-                            </div>
-                        </div>
-                        <div class="p-6">
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                                <!-- KPI 1 : Valeur Actuelle Globale -->
-                                <div class="relative group cursor-default">
-                                    <div class="bg-blue-600/20 border border-blue-500/40 rounded-2xl p-5 text-center transition-all group-hover:border-blue-400/80">
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-blue-300 mb-2">📊 Valeur Actuelle Globale</p>
-                                        <p class="text-2xl font-black text-white tracking-tight">{{ formatMAD(globalValeurTotale) }}</p>
-                                        <p class="text-[10px] text-blue-400 font-bold mt-1.5">Productifs + Jouissance / Foncier</p>
-                                    </div>
-                                    <!-- Tooltip Valeur -->
-                                    <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 w-72 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                        <div class="w-3 h-3 bg-slate-900 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                        <div class="bg-slate-900 border border-slate-600 rounded-xl shadow-2xl p-4 text-left text-[11px]">
-                                            <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail du calcul</p>
-                                            <div class="space-y-1.5">
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-violet-300">📈 Actifs productifs</span>
-                                                    <span class="font-black text-white">{{ formatMAD(globalValeurProductifs) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-amber-300">🏡 Jouissance / Foncier</span>
-                                                    <span class="font-black text-white">{{ formatMAD(globalValeurJouissance) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 border-t border-slate-600 pt-1.5 mt-1.5">
-                                                    <span class="text-blue-300 font-black">= Total</span>
-                                                    <span class="font-black text-blue-200">{{ formatMAD(globalValeurTotale) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- KPI 2 : Dette Restante Globale -->
-                                <div class="relative group cursor-default">
-                                    <div class="bg-rose-600/20 border border-rose-500/40 rounded-2xl p-5 text-center transition-all group-hover:border-rose-400/80">
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-rose-300 mb-2">🏦 Dette Restante Globale</p>
-                                        <p class="text-2xl font-black text-white tracking-tight">{{ formatMAD(globalDetteTotale) }}</p>
-                                        <p class="text-[10px] text-rose-400 font-bold mt-1.5">Crédits productifs + Crédits jouissance</p>
-                                    </div>
-                                    <!-- Tooltip Dette -->
-                                    <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 w-72 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                        <div class="w-3 h-3 bg-slate-900 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                        <div class="bg-slate-900 border border-slate-600 rounded-xl shadow-2xl p-4 text-left text-[11px]">
-                                            <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail du calcul</p>
-                                            <div class="space-y-1.5">
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-violet-300">📈 Dettes productives</span>
-                                                    <span class="font-black text-white">{{ formatMAD(globalDetteProductifs) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-amber-300">🏡 Dettes jouissance</span>
-                                                    <span class="font-black text-white">{{ formatMAD(globalDetteJouissance) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 border-t border-slate-600 pt-1.5 mt-1.5">
-                                                    <span class="text-rose-300 font-black">= Total dettes</span>
-                                                    <span class="font-black text-rose-200">{{ formatMAD(globalDetteTotale) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- KPI 3 : Patrimoine Net Global -->
-                                <div class="relative group cursor-default">
-                                    <div :class="['rounded-2xl p-5 text-center border transition-all', globalPatrimoineNet >= 0 ? 'bg-emerald-600/20 border-emerald-500/40 group-hover:border-emerald-400/80' : 'bg-red-600/20 border-red-500/40 group-hover:border-red-400/80']">
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-300 mb-2">💎 Patrimoine Net Global</p>
-                                        <p :class="['text-2xl font-black tracking-tight', globalPatrimoineNet >= 0 ? 'text-emerald-300' : 'text-red-300']">{{ formatMAD(globalPatrimoineNet) }}</p>
-                                        <p class="text-[10px] text-emerald-400 font-bold mt-1.5">Valeur Globale − Dette Globale</p>
-                                    </div>
-                                    <!-- Tooltip Net Worth -->
-                                    <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 w-80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                        <div class="w-3 h-3 bg-slate-900 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                        <div class="bg-slate-900 border border-slate-600 rounded-xl shadow-2xl p-4 text-left text-[11px]">
-                                            <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail du calcul</p>
-                                            <div class="space-y-1.5">
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-violet-300">📈 Actifs productifs</span>
-                                                    <span class="font-black text-white">{{ formatMAD(globalValeurProductifs) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-amber-300">🏡 Actifs jouissance / foncier</span>
-                                                    <span class="font-black text-white">{{ formatMAD(globalValeurJouissance) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 border-t border-slate-600 pt-1.5 mt-1">
-                                                    <span class="text-rose-300">🏦 Dettes productives</span>
-                                                    <span class="font-black text-rose-300">− {{ formatMAD(globalDetteProductifs) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-rose-300">🏦 Dettes jouissance</span>
-                                                    <span class="font-black text-rose-300">− {{ formatMAD(globalDetteJouissance) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 border-t-2 border-emerald-500/40 pt-1.5 mt-1">
-                                                    <span :class="['font-black', globalPatrimoineNet >= 0 ? 'text-emerald-300' : 'text-red-300']">= PATRIMOINE NET</span>
-                                                    <span :class="['font-black text-base', globalPatrimoineNet >= 0 ? 'text-emerald-200' : 'text-red-200']">{{ formatMAD(globalPatrimoineNet) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-
-                            <!-- Barre de composition -->
-                            <div class="mt-5 pt-4 border-t border-slate-700/60">
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Composition de la Valeur Brute</p>
-                                <div class="flex rounded-lg overflow-hidden h-4 bg-slate-700">
-                                    <div :style="{ width: globalValeurTotale > 0 ? (globalValeurProductifs / globalValeurTotale * 100).toFixed(1) + '%' : '50%' }"
-                                         class="bg-violet-500 transition-all duration-500" :title="'Productifs : ' + (globalValeurTotale > 0 ? (globalValeurProductifs / globalValeurTotale * 100).toFixed(1) : 0) + '%'"></div>
-                                    <div :style="{ width: globalValeurTotale > 0 ? (globalValeurJouissance / globalValeurTotale * 100).toFixed(1) + '%' : '50%' }"
-                                         class="bg-amber-500 transition-all duration-500" :title="'Jouissance : ' + (globalValeurTotale > 0 ? (globalValeurJouissance / globalValeurTotale * 100).toFixed(1) : 0) + '%'"></div>
-                                </div>
-                                <div class="flex gap-4 mt-2">
-                                    <span class="flex items-center gap-1 text-[10px] text-slate-300 font-bold"><span class="w-2.5 h-2.5 rounded-sm bg-violet-500 inline-block"></span>Productifs {{ globalValeurTotale > 0 ? (globalValeurProductifs / globalValeurTotale * 100).toFixed(1) : 0 }}%</span>
-                                    <span class="flex items-center gap-1 text-[10px] text-slate-300 font-bold"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block"></span>Jouissance / Foncier {{ globalValeurTotale > 0 ? (globalValeurJouissance / globalValeurTotale * 100).toFixed(1) : 0 }}%</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ── v20.00 : Module Projections / Sandbox ── -->
                     <div data-cfo-collapse="wealth-sandbox" class="bg-white rounded-2xl shadow-lg border-2 border-fuchsia-200 overflow-hidden">
                         <div class="px-6 py-4 bg-gradient-to-r from-fuchsia-50 via-purple-50 to-indigo-50 border-b border-fuchsia-100 flex items-center justify-between cfo-collapse-header">
                             <div>
@@ -3930,64 +3548,6 @@
                                     <div><p class="text-[8px] opacity-60">Revenus/an</p><p class="text-[11px] font-black text-emerald-300">{{ formatMAD(roiAssets.reduce((s,a)=>s+a.revenue,0)) }}</p></div>
                                     <div><p class="text-[8px] opacity-60">Rendement</p><p class="text-[11px] font-black text-yellow-300">{{ roiAssets.reduce((s,a)=>s+a.value,0)>0?(roiAssets.reduce((s,a)=>s+a.revenue,0)/roiAssets.reduce((s,a)=>s+a.value,0)*100).toFixed(2):'0.00' }}%</p></div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Arbitrage mobile -->
-                    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm mb-6 overflow-hidden">
-                        <div class="px-4 py-3 bg-slate-50 border-b border-gray-100">
-                            <span class="text-xs font-black uppercase tracking-widest text-gray-700">⚖️ Arbitrage : Rembourser ou Investir ?</span>
-                        </div>
-                        <div class="p-4 space-y-3">
-                            <!-- Inputs mobile 2x2 -->
-                            <div class="grid grid-cols-2 gap-2">
-                                <div class="bg-gray-50 rounded-xl p-3 border border-gray-200">
-                                    <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">💰 Montant (DH)</label>
-                                    <input type="number" v-model.number="arbitrageCash" min="0" step="5000"
-                                           class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-blue-500 text-right"/>
-                                </div>
-                                <div class="bg-blue-50 rounded-xl p-3 border border-blue-200">
-                                    <label class="text-[9px] font-black uppercase tracking-widest text-blue-600 block mb-1.5">📅 Durée (ans)</label>
-                                    <input type="number" v-model.number="arbitrageYears" min="1" max="30" step="1"
-                                           class="w-full bg-white border border-blue-200 rounded-lg px-2 py-1.5 text-xs font-black text-blue-700 outline-none focus:border-blue-500 text-right"/>
-                                </div>
-                                <div class="bg-red-50 rounded-xl p-3 border border-red-200">
-                                    <label class="text-[9px] font-black uppercase tracking-widest text-red-600 block mb-1.5">📉 Taux Crédit (%)</label>
-                                    <input type="number" v-model.number="arbitrageDebtRate" min="0" max="30" step="0.1"
-                                           class="w-full bg-white border border-red-200 rounded-lg px-2 py-1.5 text-xs font-black text-red-700 outline-none focus:border-red-500 text-right"/>
-                                </div>
-                                <div class="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
-                                    <label class="text-[9px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">📈 Taux Placement (%)</label>
-                                    <input type="number" v-model.number="arbitrageInvestRate" min="0" max="50" step="0.1"
-                                           class="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1.5 text-xs font-black text-emerald-700 outline-none focus:border-emerald-500 text-right"/>
-                                </div>
-                            </div>
-                            <!-- A vs B mobile -->
-                            <div class="grid grid-cols-2 gap-2">
-                                <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
-                                    <p class="text-[8px] font-black uppercase tracking-widest text-red-600 mb-1">🅰 Rembourser</p>
-                                    <p class="text-sm font-black text-emerald-700">+{{ formatMAD(Math.round(arbitrageCash*(Math.pow(1+arbitrageDebtRate/100,arbitrageYears)-1))) }}</p>
-                                    <p class="text-[8px] text-gray-500 font-bold">Intérêts économisés</p>
-                                </div>
-                                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
-                                    <p class="text-[8px] font-black uppercase tracking-widest text-emerald-700 mb-1">🅱 Investir</p>
-                                    <p class="text-sm font-black text-emerald-700">+{{ formatMAD(Math.round(arbitrageCash*(Math.pow(1+arbitrageInvestRate/100,arbitrageYears)-1))) }}</p>
-                                    <p class="text-[8px] text-gray-500 font-bold">Gains générés</p>
-                                </div>
-                            </div>
-                            <!-- Verdict mobile -->
-                            <div :class="['rounded-xl p-4 text-white text-center',
-                                Math.round(arbitrageCash*(Math.pow(1+arbitrageInvestRate/100,arbitrageYears)-1))-Math.round(arbitrageCash*(Math.pow(1+arbitrageDebtRate/100,arbitrageYears)-1))>0
-                                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600'
-                                    : 'bg-gradient-to-r from-red-500 to-rose-600']">
-                                <p class="text-[8px] uppercase tracking-widest opacity-80 mb-1">⚖️ Verdict</p>
-                                <p class="text-sm font-black">
-                                    {{ Math.round(arbitrageCash*(Math.pow(1+arbitrageInvestRate/100,arbitrageYears)-1))-Math.round(arbitrageCash*(Math.pow(1+arbitrageDebtRate/100,arbitrageYears)-1))>0 ? '🏆 INVESTIR' : '🏆 REMBOURSER' }}
-                                </p>
-                                <p class="text-[10px] font-bold opacity-90 mt-1">
-                                    Écart : {{ formatMAD(Math.abs(Math.round(arbitrageCash*(Math.pow(1+arbitrageInvestRate/100,arbitrageYears)-1))-Math.round(arbitrageCash*(Math.pow(1+arbitrageDebtRate/100,arbitrageYears)-1)))) }}
-                                </p>
                             </div>
                         </div>
                     </div>
@@ -6365,46 +5925,6 @@
                             </div>
                         </div>
 
-                        <!-- ── v33.80 : SIMULATEUR DE REVENTE (dans la modale) ── -->
-                        <div v-show="masterAssetTab === 'revente' && !masterAssetEstTerrain" class="space-y-4">
-                            <template v-for="sim in [masterAssetExit]" :key="'exm'">
-                            <div>
-                                <div class="flex items-center justify-between mb-1.5">
-                                    <label class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700">Année de revente</label>
-                                    <span class="text-sm font-black text-fuchsia-800 tabular-nums">Année {{ sim.annee }} / {{ masterAssetExitMax }}</span>
-                                </div>
-                                <input type="range" min="1" :max="masterAssetExitMax" step="1" v-model.number="masterAssetExitAnnee" class="w-full accent-fuchsia-600 cursor-pointer"/>
-                                <div class="flex justify-between text-[9px] font-bold text-gray-400 mt-0.5"><span>1 an</span><span>{{ masterAssetExitMax }} ans</span></div>
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-teal-600">A · Valeur de revente</p>
-                                    <p class="text-lg font-black text-teal-800 tabular-nums">{{ formatMAD(sim.valeurRevente) }}</p>
-                                    <p class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
-                                </div>
-                                <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
-                                    <p class="text-lg font-black text-rose-800 tabular-nums">{{ formatMAD(sim.crd) }}</p>
-                                    <p v-if="sim.detailIbraa" class="text-[9px] font-bold text-rose-500">capital {{ formatMAD(sim.detailIbraa.capitalRestant) }} + marge non échue {{ formatMAD(sim.detailIbraa.margeNonEchue) }} − Ibra'a {{ formatMAD(sim.detailIbraa.ibraa) }}</p>
-                                    <p v-else-if="!sim.crd" class="text-[9px] font-bold text-rose-400">Aucun crédit en cours</p>
-                                </div>
-                                <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-indigo-600">C · Cash sorti (effort)</p>
-                                    <p class="text-lg font-black text-indigo-800 tabular-nums">{{ formatMAD(sim.cashSorti) }}</p>
-                                    <p v-if="sim.moisDejaPayes" class="text-[9px] font-bold text-indigo-400">dont {{ sim.moisDejaPayes }} échéances déjà versées ({{ formatMAD(sim.dejaVerse) }})</p>
-                                </div>
-                            </div>
-                            <div :class="['p-4 rounded-2xl text-white', sim.gagnant ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : 'bg-gradient-to-r from-rose-600 to-red-700']">
-                                <p class="text-[10px] font-black uppercase tracking-widest opacity-75">D · Net dans la poche</p>
-                                <p class="text-3xl font-black tabular-nums leading-tight">{{ formatMAD(sim.netPoche) }}</p>
-                                <p class="text-[11px] font-bold opacity-90 mt-1">
-                                    {{ sim.gagnant ? '✅ Supérieur au cash sorti' : '⚠️ Inférieur au cash sorti' }}
-                                    de <span class="font-black">{{ formatMAD(Math.abs(sim.gain)) }}</span>
-                                </p>
-                            </div>
-                            </template>
-                        </div>
-
                         <!-- ── v33.60 : SCÉNARIOS DE VENTE — entièrement calculés ── -->
                         <div v-show="masterAssetTab === 'scenarios' && masterAssetEstTerrain" class="space-y-3">
                             <div class="flex flex-wrap items-end gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
@@ -6755,8 +6275,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.80 Filtre-Patrimoine";
+                    const CURRENT_VERSION = "33.90 Master-Table";
                     const CHANGELOG = [
+        { version: "33.90 Master-Table", date: "2026-08-23", changes: [
+            "SIMULATEUR D'ARBITRAGE SUPPRIMÉ : le composant « Rembourser ou Investir ? » disparaît de la page desktop et de la vue mobile, refs et computed compris. Il n'existe plus dans l'application.",
+            "TABLE UNIQUE : les deux listes — ROI Tracker (productifs) et Stress Test Foncier (jouissance) — fusionnent en une seule « 🏛️ Synthèse du Patrimoine ». Chaque ligne porte une puce de nature (🟢 Productif / 🟠 Jouissance-Foncier) sous le nom, avec le type d'actif en regard. Colonnes : valeur actuelle, crédit restant, apport, net, cash-flow mensuel et rendement net (les deux dernières vides pour un actif non productif).",
+            "La ligne TOTAUX somme l'ensemble des actifs en respectant le filtre is_included_in_net_worth, et le bandeau des exclus reste affiché juste en dessous.",
+            "EXIT SIMULATOR INLINE RESTAURÉ : l'icône 🔮 déplie de nouveau le panneau violet en accordéon sous la ligne, sans ouvrir de fenêtre par-dessus les chiffres. L'onglet « Revente » de la modale introduit en v33.80 est retiré.",
+            "L'accordéon consomme bien le moteur fiscal foncier de la v33.70 : sur un terrain il affiche Semsar, TNB projetée (années de retard + horizon) et TPI avec la règle retenue, au lieu du forfait générique."
+        ] },
         { version: "33.80 Filtre-Patrimoine", date: "2026-08-23", changes: [
             "TOGGLE D'INCLUSION : nouveau champ is_included_in_net_worth (défaut true) avec un œil 👁️/🙈 sur chaque ligne d'actif. Décoché, l'actif se grise, son nom se barre, et sa valeur comme son crédit sortent de TOUS les agrégats — patrimoine net global, totaux du tableau, projection pluriannuelle et revenus passifs.",
             "Le cash-flow d'un actif exclu sort lui aussi des agrégats : le compter tout en retirant sa valeur du bilan donnerait une projection incohérente, où l'actif alimenterait la trésorerie sans exister au patrimoine.",
@@ -8269,10 +7796,6 @@
                     watch([donneesAnnuelles, anneeAffichage], _snapAnneeAffichage, { deep: false, immediate: false });
 
                     // ── v16.2 : Arbitrage Simulator ──────────────────────
-                    const arbitrageCash = ref(100000);
-                    const arbitrageDebtRate = ref(4.5);
-                    const arbitrageInvestRate = ref(7.0);
-                    const arbitrageYears = ref(5);
 
                     // ═══════════════════════════════════════════════════════════════════
                     // v33.00 — SCHÉMA MASTER ASSET v19 + MOTEUR FINANCIER
@@ -8959,7 +8482,7 @@
                     const masterAssetDetention = computed(() => anneesDetention(masterAssetForm.value));
                     const masterAssetOngletsDispos = computed(() => masterAssetEstTerrain.value
                         ? [['acquisition','🏞️ Origine & Valorisation'],['scenarios','💰 Scénarios de Vente'],['fiscalite','🧾 Fiscalité & Frais de Sortie']]
-                        : [['acquisition','🏗️ Acquisition'],['financement','🏦 Financement'],['exploitation','🔑 Exploitation'],['fiscalite','🧾 Fiscalité'],['revente','🔮 Revente']]);
+                        : [['acquisition','🏗️ Acquisition'],['financement','🏦 Financement'],['exploitation','🔑 Exploitation'],['fiscalite','🧾 Fiscalité']]);
                     // v33.80 : simulateur de revente hébergé par la modale
                     const masterAssetExitAnnee = ref(5);
                     const masterAssetExit = computed(() => exitSim(masterAssetForm.value, masterAssetExitAnnee.value));
@@ -9037,7 +8560,7 @@
                         () => {
                             const dispos = (estTerrainNu(masterAssetForm.value)
                                 ? ['acquisition', 'scenarios', 'fiscalite']
-                                : ['acquisition', 'financement', 'exploitation', 'fiscalite', 'revente']);
+                                : ['acquisition', 'financement', 'exploitation', 'fiscalite']);
                             if (!dispos.includes(masterAssetTab.value)) masterAssetTab.value = 'acquisition';
                         }
                     );
@@ -13140,79 +12663,6 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     // ═══════════════════════════════════════════════════════════════════
-                    // v33.10 — ARBITRAGE : REMBOURSER vs PLACER (Mourabaha + Ibra'a)
-                    // ═══════════════════════════════════════════════════════════════════
-                    const arbitrageMode = ref('classique');       // 'classique' | 'mourabaha'
-                    const arbitrageAssetId = ref('');             // crédit ciblé (optionnel)
-                    const arbitrageIbraa = ref(70);               // % de remise sur marge non échue
-                    const arbitrageMoisEcoules = ref(60);
-                    const arbitrageTauxMarginal = ref(37);        // pour l'économie d'impôt perdue
-                    const arbitrageDeductible = ref(false);       // les intérêts sont-ils déductibles ?
-                    const arbitrageInflationOn = ref(true);
-
-                    const arbitrageResult = computed(() => {
-                        const cash = N(arbitrageCash.value);
-                        const n = Math.max(1, N(arbitrageYears.value));
-                        const rInv = N(arbitrageInvestRate.value) / 100;
-                        const rDette = N(arbitrageDebtRate.value) / 100;
-                        const infl = arbitrageInflationOn.value ? N((parametres.value || {}).hypotheseInflation) / 100 : 0;
-                        const deflateur = Math.pow(1 + infl, n);
-
-                        // ── Option A : PLACER ──
-                        const gainPlacement = cash * (Math.pow(1 + rInv, n) - 1);
-
-                        // ── Option B : REMBOURSER ──
-                        let capitalLibere = cash, margeEvitee = 0, margePayee = 0, detailIbraa = null;
-                        if (arbitrageMode.value === 'mourabaha') {
-                            const asset = (masterAssets.value || []).find(a => a.id === arbitrageAssetId.value);
-                            const ref_ = asset
-                                ? Object.assign({}, asset, { type_credit: 'mourabaha', taux_ibraa: N(arbitrageIbraa.value) })
-                                : { montant_credit: 300000, duree_mois: 240, taux_credit: N(arbitrageDebtRate.value),
-                                    type_credit: 'mourabaha', mode_marge: 'lineaire', taux_ibraa: N(arbitrageIbraa.value) };
-                            const sa = soldeAnticipe(ref_, N(arbitrageMoisEcoules.value));
-                            detailIbraa = sa;
-                            // marge non échue rapportée à 1 DH de capital restant
-                            const m = sa.capitalRestant > 0 ? sa.margeNonEchue / sa.capitalRestant : 0;
-                            const coutParDH = 1 + m * (1 - N(arbitrageIbraa.value) / 100);
-                            capitalLibere = coutParDH > 0 ? Math.min(sa.capitalRestant, cash / coutParDH) : 0;
-                            margeEvitee = capitalLibere * m;                                   // marge totale attachée
-                            margePayee = margeEvitee * (1 - N(arbitrageIbraa.value) / 100);    // part encore due
-                        }
-                        const gainRemboursement = arbitrageMode.value === 'mourabaha'
-                            ? (margeEvitee - margePayee)                       // gain sec = marge remise (Ibra'a)
-                            : cash * (Math.pow(1 + rDette, n) - 1);            // intérêts composés évités
-
-                        // ── Économie d'impôt perdue : rembourser supprime la déduction ──
-                        const impotPerdu = arbitrageDeductible.value
-                            ? gainRemboursement * (N(arbitrageTauxMarginal.value) / 100)
-                            : 0;
-                        const gainRemboursementNet = gainRemboursement - impotPerdu;
-
-                        const ecart = gainPlacement - gainRemboursementNet;
-                        const r0 = (v) => Math.round(v);
-                        return {
-                            mode: arbitrageMode.value,
-                            cash, annees: n,
-                            gainPlacement: r0(gainPlacement),
-                            gainRemboursement: r0(gainRemboursement),
-                            impotPerdu: r0(impotPerdu),
-                            gainRemboursementNet: r0(gainRemboursementNet),
-                            capitalLibere: r0(capitalLibere),
-                            margeEvitee: r0(margeEvitee), margePayee: r0(margePayee),
-                            detailIbraa,
-                            ecart: r0(ecart),
-                            gagnant: ecart > 0 ? 'placer' : (ecart < 0 ? 'rembourser' : 'neutre'),
-                            // ── DH constants (actualisés de l'inflation) ──
-                            deflateur: Math.round(deflateur * 1000) / 1000,
-                            constants: {
-                                gainPlacement: r0(gainPlacement / deflateur),
-                                gainRemboursementNet: r0(gainRemboursementNet / deflateur),
-                                ecart: r0(ecart / deflateur),
-                            },
-                        };
-                    });
-
-                    // ═══════════════════════════════════════════════════════════════════
                     // v33.10 — PROJET STUDIO : MODULE EXPLOITATION
                     // ═══════════════════════════════════════════════════════════════════
                     const _explDefaults = () => ({
@@ -14843,12 +14293,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tnbCalculee, tpiCalculee, anneesDetention, prixAcquisitionRevalorise,
                         creditParams, creditRestantCalcule, moisEcoulesCredit, moisPayesEffectifs,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
-                        arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
                         migrateGoalV19, migrateGoalsV19, wealthGoalsCalc, addWealthGoal, syncGoalLegacy,
                         depensesHorsCreditsMensuel, mensualitesCreditsMensuel, salaireMensuel, independanceFinanciere,
-                        arbitrageMode, arbitrageAssetId, arbitrageIbraa, arbitrageMoisEcoules,
-                        arbitrageTauxMarginal, arbitrageDeductible, arbitrageInflationOn, arbitrageResult,
                         studioExpl, studioExplTab, studioExploitationMois, studioExploitationTotaux,
                         studioScenarios, studioComparateur, studioSeuilEquilibre,
                         // v33.00 : moteur de simulation patrimoniale
