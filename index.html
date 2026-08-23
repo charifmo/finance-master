@@ -1924,7 +1924,7 @@
                 <!-- ONGLET PARAMÈTRES v15                                       -->
                 <!-- ═══════════════════════════════════════════════════════════ -->
                 <!-- ━━ WEALTH : PATRIMOINE & OBJECTIFS (v16.1) ━━ -->
-                <div v-if="activeTab === 'wealth'" class="max-w-5xl mx-auto space-y-6">
+                <div v-if="activeTab === 'wealth'" class="max-w-7xl mx-auto space-y-6">
                     <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">💎 Patrimoine & Objectifs</h2>
 
                     <!-- ── Section 1 : Smart Goals CRUD (v17.16) ── -->
@@ -2162,7 +2162,6 @@
                                     <thead class="bg-slate-800 text-white">
                                         <tr>
                                             <th class="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest">Actif</th>
-                                            <th class="px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest">Quote-part</th>
                                             <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Valeur actuelle</th>
                                             <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Crédit restant</th>
                                             <th class="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest">Apport</th>
@@ -2187,11 +2186,9 @@
                                                         {{ asset.isProductive ? '🟢 Productif' : '🟠 Jouissance / Foncier' }}
                                                     </span>
                                                     <span class="text-gray-400">{{ asset.type }}</span>
+                                                    <span :class="['px-1.5 py-0.5 rounded-full border', asset.quotePart === '100%' ? 'bg-gray-50 text-gray-500 border-gray-200' : 'bg-amber-100 text-amber-700 border-amber-300']">{{ asset.quotePart }}</span>
                                                     <span v-if="asset.is_included_in_net_worth === false" class="bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded normal-case">hors patrimoine net</span>
                                                 </p>
-                                            </td>
-                                            <td class="px-4 py-3 text-center whitespace-nowrap">
-                                                <span :class="['text-xs font-black px-2 py-1 rounded-lg border', asset.quotePart === '100%' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200']">{{ asset.quotePart }}</span>
                                             </td>
                                             <td class="px-3 py-3 text-right text-blue-700 font-black bg-blue-50/40 whitespace-nowrap">{{ formatMAD(asset.valeur_actuelle || asset.value) }}</td>
                                             <td class="px-3 py-3 text-right text-rose-700 font-black bg-rose-50/40 whitespace-nowrap">{{ formatMAD(asset.montant_credit || 0) }}</td>
@@ -2215,7 +2212,7 @@
                                         </tr>
                                         <!-- v33.90 : Exit Simulator en accordéon sous la ligne -->
                                         <tr v-if="exitOpen[asset.id]" class="bg-fuchsia-50/30">
-                                            <td colspan="9" class="px-4 pb-4 pt-0">
+                                            <td colspan="8" class="px-4 pb-4 pt-0">
                                             <div class="rounded-2xl border-2 border-fuchsia-200 overflow-hidden">
                                                 <template v-for="sim in [exitSim(asset, exitYears[asset.id] || 1)]" :key="'ex'+asset.id">
                                                 <div class="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white flex items-center justify-between flex-wrap gap-2">
@@ -2275,7 +2272,7 @@
                                     </tbody>
                                     <tfoot>
                                         <tr class="bg-gradient-to-r from-slate-800 to-violet-900 text-white">
-                                            <td class="px-4 py-3 font-black text-sm uppercase tracking-widest" colspan="2">📊 Totaux retenus</td>
+                                            <td class="px-4 py-3 font-black text-sm uppercase tracking-widest">📊 Totaux retenus</td>
                                             <td class="px-4 py-3 text-right font-black text-base text-blue-300 whitespace-nowrap">{{ formatMAD(globalValeurTotale) }}</td>
                                             <td class="px-4 py-3 text-right font-black text-base text-rose-300 whitespace-nowrap">{{ formatMAD(globalDetteTotale) }}</td>
                                             <td class="px-4 py-3 text-right font-black text-base text-indigo-300 whitespace-nowrap">{{ formatMAD(assetsInclus.reduce((s, a) => s + (Number(a.apport_personnel) || 0), 0)) }}</td>
@@ -2285,7 +2282,7 @@
                                             <td class="px-3 py-3 sticky right-0 bg-violet-900 border-l border-violet-700"></td>
                                         </tr>
                                         <tr v-if="assetsExclus.length" class="bg-gray-100">
-                                            <td colspan="9" class="px-4 py-2 text-[11px] font-bold text-gray-500">
+                                            <td colspan="8" class="px-4 py-2 text-[11px] font-bold text-gray-500">
                                                 🙈 {{ assetsExclus.length }} actif{{ assetsExclus.length > 1 ? 's' : '' }} hors patrimoine net
                                                 — {{ formatMAD(valeurExclue) }} non comptabilisés :
                                                 <span class="text-gray-600">{{ assetsExclus.map(a => a.name).join(' · ') }}</span>
@@ -6275,8 +6272,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.91 Actions-Sticky";
+                    const CURRENT_VERSION = "33.92 Table-Largeur";
                     const CHANGELOG = [
+        { version: "33.92 Table-Largeur", date: "2026-08-23", changes: [
+            "CAUSE RACINE de l'affichage cassé : l'onglet Patrimoine était plafonné à max-w-5xl (1024 px). Avec neuf colonnes la table débordait de son conteneur, et la colonne Actions épinglée en v33.91 venait se poser PAR-DESSUS la colonne Cash-flow, tronquée en « 5 096 D ». L'épinglage réglait l'accès aux boutons mais rendait les chiffres illisibles.",
+            "L'onglet Patrimoine passe à max-w-7xl (1280 px) : la table dispose enfin de la largeur nécessaire.",
+            "La colonne Quote-part disparaît en tant que colonne et devient un badge sur la ligne du nom, à côté de la nature de l'actif — huit colonnes au lieu de neuf, sans perte d'information.",
+            "Résultat mesuré en 1600 px : table 1223 px dans un conteneur de 1223 px, débordement nul, aucun recouvrement — le cash-flow s'affiche en entier (5 096 DH) et le rendement se termine exactement là où commence la colonne Actions. En 1366 px, il reste 36 px de débordement mais la colonne Actions demeure épinglée et visible."
+        ] },
         { version: "33.91 Actions-Sticky", date: "2026-08-23", changes: [
             "DIAGNOSTIC : la colonne ACTIONS n'avait pas été oubliée — en-tête et boutons 🔮 ✏️ 🗑️ étaient bien dans le DOM. Mais la table fusionnée mesurait 1 083 px dans un conteneur de 974 px : elle débordait de 111 px et poussait la colonne hors écran, atteignable uniquement par un défilement horizontal que rien ne signalait.",
             "CORRECTIF : la colonne Actions est désormais épinglée à droite (position sticky) et reste visible quel que soit le défilement, avec un liseré et une ombre portée qui la détachent du reste. Le pied de tableau est épinglé de la même façon.",
