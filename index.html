@@ -2265,7 +2265,7 @@
                                                 <p class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
                                             </div>
                                             <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
-                                                <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · Reste à la banque</p>
+                                                <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
                                                 <p class="text-lg font-black text-rose-800 tabular-nums">{{ formatMAD(sim.crd) }}</p>
                                                 <p v-if="sim.detailIbraa" class="text-[9px] font-bold text-rose-500">Mourabaha : capital {{ formatMAD(sim.detailIbraa.capitalRestant) }} + marge non échue {{ formatMAD(sim.detailIbraa.margeNonEchue) }} − Ibra'a {{ formatMAD(sim.detailIbraa.ibraa) }}</p>
                                                 <p v-else-if="sim.crd === 0" class="text-[9px] font-bold text-rose-400">Aucun crédit en cours</p>
@@ -2274,7 +2274,8 @@
                                             <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
                                                 <p class="text-[9px] font-black uppercase tracking-widest text-indigo-600">C · Cash sorti (effort)</p>
                                                 <p class="text-lg font-black text-indigo-800 tabular-nums">{{ formatMAD(sim.cashSorti) }}</p>
-                                                <p class="text-[9px] font-bold text-indigo-500">Apport {{ formatMAD(asset.apport_personnel) }} + {{ sim.moisEcheances }} échéances<span v-if="sim.fraisInit"> + frais &amp; travaux {{ formatMAD(sim.fraisInit) }}</span></p>
+                                                <p class="text-[9px] font-bold text-indigo-500">Apport {{ formatMAD(asset.apport_personnel) }}<span v-if="sim.fraisInit"> + frais &amp; travaux {{ formatMAD(sim.fraisInit) }}</span><span v-if="sim.moisEcheances"> + {{ sim.moisEcheances }} échéances de {{ formatMAD(sim.echeanceTotale) }}</span></p>
+                                <p v-if="sim.moisDejaPayes" class="text-[9px] font-bold text-indigo-400">dont {{ sim.moisDejaPayes }} déjà versées ({{ formatMAD(sim.dejaVerse) }}) et {{ sim.moisFuturs }} à venir</p>
                                             </div>
                                         </div>
                                 
@@ -2610,7 +2611,7 @@
                                                                 <p class="text-[9px] font-bold text-teal-500">+{{ formatMAD(sim.plusValueLatente) }} de revalorisation · −{{ formatMAD(sim.fraisRevente) }} de frais</p>
                                                             </div>
                                                             <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
-                                                                <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · Reste à la banque</p>
+                                                                <p class="text-[9px] font-black uppercase tracking-widest text-rose-600">B · {{ sim.estMourabaha ? 'Solde de rachat' : 'Capital restant dû' }}</p>
                                                                 <p class="text-lg font-black text-rose-800 tabular-nums">{{ formatMAD(sim.crd) }}</p>
                                                                 <p v-if="sim.detailIbraa" class="text-[9px] font-bold text-rose-500">Mourabaha : capital {{ formatMAD(sim.detailIbraa.capitalRestant) }} + marge non échue {{ formatMAD(sim.detailIbraa.margeNonEchue) }} − Ibra'a {{ formatMAD(sim.detailIbraa.ibraa) }}</p>
                                                                 <p v-else-if="sim.crd === 0" class="text-[9px] font-bold text-rose-400">Aucun crédit en cours</p>
@@ -2619,7 +2620,8 @@
                                                             <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
                                                                 <p class="text-[9px] font-black uppercase tracking-widest text-indigo-600">C · Cash sorti (effort)</p>
                                                                 <p class="text-lg font-black text-indigo-800 tabular-nums">{{ formatMAD(sim.cashSorti) }}</p>
-                                                                <p class="text-[9px] font-bold text-indigo-500">Apport {{ formatMAD(asset.apport_personnel) }} + {{ sim.moisEcheances }} échéances<span v-if="sim.fraisInit"> + frais &amp; travaux {{ formatMAD(sim.fraisInit) }}</span></p>
+                                                                <p class="text-[9px] font-bold text-indigo-500">Apport {{ formatMAD(asset.apport_personnel) }}<span v-if="sim.fraisInit"> + frais &amp; travaux {{ formatMAD(sim.fraisInit) }}</span><span v-if="sim.moisEcheances"> + {{ sim.moisEcheances }} échéances de {{ formatMAD(sim.echeanceTotale) }}</span></p>
+                                <p v-if="sim.moisDejaPayes" class="text-[9px] font-bold text-indigo-400">dont {{ sim.moisDejaPayes }} déjà versées ({{ formatMAD(sim.dejaVerse) }}) et {{ sim.moisFuturs }} à venir</p>
                                                             </div>
                                                         </div>
                                                 
@@ -6613,8 +6615,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.40 Dette-Vieillissante";
+                    const CURRENT_VERSION = "33.41 Exit-Effort-Cumule";
                     const CHANGELOG = [
+        { version: "33.41 Exit-Effort-Cumule", date: "2026-08-23", changes: [
+            "BUG CORRIGÉ — « C · Cash sorti » ne comptait que les échéances À VENIR sur l'horizon choisi et ignorait tout ce qui avait déjà été versé depuis le déblocage. Sur l'Appartement Almaz (66 mois payés à 8 332 DH), 549 912 DH d'effort disparaissaient : le simulateur annonçait +80 563 DH de gain à l'année 1 là où l'opération est en réalité à −469 349 DH.",
+            "L'effort cumulé se compte désormais depuis l'origine : apport + frais et travaux + TOUTES les échéances versées, passées comme futures, plafonnées au terme du crédit. La décomposition est affichée (« 126 échéances de 8 332 DH, dont 66 déjà versées et 60 à venir »).",
+            "Libellé B clarifié : « Capital restant dû » pour un crédit classique, « Solde de rachat » pour une Mourabaha — les deux ne se comparent pas, le solde de rachat incluant la marge non échue nette d'Ibra'a. C'est ce qui faisait apparaître un CRD à l'année 1 (718 193) supérieur au capital restant d'aujourd'hui (717 424).",
+            "Borne du curseur calée sur les mois RESTANTS et non sur la durée totale : 66 mois payés sur 180 donnent un horizon de 10 ans, plus 15. Les années où le crédit était déjà soldé et le CRD à 0 ne sont plus proposées à tort."
+        ] },
         { version: "33.40 Dette-Vieillissante", date: "2026-08-23", changes: [
             "NOUVEAU CHAMP date_debut_credit (input type=month, « Date d'initiation du crédit ») dans l'onglet Financement. Renseignée, elle rend la dette autonome dans le temps : mois_deja_payes n'est plus une valeur figée mais le résultat de (anneeActuelle − anneeDebut) × 12 + (moisActuel − moisDebut).",
             "L'horloge de référence est celle de l'application (soldesInitiaux.moisActuel / anneeActuelle), pas Date.now() — l'amortissement vieillit au rythme du cycle budgétaire, en cohérence avec le reste du moteur.",
@@ -8462,7 +8470,10 @@
                     const exitOpen = ref({});
                     const exitYears = ref({});
                     const exitMaxAnnees = (a) => {
-                        const n = Math.round(N((a || {}).duree_mois) / 12);
+                        // v33.41 : on borne sur ce qu'il RESTE à courir, pas sur la durée
+                        // totale — 66 mois déjà payés sur 180 laissent 9,5 ans, pas 15.
+                        const reste = Math.max(0, Math.round(N((a || {}).duree_mois)) - moisPayesEffectifs(a || {}));
+                        const n = Math.ceil(reste / 12);
                         return n > 0 ? n : 20;
                     };
                     const toggleExit = (id, asset) => {
@@ -8483,28 +8494,35 @@
                         const base = N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value);
                         const valeurRevente = base * Math.pow(1 + N(a.taux_revalorisation) / 100, An);
 
-                        // B — capital restant dû à la fin de l'année N
+                        // B — ce qu'il reste à solder à la fin de l'année N
+                        //   classique → capital restant dû
+                        //   Mourabaha → solde de rachat : capital + marge non échue − Ibra'a
+                        const moisDejaPayes = moisPayesEffectifs(a);
                         let crd = 0, detailIbraa = null;
+                        const estMourabaha = String(a.type_credit) === 'mourabaha';
                         if (N(a.montant_credit) > 0 && N(a.duree_mois) > 0) {
-                            if (String(a.type_credit) === 'mourabaha') {
-                                // Mourabaha : ce qu'il faut réellement verser pour solder,
-                                // marge non échue comprise, diminuée de l'Ibra'a.
-                                const sa = soldeAnticipe(a, Math.round(N(a.mois_deja_payes)) + An * 12);
+                            if (estMourabaha) {
+                                const sa = soldeAnticipe(a, moisDejaPayes + An * 12);
                                 crd = sa.solde; detailIbraa = sa;
                             } else {
                                 crd = amortissementAnnuel(a, An - 1).capitalRestant;
                             }
                         }
 
-                        // C — cash sorti (effort cumulé)
-                        const mens = N(a.mensualite) > 0 ? N(a.mensualite)
+                        // C — cash sorti : effort cumulé DEPUIS L'ORIGINE
+                        //   apport + toutes les échéances versées (déjà payées + à venir
+                        //   jusqu'à la revente, plafonnées au terme) + frais et travaux.
+                        //   v33.41 : les mensualités déjà versées étaient omises.
+                        const p = creditParams(a);
+                        const mens = p.mens > 0 ? p.mens
                                    : mensualiteClassique(a.montant_credit, a.taux_credit, a.duree_mois);
-                        // les échéances s'arrêtent à la fin du crédit
-                        const moisEcheances = N(a.montant_credit) > 0
-                            ? Math.min(An * 12, Math.max(0, Math.round(N(a.duree_mois) - N(a.mois_deja_payes))))
-                            : 0;
+                        const echeanceTotale = mens + N(a.assurance_mensuelle);
+                        const aUnCredit = N(a.montant_credit) > 0 || N(a.capital_initial) > 0;
+                        const moisRestants = aUnCredit ? Math.max(0, Math.round(N(a.duree_mois)) - moisDejaPayes) : 0;
+                        const moisFuturs = Math.min(An * 12, moisRestants);
+                        const moisEcheances = aUnCredit ? moisDejaPayes + moisFuturs : 0;
                         const fraisInit = coutTotalRevient(a) - N(a.prix_acquisition);
-                        const cashSorti = N(a.apport_personnel) + (mens + N(a.assurance_mensuelle)) * moisEcheances + fraisInit;
+                        const cashSorti = N(a.apport_personnel) + echeanceTotale * moisEcheances + fraisInit;
 
                         // D — net vendeur
                         const fraisRevente = valeurRevente * (N(a.frais_revente_pct) / 100);
@@ -8518,7 +8536,10 @@
                             fraisRevente: r0(fraisRevente),
                             crd: r0(crd), detailIbraa,
                             cashSorti: r0(cashSorti), mensualite: r0(mens),
-                            moisEcheances, fraisInit: r0(fraisInit),
+                            moisEcheances, moisDejaPayes, moisFuturs, estMourabaha,
+                            echeanceTotale: r0(echeanceTotale),
+                            dejaVerse: r0(echeanceTotale * moisDejaPayes),
+                            fraisInit: r0(fraisInit),
                             netPoche: r0(netPoche),
                             gain: r0(netPoche - cashSorti),
                             gagnant: netPoche > cashSorti,
