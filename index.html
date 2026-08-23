@@ -6275,8 +6275,29 @@
                                 <input v-model.number="masterAssetForm.duree_mois" type="number" min="0" max="360" step="12" class="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
                             </div>
                             <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5">Mois déjà payés</label>
-                                <input v-model.number="masterAssetForm.mois_deja_payes" type="number" min="0" max="360" step="1" class="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5">📆 Date d'initiation du crédit</label>
+                                <input v-model="masterAssetForm.date_debut_credit" type="month"
+                                       class="w-full bg-slate-50 border-2 border-slate-300 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
+                                <p class="text-[9px] font-bold mt-0.5" :class="masterAssetDatePilotee ? 'text-emerald-600' : 'text-gray-400'">
+                                    {{ masterAssetDatePilotee
+                                        ? '✅ La dette vieillit toute seule au fil des cycles'
+                                        : 'Vide : les mois payés restent saisis à la main' }}
+                                </p>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5 flex items-center justify-between">
+                                    <span>Mois déjà payés</span>
+                                    <span v-if="masterAssetDatePilotee" class="text-[8px] bg-slate-700 text-white px-1.5 py-0.5 rounded normal-case tracking-normal">calculé</span>
+                                </label>
+                                <input v-model.number="masterAssetForm.mois_deja_payes" type="number" min="0" max="360" step="1"
+                                       :readonly="masterAssetDatePilotee"
+                                       :class="masterAssetDatePilotee
+                                           ? 'w-full bg-gray-100 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-600 outline-none cursor-not-allowed text-right'
+                                           : 'w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right'"/>
+                                <p v-if="masterAssetDatePilotee" class="text-[9px] text-slate-400 font-bold mt-0.5">
+                                    Au cycle {{ nomDuMois(soldesInitiaux.moisActuel) }} {{ soldesInitiaux.anneeActuelle }}
+                                    · reste {{ Math.max(0, (masterAssetForm.duree_mois || 0) - masterAssetMoisAuto) }} mois
+                                </p>
                             </div>
                             <div>
                                 <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">Mensualité (0 = auto)</label>
@@ -6592,8 +6613,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.30 Credit-Dynamique";
+                    const CURRENT_VERSION = "33.40 Dette-Vieillissante";
                     const CHANGELOG = [
+        { version: "33.40 Dette-Vieillissante", date: "2026-08-23", changes: [
+            "NOUVEAU CHAMP date_debut_credit (input type=month, « Date d'initiation du crédit ») dans l'onglet Financement. Renseignée, elle rend la dette autonome dans le temps : mois_deja_payes n'est plus une valeur figée mais le résultat de (anneeActuelle − anneeDebut) × 12 + (moisActuel − moisDebut).",
+            "L'horloge de référence est celle de l'application (soldesInitiaux.moisActuel / anneeActuelle), pas Date.now() — l'amortissement vieillit au rythme du cycle budgétaire, en cohérence avec le reste du moteur.",
+            "Bornage : un crédit dont la date de déblocage est future donne 0 mois écoulé (au lieu d'un nombre négatif), et un crédit dépassé est plafonné à sa durée totale.",
+            "UI : dès que la date est remplie, « Mois déjà payés » passe en lecture seule avec un badge « calculé », et affiche le cycle de référence et le nombre de mois restants. Date vide = saisie manuelle conservée (repli). Tout changement de date recalcule immédiatement le crédit restant.",
+            "Vérifié sur Almaz (1 000 000 / 7 548 / 240 mois, débloqué en août 2021) : au cycle 08/2026 → 60 mois, CRD 857 998,38 ; au cycle 09/2026 → 61 mois, CRD 855 209,55 ; au cycle 08/2027 → 72 mois, CRD 823 492,38. La baisse annuelle de 34 506 DH correspond exactement au capital amorti calculé par amortissementAnnuel. Résultat identique que la valeur vienne de la date ou d'une saisie manuelle de 60 mois."
+        ] },
         { version: "33.30 Credit-Dynamique", date: "2026-08-23", changes: [
             "NOUVEAU CHAMP capital_initial : la base absolue de l'échéancier. Dès qu'il est renseigné, le champ « Crédit restant » passe en lecture seule (badge « calculé », fond gris) et se remplit tout seul — plus aucune saisie manuelle du CRD mois après mois.",
             "creditParams(actif) déduit tout ce qui manque : marge Mourabaha « auto » = mensualité × durée − capital initial (le calcul plantait sur un crédit en cours car le moteur ne connaissait que le solde) ; mensualité déduite du taux ou de (capital + marge) / durée ; ET taux implicite déduit de la mensualité par bissection — le cas courant d'un prêt classique dont on ne connaît que capital, échéance et durée.",
@@ -8083,6 +8111,7 @@
                         apport_personnel: 0, capital_initial: 0, montant_credit: 0, type_credit: 'classique',
                         taux_credit: 0, duree_mois: 0, mensualite: 0, assurance_mensuelle: 0,
                         marge_totale: 0, mode_marge: 'lineaire', taux_ibraa: 0, mois_deja_payes: 0,
+                        date_debut_credit: '',   // v33.40 : "YYYY-MM" — fait vieillir la dette
                         // EXPLOITATION
                         mode_exploitation: 'aucun', loyer_mensuel: 0,
                         adr: 0, taux_occupation: 0,
@@ -8157,6 +8186,32 @@
                         return (lo + hi) / 2;
                     };
 
+                    // ── v33.40 : MOIS ÉCOULÉS DEPUIS LE DÉBLOCAGE ──────────────────────
+                    //   Référence = l'horloge de l'application (soldesInitiaux), pas
+                    //   Date.now() : tout le moteur raisonne sur le cycle budgétaire
+                    //   courant, la dette doit vieillir au même rythme.
+                    //   Renvoie null si aucune date exploitable → repli sur la saisie.
+                    const moisEcoulesCredit = (asset) => {
+                        const a = asset || {};
+                        const d = String(a.date_debut_credit || '').trim();
+                        const m = d.match(/^(\d{4})-(\d{1,2})$/);
+                        if (!m) return null;
+                        const anneeDebut = Number(m[1]), moisDebut = Number(m[2]);
+                        if (!anneeDebut || !moisDebut) return null;
+                        const si = soldesInitiaux.value || {};
+                        const anneeActuelle = Number(si.anneeActuelle) || new Date().getFullYear();
+                        const moisActuel = Number(si.moisActuel) || (new Date().getMonth() + 1);
+                        const ecoules = (anneeActuelle - anneeDebut) * 12 + (moisActuel - moisDebut);
+                        const duree = Math.round(N(a.duree_mois));
+                        // borné : ni négatif (crédit pas encore débloqué), ni au-delà du terme
+                        return Math.max(0, duree > 0 ? Math.min(ecoules, duree) : ecoules);
+                    };
+                    // Valeur effectivement utilisée par le moteur : date si présente, sinon saisie
+                    const moisPayesEffectifs = (asset) => {
+                        const auto = moisEcoulesCredit(asset);
+                        return auto !== null ? auto : Math.max(0, Math.round(N((asset || {}).mois_deja_payes)));
+                    };
+
                     // ── v33.30 : PARAMÈTRES DE CRÉDIT DÉDUITS ──────────────────────────
                     //   Le moteur complète tout seul ce que l'utilisateur n'a pas saisi.
                     //   capInit  : capital_initial si présent, sinon montant_credit (legacy)
@@ -8196,8 +8251,10 @@
                             taux: Math.round(taux * 10000) / 10000,
                             marge: Math.round(marge * 100) / 100,
                             // décalage : n'a de sens que si l'échéancier part du capital initial
-                            offset: pilotageCapitalInitial ? Math.max(0, Math.round(N(a.mois_deja_payes))) : 0,
+                            offset: pilotageCapitalInitial ? moisPayesEffectifs(a) : 0,
                             pilotageCapitalInitial,
+                            moisEcoules: moisPayesEffectifs(a),
+                            dateePilotee: moisEcoulesCredit(a) !== null,
                         };
                     };
 
@@ -8544,6 +8601,24 @@
                     const masterAssetMensualiteAuto = computed(() => masterAssetCredit.value.mens);
                     const masterAssetCRD = computed(() => creditRestantCalcule(masterAssetForm.value));
                     const masterAssetPiloteParCapital = computed(() => N(masterAssetForm.value.capital_initial) > 0);
+                    // v33.40 : mois écoulés dérivés de la date de déblocage
+                    const masterAssetMoisAuto = computed(() => moisEcoulesCredit(masterAssetForm.value));
+                    const masterAssetDatePilotee = computed(() => masterAssetMoisAuto.value !== null);
+
+                    // La valeur calculée est recopiée dans le formulaire pour être persistée,
+                    // afin que le reste de l'app (qui lit mois_deja_payes) reste cohérent.
+                    watch(
+                        () => masterAssetForm.value.date_debut_credit + '|' + masterAssetForm.value.duree_mois
+                              + '|' + (soldesInitiaux.value || {}).moisActuel + '|' + (soldesInitiaux.value || {}).anneeActuelle,
+                        () => {
+                            const auto = masterAssetMoisAuto.value;
+                            if (auto === null) return;
+                            if (Number(masterAssetForm.value.mois_deja_payes) !== auto) {
+                                masterAssetForm.value.mois_deja_payes = auto;
+                            }
+                        },
+                        { immediate: true }
+                    );
 
                     // v33.30 : dès que le capital initial pilote le crédit, le champ
                     // « Crédit restant » devient un résultat — on l'écrit dans le
@@ -8640,6 +8715,7 @@
                             mode_marge: String(f.mode_marge || 'lineaire'),
                             taux_ibraa: Number(f.taux_ibraa) || 0,
                             mois_deja_payes: Number(f.mois_deja_payes) || 0,
+                            date_debut_credit: String(f.date_debut_credit || ''),
                             // ── EXPLOITATION ──
                             mode_exploitation: String(f.mode_exploitation || 'aucun'),
                             loyer_mensuel: Number(f.loyer_mensuel) || 0,
@@ -14326,7 +14402,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         showMasterAssetModal, editingMasterAssetId, masterAssetForm,
                         masterAssetTab, masterAssetPreview, masterAssetMensualiteAuto,
                         masterAssetCredit, masterAssetCRD, masterAssetPiloteParCapital,
-                        creditParams, creditRestantCalcule,
+                        masterAssetMoisAuto, masterAssetDatePilotee,
+                        creditParams, creditRestantCalcule, moisEcoulesCredit, moisPayesEffectifs,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
