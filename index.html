@@ -1868,9 +1868,17 @@
                                                     {{ asset.valeur_actuelle > asset.value ? '▲' : '▼' }} {{ asset.value > 0 ? (Math.abs(asset.valeur_actuelle - asset.value) / asset.value * 100).toFixed(1) + '%' : '' }}
                                                 </span>
                                             </p>
+                                            <!-- v33.02 : chaîne CA → REX → cash-flow net (moteur assetEconomics) -->
                                             <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                                                Revenus : <span class="text-emerald-700 font-black">{{ formatMAD(asset.revenue) }}/an</span>
-                                                <span class="text-gray-400"> · {{ formatMAD(Math.round(asset.revenue / 12)) }}/mois</span>
+                                                CA : <span class="text-gray-800 font-black">{{ formatMAD((assetEcoById[asset.id] || {}).ca || 0) }}/an</span>
+                                            </p>
+                                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                                                REX : <span class="text-emerald-700 font-black">{{ formatMAD((assetEcoById[asset.id] || {}).rex || 0) }}/an</span>
+                                            </p>
+                                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                                                Cash-flow net :
+                                                <span :class="[((assetEcoById[asset.id] || {}).cashflowNet || 0) >= 0 ? 'text-emerald-700' : 'text-red-600', 'font-black']">{{ formatMAD((assetEcoById[asset.id] || {}).cashflowNet || 0) }}/an</span>
+                                                <span class="text-gray-400"> · {{ formatMAD(Math.round((assetEcoById[asset.id] || {}).cashflowNetMensuel || 0)) }}/mois</span>
                                             </p>
                                         </div>
                                         <p v-if="asset.taux_credit > 0" class="text-[10px] text-amber-700 font-bold mt-1.5 flex flex-wrap items-center gap-2">
@@ -1881,16 +1889,37 @@
                                         <p v-if="asset.montant_credit > 0" class="text-[10px] font-bold mt-1.5 flex flex-wrap items-center gap-2">
                                             <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md text-indigo-700">💼 Apport : <span class="font-black">{{ formatMAD(asset.apport_personnel) }}</span></span>
                                             <span class="inline-flex items-center gap-1 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md text-rose-700">🏛️ Banque : <span class="font-black">{{ formatMAD(asset.montant_credit) }}</span></span>
-                                            <span class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-emerald-700">📊 ROE : <span class="font-black">{{ asset.apport_personnel > 0 ? (asset.revenue / asset.apport_personnel * 100).toFixed(1) : '—' }}%</span></span>
+                                            <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md text-slate-700">Service dette : <span class="font-black">{{ formatMAD((assetEcoById[asset.id] || {}).serviceDette || 0) }}/an</span></span>
+                                            <span class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-emerald-700">📊 ROE : <span class="font-black">{{ asset.apport_personnel > 0 ? ((assetEcoById[asset.id] || {}).roe || 0).toFixed(1) : '—' }}%</span></span>
+                                        </p>
+                                        <!-- v33.02 : exploitation & fiscalité -->
+                                        <p class="text-[10px] font-bold mt-1.5 flex flex-wrap items-center gap-2">
+                                            <span class="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md text-sky-700">
+                                                {{ asset.mode_exploitation === 'courte_duree' ? '🏨 Courte durée' : asset.mode_exploitation === 'longue_duree' ? '🔑 Longue durée' : asset.mode_exploitation === 'commercial' ? '🏪 Commercial' : '⏸️ Non exploité' }}
+                                            </span>
+                                            <span v-if="asset.mode_exploitation === 'courte_duree'" class="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md text-sky-700">
+                                                {{ formatMAD(asset.adr) }}/nuit · {{ asset.taux_occupation }}% occ. · {{ (assetEcoById[asset.id] || {}).nuitsAn || 0 }} nuits/an
+                                            </span>
+                                            <span v-if="((assetEcoById[asset.id] || {}).impot || 0) > 0" class="inline-flex items-center gap-1 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md text-orange-700">
+                                                🧾 Impôt : <span class="font-black">{{ formatMAD((assetEcoById[asset.id] || {}).impot) }}</span>
+                                                <span class="text-orange-400">({{ asset.regime_fiscal }})</span>
+                                            </span>
+                                            <span v-if="((assetEcoById[asset.id] || {}).seuilCA || 0) > 0" class="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md text-gray-600">
+                                                ⚖️ Seuil : <span class="font-black">{{ formatMAD((assetEcoById[asset.id] || {}).seuilCA) }}/an</span>
+                                            </span>
                                         </p>
                                     </div>
                                     <div class="shrink-0 flex items-center gap-2">
-                                        <span :class="['text-sm font-black px-3 py-1.5 rounded-xl border',
-                                            (asset.revenue / asset.value * 100) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                            (asset.revenue / asset.value * 100) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                            'bg-amber-100 text-amber-700 border-amber-200']">
-                                            {{ (asset.revenue / asset.value * 100).toFixed(2) }}% / an
-                                        </span>
+                                        <div class="text-right">
+                                            <span :class="['block text-sm font-black px-3 py-1.5 rounded-xl border',
+                                                ((assetEcoById[asset.id] || {}).rendementNet || 0) >= 7 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                                ((assetEcoById[asset.id] || {}).rendementNet || 0) >= 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                'bg-amber-100 text-amber-700 border-amber-200']"
+                                                  :title="'Rendement NET = REX / valeur actuelle'">
+                                                {{ ((assetEcoById[asset.id] || {}).rendementNet || 0).toFixed(2) }}% net
+                                            </span>
+                                            <span class="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-1">brut {{ ((assetEcoById[asset.id] || {}).rendementBrut || 0).toFixed(2) }}%</span>
+                                        </div>
                                         <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors text-sm" title="Éditer">✏️</button>
                                         <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors text-sm" title="Supprimer">🗑️</button>
                                     </div>
@@ -1907,27 +1936,32 @@
                             <!-- Synthèse globale pondérée -->
                             <div class="bg-gradient-to-r from-violet-600 to-purple-700 rounded-2xl p-5 text-white shadow-lg shadow-purple-900/20">
                                 <p class="text-[10px] font-black uppercase tracking-widest opacity-70 mb-4">📊 Synthèse Globale — Patrimoine Productif</p>
-                                <div class="grid grid-cols-3 gap-4 text-center mb-4">
+                                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center mb-4">
                                     <div>
-                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Capital Total</p>
-                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(roiAssets.reduce((s, a) => s + a.value, 0)) }}</p>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Valeur Actuelle</p>
+                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(globalValeurProductifs) }}</p>
                                     </div>
                                     <div>
-                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Revenus Annuels</p>
-                                        <p class="text-base lg:text-lg font-black text-emerald-300">{{ formatMAD(roiAssets.reduce((s, a) => s + a.revenue, 0)) }}</p>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">CA Annuel</p>
+                                        <p class="text-base lg:text-lg font-black">{{ formatMAD(assetsEconomics.reduce((s, e) => s + e.ca, 0)) }}</p>
                                     </div>
                                     <div>
-                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Rendement Moyen Pondéré</p>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">REX Annuel</p>
+                                        <p class="text-base lg:text-lg font-black text-emerald-300">{{ formatMAD(assetsEconomics.reduce((s, e) => s + e.rex, 0)) }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Rendement Net Pondéré</p>
                                         <p class="text-base lg:text-lg font-black text-yellow-300">
-                                            {{ roiAssets.reduce((s, a) => s + a.value, 0) > 0
-                                                ? (roiAssets.reduce((s, a) => s + a.revenue, 0) / roiAssets.reduce((s, a) => s + a.value, 0) * 100).toFixed(2)
+                                            {{ globalValeurProductifs > 0
+                                                ? (assetsEconomics.reduce((s, e) => s + e.rex, 0) / globalValeurProductifs * 100).toFixed(2)
                                                 : '0.00' }}%
                                         </p>
                                     </div>
                                 </div>
                                 <div class="pt-3 border-t border-white/20 text-center">
-                                    <p class="text-[11px] opacity-70">Revenus passifs mensuels :
-                                        <span class="font-black text-yellow-200 text-sm"> {{ formatMAD(Math.round(roiAssets.reduce((s, a) => s + a.revenue, 0) / 12)) }}/mois</span>
+                                    <p class="text-[11px] opacity-70">Revenus passifs NETS (après crédit et impôt) :
+                                        <span :class="['font-black text-sm', revenusPassifsNetsMensuel >= 0 ? 'text-yellow-200' : 'text-red-300']"> {{ formatMAD(Math.round(revenusPassifsNetsMensuel)) }}/mois</span>
+                                        <span class="opacity-60"> · {{ formatMAD(Math.round(revenusPassifsNetsAnnuel)) }}/an</span>
                                     </p>
                                 </div>
                             </div>
@@ -2267,12 +2301,48 @@
                                         class="w-full bg-white border-2 border-fuchsia-200 rounded-lg px-3 py-2 text-sm font-black text-fuchsia-800 outline-none focus:border-fuchsia-500 text-right"/>
                                 </div>
                                 <div>
-                                    <label class="text-[10px] font-black uppercase tracking-widest text-indigo-700 block mb-1.5">Surplus mensuel (hypothèse)</label>
-                                    <input type="number" v-model.number="sandboxSurplusMensuel" step="500"
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-indigo-700 block mb-1.5 flex items-center justify-between">
+                                        <span>Surplus mensuel</span>
+                                        <label class="flex items-center gap-1 cursor-pointer normal-case tracking-normal text-[9px] text-indigo-500">
+                                            <input type="checkbox" v-model="sandboxSurplusAuto" class="accent-indigo-600"/> auto
+                                        </label>
+                                    </label>
+                                    <input v-if="!sandboxSurplusAuto" type="number" v-model.number="sandboxSurplusMensuel" step="500"
                                         class="w-full bg-white border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-black text-indigo-800 outline-none focus:border-indigo-500 text-right"/>
+                                    <div v-else class="w-full bg-indigo-50 border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-black text-indigo-800 text-right tabular-nums">
+                                        {{ formatMAD(Math.round(surplusBudgetaireAnnuel(sandboxStartYear) / 12)) }}
+                                        <span class="block text-[8px] font-bold uppercase tracking-widest text-indigo-400">dérivé du budget {{ sandboxStartYear }}</span>
+                                    </div>
                                 </div>
                                 <div class="flex items-end">
                                     <button @click="resetSandbox" class="w-full py-2 rounded-lg border-2 border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest hover:bg-gray-50">♻️ Réinitialiser le brouillon</button>
+                                </div>
+                            </div>
+
+                            <!-- v33.00 : hypothèses du moteur + garde-fous anti-double-comptage -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <div class="space-y-2">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Hypothèses du moteur</p>
+                                    <label class="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
+                                        <input type="checkbox" v-model="sandboxRevaloOn" class="accent-emerald-600"/>
+                                        Revaloriser les actifs (taux par actif, défaut 3 %/an)
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
+                                        <input type="checkbox" v-model="sandboxInflationOn" class="accent-amber-600"/>
+                                        Éroder le surplus de l'inflation ({{ parametres.hypotheseInflation }} %/an)
+                                    </label>
+                                </div>
+                                <div class="space-y-2">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Éviter les doubles comptages</p>
+                                    <label class="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
+                                        <input type="checkbox" v-model="sandboxMensualitesDansBudget" class="accent-rose-600"/>
+                                        Les mensualités de crédit sont déjà dans mes charges fixes
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
+                                        <input type="checkbox" v-model="sandboxRevenusActifsDansBudget" class="accent-rose-600"/>
+                                        Les loyers sont déjà dans mes revenus
+                                    </label>
+                                    <p class="text-[9px] text-gray-400 italic leading-snug">Décoché = le moteur ajoute le flux lui-même. Coché = il le laisse au budget pour ne pas le compter deux fois.</p>
                                 </div>
                             </div>
 
@@ -2345,6 +2415,10 @@
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Dette Totale</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Valeur Actifs</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Patrimoine Net</th>
+                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Surplus budgétaire de l'année">+ Surplus</th>
+                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Cash-flow net des actifs productifs">+ Actifs</th>
+                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Capital de crédit remboursé dans l'année">− Capital</th>
+                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Plus-value de revalorisation">▲ Revalo</th>
                                             <th class="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Événements</th>
                                         </tr>
                                     </thead>
@@ -2355,6 +2429,10 @@
                                             <td class="px-3 py-2 text-right font-black tabular-nums text-rose-700">{{ formatMAD(row.dette) }}</td>
                                             <td class="px-3 py-2 text-right font-black tabular-nums text-indigo-700">{{ formatMAD(row.valeurActifs) }}</td>
                                             <td :class="['px-3 py-2 text-right font-black tabular-nums', row.net >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(row.net) }}</td>
+                                            <td :class="['px-3 py-2 text-right text-[11px] font-bold tabular-nums', row.fluxSurplus >= 0 ? 'text-gray-500' : 'text-rose-500']">{{ row.fluxSurplus ? formatMAD(row.fluxSurplus) : '—' }}</td>
+                                            <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-emerald-600">{{ row.fluxActifs ? formatMAD(row.fluxActifs) : '—' }}</td>
+                                            <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-rose-600">{{ row.capitalAmorti ? formatMAD(row.capitalAmorti) : '—' }}</td>
+                                            <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-indigo-500">{{ row.revalo ? formatMAD(row.revalo) : '—' }}</td>
                                             <td class="px-3 py-2 text-[10px] text-gray-500">{{ row.events.length ? row.events.map(e => sandboxEventLabel(e)).join(' · ') : '—' }}</td>
                                         </tr>
                                     </tbody>
@@ -5473,7 +5551,7 @@
         <!-- ━━ MODALE CRUD UNIFIÉE — Master Asset Engine v17.0 ━━ -->
         <div v-if="showMasterAssetModal" @click.self="closeMasterAssetModal"
              class="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden">
+            <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-3xl overflow-hidden">
                 <div :class="['px-5 py-4 border-b border-gray-100 flex items-center justify-between', masterAssetForm.isProductive ? 'bg-gradient-to-r from-violet-50 to-purple-50' : 'bg-gradient-to-r from-amber-50 to-orange-50']">
                     <h3 class="font-black uppercase tracking-widest text-gray-800 text-sm">
                         {{ editingMasterAssetId !== null ? '✏️ Éditer l\'actif' : '➕ Nouvel actif patrimoine' }}
@@ -5591,6 +5669,180 @@
                             <label class="text-[10px] font-black uppercase tracking-widest text-violet-600 block mb-1.5">Restantes</label>
                             <input v-model.number="masterAssetForm.annees_restantes" type="number" min="0" max="30" step="1"
                                    class="w-full bg-violet-50 border-2 border-violet-200 rounded-lg px-3 py-2 text-sm font-black text-violet-800 outline-none focus:border-violet-500 text-right"/>
+                        </div>
+                    </div>
+
+                    <!-- ═══ v33.03 : SCHÉMA v19 — onglets détaillés ═══ -->
+                    <div class="pt-3 border-t-2 border-dashed border-gray-200">
+                        <div class="flex flex-wrap gap-1 mb-4 bg-gray-100 p-1 rounded-xl">
+                            <button v-for="t in [['acquisition','🏗️ Acquisition'],['financement','🏦 Financement'],['exploitation','🔑 Exploitation'],['fiscalite','🧾 Fiscalité']]" :key="t[0]"
+                                    @click="masterAssetTab = t[0]"
+                                    :class="['flex-1 min-w-[110px] px-2 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors', masterAssetTab === t[0] ? 'bg-white text-violet-700 shadow' : 'text-gray-500 hover:text-gray-800']">
+                                {{ t[1] }}
+                            </button>
+                        </div>
+
+                        <!-- ── ACQUISITION ── -->
+                        <div v-show="masterAssetTab === 'acquisition'" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Prix d'acquisition</label>
+                                <input v-model.number="masterAssetForm.prix_acquisition" type="number" min="0" step="10000" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-violet-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Frais (notaire, ench.)</label>
+                                <input v-model.number="masterAssetForm.frais_acquisition" type="number" min="0" step="1000" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-violet-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Travaux + ameublement</label>
+                                <input v-model.number="masterAssetForm.travaux" type="number" min="0" step="1000" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-violet-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 block mb-1.5">Revalorisation (%/an)</label>
+                                <input v-model.number="masterAssetForm.taux_revalorisation" type="number" min="-20" max="30" step="0.5" class="w-full bg-emerald-50 border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-black text-emerald-800 outline-none focus:border-emerald-500 text-right"/>
+                            </div>
+                            <div class="col-span-2 flex items-end">
+                                <div class="w-full bg-violet-50 border-2 border-violet-200 rounded-lg px-3 py-2">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-violet-500">Coût total de revient</p>
+                                    <p class="text-base font-black text-violet-800 tabular-nums">{{ formatMAD(masterAssetPreview.coutTotalRevient) }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ── FINANCEMENT ── -->
+                        <div v-show="masterAssetTab === 'financement'" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">Type de crédit</label>
+                                <select v-model="masterAssetForm.type_credit" class="w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500">
+                                    <option value="classique">Classique (amortissable)</option>
+                                    <option value="mourabaha">Mourabaha (participatif)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5">Durée (mois)</label>
+                                <input v-model.number="masterAssetForm.duree_mois" type="number" min="0" max="360" step="12" class="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-600 block mb-1.5">Mois déjà payés</label>
+                                <input v-model.number="masterAssetForm.mois_deja_payes" type="number" min="0" max="360" step="1" class="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">Mensualité (0 = auto)</label>
+                                <input v-model.number="masterAssetForm.mensualite" type="number" min="0" step="50" :placeholder="masterAssetMensualiteAuto" class="w-full bg-amber-50 border-2 border-amber-200 rounded-lg px-3 py-2 text-sm font-black text-amber-800 outline-none focus:border-amber-500 text-right"/>
+                                <p class="text-[9px] text-amber-500 font-bold mt-0.5">auto : {{ formatMAD(masterAssetMensualiteAuto) }}</p>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">Assurance / mois</label>
+                                <input v-model.number="masterAssetForm.assurance_mensuelle" type="number" min="0" step="10" class="w-full bg-amber-50 border-2 border-amber-200 rounded-lg px-3 py-2 text-sm font-black text-amber-800 outline-none focus:border-amber-500 text-right"/>
+                            </div>
+                            <template v-if="masterAssetForm.type_credit === 'mourabaha'">
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5">Marge totale (0 = auto)</label>
+                                    <input v-model.number="masterAssetForm.marge_totale" type="number" min="0" step="1000" class="w-full bg-teal-50 border-2 border-teal-200 rounded-lg px-3 py-2 text-sm font-black text-teal-800 outline-none focus:border-teal-500 text-right"/>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5">Répartition marge</label>
+                                    <select v-model="masterAssetForm.mode_marge" class="w-full bg-teal-50 border-2 border-teal-200 rounded-lg px-3 py-2 text-sm font-black text-teal-800 outline-none focus:border-teal-500">
+                                        <option value="lineaire">Linéaire</option>
+                                        <option value="actuarielle">Actuarielle</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5">Taux d'Ibra'a (%)</label>
+                                    <input v-model.number="masterAssetForm.taux_ibraa" type="number" min="0" max="100" step="5" class="w-full bg-teal-50 border-2 border-teal-200 rounded-lg px-3 py-2 text-sm font-black text-teal-800 outline-none focus:border-teal-500 text-right"/>
+                                </div>
+                            </template>
+                            <div class="col-span-2 md:col-span-3 grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                                <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Service dette / an</p><p class="text-sm font-black text-gray-800 tabular-nums">{{ formatMAD(masterAssetPreview.serviceDette) }}</p></div>
+                                <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Capital an 1</p><p class="text-sm font-black text-emerald-700 tabular-nums">{{ formatMAD(masterAssetPreview.capitalRembourse) }}</p></div>
+                                <div class="bg-gray-50 rounded-lg px-2 py-1.5"><p class="text-[9px] font-black uppercase text-gray-400">Intérêts/marge an 1</p><p class="text-sm font-black text-rose-700 tabular-nums">{{ formatMAD(masterAssetPreview.interetsOuMarge) }}</p></div>
+                            </div>
+                        </div>
+
+                        <!-- ── EXPLOITATION ── -->
+                        <div v-show="masterAssetTab === 'exploitation'" class="space-y-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-sky-600 block mb-1.5">Mode d'exploitation</label>
+                                <select v-model="masterAssetForm.mode_exploitation" class="w-full bg-sky-50 border-2 border-sky-200 rounded-lg px-3 py-2 text-sm font-black text-sky-800 outline-none focus:border-sky-500">
+                                    <option value="aucun">Aucun (pas d'exploitation)</option>
+                                    <option value="longue_duree">Location longue durée</option>
+                                    <option value="courte_duree">Location courte durée (Airbnb)</option>
+                                    <option value="commercial">Bail commercial</option>
+                                </select>
+                            </div>
+                            <div v-if="masterAssetForm.mode_exploitation === 'longue_duree' || masterAssetForm.mode_exploitation === 'commercial'">
+                                <label class="text-[10px] font-black uppercase tracking-widest text-sky-600 block mb-1.5">Loyer mensuel (DH)</label>
+                                <input v-model.number="masterAssetForm.loyer_mensuel" type="number" min="0" step="500" class="w-full bg-sky-50 border-2 border-sky-200 rounded-lg px-3 py-2 text-sm font-black text-sky-800 outline-none focus:border-sky-500 text-right"/>
+                            </div>
+                            <div v-if="masterAssetForm.mode_exploitation === 'courte_duree'" class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-sky-600 block mb-1.5">ADR (DH/nuit)</label>
+                                    <input v-model.number="masterAssetForm.adr" type="number" min="0" step="50" class="w-full bg-sky-50 border-2 border-sky-200 rounded-lg px-3 py-2 text-sm font-black text-sky-800 outline-none focus:border-sky-500 text-right"/>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-sky-600 block mb-1.5">Occupation (%)</label>
+                                    <input v-model.number="masterAssetForm.taux_occupation" type="number" min="0" max="100" step="5" class="w-full bg-sky-50 border-2 border-sky-200 rounded-lg px-3 py-2 text-sm font-black text-sky-800 outline-none focus:border-sky-500 text-right"/>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Plateforme (%)</label>
+                                    <input v-model.number="masterAssetForm.frais_plateforme_pct" type="number" min="0" max="50" step="0.1" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-gray-400 text-right"/>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Co-host (%)</label>
+                                    <input v-model.number="masterAssetForm.frais_cohost_pct" type="number" min="0" max="50" step="0.1" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-gray-400 text-right"/>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Maintenance (%)</label>
+                                    <input v-model.number="masterAssetForm.maintenance_pct" type="number" min="0" max="50" step="0.5" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none focus:border-gray-400 text-right"/>
+                                </div>
+                            </div>
+                            <div v-if="masterAssetForm.mode_exploitation !== 'aucun'">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Charges fixes mensuelles</p>
+                                <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                    <div><label class="text-[9px] font-bold uppercase text-gray-400 block mb-1">Syndic</label><input v-model.number="masterAssetForm.syndic" type="number" min="0" step="50" class="w-full bg-white border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none text-right"/></div>
+                                    <div><label class="text-[9px] font-bold uppercase text-gray-400 block mb-1">Internet</label><input v-model.number="masterAssetForm.internet" type="number" min="0" step="50" class="w-full bg-white border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none text-right"/></div>
+                                    <div><label class="text-[9px] font-bold uppercase text-gray-400 block mb-1">Élec / Eau</label><input v-model.number="masterAssetForm.electricite_eau" type="number" min="0" step="50" class="w-full bg-white border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none text-right"/></div>
+                                    <div><label class="text-[9px] font-bold uppercase text-gray-400 block mb-1">Consommables</label><input v-model.number="masterAssetForm.consommables" type="number" min="0" step="50" class="w-full bg-white border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none text-right"/></div>
+                                    <div><label class="text-[9px] font-bold uppercase text-gray-400 block mb-1">Assurance PNO</label><input v-model.number="masterAssetForm.assurance_pno" type="number" min="0" step="25" class="w-full bg-white border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none text-right"/></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ── FISCALITÉ ── -->
+                        <div v-show="masterAssetTab === 'fiscalite'" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <div class="col-span-2 md:col-span-3">
+                                <label class="text-[10px] font-black uppercase tracking-widest text-orange-600 block mb-1.5">Régime fiscal</label>
+                                <select v-model="masterAssetForm.regime_fiscal" class="w-full bg-orange-50 border-2 border-orange-200 rounded-lg px-3 py-2 text-sm font-black text-orange-800 outline-none focus:border-orange-500">
+                                    <option value="exonere">Exonéré</option>
+                                    <option value="foncier_bareme">Revenus fonciers — barème (avec abattement)</option>
+                                    <option value="foncier_liberatoire">Revenus fonciers — taux libératoire</option>
+                                    <option value="professionnel">Régime professionnel (résultat réel)</option>
+                                </select>
+                            </div>
+                            <div v-if="masterAssetForm.regime_fiscal === 'foncier_bareme' || masterAssetForm.regime_fiscal === 'professionnel'">
+                                <label class="text-[10px] font-black uppercase tracking-widest text-orange-600 block mb-1.5">Taux marginal (%)</label>
+                                <input v-model.number="masterAssetForm.taux_marginal" type="number" min="0" max="60" step="1" class="w-full bg-orange-50 border-2 border-orange-200 rounded-lg px-3 py-2 text-sm font-black text-orange-800 outline-none text-right"/>
+                            </div>
+                            <div v-if="masterAssetForm.regime_fiscal === 'foncier_bareme'">
+                                <label class="text-[10px] font-black uppercase tracking-widest text-orange-600 block mb-1.5">Abattement (%)</label>
+                                <input v-model.number="masterAssetForm.abattement_pct" type="number" min="0" max="100" step="5" class="w-full bg-orange-50 border-2 border-orange-200 rounded-lg px-3 py-2 text-sm font-black text-orange-800 outline-none text-right"/>
+                            </div>
+                            <div v-if="masterAssetForm.regime_fiscal === 'foncier_liberatoire'">
+                                <label class="text-[10px] font-black uppercase tracking-widest text-orange-600 block mb-1.5">Taux libératoire (%)</label>
+                                <input v-model.number="masterAssetForm.taux_liberatoire" type="number" min="0" max="60" step="1" class="w-full bg-orange-50 border-2 border-orange-200 rounded-lg px-3 py-2 text-sm font-black text-orange-800 outline-none text-right"/>
+                            </div>
+                            <template v-if="masterAssetForm.regime_fiscal === 'professionnel'">
+                                <div><label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Amort. bâti (%/an)</label><input v-model.number="masterAssetForm.amortissement_bati_pct" type="number" min="0" max="20" step="0.5" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none text-right"/></div>
+                                <div><label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Amort. mobilier (%/an)</label><input v-model.number="masterAssetForm.amortissement_mobilier_pct" type="number" min="0" max="50" step="1" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none text-right"/></div>
+                                <div><label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Part bâti (%)</label><input v-model.number="masterAssetForm.part_bati_pct" type="number" min="0" max="100" step="5" class="w-full bg-white border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-800 outline-none text-right"/></div>
+                            </template>
+                        </div>
+
+                        <!-- ── APERÇU LIVE ── -->
+                        <div v-if="masterAssetForm.isProductive" class="mt-4 p-3 rounded-xl bg-slate-900 text-white grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div><p class="text-[9px] uppercase tracking-widest opacity-50">CA annuel</p><p class="text-sm font-black tabular-nums">{{ formatMAD(masterAssetPreview.ca) }}</p></div>
+                            <div><p class="text-[9px] uppercase tracking-widest opacity-50">REX</p><p class="text-sm font-black tabular-nums text-emerald-300">{{ formatMAD(masterAssetPreview.rex) }}</p></div>
+                            <div><p class="text-[9px] uppercase tracking-widest opacity-50">Cash-flow net</p><p :class="['text-sm font-black tabular-nums', masterAssetPreview.cashflowNet >= 0 ? 'text-yellow-300' : 'text-red-400']">{{ formatMAD(masterAssetPreview.cashflowNet) }}</p></div>
+                            <div><p class="text-[9px] uppercase tracking-widest opacity-50">Rdt net · ROE</p><p class="text-sm font-black tabular-nums text-sky-300">{{ masterAssetPreview.rendementNet.toFixed(1) }}% · {{ masterAssetPreview.roe.toFixed(1) }}%</p></div>
                         </div>
                     </div>
                 </div>
@@ -5783,7 +6035,7 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "32.80 UI-Compacte";
+                    const CURRENT_VERSION = "33.00 Moteur-Patrimoine";
                     const CHANGELOG = [
         { version: "32.80 UI-Compacte", date: "2026-08-21", changes: [
             "SIDEBAR RÉTRACTABLE : nouvel état isSidebarCollapsed (persisté en localStorage) + bouton toggle « / » sous le logo. Ouvert = 16rem (icônes + texte), replié = 72px (icônes seules, centrées, libellé en title au survol). Transition CSS transition-[width] duration-300 ease-in-out — aucun saut brutal.",
@@ -7230,6 +7482,304 @@
                     const arbitrageInvestRate = ref(7.0);
                     const arbitrageYears = ref(5);
 
+                    // ═══════════════════════════════════════════════════════════════════
+                    // v33.00 — SCHÉMA MASTER ASSET v19 + MOTEUR FINANCIER
+                    //   Tout est pur et déterministe : aucune mutation du store.
+                    // ═══════════════════════════════════════════════════════════════════
+                    const N = (v, d = 0) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+
+                    // ── Valeurs par défaut du schéma v19 ───────────────────────────────
+                    const _assetDefaultsV19 = () => ({
+                        // ACQUISITION
+                        prix_acquisition: 0, frais_acquisition: 0, travaux: 0, valeur_actuelle: 0,
+                        taux_revalorisation: 3,
+                        // FINANCEMENT
+                        apport_personnel: 0, montant_credit: 0, type_credit: 'classique',
+                        taux_credit: 0, duree_mois: 0, mensualite: 0, assurance_mensuelle: 0,
+                        marge_totale: 0, mode_marge: 'lineaire', taux_ibraa: 0, mois_deja_payes: 0,
+                        // EXPLOITATION
+                        mode_exploitation: 'aucun', loyer_mensuel: 0,
+                        adr: 0, taux_occupation: 0,
+                        frais_plateforme_pct: 3, frais_cohost_pct: 19.4, maintenance_pct: 5,
+                        syndic: 0, internet: 0, electricite_eau: 0, consommables: 0, assurance_pno: 0,
+                        // FISCALITÉ
+                        regime_fiscal: 'exonere', taux_marginal: 37, abattement_pct: 40,
+                        taux_liberatoire: 20, amortissement_bati_pct: 4,
+                        amortissement_mobilier_pct: 20, part_bati_pct: 75,
+                    });
+
+                    // ── Migration d'UN actif vers v19 (idempotente, sans perte) ────────
+                    //   Les champs legacy (value, revenue, annees_total, annees_restantes)
+                    //   sont conservés ET convertis vers les nouveaux champs.
+                    const migrateAssetV19 = (raw) => {
+                        const a = Object.assign({}, _assetDefaultsV19(), raw || {});
+                        const legacyValue = N(raw && raw.value);
+                        // Acquisition : prix d'acquisition hérite de l'ancien "value" (capital investi)
+                        if (!N(a.prix_acquisition) && legacyValue) a.prix_acquisition = legacyValue;
+                        if (!N(a.valeur_actuelle)) a.valeur_actuelle = legacyValue || N(a.prix_acquisition);
+                        if (!N(a.taux_revalorisation)) a.taux_revalorisation = 3;
+                        // Financement : durée en mois dérivée des années legacy
+                        if (!N(a.duree_mois) && N(raw && raw.annees_total)) a.duree_mois = N(raw.annees_total) * 12;
+                        if (!N(a.mois_deja_payes) && N(raw && raw.annees_total)) {
+                            a.mois_deja_payes = Math.max(0, (N(raw.annees_total) - N(raw.annees_restantes)) * 12);
+                        }
+                        // Exploitation : l'ancien "revenue" (annuel brut) devient un loyer mensuel
+                        const legacyRevenue = N(raw && raw.revenue);
+                        if (a.mode_exploitation === 'aucun' && legacyRevenue > 0) {
+                            a.mode_exploitation = (String(a.type || '').toLowerCase().indexOf('commerc') >= 0) ? 'commercial' : 'longue_duree';
+                            if (!N(a.loyer_mensuel)) a.loyer_mensuel = Math.round((legacyRevenue / 12) * 100) / 100;
+                        }
+                        // Fiscalité : par défaut foncier au barème pour un actif productif loué
+                        if (a.regime_fiscal === 'exonere' && a.isProductive && a.mode_exploitation !== 'aucun') {
+                            a.regime_fiscal = 'foncier_bareme';
+                        }
+                        // Cohérence apport / crédit / valeur
+                        if (!N(a.apport_personnel) && !N(a.montant_credit) && legacyValue) a.apport_personnel = legacyValue;
+                        a._v = 19;
+                        return a;
+                    };
+                    const migrateAssetsV19 = (arr) => (Array.isArray(arr) ? arr : []).map(migrateAssetV19);
+
+                    // Coût de revient : prix + frais + travaux (dérivé, jamais stocké)
+                    const coutTotalRevient = (a) => N(a.prix_acquisition) + N(a.frais_acquisition) + N(a.travaux);
+
+                    // ── Mensualité d'un crédit classique ───────────────────────────────
+                    const mensualiteClassique = (capital, tauxAnnuelPct, dureeMois) => {
+                        const C = N(capital), n = N(dureeMois), i = N(tauxAnnuelPct) / 100 / 12;
+                        if (C <= 0 || n <= 0) return 0;
+                        if (i === 0) return C / n;
+                        return (C * i) / (1 - Math.pow(1 + i, -n));
+                    };
+
+                    // ── Taux implicite d'un échéancier (bissection) ────────────────────
+                    //   Sert à répartir la marge Mourabaha de façon ACTUARIELLE :
+                    //   on cherche i tel que C = ech × (1 - (1+i)^-n) / i
+                    const tauxImplicite = (capital, echeance, dureeMois) => {
+                        const C = N(capital), e = N(echeance), n = N(dureeMois);
+                        if (C <= 0 || e <= 0 || n <= 0 || e * n <= C) return 0;
+                        let lo = 0, hi = 1; // 0 % à 100 %/mois
+                        for (let k = 0; k < 80; k++) {
+                            const mid = (lo + hi) / 2;
+                            const pv = mid === 0 ? e * n : e * (1 - Math.pow(1 + mid, -n)) / mid;
+                            if (pv > C) lo = mid; else hi = mid;
+                        }
+                        return (lo + hi) / 2;
+                    };
+
+                    // ── Tableau d'amortissement mensuel complet ────────────────────────
+                    //   Classique  : annuité constante, intérêt = solde × i
+                    //   Mourabaha  : échéance = (capital + marge) / n
+                    //       mode 'lineaire'    → marge répartie à parts égales
+                    //       mode 'actuarielle' → marge = solde × taux implicite
+                    //   Retourne [{ mois, echeance, capital, interet, soldeApres }]
+                    const tableauAmortissement = (asset) => {
+                        const a = asset || {};
+                        const C = N(a.montant_credit);
+                        const n = Math.round(N(a.duree_mois));
+                        if (C <= 0 || n <= 0) return [];
+                        const estMourabaha = String(a.type_credit || 'classique') === 'mourabaha';
+                        const rows = [];
+                        let solde = C;
+
+                        if (!estMourabaha) {
+                            const i = N(a.taux_credit) / 100 / 12;
+                            const M = N(a.mensualite) > 0 ? N(a.mensualite) : mensualiteClassique(C, a.taux_credit, n);
+                            for (let m = 1; m <= n && solde > 0.005; m++) {
+                                const interet = solde * i;
+                                let capital = M - interet;
+                                if (capital > solde) capital = solde;
+                                solde -= capital;
+                                rows.push({ mois: m, echeance: capital + interet, capital, interet, soldeApres: solde });
+                            }
+                            return rows;
+                        }
+
+                        // Mourabaha
+                        let MT = N(a.marge_totale);
+                        if (MT <= 0 && N(a.taux_credit) > 0) MT = mensualiteClassique(C, a.taux_credit, n) * n - C;
+                        const ech = (C + MT) / n;
+                        const mode = String(a.mode_marge || 'lineaire');
+                        if (mode === 'actuarielle') {
+                            const i = tauxImplicite(C, ech, n);
+                            for (let m = 1; m <= n && solde > 0.005; m++) {
+                                const interet = solde * i;
+                                let capital = ech - interet;
+                                if (capital > solde) capital = solde;
+                                solde -= capital;
+                                rows.push({ mois: m, echeance: ech, capital, interet, soldeApres: solde });
+                            }
+                        } else {
+                            const capM = C / n, margeM = MT / n;
+                            for (let m = 1; m <= n; m++) {
+                                solde = Math.max(0, solde - capM);
+                                rows.push({ mois: m, echeance: ech, capital: capM, interet: margeM, soldeApres: solde });
+                            }
+                        }
+                        return rows;
+                    };
+
+                    // ── Amortissement d'UNE année de projection ────────────────────────
+                    //   anneeIndex 0 = première année projetée (à partir de mois_deja_payes)
+                    //   → { capitalRembourse, interetsOuMarge, capitalRestant, echeances }
+                    const amortissementAnnuel = (asset, anneeIndex) => {
+                        const a = asset || {};
+                        const tab = tableauAmortissement(a);
+                        const vide = { capitalRembourse: 0, interetsOuMarge: 0, capitalRestant: N(a.montant_credit), echeances: 0 };
+                        if (!tab.length) return vide;
+                        const offset = Math.max(0, Math.round(N(a.mois_deja_payes)));
+                        const debut = offset + Math.max(0, Math.round(N(anneeIndex))) * 12;
+                        const fin = debut + 12;
+                        const tranche = tab.filter(r => r.mois > debut && r.mois <= fin);
+                        // Capital restant après cette année (0 si le crédit est soldé)
+                        const derniere = tab.filter(r => r.mois <= fin).pop();
+                        const capitalRestant = tranche.length ? tranche[tranche.length - 1].soldeApres
+                                                              : (derniere ? derniere.soldeApres : 0);
+                        return {
+                            capitalRembourse: Math.round(tranche.reduce((x, r) => x + r.capital, 0) * 100) / 100,
+                            interetsOuMarge:  Math.round(tranche.reduce((x, r) => x + r.interet, 0) * 100) / 100,
+                            capitalRestant:   Math.round(Math.max(0, capitalRestant) * 100) / 100,
+                            echeances:        Math.round(tranche.reduce((x, r) => x + r.echeance, 0) * 100) / 100,
+                        };
+                    };
+
+                    // ── Solde de remboursement anticipé (Mourabaha avec Ibra'a) ────────
+                    //   capital_restant + marge_non_echue × (1 − taux_ibraa)
+                    const soldeAnticipe = (asset, apresMois) => {
+                        const a = asset || {};
+                        const tab = tableauAmortissement(a);
+                        if (!tab.length) return { capitalRestant: 0, margeNonEchue: 0, ibraa: 0, solde: 0 };
+                        const k = Math.max(0, Math.min(tab.length, Math.round(N(apresMois))));
+                        const capitalRestant = k === 0 ? N(a.montant_credit) : tab[k - 1].soldeApres;
+                        const margeTotale = tab.reduce((x, r) => x + r.interet, 0);
+                        const margeCourue = tab.slice(0, k).reduce((x, r) => x + r.interet, 0);
+                        const margeNonEchue = Math.max(0, margeTotale - margeCourue);
+                        const estMourabaha = String(a.type_credit || 'classique') === 'mourabaha';
+                        const tIbraa = estMourabaha ? N(a.taux_ibraa) / 100 : 1; // crédit classique : pas de marge future due
+                        const ibraa = margeNonEchue * tIbraa;
+                        return {
+                            capitalRestant: Math.round(capitalRestant * 100) / 100,
+                            margeNonEchue:  Math.round(margeNonEchue * 100) / 100,
+                            ibraa:          Math.round(ibraa * 100) / 100,
+                            solde:          Math.round((capitalRestant + margeNonEchue - ibraa) * 100) / 100,
+                        };
+                    };
+
+                    // ── ÉCONOMIE D'EXPLOITATION D'UN ACTIF ─────────────────────────────
+                    //   CA → charges → REX → service dette → impôt → cash-flow net
+                    //   anneeIndex sert au régime professionnel (intérêts déductibles
+                    //   de l'année) et au ramp-up éventuel.
+                    const assetEconomics = (asset, anneeIndex = 0, opts = {}) => {
+                        const a = Object.assign({}, _assetDefaultsV19(), asset || {});
+                        const mode = String(a.mode_exploitation || 'aucun');
+                        const occFactor = N(opts.occFactor, 1);       // stress / ramp-up
+                        const loyerFactor = N(opts.loyerFactor, 1);   // stress -20 % etc.
+
+                        // 1. CHIFFRE D'AFFAIRES
+                        let ca = 0, nuitsAn = 0;
+                        if (mode === 'courte_duree') {
+                            const occ = (N(a.taux_occupation) / 100) * occFactor;
+                            nuitsAn = 30.4 * occ * 12;
+                            ca = N(a.adr) * loyerFactor * nuitsAn;
+                        } else if (mode === 'longue_duree' || mode === 'commercial') {
+                            ca = N(a.loyer_mensuel) * loyerFactor * 12 * occFactor;
+                        }
+
+                        // 2. CHARGES
+                        const pctVar = (N(a.frais_plateforme_pct) + N(a.frais_cohost_pct) + N(a.maintenance_pct)) / 100;
+                        const chargesVariables = mode === 'courte_duree' ? ca * pctVar : ca * (N(a.maintenance_pct) / 100);
+                        const chargesFixesMensuelles = N(a.syndic) + N(a.internet) + N(a.electricite_eau) + N(a.consommables) + N(a.assurance_pno);
+                        const chargesFixes = chargesFixesMensuelles * 12;
+
+                        // 3. RÉSULTAT D'EXPLOITATION (avant crédit)
+                        const rex = ca - chargesVariables - chargesFixes;
+
+                        // 4. SERVICE DE LA DETTE
+                        const amo = amortissementAnnuel(a, anneeIndex);
+                        const mensualiteEff = N(a.mensualite) > 0 ? N(a.mensualite)
+                                            : mensualiteClassique(a.montant_credit, a.taux_credit, a.duree_mois);
+                        const serviceDette = amo.echeances > 0 ? amo.echeances + N(a.assurance_mensuelle) * 12
+                                                               : (mensualiteEff + N(a.assurance_mensuelle)) * 12;
+                        const cashflowAvantImpot = rex - serviceDette;
+
+                        // 5. FISCALITÉ
+                        const cout = coutTotalRevient(a);
+                        const amortBati = (N(a.prix_acquisition) * N(a.part_bati_pct) / 100) * (N(a.amortissement_bati_pct) / 100);
+                        const amortMobilier = N(a.travaux) * (N(a.amortissement_mobilier_pct) / 100);
+                        const amortissements = amortBati + amortMobilier;
+                        let baseImposable = 0, tauxImpot = 0;
+                        const reg = String(a.regime_fiscal || 'exonere');
+                        if (reg === 'professionnel') {
+                            baseImposable = rex - amortissements - amo.interetsOuMarge;
+                            tauxImpot = N(a.taux_marginal);
+                        } else if (reg === 'foncier_bareme') {
+                            baseImposable = ca * (1 - N(a.abattement_pct) / 100);
+                            tauxImpot = N(a.taux_marginal);
+                        } else if (reg === 'foncier_liberatoire') {
+                            baseImposable = ca;
+                            tauxImpot = N(a.taux_liberatoire);
+                        }
+                        const impot = Math.max(0, baseImposable) * (tauxImpot / 100);
+                        const cashflowNet = cashflowAvantImpot - impot;
+
+                        // 6. RENDEMENTS
+                        const vRef = N(a.valeur_actuelle) || N(a.prix_acquisition) || cout;
+                        const apport = N(a.apport_personnel);
+                        const r2 = (v) => Math.round(v * 100) / 100;
+                        return {
+                            id: a.id, name: a.name, mode, regime: reg,
+                            ca: r2(ca), nuitsAn: Math.round(nuitsAn),
+                            chargesVariables: r2(chargesVariables),
+                            chargesFixes: r2(chargesFixes), chargesFixesMensuelles: r2(chargesFixesMensuelles),
+                            rex: r2(rex),
+                            serviceDette: r2(serviceDette), mensualite: r2(mensualiteEff),
+                            capitalRembourse: amo.capitalRembourse, interetsOuMarge: amo.interetsOuMarge,
+                            capitalRestant: amo.capitalRestant,
+                            cashflowAvantImpot: r2(cashflowAvantImpot),
+                            amortissements: r2(amortissements),
+                            baseImposable: r2(Math.max(0, baseImposable)), tauxImpot, impot: r2(impot),
+                            cashflowNet: r2(cashflowNet), cashflowNetMensuel: r2(cashflowNet / 12),
+                            coutTotalRevient: r2(cout),
+                            rendementBrut: vRef > 0 ? r2((ca / vRef) * 100) : 0,
+                            rendementNet:  vRef > 0 ? r2((rex / vRef) * 100) : 0,
+                            roe: apport > 0 ? r2((cashflowNet / apport) * 100) : 0,
+                            // seuil d'équilibre : CA à atteindre pour couvrir dette + charges fixes
+                            seuilCA: (1 - pctVar) > 0 ? r2((serviceDette + chargesFixes) / (1 - pctVar)) : 0,
+                        };
+                    };
+
+                    // Vue réactive : économie de chaque actif (année 0)
+                    const assetsEconomics = computed(() => (masterAssets.value || []).map(a => assetEconomics(a, 0)));
+                    const assetEcoById = computed(() => {
+                        const m = {};
+                        assetsEconomics.value.forEach(e => { m[e.id] = e; });
+                        return m;
+                    });
+                    // Revenus passifs nets = Σ cash-flow net des actifs productifs
+                    const revenusPassifsNetsAnnuel = computed(() =>
+                        assetsEconomics.value
+                            .filter(e => (masterAssets.value.find(a => a.id === e.id) || {}).isProductive)
+                            .reduce((s, e) => s + e.cashflowNet, 0));
+                    const revenusPassifsNetsMensuel = computed(() => revenusPassifsNetsAnnuel.value / 12);
+
+                    // ── SURPLUS BUDGÉTAIRE ANNUEL dérivé du budget réel ────────────────
+                    //   revenus − chargesFixes − chargesVariables − irrégulier net
+                    const surplusBudgetaireAnnuel = (annee) => {
+                        const dAll = donneesAnnuelles.value || {};
+                        const d = dAll[annee] || dAll[Object.keys(dAll).map(Number).sort((x, y) => y - x)[0]] || {};
+                        const revenus = Object.values(d.revenus || {}).reduce((s, r) => s + N(r.base) * 12, 0);
+                        const fixes = Object.values(d.chargesFixes || {}).reduce((s, f) => s + N(f.valeur) * 12, 0);
+                        const variables = Object.values(d.chargesVariables || {})
+                            .reduce((s, c) => s + (c.periode === 'semaine' ? N(c.valeur) * 4.3 : N(c.valeur)) * 12, 0);
+                        const irr = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : Object.values(d.depensesIrregulieres || {}))
+                            .reduce((s, x) => s + N(x.montant), 0);
+                        return Math.round((revenus - fixes - variables - irr) * 100) / 100;
+                    };
+
+                    // v33.03 : aperçu live de l'économie de l'actif en cours d'édition
+                    const masterAssetPreview = computed(() => assetEconomics(masterAssetForm.value, 0));
+                    const masterAssetMensualiteAuto = computed(() =>
+                        Math.round(mensualiteClassique(masterAssetForm.value.montant_credit, masterAssetForm.value.taux_credit, masterAssetForm.value.duree_mois) * 100) / 100);
+
                     // ── v17.0 : Master Asset Engine (source unique de vérité) ──
                     const masterAssets = ref([
                         { id: 'ma_1', name: 'Local Bouskoura (Hadri Parfums)', type: 'Commercial', isProductive: true,  value: 1200000, revenue: 84000,  taux_credit: 4.5,  annees_total: 15, annees_restantes: 12, val_pessimiste: 0,       val_optimiste: 0,        quotePart: '100%', apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0 },
@@ -7240,6 +7790,9 @@
                         { id: 'ma_6', name: 'Villa Riad Salam',                 type: 'Résidentiel',   isProductive: false, value: 1400000,  revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 1260000, val_optimiste: 1680000,  quotePart: '35%',  apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0 },
                         { id: 'ma_7', name: 'Local Bouskoura (Commercial)',     type: 'Commercial',    isProductive: false, value: 900000,   revenue: 0,     taux_credit: 0,    annees_total: 0,  annees_restantes: 0,  val_pessimiste: 800000,  val_optimiste: 1000000,  quotePart: '100%', apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0 },
                     ]);
+                    // v33.00 : les actifs par défaut sont eux aussi normalisés au schéma v19
+                    masterAssets.value = migrateAssetsV19(masterAssets.value);
+
                     const roiAssets    = computed(() => masterAssets.value.filter(a => a.isProductive));
                     const stressAssets = computed(() => masterAssets.value.filter(a => !a.isProductive));
                     const totalConservateur = computed(() => stressAssets.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
@@ -7264,7 +7817,9 @@
                     // ── v17.0 : CRUD unifié Master Asset ─────────────────
                     const showMasterAssetModal = ref(false);
                     const editingMasterAssetId = ref(null);
-                    const _emptyMasterAssetForm = () => ({ name: '', type: 'Commercial', isProductive: true, value: 0, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0, val_pessimiste: 0, val_optimiste: 0, quotePart: '100%', apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0 });
+                    // v33.03 : le formulaire porte le schéma v19 complet
+                    const masterAssetTab = ref('acquisition');
+                    const _emptyMasterAssetForm = () => migrateAssetV19({ name: '', type: 'Commercial', isProductive: true, value: 0, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0, val_pessimiste: 0, val_optimiste: 0, quotePart: '100%', apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0 });
                     const masterAssetForm = ref(_emptyMasterAssetForm());
 
                     const calculerCapital = () => {
@@ -7273,6 +7828,7 @@
 
                     const openMasterAssetModal = () => {
                         editingMasterAssetId.value = null;
+                        masterAssetTab.value = 'acquisition';
                         masterAssetForm.value = _emptyMasterAssetForm();
                         showMasterAssetModal.value = true;
                     };
@@ -7280,17 +7836,18 @@
                         const asset = masterAssets.value.find(a => a.id === id);
                         if (!asset) return;
                         editingMasterAssetId.value = id;
+                        masterAssetTab.value = 'acquisition';
                         // Migration legacy : si pas d'apport/crédit renseignés mais value > 0,
                         // injecte la valeur dans l'apport pour que Apport + Crédit = Capital
                         const apport = Number(asset.apport_personnel) || 0;
                         const credit = Number(asset.montant_credit) || 0;
                         const isLegacy = asset.isProductive && apport === 0 && credit === 0 && (Number(asset.value) || 0) > 0;
-                        masterAssetForm.value = {
+                        masterAssetForm.value = migrateAssetV19({
                             ...asset,
                             apport_personnel: isLegacy ? (Number(asset.value) || 0) : apport,
                             montant_credit:   isLegacy ? 0 : credit,
                             valeur_actuelle:  Number(asset.valeur_actuelle) || Number(asset.value) || 0,
-                        };
+                        });
                         showMasterAssetModal.value = true;
                     };
                     const deleteMasterAsset = (id) => {
@@ -7307,7 +7864,10 @@
                     const saveMasterAsset = () => {
                         const f = masterAssetForm.value;
                         if (!f.name || !f.name.trim()) { alert('Nom obligatoire'); return; }
+                        // v33.03 : on part du formulaire complet (schéma v19) puis on
+                        // normalise — plus aucun champ n'est perdu à l'enregistrement.
                         const cleaned = {
+                            ...migrateAssetV19(f),
                             id: editingMasterAssetId.value || ('ma_' + Date.now()),
                             name: String(f.name).trim(),
                             type: String(f.type || 'Commercial').trim(),
@@ -7323,6 +7883,42 @@
                             apport_personnel: Number(f.apport_personnel) || 0,
                             montant_credit: Number(f.montant_credit) || 0,
                             valeur_actuelle: Number(f.valeur_actuelle) || 0,
+                            // ── ACQUISITION ──
+                            prix_acquisition: Number(f.prix_acquisition) || 0,
+                            frais_acquisition: Number(f.frais_acquisition) || 0,
+                            travaux: Number(f.travaux) || 0,
+                            taux_revalorisation: Number(f.taux_revalorisation) || 0,
+                            // ── FINANCEMENT ──
+                            type_credit: String(f.type_credit || 'classique'),
+                            duree_mois: Number(f.duree_mois) || 0,
+                            mensualite: Number(f.mensualite) || 0,
+                            assurance_mensuelle: Number(f.assurance_mensuelle) || 0,
+                            marge_totale: Number(f.marge_totale) || 0,
+                            mode_marge: String(f.mode_marge || 'lineaire'),
+                            taux_ibraa: Number(f.taux_ibraa) || 0,
+                            mois_deja_payes: Number(f.mois_deja_payes) || 0,
+                            // ── EXPLOITATION ──
+                            mode_exploitation: String(f.mode_exploitation || 'aucun'),
+                            loyer_mensuel: Number(f.loyer_mensuel) || 0,
+                            adr: Number(f.adr) || 0,
+                            taux_occupation: Number(f.taux_occupation) || 0,
+                            frais_plateforme_pct: Number(f.frais_plateforme_pct) || 0,
+                            frais_cohost_pct: Number(f.frais_cohost_pct) || 0,
+                            maintenance_pct: Number(f.maintenance_pct) || 0,
+                            syndic: Number(f.syndic) || 0,
+                            internet: Number(f.internet) || 0,
+                            electricite_eau: Number(f.electricite_eau) || 0,
+                            consommables: Number(f.consommables) || 0,
+                            assurance_pno: Number(f.assurance_pno) || 0,
+                            // ── FISCALITÉ ──
+                            regime_fiscal: String(f.regime_fiscal || 'exonere'),
+                            taux_marginal: Number(f.taux_marginal) || 0,
+                            abattement_pct: Number(f.abattement_pct) || 0,
+                            taux_liberatoire: Number(f.taux_liberatoire) || 0,
+                            amortissement_bati_pct: Number(f.amortissement_bati_pct) || 0,
+                            amortissement_mobilier_pct: Number(f.amortissement_mobilier_pct) || 0,
+                            part_bati_pct: Number(f.part_bati_pct) || 0,
+                            _v: 19,
                         };
                         if (editingMasterAssetId.value !== null) {
                             masterAssets.value = masterAssets.value.map(a => a.id === editingMasterAssetId.value ? cleaned : a);
@@ -7333,12 +7929,22 @@
                         closeMasterAssetModal();
                     };
 
+
                     // ─────────────────────────────────────────────────────
                     // ── v20.00 : SANDBOX / PROJECTIONS ────────────────────
                     // ─────────────────────────────────────────────────────
                     const sandboxStartYear = new Date().getFullYear();
                     const sandboxHorizon = ref(7);
                     const sandboxSurplusMensuel = ref(0);
+                    // v33.00 : pilotage du moteur de projection
+                    const sandboxSurplusAuto = ref(true);        // surplus dérivé du budget réel
+                    const sandboxInflationOn = ref(true);        // érosion du pouvoir d'achat
+                    const sandboxRevaloOn = ref(true);           // revalorisation des actifs
+                    // Anti-double-comptage : par défaut les mensualités de crédit sont DÉJÀ
+                    // dans chargesFixes (clés "credit*") du budget, donc on ne les sort pas
+                    // une seconde fois de la trésorerie. Les loyers, eux, n'y sont pas.
+                    const sandboxMensualitesDansBudget = ref(true);
+                    const sandboxRevenusActifsDansBudget = ref(false);
                     const sandboxEvents = ref([]);
                     const sandboxForm = ref({
                         annee: sandboxStartYear + 1,
@@ -7406,22 +8012,89 @@
                         return { courant, dette, valeurActifs, comptes: cloneComptes, assets: cloneAssets, donneesAnnuelles: cloneAnnuel };
                     };
 
-                    // Projection annuelle isolée
+                    // ═══════════════════════════════════════════════════════════════
+                    // v33.00 — PROJECTION ANNUELLE DYNAMIQUE
+                    //   Pour chaque année :
+                    //     1. revenus       (surplus budgétaire + cash-flow net des actifs)
+                    //     2. amortissement (capital remboursé, dette et trésorerie)
+                    //     3. revalorisation des actifs
+                    //     4. inflation     (érosion du surplus)
+                    //     5. événements    (achat / vente / remboursement)
+                    //     6. patrimoine net = valeurActifs + courant − dette
+                    // ═══════════════════════════════════════════════════════════════
                     const sandboxProjection = computed(() => {
+                        calculationTick.value;
                         const base = _sandboxBaseState();
                         let courant = base.courant;
                         let dette = base.dette;
                         let valeurActifs = base.valeurActifs;
-                        const surplusAnnuel = (Number(sandboxSurplusMensuel.value) || 0) * 12;
                         const rows = [];
                         const horizon = Math.max(1, Math.min(20, Number(sandboxHorizon.value) || 1));
-                        // Sandbox assets travaille en mémoire pour ajuster les ventes/achats
-                        const sbAssets = JSON.parse(JSON.stringify(base.assets));
+                        const inflation = sandboxInflationOn.value ? N((parametres.value || {}).hypotheseInflation) / 100 : 0;
+                        // Sandbox assets travaille en mémoire (schéma v19 garanti)
+                        const sbAssets = migrateAssetsV19(JSON.parse(JSON.stringify(base.assets)));
+                        // Surplus : dérivé du budget réel, ou saisie manuelle
+                        let surplusAnnuel = sandboxSurplusAuto.value
+                            ? surplusBudgetaireAnnuel(sandboxStartYear)
+                            : (Number(sandboxSurplusMensuel.value) || 0) * 12;
+
                         for (let i = 0; i <= horizon; i++) {
                             const annee = sandboxStartYear + i;
-                            // Surplus annuel cumulé (sauf année 0 = "aujourd'hui")
-                            if (i > 0) courant += surplusAnnuel;
-                            // Appliquer les événements de cette année
+                            let fluxSurplus = 0, fluxActifs = 0, capitalAmorti = 0,
+                                interetsAnnee = 0, serviceDette = 0, revalo = 0;
+
+                            if (i > 0) {
+                                // ── 1. REVENUS ────────────────────────────────────────
+                                fluxSurplus = surplusAnnuel;
+                                courant += fluxSurplus;
+
+                                sbAssets.forEach(a => {
+                                    if (!a.isProductive) return;
+                                    const eco = assetEconomics(a, i - 1);
+                                    if (!sandboxRevenusActifsDansBudget.value) {
+                                        // cash-flow net = REX − service dette − impôt : le service
+                                        // de la dette est déjà dedans, on ne le resoustrait pas.
+                                        fluxActifs += eco.cashflowNet;
+                                    }
+                                    interetsAnnee += eco.interetsOuMarge;
+                                    serviceDette += eco.serviceDette;
+                                });
+                                courant += fluxActifs;
+
+                                // ── 2. AMORTISSEMENT DES CRÉDITS ──────────────────────
+                                sbAssets.forEach(a => {
+                                    if (N(a.montant_credit) <= 0) return;
+                                    const amo = amortissementAnnuel(a, i - 1);
+                                    const paye = Math.min(N(a.montant_credit), amo.capitalRembourse);
+                                    a.montant_credit = Math.max(0, N(a.montant_credit) - paye);
+                                    dette -= paye;
+                                    capitalAmorti += paye;
+                                    // La mensualité ne sort de la trésorerie que si elle n'est
+                                    // pas déjà comptée ailleurs (budget, ou cash-flow de l'actif).
+                                    const dejaCompte = sandboxMensualitesDansBudget.value
+                                        || (a.isProductive && !sandboxRevenusActifsDansBudget.value);
+                                    if (!dejaCompte) courant -= (N(a.mensualite) + N(a.assurance_mensuelle)) * 12;
+                                });
+
+                                // ── 3. REVALORISATION ─────────────────────────────────
+                                if (sandboxRevaloOn.value) {
+                                    sbAssets.forEach(a => {
+                                        const av = N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value);
+                                        const ap = av * (1 + N(a.taux_revalorisation) / 100);
+                                        revalo += (ap - av);
+                                        a.valeur_actuelle = ap;
+                                    });
+                                }
+                                valeurActifs = sbAssets.reduce((s, a) => s + (N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value)), 0);
+
+                                // ── 4. INFLATION ──────────────────────────────────────
+                                //   Érosion du pouvoir d'achat. Sur un surplus positif c'est
+                                //   bien s×(1−infl) ; sur un DÉFICIT, l'inflation le creuse au
+                                //   lieu de le réduire — d'où le raisonnement en valeur absolue.
+                                surplusAnnuel = surplusAnnuel - Math.abs(surplusAnnuel) * inflation;
+                            }
+
+                            // ── 5. ÉVÉNEMENTS de l'année (logique conservée) ──────────
                             const yearEvents = sandboxEvents.value.filter(e => Number(e.annee) === annee);
                             for (const ev of yearEvents) {
                                 const m = Number(ev.montant) || 0;
@@ -7455,12 +8128,23 @@
                                     }
                                 }
                             }
+                            // Recalage après événements (achats/ventes modifient sbAssets)
+                            if (yearEvents.length) {
+                                valeurActifs = sbAssets.reduce((s, a) => s + (N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value)), 0);
+                            }
                             rows.push({
                                 annee,
                                 courant: Math.round(courant),
-                                dette: Math.round(dette),
+                                dette: Math.round(Math.max(0, dette)),
                                 valeurActifs: Math.round(valeurActifs),
-                                net: Math.round(courant + valeurActifs - dette),
+                                net: Math.round(courant + valeurActifs - Math.max(0, dette)),
+                                // v33.00 : décomposition du mouvement de l'année
+                                fluxSurplus: Math.round(fluxSurplus),
+                                fluxActifs: Math.round(fluxActifs),
+                                capitalAmorti: Math.round(capitalAmorti),
+                                interets: Math.round(interetsAnnee),
+                                serviceDette: Math.round(serviceDette),
+                                revalo: Math.round(revalo),
                                 events: yearEvents,
                             });
                         }
@@ -7738,7 +8422,7 @@
                         }
                     };
 
-                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 18, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 19, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value });
                     // v17.19 : Auto-Save debounce 2s
                     let _autoSaveTimer = null;
 
@@ -8422,8 +9106,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             // v16.3 : hydratation Wealth Goals
                             if (Array.isArray(data.wealthGoals)) wealthGoals.value = data.wealthGoals;
                             // v17.0 : hydratation Master Assets (avec migration v16→v17)
+                            // v33.00 : puis migration de schéma 18 → 19 (idempotente, sans perte)
                             if (Array.isArray(data.masterAssets) && data.masterAssets.length) {
-                                masterAssets.value = data.masterAssets;
+                                masterAssets.value = migrateAssetsV19(data.masterAssets);
+                                if ((data._schemaVersion || 0) < 19) addLog('✅ Migration schéma 18→19 : ' + masterAssets.value.length + ' actif(s) enrichi(s).', 'success');
                             } else if (Array.isArray(data.wealthAssets) || Array.isArray(data.foncierPortfolio)) {
                                 // Migration v16 → v17 : reconstruit masterAssets depuis les deux sources legacy
                                 const migrated = [];
@@ -8442,7 +9128,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     val_pessimiste: a.pessimiste || 0, val_optimiste: a.optimiste || 0,
                                     quotePart: a.quotePart || '100%'
                                 }));
-                                if (migrated.length) { masterAssets.value = migrated; addLog('✅ Migration v16→v17 : masterAssets reconstruit.', 'success'); }
+                                if (migrated.length) { masterAssets.value = migrateAssetsV19(migrated); addLog('✅ Migration v16→v17→v19 : masterAssets reconstruit.', 'success'); }
                             }
 
                             // v17.7 : forcer mois/année réels UNE SEULE FOIS, après toutes les hydratations
@@ -12556,8 +13242,16 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         sandboxStartYear, sandboxHorizon, sandboxSurplusMensuel, sandboxEvents, sandboxEventsSorted, sandboxForm,
                         sandboxProjection, addSandboxEvent, removeSandboxEvent, resetSandbox, applySandbox, sandboxEventLabel,
                         showMasterAssetModal, editingMasterAssetId, masterAssetForm,
+                        masterAssetTab, masterAssetPreview, masterAssetMensualiteAuto,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         arbitrageCash, arbitrageDebtRate, arbitrageInvestRate, arbitrageYears,
+                        // v33.00 : moteur de simulation patrimoniale
+                        migrateAssetV19, migrateAssetsV19, coutTotalRevient, mensualiteClassique,
+                        tableauAmortissement, amortissementAnnuel, soldeAnticipe, assetEconomics,
+                        assetsEconomics, assetEcoById, revenusPassifsNetsAnnuel, revenusPassifsNetsMensuel,
+                        surplusBudgetaireAnnuel,
+                        sandboxSurplusAuto, sandboxInflationOn, sandboxRevaloOn,
+                        sandboxMensualitesDansBudget, sandboxRevenusActifsDansBudget,
                         comptes, parametres, comptesProjetes,
                         moisCibleProjection, anneeCibleProjectionComptes,
                         patrimoineLiquide, patrimoineNet, patrimoineSavingsInvest,
