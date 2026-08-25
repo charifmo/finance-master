@@ -2209,10 +2209,51 @@
                                             </td>
                                             <td :class="['px-3 py-3 text-center whitespace-nowrap sticky right-0 border-l border-gray-200 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]', asset.is_included_in_net_worth === false ? 'bg-gray-100' : 'bg-white']">
                                                 <div class="flex items-center justify-center gap-1.5">
+                                                    <button @click="toggleMarketIntel(asset)" :class="['p-1.5 rounded-lg transition-colors', (marketIntel[asset.id] || {}).open ? 'bg-sky-100 text-sky-700' : 'hover:bg-sky-100 text-sky-600']" title="Intelligence marché — actualités de la zone">🧠</button>
                                                     <button @click="toggleExit(asset.id, asset)" :class="['p-1.5 rounded-lg transition-colors', exitOpen[asset.id] ? 'bg-fuchsia-100 text-fuchsia-700' : 'hover:bg-fuchsia-100 text-fuchsia-600']" title="Simuler une revente">🔮</button>
                                                     <button @click="editMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="Éditer">✏️</button>
                                                     <button @click="deleteMasterAsset(asset.id)" class="p-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors" title="Supprimer">🗑️</button>
                                                 </div>
+                                            </td>
+                                        </tr>
+                                        <!-- v33.97 : Intelligence marché en accordéon sous la ligne -->
+                                        <tr v-if="(marketIntel[asset.id] || {}).open" class="bg-slate-50">
+                                            <td colspan="8" class="px-4 pb-4 pt-0">
+                                                <template v-for="mi in [marketIntel[asset.id] || {}]" :key="'mi'+asset.id">
+                                                <div class="rounded-2xl border-2 border-slate-700 overflow-hidden">
+                                                    <div class="px-4 py-2.5 bg-gradient-to-r from-slate-900 to-sky-900 text-white flex items-center justify-between flex-wrap gap-2">
+                                                        <p class="font-black uppercase tracking-widest text-[11px]">🧠 Intelligence marché — {{ asset.name }}</p>
+                                                        <div class="flex items-center gap-2">
+                                                            <span v-if="mi.at" class="text-[9px] opacity-60">recherche du {{ mi.at }}</span>
+                                                            <button @click="rafraichirMarketIntel(asset)" :disabled="mi.loading"
+                                                                    class="text-[9px] font-black uppercase tracking-widest bg-white/15 hover:bg-white/25 disabled:opacity-40 px-2 py-1 rounded-lg transition-colors">↻ Actualiser</button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="p-5 bg-slate-100">
+                                                        <!-- Chargement -->
+                                                        <div v-if="mi.loading" class="flex items-center gap-3 text-slate-600 py-4">
+                                                            <span class="inline-block w-5 h-5 border-2 border-slate-300 border-t-sky-600 rounded-full animate-spin"></span>
+                                                            <div>
+                                                                <p class="text-sm font-black">Recherche des dernières actualités marchés par l'IA…</p>
+                                                                <p class="text-[10px] text-slate-400 font-bold">Prix, projets urbanistiques, SDAU et infrastructures de la zone</p>
+                                                            </div>
+                                                        </div>
+                                                        <!-- Erreur -->
+                                                        <div v-else-if="mi.error" class="flex items-start gap-3 py-2">
+                                                            <span class="text-lg leading-none">⚠️</span>
+                                                            <div>
+                                                                <p class="text-sm font-black text-red-700">{{ mi.error }}</p>
+                                                                <button @click="rafraichirMarketIntel(asset)" class="mt-2 text-[10px] font-black uppercase tracking-widest bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition-colors">Réessayer</button>
+                                                            </div>
+                                                        </div>
+                                                        <!-- Réponse (HTML assaini) -->
+                                                        <div v-else class="cfo-html text-sm text-slate-800 leading-relaxed" v-html="mi.html"></div>
+                                                        <p v-if="mi.html && !mi.loading" class="text-[9px] text-slate-400 font-bold mt-3 pt-2 border-t border-slate-200">
+                                                            Synthèse produite par recherche web — à recouper avant toute décision d'achat ou de vente.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                </template>
                                             </td>
                                         </tr>
                                         <!-- v33.90 : Exit Simulator en accordéon sous la ligne -->
@@ -6312,8 +6353,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.96 Dette-Banque";
+                    const CURRENT_VERSION = "33.97 Market-Intel";
                     const CHANGELOG = [
+        { version: "33.97 Market-Intel", date: "2026-08-25", changes: [
+            "BOUTON 🧠 dans la colonne Actions, juste avant 🔮 : il déplie sous la ligne un accordéon bleu nuit qui interroge l'agent n8n « finance-cfo-web » en recherche web et affiche les actualités immobilières, prix de marché et projets urbanistiques (SDAU, infrastructures) de la zone de l'actif.",
+            "États gérés : loader animé « Recherche des dernières actualités marchés par l'IA… », message d'erreur explicite avec bouton Réessayer, horodatage de la recherche et bouton Actualiser. Une seule requête par session et par actif : rouvrir l'accordéon n'appelle pas l'agent une deuxième fois.",
+            "SÉCURITÉ — le contenu renvoyé provient de pages web tierces résumées par un LLM, puis injecté en v-html dans l'application. Sans filtre, une page piégée pourrait exécuter du script, charger des ressources distantes ou afficher un faux formulaire. Le HTML passe donc par un assainisseur à liste blanche : script, iframe, form, input, img, svg et consorts sont supprimés, tous les attributs d'événement (onerror, onclick…) et les URL javascript: sont retirés, les liens externes forcés en target=_blank rel=noopener noreferrer nofollow. Aucune dépendance ajoutée, DOMParser suffit.",
+            "Testé avec cinq charges hostiles (script, img onerror, href javascript:, onclick, iframe + form) : aucune ne s'exécute, le contenu légitime et les liens valides sont préservés.",
+            "DIAGNOSTIC CONNECTIVITÉ : le webhook répond bien en HTTP 200 mais renvoie seulement {\"session_id\":\"…\"}, sans champ html / output / response. L'interface le signale explicitement au lieu d'afficher du JSON brut — le workflow n8n doit être complété côté serveur pour retourner la réponse de l'IA."
+        ] },
         { version: "33.96 Dette-Banque", date: "2026-08-25", changes: [
             "COLONNE CRÉDIT RESTANT AU FORMAT BANQUE PARTICIPATIVE : sur une Mourabaha, le chiffre en gras rouge devient capital restant + marge non échue — le montant que la banque annonce au client — avec « dont X DH de marge » en petit gris juste en dessous. Un crédit classique reste sur le capital seul, sans sous-ligne.",
             "L'Ibra'a n'est PAS déduite dans cette colonne : c'est une remise commerciale accordée au moment d'un remboursement anticipé, pas une réduction de la dette due. Elle reste affichée dans le simulateur de revente, à sa place.",
@@ -8227,6 +8275,101 @@
                             echeances:        Math.round(tranche.reduce((x, r) => x + r.echeance, 0) * 100) / 100,
                         };
                     };
+
+                    // ═══════════════════════════════════════════════════════════════════
+                    // v33.97 — INTELLIGENCE MARCHÉ (recherche web via l'agent n8n)
+                    // ═══════════════════════════════════════════════════════════════════
+                    const MARKET_WEBHOOK = 'https://n8n.beau.ink/webhook/finance-cfo-web';
+                    const marketIntel = ref({});   // { [id]: { open, loading, html, error, at } }
+
+                    // Liste blanche : tout le reste est déballé (contenu conservé, balise jetée)
+                    const _BALISES_SURES = new Set(['P','BR','B','STRONG','I','EM','U','UL','OL','LI',
+                        'H1','H2','H3','H4','H5','H6','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH',
+                        'SPAN','DIV','A','CODE','PRE','BLOCKQUOTE','HR','SMALL','SECTION','ARTICLE']);
+                    const _ATTRS_SURS = new Set(['class','colspan','rowspan','title']);
+
+                    // Le résumé vient du web : on ne lui fait aucune confiance.
+                    const _sanitizeHtml = (brut) => {
+                        let doc;
+                        try { doc = new DOMParser().parseFromString('<div id="racine">' + String(brut || '') + '</div>', 'text/html'); }
+                        catch (_) { return String(brut || '').replace(/[<>]/g, ''); }
+                        const racine = doc.getElementById('racine');
+                        if (!racine) return '';
+                        // 1. suppression pure des éléments actifs ou porteurs de requêtes
+                        racine.querySelectorAll('script,style,iframe,object,embed,form,input,textarea,select,button,link,meta,base,svg,math,audio,video,img,source').forEach(e => e.remove());
+                        // 2. parcours en profondeur : balises hors liste déballées, attributs filtrés
+                        const nettoyer = (noeud) => {
+                            [...noeud.children].forEach(el => {
+                                nettoyer(el);
+                                [...el.attributes].forEach(at => {
+                                    const n = at.name.toLowerCase();
+                                    if (n === 'href' && el.tagName === 'A') {
+                                        if (!/^https?:\/\//i.test(at.value)) el.removeAttribute('href');
+                                        return;
+                                    }
+                                    if (!_ATTRS_SURS.has(n)) el.removeAttribute(at.name);
+                                });
+                                if (el.tagName === 'A' && el.getAttribute('href')) {
+                                    el.setAttribute('target', '_blank');
+                                    el.setAttribute('rel', 'noopener noreferrer nofollow');
+                                }
+                                if (!_BALISES_SURES.has(el.tagName)) el.replaceWith(...el.childNodes);
+                            });
+                        };
+                        nettoyer(racine);
+                        return racine.innerHTML;
+                    };
+
+                    const _majIntel = (id, patch) => {
+                        marketIntel.value = Object.assign({}, marketIntel.value,
+                            { [id]: Object.assign({}, marketIntel.value[id] || {}, patch) });
+                    };
+
+                    const chargerMarketIntel = async (asset) => {
+                        const a = asset || {}; const id = a.id;
+                        _majIntel(id, { loading: true, error: '', html: '' });
+                        try {
+                            const res = await fetch(MARKET_WEBHOOK, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    session_id: 'market_intel_' + id,
+                                    question: "Fais une recherche web approfondie (web_search) sur les dernières actualités immobilières, "
+                                        + "les prix du marché, et les projets urbanistiques (SDAU, infrastructures) pour la zone suivante au Maroc : "
+                                        + (a.name || '') + " (Type: " + (a.type || '') + "). Résume les informations clés en 3 bullet points.",
+                                })
+                            });
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                            const raw = await res.text();
+                            let html = '';
+                            try {
+                                const j = JSON.parse(raw);
+                                html = j.html || j.output || j.response || j.message || j.text || '';
+                                // Le workflow a répondu, mais sans contenu : inutile de déverser le JSON
+                                // brut dans la bulle, on le dit franchement.
+                                if (!html) {
+                                    _majIntel(id, { error: "L'agent a répondu sans contenu exploitable (aucun champ html / output / response). Vérifie que le workflow n8n « finance-cfo-web » renvoie bien la réponse de l'IA." });
+                                    return;
+                                }
+                            } catch (_) { html = raw; }
+                            const propre = _sanitizeHtml(html);
+                            _majIntel(id, { html: propre || '<p>Aucune information trouvée pour cette zone.</p>',
+                                            at: new Date().toLocaleString('fr-FR') });
+                        } catch (e) {
+                            _majIntel(id, { error: "Impossible de joindre l'agent IA — " + (e.message || e) });
+                        } finally {
+                            _majIntel(id, { loading: false });
+                        }
+                    };
+
+                    const toggleMarketIntel = (asset) => {
+                        const id = (asset || {}).id;
+                        const cur = marketIntel.value[id] || {};
+                        const open = !cur.open;
+                        _majIntel(id, { open });
+                        // une seule recherche par session : on ne rappelle pas l'agent à chaque ouverture
+                        if (open && !cur.html && !cur.loading) chargerMarketIntel(asset);
+                    };
+                    const rafraichirMarketIntel = (asset) => chargerMarketIntel(asset);
 
                     // ── v33.96 : DETTE AU SENS DE LA BANQUE ────────────────────────────
                     //   Classique  → capital restant dû
@@ -14420,6 +14563,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tnbCalculee, tpiCalculee, anneesDetention, prixAcquisitionRevalorise,
                         creditParams, creditRestantCalcule, moisEcoulesCredit, moisPayesEffectifs,
                         detteBancaire, globalDetteBancaire,
+                        marketIntel, toggleMarketIntel, chargerMarketIntel, rafraichirMarketIntel,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
                         migrateGoalV19, migrateGoalsV19, wealthGoalsCalc, addWealthGoal, syncGoalLegacy,
