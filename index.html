@@ -5802,11 +5802,16 @@
                         <!-- ── FINANCEMENT ── -->
                         <div v-show="masterAssetTab === 'financement' && !masterAssetEstTerrain" class="grid grid-cols-2 md:grid-cols-3 gap-3">
                             <div class="col-span-2 md:col-span-3">
-                                <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">💰 Capital initial emprunté (DH)</label>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-rose-600 block mb-1.5">
+                                    💰 {{ masterAssetMourabaha ? 'Montant net financé (prix d’achat pur)' : 'Capital initial emprunté' }} (DH)
+                                </label>
                                 <input v-model.number="masterAssetForm.capital_initial" type="number" min="0" step="10000"
-                                       placeholder="Renseigne-le et le crédit restant se calcule tout seul"
+                                       :placeholder="masterAssetMourabaha ? 'Le prix payé au vendeur, hors bénéfice de la banque' : 'Renseigne-le et le crédit restant se calcule tout seul'"
                                        class="w-full bg-rose-50 border-2 border-rose-300 rounded-lg px-3 py-2 text-sm font-black text-rose-800 outline-none focus:border-rose-500 text-right"/>
-                                <p class="text-[9px] font-bold mt-0.5" :class="masterAssetPiloteParCapital ? 'text-emerald-600' : 'text-gray-400'">
+                                <p v-if="masterAssetMourabaha" class="text-[9px] font-bold text-amber-600 mt-0.5">
+                                    ⚠️ Ne pas inclure le bénéfice de la banque : c’est le prix d’acquisition pur. La marge en est déduite.
+                                </p>
+                                <p v-else class="text-[9px] font-bold mt-0.5" :class="masterAssetPiloteParCapital ? 'text-emerald-600' : 'text-gray-400'">
                                     {{ masterAssetPiloteParCapital
                                         ? '✅ Base de l’échéancier — le crédit restant, la marge et le taux en découlent'
                                         : 'Vide : le moteur retombe sur le crédit restant saisi à la main' }}
@@ -5849,9 +5854,17 @@
                                 </p>
                             </div>
                             <div>
-                                <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">Mensualité (0 = auto)</label>
-                                <input v-model.number="masterAssetForm.mensualite" type="number" min="0" step="50" :placeholder="masterAssetMensualiteAuto" class="w-full bg-amber-50 border-2 border-amber-200 rounded-lg px-3 py-2 text-sm font-black text-amber-800 outline-none focus:border-amber-500 text-right"/>
-                                <p class="text-[9px] text-amber-500 font-bold mt-0.5">auto : {{ formatMAD(masterAssetMensualiteAuto) }}</p>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">
+                                    Mensualité {{ masterAssetMourabaha ? '(obligatoire)' : '(0 = auto)' }}
+                                </label>
+                                <input v-model.number="masterAssetForm.mensualite" type="number" min="0" step="50"
+                                       :placeholder="masterAssetMourabaha ? 'Échéance du contrat' : masterAssetMensualiteAuto"
+                                       :class="masterAssetMensualiteManquante
+                                           ? 'w-full bg-red-50 border-2 border-red-400 rounded-lg px-3 py-2 text-sm font-black text-red-800 outline-none text-right'
+                                           : 'w-full bg-amber-50 border-2 border-amber-200 rounded-lg px-3 py-2 text-sm font-black text-amber-800 outline-none focus:border-amber-500 text-right'"/>
+                                <p v-if="masterAssetMensualiteManquante" class="text-[9px] text-red-600 font-bold mt-0.5">Requise : c’est elle qui détermine la marge et l’Ibra’a.</p>
+                                <p v-else-if="!masterAssetMourabaha" class="text-[9px] text-amber-500 font-bold mt-0.5">auto : {{ formatMAD(masterAssetMensualiteAuto) }}</p>
+                                <p v-else class="text-[9px] text-emerald-600 font-bold mt-0.5">Échéance du contrat · pilote tout le calcul</p>
                             </div>
                             <div>
                                 <label class="text-[10px] font-black uppercase tracking-widest text-amber-600 block mb-1.5">Assurance / mois</label>
@@ -5859,9 +5872,15 @@
                             </div>
                             <template v-if="masterAssetForm.type_credit === 'mourabaha'">
                                 <div>
-                                    <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5">Marge totale (0 = auto)</label>
-                                    <input v-model.number="masterAssetForm.marge_totale" type="number" min="0" step="1000" class="w-full bg-teal-50 border-2 border-teal-200 rounded-lg px-3 py-2 text-sm font-black text-teal-800 outline-none focus:border-teal-500 text-right"/>
-                                    <p class="text-[9px] text-teal-500 font-bold mt-0.5">auto : {{ formatMAD(masterAssetCredit.marge) }}</p>
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5 flex items-center justify-between">
+                                        <span>Marge totale banque</span>
+                                        <span class="text-[8px] bg-teal-600 text-white px-1.5 py-0.5 rounded normal-case tracking-normal">calculée</span>
+                                    </label>
+                                    <input :value="masterAssetMargeAuto" type="number" readonly
+                                           class="w-full bg-gray-100 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-600 outline-none cursor-not-allowed text-right"/>
+                                    <p class="text-[9px] text-teal-500 font-bold mt-0.5">
+                                        {{ formatMAD(masterAssetCredit.mens) }} × {{ masterAssetCredit.n }} mois − {{ formatMAD(masterAssetCredit.capInit) }}
+                                    </p>
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-black uppercase tracking-widest text-teal-600 block mb-1.5">Répartition marge</label>
@@ -6284,8 +6303,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.93 Exit-Foncier-Logique";
+                    const CURRENT_VERSION = "33.95 Smart-Mourabaha";
                     const CHANGELOG = [
+        { version: "33.95 Smart-Mourabaha", date: "2026-08-25", changes: [
+            "CLARIFICATION DU CAPITAL : en Mourabaha, « Capital initial emprunté » devient « Montant net financé (prix d'achat pur) », avec l'avertissement de ne pas y inclure le bénéfice de la banque. Le libellé d'origine reste affiché pour un crédit classique.",
+            "MARGE VERROUILLÉE : marge_totale passe en lecture seule avec badge « calculée » et vaut STRICTEMENT mensualité × durée − montant net financé. Le moteur ne se contente plus de la déduire quand elle vaut zéro : il la recalcule en continu, car une marge saisie qui ne colle pas à l'échéancier fausse la répartition capital/marge, donc le capital restant dû, donc l'Ibra'a. La formule est affichée sous le champ.",
+            "MENSUALITÉ OBLIGATOIRE : le mode « 0 = auto » est désactivé en Mourabaha, puisque c'est l'échéance qui porte la marge. Champ vide = bordure rouge et message « Requise : c'est elle qui détermine la marge et l'Ibra'a ». La dernière marge connue est conservée le temps de la re-saisir, plutôt que remise à zéro.",
+            "Vérifié sur le cas de référence : 1 000 000 DH net financé, 180 mois, 7 939 DH d'échéance → marge 429 020 DH affichée seule, taux implicite 5,06 %, CRD 717 394 DH après 66 mois, et solde de rachat à 60 mois de 828 941 DH (capital 746 449 + marge non échue 206 231 − Ibra'a 123 739). Passer l'échéance à 8 500 DH recalcule la marge à 530 000 DH instantanément."
+        ] },
         { version: "33.93 Exit-Foncier-Logique", date: "2026-08-23", changes: [
             "TAUX DE REVALORISATION : le moteur lisait déjà actif.taux_revalorisation — vérifié, un terrain réglé sur 3 % produit bien 1,03^N. Un panneau affichant 1 %/an reflète donc la valeur STOCKÉE sur la fiche. Le taux devient éditable directement dans l'en-tête du panneau de revente : on voit et on corrige sur place, la projection se recalcule immédiatement.",
             "TNB — fin de la rétroactivité aveugle. L'ancienne formule multipliait le tarif par (annees_tnb + N), mêlant passé et horizon. Nouvelle règle : TNB(N) = passif actuel + TNB annuelle × N. Le passif actuel vient du montant saisi dans arrieres_tnb ou, à défaut, de l'estimation issue de annees_tnb ; il ne bouge plus avec l'horizon. Un terrain agricole jamais taxé (annees_tnb = 0) ne porte donc aucun passif et ne paie que la taxe générée pendant la simulation.",
@@ -8080,10 +8105,15 @@
                         let marge = N(a.marge_totale);
 
                         if (estMourabaha) {
-                            // Marge « auto » : elle se déduit de l'échéance et du capital INITIAL.
-                            if (marge <= 0) {
-                                if (mens > 0 && n > 0 && capInit > 0) marge = mens * n - capInit;
-                                else if (taux > 0 && capInit > 0 && n > 0) marge = mensualiteClassique(capInit, taux, n) * n - capInit;
+                            // v33.95 : la marge n'est plus une saisie mais un RÉSULTAT du contrat.
+                            //   marge = mensualité × durée − montant net financé
+                            //   Une marge stockée qui ne colle pas à l'échéancier fausserait la
+                            //   répartition capital/marge, donc le capital restant dû, donc l'Ibra'a.
+                            if (mens > 0 && n > 0 && capInit > 0) {
+                                marge = mens * n - capInit;
+                            } else if (marge <= 0 && taux > 0 && capInit > 0 && n > 0) {
+                                // repli : aucun échéancier connu, on part du taux affiché
+                                marge = mensualiteClassique(capInit, taux, n) * n - capInit;
                             }
                             if (marge < 0) marge = 0;
                             if (mens <= 0 && n > 0) mens = (capInit + marge) / n;
@@ -8546,6 +8576,22 @@
                         },
                         { immediate: true }
                     );
+                    // v33.95 : en Mourabaha, la marge affichée EST la marge calculée
+                    const masterAssetMargeAuto = computed(() => masterAssetCredit.value.marge);
+                    const masterAssetMourabaha = computed(() => String(masterAssetForm.value.type_credit) === 'mourabaha');
+                    const masterAssetMensualiteManquante = computed(() =>
+                        masterAssetMourabaha.value && !(N(masterAssetForm.value.mensualite) > 0));
+                    watch(
+                        () => [masterAssetForm.value.type_credit, masterAssetForm.value.capital_initial,
+                               masterAssetForm.value.duree_mois, masterAssetForm.value.mensualite].join('|'),
+                        () => {
+                            if (!masterAssetMourabaha.value) return;
+                            const m = masterAssetMargeAuto.value;
+                            if (Number(masterAssetForm.value.marge_totale) !== m) masterAssetForm.value.marge_totale = m;
+                        },
+                        { immediate: true }
+                    );
+
                     // v33.40 : mois écoulés dérivés de la date de déblocage
                     const masterAssetMoisAuto = computed(() => moisEcoulesCredit(masterAssetForm.value));
                     const masterAssetDatePilotee = computed(() => masterAssetMoisAuto.value !== null);
@@ -14318,6 +14364,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         masterAssetTab, masterAssetPreview, masterAssetMensualiteAuto,
                         masterAssetCredit, masterAssetCRD, masterAssetPiloteParCapital,
                         masterAssetMoisAuto, masterAssetDatePilotee,
+                        masterAssetMargeAuto, masterAssetMourabaha, masterAssetMensualiteManquante,
                         masterAssetEstTerrain, masterAssetQuotePct, masterAssetMaPart,
                         masterAssetScenarios, masterAssetOngletsDispos, syncPrixM2, syncValeurGlobale,
                         masterAssetTNB, masterAssetRevalorise, masterAssetDetention,
