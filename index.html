@@ -2191,9 +2191,14 @@
                                                 </p>
                                             </td>
                                             <td class="px-3 py-3 text-right text-blue-700 font-black bg-blue-50/40 whitespace-nowrap">{{ formatMAD(asset.valeur_actuelle || asset.value) }}</td>
-                                            <td class="px-3 py-3 text-right text-rose-700 font-black bg-rose-50/40 whitespace-nowrap">{{ formatMAD(asset.montant_credit || 0) }}</td>
+                                            <td class="px-3 py-3 text-right bg-rose-50/40 whitespace-nowrap">
+                                                <template v-for="d in [detteBancaire(asset)]" :key="'d'+asset.id">
+                                                    <span class="text-rose-700 font-black">{{ formatMAD(d.total) }}</span>
+                                                    <span v-if="d.estMourabaha && d.marge > 0" class="block text-[9px] font-bold text-gray-400 mt-0.5">dont {{ formatMAD(d.marge) }} de marge</span>
+                                                </template>
+                                            </td>
                                             <td class="px-3 py-3 text-right text-indigo-700 font-black bg-indigo-50/40 whitespace-nowrap">{{ formatMAD(asset.apport_personnel || 0) }}</td>
-                                            <td class="px-3 py-3 text-right text-emerald-700 font-black bg-emerald-50/40 whitespace-nowrap">{{ formatMAD((Number(asset.valeur_actuelle || asset.value) || 0) - (Number(asset.montant_credit) || 0)) }}</td>
+                                            <td class="px-3 py-3 text-right text-emerald-700 font-black bg-emerald-50/40 whitespace-nowrap">{{ formatMAD((Number(asset.valeur_actuelle || asset.value) || 0) - detteBancaire(asset).capital) }}</td>
                                             <td class="px-4 py-3 text-right whitespace-nowrap">
                                                 <span v-if="asset.isProductive" :class="['font-black', ((assetEcoById[asset.id] || {}).cashflowNetMensuel || 0) >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(Math.round((assetEcoById[asset.id] || {}).cashflowNetMensuel || 0)) }}</span>
                                                 <span v-else class="text-gray-300">—</span>
@@ -2286,7 +2291,10 @@
                                         <tr class="bg-gradient-to-r from-slate-800 to-violet-900 text-white">
                                             <td class="px-4 py-3 font-black text-sm uppercase tracking-widest">📊 Totaux retenus</td>
                                             <td class="px-4 py-3 text-right font-black text-base text-blue-300 whitespace-nowrap">{{ formatMAD(globalValeurTotale) }}</td>
-                                            <td class="px-4 py-3 text-right font-black text-base text-rose-300 whitespace-nowrap">{{ formatMAD(globalDetteTotale) }}</td>
+                                            <td class="px-4 py-3 text-right whitespace-nowrap">
+                                                <span class="font-black text-base text-rose-300">{{ formatMAD(globalDetteBancaire.total) }}</span>
+                                                <span v-if="globalDetteBancaire.marge > 0" class="block text-[9px] font-bold text-white/50 mt-0.5">dont {{ formatMAD(globalDetteBancaire.marge) }} de marge</span>
+                                            </td>
                                             <td class="px-4 py-3 text-right font-black text-base text-indigo-300 whitespace-nowrap">{{ formatMAD(assetsInclus.reduce((s, a) => s + (Number(a.apport_personnel) || 0), 0)) }}</td>
                                             <td class="px-4 py-3 text-right font-black text-base text-emerald-300 whitespace-nowrap">{{ formatMAD(globalPatrimoineNet) }}</td>
                                             <td class="px-4 py-3 text-right font-black text-base text-yellow-300 whitespace-nowrap">{{ formatMAD(Math.round(revenusPassifsNetsMensuel)) }}</td>
@@ -2321,6 +2329,7 @@
                                     <div>
                                         <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Dette totale</p>
                                         <p class="text-base lg:text-lg font-black text-rose-300">{{ formatMAD(globalDetteTotale) }}</p>
+                                        <p v-if="globalDetteBancaire.marge > 0" class="text-[9px] opacity-60">capital pur · {{ formatMAD(globalDetteBancaire.total) }} au sens banque</p>
                                     </div>
                                     <div>
                                         <p class="text-[9px] uppercase tracking-widest opacity-60 mb-1">Patrimoine net</p>
@@ -6303,8 +6312,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.95 Smart-Mourabaha";
+                    const CURRENT_VERSION = "33.96 Dette-Banque";
                     const CHANGELOG = [
+        { version: "33.96 Dette-Banque", date: "2026-08-25", changes: [
+            "COLONNE CRÉDIT RESTANT AU FORMAT BANQUE PARTICIPATIVE : sur une Mourabaha, le chiffre en gras rouge devient capital restant + marge non échue — le montant que la banque annonce au client — avec « dont X DH de marge » en petit gris juste en dessous. Un crédit classique reste sur le capital seul, sans sous-ligne.",
+            "L'Ibra'a n'est PAS déduite dans cette colonne : c'est une remise commerciale accordée au moment d'un remboursement anticipé, pas une réduction de la dette due. Elle reste affichée dans le simulateur de revente, à sa place.",
+            "COLONNE NET PRÉSERVÉE : elle continue de déduire le capital restant PUR. Imputer la marge non échue au bilan amputerait le patrimoine d'un coup d'une charge qui court sur toute la durée du contrat. Par construction, total affiché − marge affichée = capital déduit du NET.",
+            "COHÉRENCE LIVE : la marge non échue vieillissait toute seule via la date de déblocage alors que le capital restait la valeur figée en base — le total dérivait entre deux ouvertures de fiche. Le capital des colonnes Crédit restant et NET, ainsi que les agrégats globaux, passent sur creditRestantCalcule : tout vieillit au même rythme.",
+            "Vérifié sur le Studio (765 560 net financé, 240 mois à 5 145 DH, débloqué en août 2021) : 60 mois payés → capital 641 365 + marge non échue 284 735 = 926 100 DH affichés, soit exactement les 180 échéances restantes. La somme des NET des lignes (1 140 637) égale le NET du pied de tableau au dirham près."
+        ] },
         { version: "33.95 Smart-Mourabaha", date: "2026-08-25", changes: [
             "CLARIFICATION DU CAPITAL : en Mourabaha, « Capital initial emprunté » devient « Montant net financé (prix d'achat pur) », avec l'avertissement de ne pas y inclure le bénéfice de la banque. Le libellé d'origine reste affiché pour un crédit classique.",
             "MARGE VERROUILLÉE : marge_totale passe en lecture seule avec badge « calculée » et vaut STRICTEMENT mensualité × durée − montant net financé. Le moteur ne se contente plus de la déduire quand elle vaut zéro : il la recalcule en continu, car une marge saisie qui ne colle pas à l'échéancier fausse la répartition capital/marge, donc le capital restant dû, donc l'Ibra'a. La formule est affichée sous le champ.",
@@ -8212,6 +8228,27 @@
                         };
                     };
 
+                    // ── v33.96 : DETTE AU SENS DE LA BANQUE ────────────────────────────
+                    //   Classique  → capital restant dû
+                    //   Mourabaha  → capital restant + marge non échue (le chiffre du relevé)
+                    //   Le capital retenu est montant_credit, celui-là même que la colonne NET
+                    //   déduit : total − marge = capital, l'affichage reste cohérent au dirham.
+                    const detteBancaire = (asset) => {
+                        const a = asset || {};
+                        // Capital LIVE : la marge non échue vieillit toute seule via la date de
+                        //   déblocage, le capital doit suivre le même rythme sinon le total dérive
+                        //   entre deux ouvertures de la fiche.
+                        const capital = creditRestantCalcule(a);
+                        const r2 = (v) => Math.round(v * 100) / 100;
+                        if (capital <= 0) return { capital: 0, marge: 0, total: 0, estMourabaha: false };
+                        if (String(a.type_credit) !== 'mourabaha' || N(a.duree_mois) <= 0) {
+                            return { capital: r2(capital), marge: 0, total: r2(capital), estMourabaha: false };
+                        }
+                        const sa = soldeAnticipe(a, moisPayesEffectifs(a));
+                        const marge = Math.max(0, N(sa.margeNonEchue));
+                        return { capital: r2(capital), marge: r2(marge), total: r2(capital + marge), estMourabaha: true };
+                    };
+
                     // ── v33.30 : CRÉDIT RESTANT DÛ CALCULÉ ─────────────────────────────
                     //   Fait tourner l'échéancier jusqu'au mois « mois_deja_payes »
                     //   et renvoie le solde exact. Aucune saisie manuelle.
@@ -8507,18 +8544,28 @@
 
                     // ── v20.00 : Totaux Patrimoine de Jouissance (non-productifs) ──
                     const stressTotalValeur = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
-                    const stressTotalCredit = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0));
+                    // v33.96 : capital LIVE (vieillit avec la date de déblocage), pas la valeur figée
+                    const stressTotalCredit = computed(() => stressAssetsInclus.value.reduce((s, a) => s + creditRestantCalcule(a), 0));
                     const stressTotalApport = computed(() => stressAssetsInclus.value.reduce((s, a) => s + (Number(a.apport_personnel) || 0), 0));
-                    const stressTotalNet    = computed(() => stressAssetsInclus.value.reduce((s, a) => s + ((Number(a.valeur_actuelle || a.value) || 0) - (Number(a.montant_credit) || 0)), 0));
+                    const stressTotalNet    = computed(() => stressAssetsInclus.value.reduce((s, a) => s + ((Number(a.valeur_actuelle || a.value) || 0) - creditRestantCalcule(a)), 0));
 
                     // ── v20.10 : Synthèse Globale du Patrimoine (NET WORTH) ──
                     const globalValeurProductifs   = computed(() => roiAssetsInclus.value.reduce((s, a) => s + (Number(a.valeur_actuelle || a.value) || 0), 0));
-                    const globalDetteProductifs    = computed(() => roiAssetsInclus.value.reduce((s, a) => s + (Number(a.montant_credit) || 0), 0));
+                    const globalDetteProductifs    = computed(() => roiAssetsInclus.value.reduce((s, a) => s + creditRestantCalcule(a), 0));
                     const globalValeurJouissance   = computed(() => stressTotalValeur.value);
                     const globalDetteJouissance    = computed(() => stressTotalCredit.value);
                     const globalValeurTotale       = computed(() => globalValeurProductifs.value + globalValeurJouissance.value);
                     const globalDetteTotale        = computed(() => globalDetteProductifs.value + globalDetteJouissance.value);
                     const globalPatrimoineNet      = computed(() => globalValeurTotale.value - globalDetteTotale.value);
+                    // v33.96 : dette telle qu'annoncée par les banques (marge non échue incluse)
+                    const globalDetteBancaire = computed(() => {
+                        const d = assetsInclus.value.map(detteBancaire);
+                        return {
+                            capital: Math.round(d.reduce((s, x) => s + x.capital, 0)),
+                            marge:   Math.round(d.reduce((s, x) => s + x.marge, 0)),
+                            total:   Math.round(d.reduce((s, x) => s + x.total, 0)),
+                        };
+                    });
 
                     // ── v17.0 : CRUD unifié Master Asset ─────────────────
                     const showMasterAssetModal = ref(false);
@@ -14372,6 +14419,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         estTerrainNu, quotePartPct, terrainScenarios, ZONAGES,
                         tnbCalculee, tpiCalculee, anneesDetention, prixAcquisitionRevalorise,
                         creditParams, creditRestantCalcule, moisEcoulesCredit, moisPayesEffectifs,
+                        detteBancaire, globalDetteBancaire,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
                         migrateGoalV19, migrateGoalsV19, wealthGoalsCalc, addWealthGoal, syncGoalLegacy,
