@@ -305,6 +305,7 @@
                         <!-- v17.21 Tooltip répartition dynamique -->
                         <div class="hidden group-hover:block absolute right-0 top-full mt-1 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 min-w-[300px] text-left border border-slate-700">
                             <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Répartition du Patrimoine Projeté</p>
+                            <p class="text-[8px] font-bold text-slate-500 mb-2 -mt-1">Soldes issus du Relevé de Comptes — fin {{ Math.max(anneeCibleProjection, soldesInitiaux.anneeActuelle) }}</p>
                             <div class="space-y-1.5 text-sm">
                                 <!-- v17.37 : SSOT — Comptes physiques depuis bilan -->
                                 <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
@@ -6385,8 +6386,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.00 Surplus-Futur";
+                    const CURRENT_VERSION = "34.01 SSOT-Solde-Projete";
                     const CHANGELOG = [
+        { version: "34.01 SSOT-Solde-Projete", date: "2026-08-26", changes: [
+            "VÉRIFICATION PRÉALABLE : le Relevé de Comptes n'oubliait RIEN. Sur les données réelles de décembre 2026, il produit bien les onze lignes attendues — salaire, bonification, les deux virements d'épargne (−3 000 et −2 000 au j.27), les revenus locatifs, les charges fixes, la dépense ponctuelle Appart Aga et les charges variables. Les virements d'épargne étaient simplement hors écran : le cycle démarre au jour de paie, donc le j.27 s'affiche EN HAUT de la liste, au-dessus du j.5.",
+            "LE VRAI DÉFAUT était la coexistence de deux moteurs de projection contradictoires : bilan.lignes[].detailsComptes alimentait l'info-bulle « Répartition du Patrimoine Projeté » et le KPI Patrimoine Global, tandis que _buildJournalReleve alimentait le Relevé. Sur le Compte Courant fin 2026 : −20 048 DH d'un côté, +2 107 DH de l'autre, soit 22 155 DH d'écart. Les comptes « depenses annuels » (28 440 vs 6 700) et « Compte urgence » (27 000 vs 22 000) divergeaient aussi.",
+            "SSOT : les soldes projetés par compte proviennent désormais du moteur du Relevé, chaîné depuis les soldes réels d'aujourd'hui jusqu'à décembre de l'année cible de projection. detailsComptesFinal et detailsEpargneFinal en dérivent, avec repli sur l'ancien moteur si le journal ne produit rien. L'info-bulle porte la mention « Soldes issus du Relevé de Comptes — fin <année> ».",
+            "Écart mesuré après correction : ZÉRO sur les cinq comptes, en cible 2026 comme en cible 2029. Le chiffre du KPI est désormais, par construction, la dernière ligne du relevé.",
+            "CONSÉQUENCE À CONNAÎTRE : le Patrimoine Global Projeté fin 2026 passe de 64 352 DH à 59 767 DH. La baisse n'est pas une régression — c'est l'ancien moteur macro qui surévaluait, notamment sur le compte « depenses annuels »."
+        ] },
         { version: "34.00 Surplus-Futur", date: "2026-08-26", changes: [
             "LE MOIS EN COURS SORT DE LA MOYENNE. Il est calculé en mode « remaining » : les charges déjà payées en sont retirées mais le salaire à venir aussi, si bien qu'il représente un atterrissage de fin de mois, pas un potentiel mensuel. Le moyenner avec des mois théoriques pleins creusait artificiellement le KPI.",
             "Nouvelle assiette (surplusMoisMoyennes) : année en cours → mois strictement futurs [moisActuel + 1 … 12] ; autre année → les 12 mois, puisque aucun n'est en cours. Filet de sécurité : en décembre il ne reste aucun mois futur, la moyenne retombe alors sur le mois en cours plutôt que d'afficher zéro.",
@@ -14027,12 +14035,37 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return am.length > 0 ? am[am.length - 1] : null;
                     });
 
+                    // ── v34.01 : SSOT — soldes projetés issus du moteur du Relevé ──────
+                    //   Même chaînage que le Relevé de Comptes : on part des soldes réels
+                    //   d'aujourd'hui et on déroule tous les cycles jusqu'à décembre de
+                    //   l'année cible. Ce que montre l'info-bulle est donc exactement la
+                    //   dernière ligne du relevé, au dirham près.
+                    const soldesProjetesJournal = computed(() => {
+                        calculationTick.value;
+                        const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
+                        const cible = Math.max(Number(anneeCibleProjection.value) || curA, curA);
+                        const cycles = [];
+                        for (let a = curA; a <= cible; a++) {
+                            for (let m = (a === curA ? curM : 1); m <= 12; m++) cycles.push(m + '-' + a);
+                        }
+                        return (_buildJournalReleve([], cycles) || {}).soldesFinaux || {};
+                    });
+
                     const detailsComptesFinal = computed(() => {
+                        const src = soldesProjetesJournal.value;
+                        const out = {};
+                        Object.keys(src).forEach(k => { if (String(k).startsWith('cpt_')) out[k] = src[k]; });
+                        if (Object.keys(out).length) return out;
+                        // repli : moteur bilan, si le journal n'a rien produit
                         const row = _derniereLigneCible.value;
                         return (row && row.detailsComptes) ? row.detailsComptes : {};
                     });
 
                     const detailsEpargneFinal = computed(() => {
+                        const src = soldesProjetesJournal.value;
+                        const out = {};
+                        Object.keys(src).forEach(k => { if (String(k).startsWith('ep_')) out[k] = src[k]; });
+                        if (Object.keys(out).length) return out;
                         const row = _derniereLigneCible.value;
                         return (row && row.detailsEpargne) ? row.detailsEpargne : {};
                     });
@@ -14650,7 +14683,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         addCompte, deleteCompte, startEditCompte, saveEditCompte, cancelEditCompte, moveCompte, uploadMedia,
                         addObjectifEpargne, deleteObjectifEpargne,
                         comptesSelectOptions,
-                        detailsComptesFinal, getCompteLabel, getCompteIcone, getNomCompte,
+                        detailsComptesFinal, soldesProjetesJournal, getCompteLabel, getCompteIcone, getNomCompte,
                         getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
                         canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup
