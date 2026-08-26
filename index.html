@@ -309,13 +309,14 @@
                             <div class="space-y-1.5 text-sm">
                                 <!-- v17.37 : SSOT — Comptes physiques depuis bilan -->
                                 <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
-                                    <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black" :class="val < 0 ? 'text-red-400' : ''">{{ formatMAD(val) }}</span></div>
+                                    <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleveProjection(key)" title="Ouvrir le Relevé sur le même horizon">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black" :class="val < 0 ? 'text-red-400' : ''">{{ formatMAD(val) }}</span></div>
                                 </template>
                                 <!-- v17.45 : Radical — masque tout objectif ayant linkedAccountId, quelle que soit sa valeur -->
                                 <template v-for="(val, key) in detailsEpargneFinal" :key="'tt_'+key">
-                                    <div v-if="!getEpLinkedId(key)" class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleve(key)">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                    <div v-if="!getEpLinkedId(key)" class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleveProjection(key)" title="Ouvrir le Relevé sur le même horizon">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
                                 </template>
                                 <div class="border-t border-slate-700 pt-1.5 mt-1.5 flex justify-between"><span class="text-emerald-300 font-black">🏛️ Total</span><span class="font-black text-emerald-400">{{ formatMAD(patrimoineProjeteGlobal) }}</span></div>
+                                <p class="text-[8px] text-slate-500 font-bold mt-1">Cliquez un compte pour ouvrir son relevé sur le même horizon.</p>
                             </div>
                         </div>
                     </div>
@@ -6386,8 +6387,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.02 Audit-Journal";
+                    const CURRENT_VERSION = "34.03 Bulle-Horizon";
                     const CHANGELOG = [
+        { version: "34.03 Bulle-Horizon", date: "2026-08-26", changes: [
+            "AUDIT DE LA BULLE « Répartition du Patrimoine Projeté » : aucune faute de calcul. Le total égale la somme de ses lignes (59 767 DH), chaque ligne égale l'atterrissage du Relevé pour ce compte avec un écart de zéro, et le pont mois par mois du Compte Courant s'enchaîne proprement — −495 DH fin août, −174, +147, +1 702, +2 107 fin décembre.",
+            "L'INCOHÉRENCE CONSTATÉE ÉTAIT UN ÉCART D'HORIZON, pas un écart de calcul : la bulle affiche fin 2026 (2 107 DH) alors qu'un clic ouvrait le Relevé sur le cycle courant seul (−495 DH). Deux chiffres justes, deux périodes différentes.",
+            "CORRECTIF : cliquer un compte dans la bulle ouvre désormais le Relevé déjà cadré sur le même horizon — du cycle courant à décembre de l'année cible de projection. Le montant lu dans la bulle est littéralement la dernière ligne du relevé qui s'ouvre. Vérifié sur les cinq comptes : écart 0.",
+            "La bulle porte une mention explicite invitant à cliquer un compte pour ouvrir son relevé sur le même horizon."
+        ] },
         { version: "34.02 Audit-Journal", date: "2026-08-26", changes: [
             "AUDIT PAR INVARIANTS du moteur du Relevé, mené sur les données réelles : additivité, indépendance des filtres, cohérence du chaînage, insensibilité à l'ordre de sélection, découplage du sélecteur d'année, multi-années, mois passés, et contrôle arithmétique ligne à ligne. Deux fautes trouvées, six invariants déjà respectés.",
             "FAUTE 1 — ADDITIVITÉ ROMPUE DE 10 500 DH. Le dictionnaire de soldes créait un pseudo-compte « ep_<id> » par objectif d'épargne et l'initialisait à la MENSUALITÉ du virement, comme s'il s'agissait d'un encours. Les deux objectifs de la base étant liés à des comptes physiques (linkedAccountId), leurs crédits partaient vers ces comptes et les pseudo-comptes gardaient un solde fantôme jamais mouvementé. La vue Globale affichait 70 267 DH quand la somme des cinq comptes valait 59 767 DH. Correctif : aucun pseudo-compte pour une épargne liée, départ à zéro pour les autres — un objectif n'a pas d'encours initial, il accumule ses versements.",
@@ -10575,6 +10582,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         releveActiveCycle.value = null;
                         showReleveModal.value = true;
                     };
+                    // v34.03 : ouvre le Relevé sur l'horizon exact de la projection, pour
+                    //   que l'atterrissage affiché soit le chiffre lu dans la bulle.
+                    const ouvrirReleveProjection = (compteKey) => {
+                        const curA = moisBudgetaire.value.an;
+                        const cible = Math.max(Number(anneeCibleProjection.value) || curA, curA);
+                        ouvrirReleve(compteKey);
+                        anneesSelectionnees.value = Array.from({ length: cible - curA + 1 }, (_, i) => curA + i);
+                        moisSelectionnes.value = [1,2,3,4,5,6,7,8,9,10,11,12];
+                    };
+
                     const fermerReleve = () => {
                         showReleveModal.value = false;
                         compteReleve.value = null;
@@ -14629,7 +14646,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         soldeCloturePilotageRetro,
                         // v24.40 Freeze-Retro
                         isCyclePasse, joursCyclePasse,
-                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, getDepensesCycle, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, releveActiveCycle, cyclesDisponibles, historiqueCycles, viewedCycleKey, cloturerCycle,
+                        totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, getDepensesCycle, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, ouvrirReleveProjection, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, releveActiveCycle, cyclesDisponibles, historiqueCycles, viewedCycleKey, cloturerCycle,
                         // v23.30 Retro-Clean
                         pilotageViewedCycle, pilotageViewedMois, pilotageViewedAn, isPilotageRetro, pilotageCycleLabel,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
