@@ -6386,8 +6386,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.01 SSOT-Solde-Projete";
+                    const CURRENT_VERSION = "34.02 Audit-Journal";
                     const CHANGELOG = [
+        { version: "34.02 Audit-Journal", date: "2026-08-26", changes: [
+            "AUDIT PAR INVARIANTS du moteur du Relevé, mené sur les données réelles : additivité, indépendance des filtres, cohérence du chaînage, insensibilité à l'ordre de sélection, découplage du sélecteur d'année, multi-années, mois passés, et contrôle arithmétique ligne à ligne. Deux fautes trouvées, six invariants déjà respectés.",
+            "FAUTE 1 — ADDITIVITÉ ROMPUE DE 10 500 DH. Le dictionnaire de soldes créait un pseudo-compte « ep_<id> » par objectif d'épargne et l'initialisait à la MENSUALITÉ du virement, comme s'il s'agissait d'un encours. Les deux objectifs de la base étant liés à des comptes physiques (linkedAccountId), leurs crédits partaient vers ces comptes et les pseudo-comptes gardaient un solde fantôme jamais mouvementé. La vue Globale affichait 70 267 DH quand la somme des cinq comptes valait 59 767 DH. Correctif : aucun pseudo-compte pour une épargne liée, départ à zéro pour les autres — un objectif n'a pas d'encours initial, il accumule ses versements.",
+            "FAUTE 2 — UNE ANNÉE COCHÉE N'AFFICHAIT QU'UN MOIS. cyclesReleveActifs retombait sur le seul mois courant dès qu'aucun mois n'était sélectionné : cliquer « 2027 » montrait août 2027 (10 003 DH) au lieu de l'année entière (13 951 DH). C'est la cause des valeurs qui semblaient sauter en activant ou désactivant les filtres. Une année cochée sans mois déroule désormais les douze mois, le filtre du passé élaguant ce qui est écoulé.",
+            "VÉRIFIÉ APRÈS CORRECTION — additivité : écart 0 (Global 59 767 = somme des cinq comptes) ; année seule : 13 951 des deux façons ; indépendance des filtres, ordre de sélection, couplage au sélecteur d'année, mois passés : écart 0 ; contrôle arithmétique T0 + mouvements = dernière ligne = atterrissage : écart 0 sur les cinq comptes et sur deux horizons (fin 2026 et fin 2027) ; SSOT KPI contre Relevé : écart 0."
+        ] },
         { version: "34.01 SSOT-Solde-Projete", date: "2026-08-26", changes: [
             "VÉRIFICATION PRÉALABLE : le Relevé de Comptes n'oubliait RIEN. Sur les données réelles de décembre 2026, il produit bien les onze lignes attendues — salaire, bonification, les deux virements d'épargne (−3 000 et −2 000 au j.27), les revenus locatifs, les charges fixes, la dépense ponctuelle Appart Aga et les charges variables. Les virements d'épargne étaient simplement hors écran : le cycle démarre au jour de paie, donc le j.27 s'affiche EN HAUT de la liste, au-dessus du j.5.",
             "LE VRAI DÉFAUT était la coexistence de deux moteurs de projection contradictoires : bilan.lignes[].detailsComptes alimentait l'info-bulle « Répartition du Patrimoine Projeté » et le KPI Patrimoine Global, tandis que _buildJournalReleve alimentait le Relevé. Sur le Compte Courant fin 2026 : −20 048 DH d'un côté, +2 107 DH de l'autre, soit 22 155 DH d'écart. Les comptes « depenses annuels » (28 440 vs 6 700) et « Compte urgence » (27 000 vs 22 000) divergeaient aussi.",
@@ -10501,7 +10507,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const cyclesReleveActifs = computed(() => {
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         if (!moisSelectionnes.value.length && !anneesSelectionnees.value.length) return [];
-                        const ms = moisSelectionnes.value.length > 0 ? moisSelectionnes.value.slice() : [curM];
+                        // v34.02 : cocher une année sans préciser de mois déroule les DOUZE
+                        //   mois. Auparavant on retombait sur le seul mois courant, si bien
+                        //   que « 2027 » affichait août 2027 au lieu de l'année complète.
+                        const ms = moisSelectionnes.value.length > 0
+                            ? moisSelectionnes.value.slice()
+                            : (anneesSelectionnees.value.length > 0 ? [1,2,3,4,5,6,7,8,9,10,11,12] : [curM]);
                         const as = anneesSelectionnees.value.length > 0 ? anneesSelectionnees.value.slice() : [curA];
                         const combos = [];
                         as.forEach(a => ms.forEach(m => combos.push({ m: Number(m), a: Number(a) })));
@@ -11219,8 +11230,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // ══════════════════════════════════════════════════════════════════════════
                         const soldes = {};
                         (comptes.value || []).forEach(c => { const s = Number(c.solde); soldes['cpt_' + c.id] = Number.isFinite(s) ? s : 0; });
+                        // v34.02 : un objectif d'épargne n'a pas d'encours de départ.
+                        //   • lié à un compte physique → aucun pseudo-compte, le compte réel
+                        //     porte le solde et reçoit les crédits ;
+                        //   • non lié → compte d'accumulation démarrant à zéro.
+                        //   L'ancien code y injectait la MENSUALITÉ, ce qui gonflait la vue
+                        //   Globale d'un solde fantôme jamais mouvementé.
                         { const _epR = (donneesAnnuelles.value[curA] || {}).epargne;
-                          (Array.isArray(_epR) ? _epR : Object.values(_epR || {})).forEach(e => { const s = Number(e.valeur); soldes['ep_' + e.id] = Number.isFinite(s) ? s : 0; }); }
+                          (Array.isArray(_epR) ? _epR : Object.values(_epR || {})).forEach(e => {
+                              if (e && e.linkedAccountId) return;
+                              soldes['ep_' + e.id] = 0;
+                          }); }
                         const _accountKeys = () => Object.keys(soldes);
                         // applique un flux à SON compte cible et renvoie le solde isolé résultant (jamais de cumul croisé)
                         const _apply = (account, montant, type) => {
