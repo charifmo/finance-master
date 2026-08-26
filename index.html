@@ -6387,8 +6387,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.03 Bulle-Horizon";
+                    const CURRENT_VERSION = "34.04 Soldes-SSOT";
                     const CHANGELOG = [
+        { version: "34.04 Soldes-SSOT", date: "2026-08-26", changes: [
+            "ANOMALIE : le mode « Soldes » du Relevé affichait pour le Compte Courant −22 329 / −22 008 / −20 453 / −20 048 de septembre à décembre, quand le journal détaillé donnait −174 / +147 / +1 702 / +2 107.",
+            "SIGNATURE DU DÉFAUT : les variations mensuelles étaient identiques des deux côtés (+321, +1 555, +405) — seul le point de départ différait, d'exactement 22 155 DH. Le même écart que celui corrigé en v34.01 : releveEvolution était le dernier consommateur resté branché sur l'ancien moteur bilan (bilanLignes[].detailsComptes), alors que le journal et la bulle du dashboard étaient déjà passés sur _buildJournalReleve.",
+            "CORRECTIF : la vue Soldes calcule chaque palier avec le moteur du journal, en rejouant la chaîne depuis le cycle courant jusqu'au mois affiché. Les trois vues — journal détaillé, mode Soldes et bulle du dashboard — lisent désormais le même moteur et affichent le même chiffre par construction.",
+            "Vérifié sur données réelles : mode Soldes et journal détaillé donnent −174 / +147 / +1 702 / +2 107 pour les quatre mois ; en mode Global, les cinq comptes correspondent à la bulle avec un écart de zéro et totalisent 59 767 DH des deux côtés."
+        ] },
         { version: "34.03 Bulle-Horizon", date: "2026-08-26", changes: [
             "AUDIT DE LA BULLE « Répartition du Patrimoine Projeté » : aucune faute de calcul. Le total égale la somme de ses lignes (59 767 DH), chaque ligne égale l'atterrissage du Relevé pour ce compte avec un écart de zéro, et le pont mois par mois du Compte Courant s'enchaîne proprement — −495 DH fin août, −174, +147, +1 702, +2 107 fin décembre.",
             "L'INCOHÉRENCE CONSTATÉE ÉTAIT UN ÉCART D'HORIZON, pas un écart de calcul : la bulle affiche fin 2026 (2 107 DH) alors qu'un clic ouvrait le Relevé sur le cycle courant seul (−495 DH). Deux chiffres justes, deux périodes différentes.",
@@ -10763,13 +10769,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return `${filtres.length} comptes sélectionnés`;
                     });
                     // v17.43 / v20.94 : Mode Évolution — snapshot des soldes par mois (multi-comptes)
+                    // v34.04 : soldes issus du MOTEUR DU JOURNAL, plus de l'ancien bilan.
+                    //   Pour chaque mois affiché, on rejoue la chaîne depuis le cycle courant
+                    //   jusqu'à ce mois et on lit les soldes finaux. Le palier de décembre est
+                    //   donc, au dirham près, l'atterrissage du journal détaillé.
                     const releveEvolution = computed(() => {
-                        const lignes = bilanLignes.value;
-                        if (!lignes || lignes.length === 0) return [];
-                        // v26.73 : brancher sur les badges multi-sélection (moisSelectionnes × anneesSelectionnees)
-                        let aFs = anneesSelectionnees.value;
-                        let mFs = moisSelectionnes.value;
-                        // conserver l'override cycle (releveActiveCycle) pour compatibilité
+                        calculationTick.value;
+                        const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
+                        const _mNL = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+                        let aFs = anneesSelectionnees.value.slice();
+                        let mFs = moisSelectionnes.value.slice();
+                        // override cycle (releveActiveCycle) conservé pour compatibilité
                         const _acEv = releveActiveCycle.value;
                         if (_acEv) {
                             const _cdEv = cyclesDisponibles.value.find(c => c.key === _acEv);
@@ -10778,19 +10789,36 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 mFs = [...new Set([_cdEv.mois, _cdEv.moisPrev])];
                             }
                         }
+                        if (!aFs.length) aFs = [curA];
+                        if (!mFs.length) mFs = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+                        // Paliers à afficher : uniquement le présent et le futur
+                        const cibles = [];
+                        aFs.forEach(a => mFs.forEach(m => {
+                            const an = Number(a), mo = Number(m);
+                            if (an > curA || (an === curA && mo >= curM)) cibles.push({ a: an, m: mo });
+                        }));
+                        cibles.sort((x, y) => (x.a - y.a) || (x.m - y.m));
+                        if (!cibles.length) return [];
+
                         const onglets = releveOnglets.value;
                         const comptesFiltres = releveComptesFiltres.value;
                         const tabsToShow = isGlobalView.value ? onglets : onglets.filter(t => comptesFiltres.includes(t.key));
+
                         const rows = [];
-                        let gIdx = -1, lastMois = null;
-                        lignes.forEach(row => {
-                            if (aFs.length && !aFs.includes(Number(row.annee))) return;
-                            if (mFs.length && !mFs.includes(Number(row.numMois))) return;
-                            const isNewMoisGroup = row.mois !== lastMois;
-                            if (isNewMoisGroup) { lastMois = row.mois; gIdx++; }
+                        let gIdx = -1;
+                        cibles.forEach(cible => {
+                            const cycles = [];
+                            for (let a = curA; a <= cible.a; a++) {
+                                const finMois = (a === cible.a) ? cible.m : 12;
+                                for (let m = (a === curA ? curM : 1); m <= finMois; m++) cycles.push(m + '-' + a);
+                            }
+                            const soldes = (_buildJournalReleve([], cycles) || {}).soldesFinaux || {};
+                            gIdx++;
+                            const label = (_mNL[cible.m] || '') + ' ' + cible.a;
                             tabsToShow.forEach((t, ti) => {
-                                const val = t.type === 'cpt' ? ((row.detailsComptes || {})[t.key] || 0) : ((row.detailsEpargne || {})[t.key] || 0);
-                                rows.push({ mois: row.mois, _compteLabel: t.label, _compteIcon: t.icon, _compteKey: t.key, solde: val, _gMois: gIdx, _isNewMonth: isNewMoisGroup && ti === 0 });
+                                rows.push({ mois: label, _compteLabel: t.label, _compteIcon: t.icon, _compteKey: t.key,
+                                            solde: Number(soldes[t.key]) || 0, _gMois: gIdx, _isNewMonth: ti === 0 });
                             });
                         });
                         return rows;
