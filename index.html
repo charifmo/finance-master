@@ -362,7 +362,9 @@
                                     </template>
                                 </div>
                                 <div class="grid grid-cols-[52px_1fr_1fr_1fr] px-3 py-2 border-t-2 border-gray-700 bg-gray-900/70 items-center">
-                                    <span class="text-[8px] font-black uppercase text-gray-400">Moy.</span>
+                                    <span class="text-[8px] font-black uppercase text-gray-400" :title="surplusMoyenneHorsMoisCourant ? 'Moyenne sur les ' + surplusStats.nbMois + ' mois strictement futurs — le mois en cours est un atterrissage, pas un potentiel mensuel.' : null">
+                                        Moy.<span v-if="surplusMoyenneHorsMoisCourant" class="normal-case tracking-normal"> (hors mois en cours)</span>
+                                    </span>
                                     <span class="text-[9px] font-black tabular-nums text-right text-emerald-500 whitespace-nowrap">+{{ formatMAD(surplusStats.moyBrut) }}</span>
                                     <span class="text-[9px] font-black tabular-nums text-right text-purple-500 whitespace-nowrap">-{{ formatMAD(surplusStats.moyEpargne) }}</span>
                                     <span class="text-[9px] font-black tabular-nums text-right whitespace-nowrap" :class="surplusStats.moyNet >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ surplusStats.moyNet >= 0 ? '+' : '' }}{{ formatMAD(surplusStats.moyNet) }}</span>
@@ -2902,7 +2904,7 @@
                                 </template>
                             </div>
                             <div class="grid grid-cols-[44px_1fr_1fr_1fr] px-2 py-1.5 border-t-2 border-gray-700 bg-gray-900/70 items-center">
-                                <span class="text-[7px] font-black uppercase text-gray-400">Moy.</span>
+                                <span class="text-[7px] font-black uppercase text-gray-400">Moy.<span v-if="surplusMoyenneHorsMoisCourant" class="normal-case"> (futur)</span></span>
                                 <span class="text-[8px] font-black tabular-nums text-right text-emerald-500 whitespace-nowrap">+{{ formatMAD(surplusStats.moyBrut) }}</span>
                                 <span class="text-[8px] font-black tabular-nums text-right text-purple-500 whitespace-nowrap">-{{ formatMAD(surplusStats.moyEpargne) }}</span>
                                 <span class="text-[8px] font-black tabular-nums text-right whitespace-nowrap" :class="surplusStats.moyNet >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ surplusStats.moyNet >= 0 ? '+' : '' }}{{ formatMAD(surplusStats.moyNet) }}</span>
@@ -6383,8 +6385,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "33.99 Refonte-Patrimoine";
+                    const CURRENT_VERSION = "34.00 Surplus-Futur";
                     const CHANGELOG = [
+        { version: "34.00 Surplus-Futur", date: "2026-08-26", changes: [
+            "LE MOIS EN COURS SORT DE LA MOYENNE. Il est calculé en mode « remaining » : les charges déjà payées en sont retirées mais le salaire à venir aussi, si bien qu'il représente un atterrissage de fin de mois, pas un potentiel mensuel. Le moyenner avec des mois théoriques pleins creusait artificiellement le KPI.",
+            "Nouvelle assiette (surplusMoisMoyennes) : année en cours → mois strictement futurs [moisActuel + 1 … 12] ; autre année → les 12 mois, puisque aucun n'est en cours. Filet de sécurité : en décembre il ne reste aucun mois futur, la moyenne retombe alors sur le mois en cours plutôt que d'afficher zéro.",
+            "surplusMensuelBase et surplusStats (Brut, Épargne, Net) partagent désormais cette assiette unique, et surplusStats expose nbMois.",
+            "UI : la ligne « Moy. » de la modale Surplus Détaillé devient « Moy. (hors mois en cours) » sur desktop et « Moy. (futur) » sur mobile, avec une info-bulle expliquant le nombre de mois retenus. Le libellé ne change que si le mois courant est effectivement écarté.",
+            "Effet mesuré sur données réelles (cycle 08/2026, moyenne sur Sept-Oct-Nov-Déc) : le KPI Reste à vivre moyen passe de −2 727 DH à +223 DH. Le mois d'août, à −14 528 DH, ne tire plus la moyenne vers le bas."
+        ] },
         { version: "33.99 Refonte-Patrimoine", date: "2026-08-25", changes: [
             "NOUVELLE HIÉRARCHIE « Family Office » : le bloc KPI « 🏛️ Patrimoine retenu » remonte tout en haut de la page, suivi du portefeuille d'actifs, puis des objectifs et de l'indépendance financière, et enfin du simulateur et de la projection pluriannuelle. Les moyens précèdent désormais les cibles.",
             "Le bloc KPI devient une carte autonome avec des chiffres agrandis, et signale en pied le nombre d'actifs exclus du calcul ainsi que leur valeur.",
@@ -11440,21 +11449,37 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (Array.isArray(ep)) return ep.reduce((sum, obj) => sum + Number(obj.valeur || 0), 0);
                         return Object.values(ep || {}).reduce((sum, item) => sum + Number((item || {}).valeur || 0), 0);
                     });
+                    // ── v34.00 : assiette de la moyenne prévisionnelle ─────────────────
+                    //   Le mois en cours est un ATTERRISSAGE (charges déjà payées retirées,
+                    //   salaire à venir compté) : le moyenner avec des mois théoriques pleins
+                    //   n'a pas de sens et creuse artificiellement le KPI.
+                    const surplusMoisMoyennes = computed(() => {
+                        const arr = surplusParMois.value || [];
+                        const futurs = arr.filter(r => !r.isPast && !r.isCurrent);
+                        if (futurs.length) return futurs;
+                        // décembre : plus aucun mois futur → on retombe sur le mois en cours
+                        const restants = arr.filter(r => !r.isPast);
+                        return restants.length ? restants : arr;
+                    });
+                    // Vrai si la moyenne exclut effectivement le mois courant (pour le libellé)
+                    const surplusMoyenneHorsMoisCourant = computed(() =>
+                        (surplusParMois.value || []).some(r => r.isCurrent) &&
+                        !surplusMoisMoyennes.value.some(r => r.isCurrent));
+
                     const surplusMensuelBase = computed(() => {
-                        // v27.50 : moyenne sur surplusMensuel (flux net mensuel, non cumulatif)
-                        const arr = surplusParMois.value.filter(r => !r.isPast);
+                        const arr = surplusMoisMoyennes.value;
                         if (!arr.length) return 0;
                         return arr.reduce((s, r) => s + r.surplusMensuel, 0) / arr.length;
                     });
                     const surplusStats = computed(() => {
-                        // v27.50 : moyNet basé sur surplusMensuel (flux mensuel) — net est cumulatif
-                        const arr = surplusParMois.value.filter(r => !r.isPast);
-                        if (!arr.length) return { moyBrut: 0, moyEpargne: 0, moyNet: 0 };
+                        const arr = surplusMoisMoyennes.value;
+                        if (!arr.length) return { moyBrut: 0, moyEpargne: 0, moyNet: 0, nbMois: 0 };
                         const n = arr.length;
                         return {
                             moyBrut:    arr.reduce((s, r) => s + r.brut, 0) / n,
                             moyEpargne: arr.reduce((s, r) => s + r.epargne, 0) / n,
                             moyNet:     arr.reduce((s, r) => s + r.surplusMensuel, 0) / n,
+                            nbMois: n,
                         };
                     });
 
@@ -14511,7 +14536,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, appMode, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio,
-                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerFactures, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
+                        surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip,
+                        surplusMoisMoyennes, surplusMoyenneHorsMoisCourant, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerFactures, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
                         // v22.90 Double-Pilotage
                         revenusTheoriquesMois, engagementsTheoriquesMois, engagementsTheoriquesDetail,
                         budgetConsoTheoriqueMois, rythmeTheoriqueSemaine, pilotageTheoLignes,
