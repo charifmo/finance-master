@@ -4858,11 +4858,42 @@
                                             class="text-[9px] font-black px-2 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:border-red-500 hover:text-red-300 transition-all">↩</button>
                                 </div>
                             </div>
+                            <!-- v34.05 : Mode Voyage -->
+                            <div :class="['px-5 py-3 border-b border-slate-700 flex items-center justify-between gap-3 flex-wrap', modeVoyageActif ? 'bg-sky-900/30' : 'bg-slate-900/40']">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-lg">✈️</span>
+                                    <div>
+                                        <label class="text-[11px] font-black uppercase tracking-widest text-sky-200">Jours d'absence ce mois</label>
+                                        <p class="text-[9px] font-bold text-slate-400">Suspend les postes consommés sur place</p>
+                                    </div>
+                                    <input type="number" min="0" :max="joursCycleTotal" :value="joursAbsence"
+                                           @input="setJoursAbsence($event.target.value)"
+                                           class="w-20 bg-slate-950 text-sky-300 border border-slate-600 rounded p-1.5 text-right text-sm font-black outline-none focus:border-sky-400"/>
+                                    <span class="text-[10px] font-bold text-slate-400">/ {{ joursCycleTotal }} j</span>
+                                </div>
+                                <div v-if="modeVoyageActif" class="text-right">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-sky-400">Économie du cycle</p>
+                                    <p class="text-base font-black text-emerald-300 tabular-nums">+{{ formatMAD(economieVoyage) }}</p>
+                                    <p class="text-[9px] font-bold text-slate-400">présence {{ Math.round(facteurPresence * 100) }} % · gain réel sur l’atterrissage</p>
+                                    <p v-if="economieVoyageBudget !== economieVoyage" class="text-[9px] font-bold text-slate-500">budget du cycle allégé de {{ formatMAD(economieVoyageBudget) }}</p>
+                                </div>
+                            </div>
                             <div class="p-4 space-y-2">
                                 <div v-for="c in consoCategoriesT0" :key="'ct0_' + c.key"
                                      class="flex items-center justify-between gap-3 p-3 bg-slate-900/90 rounded-xl border border-slate-700 hover:border-violet-500 transition-all">
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-bold text-slate-200 truncate">{{ c.label }}</p>
+                                        <p class="text-sm font-bold text-slate-200 truncate flex items-center gap-2">
+                                            <span class="truncate">{{ c.label }}</span>
+                                            <button @click="toggleSuspendreAbsence(c.key)"
+                                                    :title="c.suspendue ? 'Suspendu pendant l’absence — cliquer pour le laisser courir' : 'Continue de courir pendant l’absence — cliquer pour le suspendre'"
+                                                    :class="['text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0 transition-colors', c.suspendue ? 'bg-sky-900/60 text-sky-300 border-sky-600' : 'bg-slate-800 text-slate-500 border-slate-600 hover:text-slate-300']">
+                                                ✈️ {{ c.suspendue ? 'suspendu' : 'maintenu' }}
+                                            </button>
+                                        </p>
+                                        <p v-if="modeVoyageActif && c.economie > 0" class="text-[10px] font-bold text-sky-300 mt-0.5">
+                                            {{ formatMAD(c.budgetInitial) }} ➔ {{ formatMAD(c.budget) }}
+                                            <span class="text-emerald-300">(−{{ formatMAD(c.economie) }} mode voyage)</span>
+                                        </p>
                                         <div class="flex items-center gap-2 mt-1">
                                             <div class="h-1.5 w-20 bg-slate-700 rounded-full overflow-hidden shrink-0">
                                                 <div :style="{ width: Math.min(100, c.pct) + '%' }"
@@ -6387,8 +6418,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.04 Soldes-SSOT";
+                    const CURRENT_VERSION = "34.05 Mode-Voyage";
                     const CHANGELOG = [
+        { version: "34.05 Mode-Voyage", date: "2026-08-26", changes: [
+            "MODE VOYAGE : nouveau bloc « ✈️ Jours d'absence ce mois » en tête de la carte Réalisé à T0. Les postes consommés sur place sont proratisés sur les jours de présence, et l'économie remonte jusqu'à l'atterrissage du Compte Courant.",
+            "Suspension par poste : chaque ligne de charge variable porte un bouton ✈️ suspendu / maintenu. Sans choix explicite, la détection se fait au libellé — alimentation, voiture, carburant, transport, sorties et loisirs suspendus ; santé et les autres frais qui courent pendant l'absence maintenus. Le choix, une fois posé, est enregistré sur la catégorie.",
+            "POINT D'INJECTION UNIQUE : la réduction s'applique à budgetVariableProrataBase, racine de la chaîne budgetConsoCycle → enveloppeConsoRestante → enveloppeVariableProrata → _mkLegs. Le journal, le relevé, la bulle et les KPI héritent de l'économie sans qu'aucune règle ne soit dupliquée.",
+            "Le prorata se fait sur le CYCLE DE PAIE (joursCycleTotal), pas sur le mois civil — c'est l'unité de temps du reste du moteur.",
+            "CHIFFRE ANNONCÉ = CHIFFRE OBTENU : l'économie affichée n'est pas la simple baisse du budget mais l'écart mesuré sur l'ENVELOPPE restante, celle que le journal consomme réellement. Vérifié sur six horizons d'absence (1, 5, 10, 15, 20 et 31 jours) : le gain annoncé égale au dirham près l'amélioration de l'atterrissage. La baisse du budget théorique reste affichée en seconde ligne quand elle diffère.",
+            "Exemple sur données réelles, 10 jours d'absence sur un cycle de 31 : Alimentation 6 837 ➔ 4 632 DH, Voiture 2 967 ➔ 2 010, Sorties 2 666 ➔ 1 806, Santé inchangée. Budget du cycle allégé de 4 023 DH, gain réel sur l'atterrissage +3 764 DH — l'écart vient des jours déjà écoulés du cycle."
+        ] },
         { version: "34.04 Soldes-SSOT", date: "2026-08-26", changes: [
             "ANOMALIE : le mode « Soldes » du Relevé affichait pour le Compte Courant −22 329 / −22 008 / −20 453 / −20 048 de septembre à décembre, quand le journal détaillé donnait −174 / +147 / +1 702 / +2 107.",
             "SIGNATURE DU DÉFAUT : les variations mensuelles étaient identiques des deux côtés (+321, +1 555, +405) — seul le point de départ différait, d'exactement 22 155 DH. Le même écart que celui corrigé en v34.01 : releveEvolution était le dernier consommateur resté branché sur l'ancien moteur bilan (bilanLignes[].detailsComptes), alors que le journal et la bulle du dashboard étaient déjà passés sur _buildJournalReleve.",
@@ -12671,6 +12710,44 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     //   Les "Factures" (cat_cv_factures) sont des montants EXACTS (élec, tel, internet…)
                     //   qui ne se consomment pas au prorata du temps → EXCLUES de cette base.
                     //   Elles obéissent à la Règle 1 (due − avance) via resteAPayerFactures.
+                    // ── v34.05 : MODE VOYAGE ───────────────────────────────────────────
+                    //   Une absence suspend les postes consommés sur place. Le budget de ces
+                    //   postes est proratisé sur les jours de présence du CYCLE DE PAIE —
+                    //   l'unité de temps du reste du moteur, pas le mois civil.
+                    const CAT_SUSPENDABLES = /aliment|nourrit|course|voiture|carburant|essence|transport|sortie|resto|loisir/i;
+                    //   Choix explicite de l'utilisateur s'il existe, sinon détection par
+                    //   libellé : alimentation et voiture suspendues par défaut.
+                    const estSuspendableAbsence = (cv) => {
+                        if (!cv) return false;
+                        if (cv.suspendreAbsence !== undefined && cv.suspendreAbsence !== null) return !!cv.suspendreAbsence;
+                        return CAT_SUSPENDABLES.test(String(cv.label || '') + ' ' + String(cv.categorieId || ''));
+                    };
+                    const joursAbsence = computed(() => {
+                        const t = Math.max(1, Number(joursCycleTotal.value) || 30);
+                        return Math.max(0, Math.min(t, Math.round(Number((soldesInitiaux.value || {}).joursAbsence) || 0)));
+                    });
+                    const modeVoyageActif = computed(() => joursAbsence.value > 0);
+                    const facteurPresence = computed(() => {
+                        const t = Math.max(1, Number(joursCycleTotal.value) || 30);
+                        return Math.max(0, (t - joursAbsence.value) / t);
+                    });
+                    // Budget d'une catégorie après application éventuelle de l'absence
+                    const budgetCategorieRevise = (cv) => {
+                        const brut = getMonthlyVariableValue(cv || {});
+                        return estSuspendableAbsence(cv) ? brut * facteurPresence.value : brut;
+                    };
+                    const setJoursAbsence = (v) => {
+                        soldesInitiaux.value.joursAbsence = Math.max(0, Math.round(Number(v) || 0));
+                        handleDataChange();
+                    };
+                    const toggleSuspendreAbsence = (cle) => {
+                        const d = donneesAnnuelles.value[moisBudgetaire.value.an];
+                        const cv = d && d.chargesVariables ? d.chargesVariables[cle] : null;
+                        if (!cv) return;
+                        cv.suspendreAbsence = !estSuspendableAbsence(cv);
+                        handleDataChange();
+                    };
+
                     const budgetVariableProrataBase = computed(() => {
                         calculationTick.value;
                         const mb = moisBudgetaire.value;
@@ -12678,8 +12755,38 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!d) return 0;
                         return Object.values(d.chargesVariables || {})
                             .filter(c => c && c.categorieId !== 'cat_cv_factures')
+                            .reduce((s, c) => s + budgetCategorieRevise(c || {}), 0);
+                    });
+                    // Budget théorique SANS absence, pour afficher le delta
+                    const budgetVariableSansAbsence = computed(() => {
+                        calculationTick.value;
+                        const d = donneesAnnuelles.value[moisBudgetaire.value.an];
+                        if (!d) return 0;
+                        return Object.values(d.chargesVariables || {})
+                            .filter(c => c && c.categorieId !== 'cat_cv_factures')
                             .reduce((s, c) => s + getMonthlyVariableValue(c || {}), 0);
                     });
+                    // Économie dégagée par l'absence.
+                    //   Elle n'est PAS la simple baisse du budget : l'enveloppe restante suit
+                    //   soit le réel saisi (budget − engagé), soit le prorata des jours qui
+                    //   restent à courir. On mesure donc l'écart sur l'ENVELOPPE elle-même,
+                    //   pour que le chiffre affiché soit exactement le gain qui remonte à
+                    //   l'atterrissage du Compte Courant — ni plus, ni moins.
+                    const _enveloppeDepuisBudget = (budget) => {
+                        if (isCyclePasse.value) return 0;
+                        return consoT0Renseigne.value
+                            ? Math.max(0, budget - consoEngageeT0.value)
+                            : Math.round(budget * (joursCycleRestants.value / joursCycleTotal.value));
+                    };
+                    //   On part des budgets ARRONDIS, comme le fait budgetConsoCycle : sinon
+                    //   un double arrondi décale le chiffre affiché d'un dirham par rapport au
+                    //   gain réellement constaté sur l'atterrissage.
+                    const economieVoyage = computed(() =>
+                        _enveloppeDepuisBudget(Math.round(budgetVariableSansAbsence.value))
+                        - _enveloppeDepuisBudget(budgetConsoCycle.value));
+                    // Baisse du budget théorique du cycle, affichée ligne par ligne
+                    const economieVoyageBudget = computed(() =>
+                        Math.round(budgetVariableSansAbsence.value - budgetVariableProrataBase.value));
                     // ════════════════════════════════════════════════════════════════════
                     // v32.00 Realized-T0 — LE RESTE VIENT DU RÉEL, PLUS DU CALENDRIER
                     //
@@ -12740,12 +12847,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return Object.entries(d.chargesVariables || {})
                             .filter(([, cv]) => cv && cv.categorieId !== 'cat_cv_factures')
                             .map(([key, cv]) => {
-                                const budget = Math.round(getMonthlyVariableValue(cv));
+                                const budgetInitial = Math.round(getMonthlyVariableValue(cv));
+                                const budget = Math.round(budgetCategorieRevise(cv));
                                 const engage = Math.max(0, Number(saisies[key] || 0));
                                 return {
                                     key,
                                     label: cv.label || key,
                                     periode: cv.periode || 'mois',
+                                    budgetInitial,
+                                    suspendue: estSuspendableAbsence(cv),
+                                    economie: budgetInitial - budget,
                                     budget,
                                     engage,
                                     reste: Math.max(0, budget - engage),
@@ -14650,6 +14761,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v32.00 Realized-T0 : saisie du réalisé conso + moteur cycle-aware
                         joursCycleTotal, joursCycleEcoules, joursCycleRestants,
                         consoCategoriesT0, consoEngageeT0, consoTheoriqueAJour, deriveConsoT0,
+                        joursAbsence, modeVoyageActif, facteurPresence, economieVoyage,
+                        budgetVariableSansAbsence, economieVoyageBudget, setJoursAbsence, toggleSuspendreAbsence, estSuspendableAbsence,
                         consoT0Renseigne, budgetConsoCycle, enveloppeConsoRestante, enveloppeConsoProrataTemps,
                         setConsoT0, resetConsoT0, remplirConsoT0DepuisReel,
                         obligationsCourantHorsConso, budgetConsoRestantReel, contrainteConso,
