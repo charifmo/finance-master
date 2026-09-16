@@ -6463,8 +6463,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.12 CFO-Cockpit";
+                    const CURRENT_VERSION = "34.13 Chocs-Sans-Injection";
                     const CHANGELOG = [
+        { version: "34.13 Chocs-Sans-Injection", date: "2026-09-16", changes: [
+            "BUG CORRIGÉ (2e passe) — le « Total Chocs » du badge Poids (v34.11) sommait Math.abs(montant) sur TOUTES les lignes de depensesIrregulieres, dépenses ET injections confondues. Une ligne à montant négatif dans ce tableau n'est pas une dépense mal signée : c'est une INJECTION délibérée, étiquetée « Injection Banque » par l'app elle-même (remboursement, crédit débloqué — voir injecterFluxCashStudio, qui pousse un « Déblocage Crédit » à montant négatif pouvant atteindre plusieurs centaines de milliers de DH pour un achat immobilier). Cas signalé : Top 3 visible = 64 000 DH, badge affichait « Total Chocs 485 290 DH ».",
+            "CORRECTIF — totalChocsAnnuel = chocsSorties (déjà calculé juste au-dessus, déjà filtré par le même tableau chocs que top3Chocs, donc par le toggle « inclure long terme »). Plus de Math.abs sur l'ensemble : les injections sont exclues du poids, exactement comme le client l'a précisé (chocs = dépenses ponctuelles — voyages, anniversaires, vidanges — jamais une entrée d'argent). Bénéfice additionnel : total, top3 et % du badge viennent désormais tous de la même liste filtrée — une incohérence interne de la v34.11 (le total, lui, ignorait le toggle) disparaît au passage.",
+            "VÉRIFIÉ — scénario reconstruit à partir du signalement (5 dépenses réelles + 1 injection studio de −420 000 DH) : l'ancien calcul produit 498 290 DH, à l'échelle du chiffre faux rapporté (485 290 DH) — confirme le diagnostic. Le nouveau calcul isole exactement les 5 dépenses (78 290 DH), l'injection est exclue, le total reste ≥ la somme du Top 3 seul, et l'impact mensuel/pourcentage (basé sur le net, inchangé) n'est pas affecté."
+        ] },
         { version: "34.12 CFO-Cockpit", date: "2026-09-16", changes: [
             "La modale CFO & Audit était un widget flottant (position:fixed, bas-gauche, min(620px,90vw) × min(600px,85vh)) sans fond assombri — pas une vraie modale. Format par défaut désormais cockpit d'analyse : 90vw/1200px × 85vh/900px, centrée, avec fond noir semi-transparent + flou (bg-black/60 backdrop-blur-sm) qui estompe le dashboard pendant l'échange et se ferme au clic.",
             "L'icône ⛶ dans l'en-tête bascule désormais vers un plein écran STRICT (100vw/100vh, sans marge ni arrondi) au lieu de l'ancien quasi-plein-écran à 0,5rem de marge.",
@@ -11869,13 +11874,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let chocsEntrees = 0, chocsSorties = 0;
                         chocs.forEach(c => { const m = Number(c.montant || 0); if (m < 0) chocsEntrees += Math.abs(m); else chocsSorties += m; });
                         const netAnnuel = chocsSorties - chocsEntrees;
-                        // v34.11 : total BRUT (poids réel) — somme des valeurs absolues de
-                        //   TOUTES les lignes de l'année, dépenses ET injections confondues.
-                        //   Non filtré par _inclureLT : le panneau "Flux Exceptionnels" auquel
-                        //   ce total doit correspondre au dirham près ne filtre pas non plus.
-                        const totalChocsAnnuel = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [])
-                            .filter(c => Number(c.annee) === Number(anneeAffichage.value))
-                            .reduce((sum, c) => sum + Math.abs(Number(c.montant) || 0), 0);
+                        // v34.13 : "Total Chocs" = chocsSorties, PAS Math.abs(tout le tableau).
+                        //   Une ligne à montant négatif est une INJECTION (l'app l'étiquette
+                        //   elle-même "Injection Banque" — remboursement, crédit débloqué :
+                        //   voir injecterFluxCashStudio). Ce n'est jamais un "choc" au sens où
+                        //   le client l'entend (voyages, anniversaires, vidanges) : l'ajouter au
+                        //   poids via Math.abs (v34.11) gonflait le total de tout déblocage de
+                        //   crédit ou remboursement exceptionnel de l'année. chocsSorties est
+                        //   déjà la somme des seules lignes de dépense, déjà filtrée par le même
+                        //   tableau "chocs" que top3Chocs (_inclureLT) — total, top3 et % viennent
+                        //   enfin tous de la même liste.
+                        const totalChocsAnnuel = chocsSorties;
                         // KPIs annuels : réguliers (_getMonthFlux) + irréguliers (chocs) séparés
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         const isViewCurYear  = anneeAffichage.value === curA;
