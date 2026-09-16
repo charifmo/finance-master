@@ -1,23 +1,34 @@
 <?php
 // ============================================================================
-// Finance Master v13.5 - Pending Commit Cache (Stateful Tools)
+// Finance Master v35.0 — Pending Commit + Intent Compiler serveur
 // ----------------------------------------------------------------------------
-// Stocke par session_id la simulation produite par Budget Engine, en attente
-// du "OUI" utilisateur. Le Committer lit le fichier puis le supprime.
+// Ce fichier remplace la v13.5. Il CONSERVE intégralement l'ancien contrat —
+// le Committer n8n et le front n'ont rien à changer :
 //
-//   POST   /finance/pending_commit.php
-//          body JSON : { session_id, finance_data, operations, annee }
-//          -> écrit /var/www/finance/pending/<sanitized_session_id>.json
+//   GET    ?session_id=X                        -> le payload en attente (404 / 410)
+//   DELETE ?session_id=X                        -> supprime (idempotent)
+//   POST   {session_id, action:"cancel_pending"} -> annule la simulation en attente
+//   POST   {session_id, finance_data, operations, annee} -> écriture brute (legacy)
 //
-//   GET    /finance/pending_commit.php?session_id=XXXX
-//          -> renvoie le payload JSON (404 si rien, 410 si expiré >30min)
+// ET AJOUTE LA ROUTE QUI DÉPORTE LE MÉTIER DEPUIS n8n :
 //
-//   DELETE /finance/pending_commit.php?session_id=XXXX
-//          -> supprime le fichier (idempotent)
+//   POST   {session_id, calls:[{function,args}]} -> COMPILE
+//          1. lit l'état financier réel (Postgres finance_state, repli fichier)
+//          2. traduit les calls via le catalogue strict
+//          3. résout les entités (Levenshtein), applique les mutations,
+//             calcule snapshots et deltas          [cfo_intent_engine.php]
+//          4. écrit le pending (TTL 30 min)
+//          5. renvoie un résumé JSON au nœud n8n
 //
-// Sécurité :
-//   - session_id sanitizé (regex [^A-Za-z0-9_-])
-//   - TTL 30 minutes : auto-expire si l'utilisateur ne valide pas à temps
+// Le nœud n8n « Intent Compiler » n'est plus qu'un POST vers cette route.
+//
+// POURQUOI LE MOTEUR EST DANS UN FICHIER SÉPARÉ
+//   1 100 lignes de logique budgétaire dans le même fichier que le routage HTTP
+//   redonnerait ici le monstre qu'on vient de sortir de n8n. cfo_intent_engine.php
+//   est du métier pur, sans I/O : testable en ligne de commande, sans serveur.
+//
+// SETUP : identique à save_data.php — db_config.php + extension pdo_pgsql.
+//         Le dossier ./pending doit être accessible en écriture par www-data.
 // ============================================================================
 
 header('Content-Type: application/json; charset=utf-8');
@@ -26,16 +37,12 @@ header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Accept');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
-// CORS preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+
+require_once __DIR__ . '/cfo_intent_engine.php';
 
 $pendingDir = __DIR__ . '/pending';
-if (!is_dir($pendingDir)) {
-    @mkdir($pendingDir, 0775, true);
-}
+if (!is_dir($pendingDir)) { @mkdir($pendingDir, 0775, true); }
 if (!is_dir($pendingDir) || !is_writable($pendingDir)) {
     http_response_code(500);
     echo json_encode(['error' => 'pending dir not writable', 'path' => $pendingDir]);
@@ -46,7 +53,6 @@ function sanitize_session_id($s) {
     $clean = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string)$s);
     return substr($clean, 0, 128);
 }
-
 function session_file($sessionId, $dir) {
     $clean = sanitize_session_id($sessionId);
     if ($clean === '') return null;
@@ -56,14 +62,57 @@ function session_file($sessionId, $dir) {
 $method = $_SERVER['REQUEST_METHOD'];
 $ttlSeconds = 1800; // 30 min
 
-// ── GET ─────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// LECTURE DE L'ÉTAT FINANCIER — même contrat de stockage que save_data.php
+// (Postgres finance_state, ligne unique id=1, colonne data JSONB ; repli fichier)
+// Décodage en OBJETS et non en tableaux associatifs : json_decode(..., true)
+// transformerait un « revenus: {} » vide en « [] » au ré-encodage, et l'appli Vue,
+// qui fait Object.entries(y.revenus), casserait.
+// ════════════════════════════════════════════════════════════════════════════
+function cfo_load_finance_state() {
+    $cfgFile = __DIR__ . '/db_config.php';
+    if (file_exists($cfgFile)) {
+        $cfg = include $cfgFile;
+        $ok = is_array($cfg);
+        foreach (['host','port','dbname','user','password'] as $k) { if (!isset($cfg[$k])) $ok = false; }
+        if ($ok && extension_loaded('pdo_pgsql')) {
+            try {
+                $pdo = new PDO(
+                    sprintf('pgsql:host=%s;port=%s;dbname=%s', $cfg['host'], $cfg['port'], $cfg['dbname']),
+                    $cfg['user'], $cfg['password'],
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 5]
+                );
+                $row = $pdo->query('SELECT data FROM finance_state WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
+                if ($row && !empty($row['data'])) {
+                    $d = json_decode($row['data']);
+                    if (is_object($d)) return [$d, 'postgres'];
+                }
+            } catch (Exception $e) {
+                error_log('[pending_commit.php] PG read failed: ' . $e->getMessage());
+            }
+        }
+    }
+    $f = __DIR__ . '/finance_data.json';
+    if (file_exists($f)) {
+        $d = json_decode((string)file_get_contents($f));
+        if (is_object($d)) return [$d, 'file'];
+    }
+    return [null, 'none'];
+}
+
+function cfo_write_pending(string $f, array $payload, int $ttl) {
+    $tmp = $f . '.tmp';
+    $bytes = file_put_contents($tmp, json_encode($payload, JSON_UNESCAPED_UNICODE), LOCK_EX);
+    if ($bytes === false || !@rename($tmp, $f)) { @unlink($tmp); return false; }
+    return $bytes;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// GET — récupère le pending (lu par le Committer)
+// ════════════════════════════════════════════════════════════════════════════
 if ($method === 'GET') {
     $sid = $_GET['session_id'] ?? '';
-    if ($sid === '') {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing session_id query param']);
-        exit;
-    }
+    if ($sid === '') { http_response_code(400); echo json_encode(['error' => 'Missing session_id query param']); exit; }
     $f = session_file($sid, $pendingDir);
     if (!$f || !file_exists($f)) {
         http_response_code(404);
@@ -78,120 +127,137 @@ if ($method === 'GET') {
         exit;
     }
     $raw = file_get_contents($f);
-    if ($raw === false) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Read failed']);
-        exit;
-    }
+    if ($raw === false) { http_response_code(500); echo json_encode(['error' => 'Read failed']); exit; }
     echo $raw;
     exit;
 }
 
-// ── POST ────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// POST
+// ════════════════════════════════════════════════════════════════════════════
 if ($method === 'POST') {
     $raw = file_get_contents('php://input');
-    if ($raw === false || $raw === '') {
+    if ($raw === false || $raw === '') { http_response_code(400); echo json_encode(['error' => 'Empty body']); exit; }
+    $body = json_decode($raw);
+    if (!is_object($body) || empty($body->session_id)) {
         http_response_code(400);
-        echo json_encode(['error' => 'Empty body']);
+        echo json_encode(['error' => 'Invalid body : need {session_id, calls} or {session_id, finance_data, operations, annee}']);
         exit;
     }
-    $body = json_decode($raw, true);
-    if (!is_array($body) || empty($body['session_id'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid body : need {session_id, finance_data, operations, annee}']);
-        exit;
-    }
-
-    $sid = (string)$body['session_id'];
+    $sid = (string)$body->session_id;
     $f = session_file($sid, $pendingDir);
-    if (!$f) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid session_id']);
+    if (!$f) { http_response_code(400); echo json_encode(['error' => 'Invalid session_id']); exit; }
+
+    // ── Abort / Cancel (v31.00, inchangé) ───────────────────────────────────
+    if (isset($body->action) && $body->action === 'cancel_pending') {
+        $existed = file_exists($f);
+        if ($existed) { @unlink($f); }
+        echo json_encode(['status'=>'cancelled','session_id'=>$sid,'was_pending'=>$existed,'cancelled_at'=>date('c')]);
         exit;
     }
 
-    // ── v31.00 : Abort / Cancel ─────────────────────────────────────────────
-    // Si action = cancel_pending : supprime le cache et court-circuite le reste.
-    if (isset($body['action']) && $body['action'] === 'cancel_pending') {
-        $cancelSid = (string)($body['session_id'] ?? '');
-        if ($cancelSid === '') {
+    // ── ROUTE COMPILE (v35.0) : { session_id, calls:[{function,args}] } ──────
+    if (isset($body->calls)) {
+        if (!is_array($body->calls) || !count($body->calls)) {
             http_response_code(400);
-            echo json_encode(['error' => 'Missing session_id for cancel_pending']);
+            echo json_encode(['error'=>'Parametre calls vide. Format : { calls: [{ function, args }] }',
+                              'catalogue'=>cfo_catalog_names(), 'pending_saved'=>false]);
             exit;
         }
-        $cancelFile = session_file($cancelSid, $pendingDir);
-        if (!$cancelFile) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid session_id for cancel_pending']);
+
+        // L'état vient du serveur. Un finance_data explicite dans le corps reste
+        // accepté (tests, rejeu) mais n'est jamais nécessaire au fonctionnement.
+        if (isset($body->finance_data) && is_object($body->finance_data)) {
+            $fd = $body->finance_data; $stateSource = 'body';
+        } else {
+            list($fd, $stateSource) = cfo_load_finance_state();
+        }
+        if (!is_object($fd) || !isset($fd->donneesAnnuelles)) {
+            http_response_code(503);
+            echo json_encode(['error'=>'Etat financier illisible (donneesAnnuelles absent).',
+                              'state_source'=>$stateSource, 'pending_saved'=>false]);
             exit;
         }
-        $existed = file_exists($cancelFile);
-        if ($existed) { @unlink($cancelFile); }
-        echo json_encode([
-            'status'      => 'cancelled',
-            'session_id'  => $cancelSid,
-            'was_pending' => $existed,
-            'cancelled_at' => date('c'),
-        ]);
+
+        $ctx = [
+            'monthlyNetFromPayload' => (isset($body->surplus_mensuel_net_courant) && is_array($body->surplus_mensuel_net_courant))
+                ? $body->surplus_mensuel_net_courant : null,
+        ];
+
+        try {
+            $res = cfo_compile($body->calls, $fd, $ctx);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['status'=>'error','error'=>'COMPILE_EXCEPTION','message'=>$e->getMessage(),'pending_saved'=>false],
+                             JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $internal = $res['_internal'] ?? null;
+        unset($res['_internal']);
+
+        // Hors catalogue / clarification : rien n'a été muté, rien à enregistrer.
+        if (!$internal) {
+            $res['state_source'] = $stateSource;
+            echo json_encode($res, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+            exit;
+        }
+
+        $res['pending_saved'] = false;
+        $res['pending_error'] = null;
+        if ($internal['valid'] && $internal['has_effective']) {
+            $payload = [
+                'session_id'   => $sid,
+                'created_at'   => date('c'),
+                'created_ts'   => time(),
+                'annee'        => $internal['annee_payload'],
+                'operations'   => $internal['operations'],
+                'finance_data' => $internal['finance_data'],
+            ];
+            $bytes = cfo_write_pending($f, $payload, $ttlSeconds);
+            if ($bytes === false) { $res['pending_error'] = 'Write failed'; }
+            else { $res['pending_saved'] = true; $res['pending_bytes'] = $bytes; }
+        }
+
+        $res['session_id']  = $sid;
+        $res['state_source'] = $stateSource;
+        $res['ttl_sec']     = $ttlSeconds;
+        echo json_encode($res, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
         exit;
     }
-    // ── Fin Abort ───────────────────────────────────────────────────────────
 
-    if (empty($body['finance_data']) || !is_array($body['finance_data'])) {
+    // ── ROUTE LEGACY : écriture brute d'un pending déjà calculé ──────────────
+    if (empty($body->finance_data) || !is_object($body->finance_data)) {
         http_response_code(400);
         echo json_encode(['error' => 'Missing finance_data (the simulated state)']);
         exit;
     }
-
     $payload = [
-        'session_id' => $sid,
-        'created_at' => date('c'),
-        'created_ts' => time(),
-        'annee'      => $body['annee'] ?? null,
-        'operations' => $body['operations'] ?? [],
-        'finance_data' => $body['finance_data'],
+        'session_id'   => $sid,
+        'created_at'   => date('c'),
+        'created_ts'   => time(),
+        'annee'        => $body->annee ?? null,
+        'operations'   => $body->operations ?? [],
+        'finance_data' => $body->finance_data,
     ];
+    $bytes = cfo_write_pending($f, $payload, $ttlSeconds);
+    if ($bytes === false) { http_response_code(500); echo json_encode(['error' => 'Write failed']); exit; }
 
-    $tmp = $f . '.tmp';
-    $bytes = file_put_contents($tmp, json_encode($payload, JSON_UNESCAPED_UNICODE), LOCK_EX);
-    if ($bytes === false || !@rename($tmp, $f)) {
-        @unlink($tmp);
-        http_response_code(500);
-        echo json_encode(['error' => 'Write failed']);
-        exit;
-    }
-
-    echo json_encode([
-        'status'     => 'ok',
-        'session_id' => $sid,
-        'bytes'      => $bytes,
-        'created_at' => $payload['created_at'],
-        'ttl_sec'    => $ttlSeconds,
-        'file'       => basename($f),
-    ]);
+    echo json_encode(['status'=>'ok','session_id'=>$sid,'bytes'=>$bytes,
+                      'created_at'=>$payload['created_at'],'ttl_sec'=>$ttlSeconds,'file'=>basename($f)]);
     exit;
 }
 
-// ── DELETE ──────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// DELETE — nettoyage après commit (inchangé)
+// ════════════════════════════════════════════════════════════════════════════
 if ($method === 'DELETE') {
     $sid = $_GET['session_id'] ?? '';
-    if ($sid === '') {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing session_id query param']);
-        exit;
-    }
+    if ($sid === '') { http_response_code(400); echo json_encode(['error' => 'Missing session_id query param']); exit; }
     $f = session_file($sid, $pendingDir);
-    if (!$f) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid session_id']);
-        exit;
-    }
-    if (file_exists($f)) {
-        @unlink($f);
-        echo json_encode(['status' => 'ok', 'deleted' => true, 'session_id' => $sid]);
-    } else {
-        echo json_encode(['status' => 'ok', 'deleted' => false, 'reason' => 'no pending', 'session_id' => $sid]);
-    }
+    if (!$f) { http_response_code(400); echo json_encode(['error' => 'Invalid session_id']); exit; }
+    if (file_exists($f)) { @unlink($f); echo json_encode(['status'=>'ok','deleted'=>true,'session_id'=>$sid]); }
+    else { echo json_encode(['status'=>'ok','deleted'=>false,'reason'=>'no pending','session_id'=>$sid]); }
     exit;
 }
 
