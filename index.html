@@ -480,7 +480,7 @@
                         <div class="border border-white/10 bg-slate-900/90 rounded-lg px-2 py-1 relative cursor-default flex items-baseline gap-1.5 whitespace-nowrap"
                              @mouseenter="showPoidsTooltip = true" @mouseleave="showPoidsTooltip = false">
                             <span :class="['text-[9px] font-black uppercase tracking-wide', statsFluxAnnee.impactSurplus > 0 ? (statsFluxAnnee.impactSurplus > 50 ? 'text-rose-400' : 'text-orange-300') : 'text-emerald-400']">Poids ⓘ</span>
-                            <span v-if="statsFluxAnnee.impactSurplus > 0" :class="['text-[11px] font-black tabular-nums', statsFluxAnnee.impactSurplus > 50 ? 'text-rose-400' : 'text-orange-300']">⚠️ {{ formatMAD(statsFluxAnnee.montantImpact) }}/m · Total {{ formatMAD(statsFluxAnnee.netAnnuel) }} ({{ statsFluxAnnee.impactSurplus.toFixed(0) }}%)</span>
+                            <span v-if="statsFluxAnnee.impactSurplus > 0" :class="['text-[11px] font-black tabular-nums', statsFluxAnnee.impactSurplus > 50 ? 'text-rose-400' : 'text-orange-300']">⚠️ {{ formatMAD(statsFluxAnnee.montantImpact) }}/m · Total Chocs {{ formatMAD(statsFluxAnnee.totalChocsAnnuel) }} ({{ statsFluxAnnee.impactSurplus.toFixed(0) }}%)</span>
                             <span v-else class="text-[11px] font-black text-emerald-700">✅ Préservé</span>
                             <div v-if="showPoidsTooltip && statsFluxAnnee.top3Chocs.length" class="absolute right-0 top-full mt-1 z-[200] w-60 bg-gray-950 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
                                 <div class="px-3 py-2 border-b border-gray-800">
@@ -6460,8 +6460,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.10 Elegance-Fintech";
+                    const CURRENT_VERSION = "34.11 Poids-Brut";
                     const CHANGELOG = [
+        { version: "34.11 Poids-Brut", date: "2026-09-16", changes: [
+            "BUG CORRIGÉ — le « Total » ajouté au badge Poids en v34.10 affichait statsFluxAnnee.netAnnuel = chocsSorties − chocsEntrees : un impact NET sur l'année, pas la somme des chocs. Toute ligne de depensesIrregulieres à montant négatif (« Injection Banque » dans l'UI — remboursement, avance reçue) venait DÉDUIRE le total au lieu d'y être étrangère. Cas signalé : Top 3 seul = 46 500 DH, badge affichait 11 300 DH — une injection de 35 200 DH nettait la différence.",
+            "CORRECTIF — nouveau champ statsFluxAnnee.totalChocsAnnuel : somme des valeurs ABSOLUES de toutes les lignes de depensesIrregulieres de l'année affichée, dépenses et injections confondues. Non filtré par le toggle « inclure long terme » — le panneau Flux Exceptionnels auquel ce total doit correspondre au dirham près ne filtre pas non plus. Badge : « ⚠️ 942 DH/m · Total Chocs 81 700 DH (95%) ».",
+            "CE QUI N'A PAS CHANGÉ — montantImpact (942 DH/m) et le pourcentage restent calculés sur netAnnuel, volontairement : ce sont des mesures d'impact réel sur le surplus mensuel, pas des sommes de lignes, et rien dans la demande n'en réclamait la révision.",
+            "VÉRIFIÉ — scénario reconstruit à partir du cas signalé (3 dépenses 30 000/10 000/6 500 + 1 injection −35 200) : reproduit exactement 11 300 DH en AVANT et 942 DH/m, confirmant le diagnostic ; le total brut recalculé (81 700 DH) est bien ≥ la somme du Top 3 seul et égal à Σ|montant| de toutes les lignes."
+        ] },
         { version: "34.10 Elegance-Fintech", date: "2026-09-16", changes: [
             "TYPOGRAPHIE — formatMAD() joint désormais le montant et « DH » par une espace INSÉCABLE au lieu d'une espace normale. Intl.NumberFormat('fr-FR') séparait déjà les milliers par une espace insécable ; seul le dernier espace avant « DH » pouvait casser la ligne (« 135 969 ⏎ DH »). Un seul point de correction, effectif sur les 411 sites d'appel — templates ET chaînes de texte pur (prompts CFO, exports) — sans risque puisque c'est une simple substitution de caractère, jamais du HTML.",
             "ANNÉE UNIFIÉE — anneeCibleProjection (ref indépendante, persistée en localStorage, horizon par défaut 2029) est supprimée. Elle alimentait un second sélecteur d'année sur la carte « Patrimoine Global » — topbar, grille KPI desktop et grille KPI mobile — perçu comme redondant avec le sélecteur global d'édition. Les trois cartes lisent désormais anneeAffichage, avec un simple rappel « (Fin {{année}}) ». Conséquence à connaître : la projection à un horizon différent de l'année en cours d'édition (ex. voir 2029 en éditant 2026) n'existe plus — elle était de toute façon décorrélée par construction, les deux sélecteurs ne coïncidant que si l'utilisateur les alignait à la main.",
@@ -11837,7 +11843,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // SORTIES = Σ sortants de tous les mois actifs du journal (même logique)
                         calculationTick.value;
                         const d = donneesAnnuelles.value[anneeAffichage.value];
-                        if (!d) return { totalEntrees: 0, totalSorties: 0, netAnnuel: 0, surplusMensuelMoyen: 0, impactSurplus: 0, montantImpact: 0, top3Chocs: [] };
+                        if (!d) return { totalEntrees: 0, totalSorties: 0, netAnnuel: 0, totalChocsAnnuel: 0, surplusMensuelMoyen: 0, impactSurplus: 0, montantImpact: 0, top3Chocs: [] };
                         const _inclureLT = parametres.value.inclureLongTermeRuban !== false;
                         const _ltComptes = _inclureLT ? null : new Set(comptes.value.filter(c => /long.term|invest/i.test(c.label || '') || c.type === 'investissement').map(c => 'cpt_' + c.id));
                         // Flux exceptionnels — Poids sur Surplus (sémantique inchangée)
@@ -11846,6 +11852,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let chocsEntrees = 0, chocsSorties = 0;
                         chocs.forEach(c => { const m = Number(c.montant || 0); if (m < 0) chocsEntrees += Math.abs(m); else chocsSorties += m; });
                         const netAnnuel = chocsSorties - chocsEntrees;
+                        // v34.11 : total BRUT (poids réel) — somme des valeurs absolues de
+                        //   TOUTES les lignes de l'année, dépenses ET injections confondues.
+                        //   Non filtré par _inclureLT : le panneau "Flux Exceptionnels" auquel
+                        //   ce total doit correspondre au dirham près ne filtre pas non plus.
+                        const totalChocsAnnuel = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [])
+                            .filter(c => Number(c.annee) === Number(anneeAffichage.value))
+                            .reduce((sum, c) => sum + Math.abs(Number(c.montant) || 0), 0);
                         // KPIs annuels : réguliers (_getMonthFlux) + irréguliers (chocs) séparés
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         const isViewCurYear  = anneeAffichage.value === curA;
@@ -11867,7 +11880,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             .sort((a, b) => Number(b.montant || 0) - Number(a.montant || 0))
                             .slice(0, 3)
                             .map(c => ({ nom: c.nom || '—', montant: Number(c.montant || 0) }));
-                        return { totalEntrees, totalSorties, netAnnuel, surplusMensuelMoyen, impactSurplus, montantImpact, top3Chocs };
+                        return { totalEntrees, totalSorties, netAnnuel, totalChocsAnnuel, surplusMensuelMoyen, impactSurplus, montantImpact, top3Chocs };
                     });
 
                     // v28.40 : Budget conso restant = enveloppe variable au prorata temporis (RÈGLE 2)
