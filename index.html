@@ -72,31 +72,31 @@
         <!-- v17.45 : Toast auto-backup -->
         <transition name="fade"><div v-if="autoBackupToast" class="fixed bottom-6 right-6 z-[9999] bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-black flex items-center gap-2 border border-emerald-500/40">💾 Auto-backup VPS réussi</div></transition>
 
-        <!-- v17.98 : Bouton flottant Baguette Magique MERLIN — v18.00 : responsive mobile -->
-        <button @click="toggleMerlin"
+        <!-- v34.08 : les 3 actions IA quittent le flottant desktop pour le pied de sidebar
+             (voir plus bas, dans le menu). Sur mobile — pas de sidebar — elles restent
+             ici, flottantes, débarrassées des classes md:* qui les posaient sur le menu. -->
+        <button v-if="isMobile" @click="toggleMerlin"
             :title="merlinActive ? 'Désactiver Merlin (Echap)' : 'Activer Merlin — Audit IA d\'un champ'"
             :class="['merlin-wand-btn fixed z-[9998] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110',
-                      'bottom-20 right-4 w-12 h-12 text-xl md:bottom-6 md:left-6 md:right-auto md:w-16 md:h-16 md:text-3xl',
+                      'bottom-20 right-4 w-12 h-12 text-xl',
                       merlinActive ? 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-purple-500/40']">
             🪄
         </button>
 
-        <!-- v26.71 FAB Journal — toujours visible, au-dessus de Merlin, jamais superposé au bouton save -->
-        <button @click="ouvrirReleve()"
+        <!-- v26.71 FAB Journal (mobile uniquement depuis v34.08) -->
+        <button v-if="isMobile" @click="ouvrirReleve()"
             title="Ouvrir le Journal / Relevé"
             class="fixed z-[9996] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl
                    bottom-[11.5rem] right-4 w-12 h-12 text-xl
-                   md:bottom-24 md:left-6 md:right-auto md:w-16 md:h-16 md:text-3xl
                    bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-indigo-400/60 shadow-indigo-900/50">
             📑
         </button>
 
-        <!-- v26.80 FAB CFO Widget — au-dessus du Journal, accès direct sans changer d'onglet -->
-        <button @click="showCfoModal = true"
+        <!-- v26.80 FAB CFO Widget (mobile uniquement depuis v34.08) -->
+        <button v-if="isMobile" @click="showCfoModal = true"
             title="Ouvrir le CFO & Audit"
             :class="['fixed z-[9995] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl',
                      'bottom-60 right-4 w-12 h-12 text-xl',
-                     'md:bottom-[10.5rem] md:left-6 md:right-auto md:w-16 md:h-16 md:text-3xl',
                      showCfoModal
                        ? 'bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white border-fuchsia-300 shadow-fuchsia-900/50'
                        : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-fuchsia-500/40 shadow-slate-900/50']">
@@ -104,7 +104,7 @@
         </button>
 
         <transition name="fade">
-            <div v-if="merlinActive && !merlinBubble.open" class="fixed bottom-36 right-4 md:bottom-24 md:left-6 md:right-auto z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[240px] backdrop-blur">
+            <div v-if="isMobile && merlinActive && !merlinBubble.open" class="fixed bottom-36 right-4 z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[240px] backdrop-blur">
                 ✨ <b>Mode Merlin actif</b><br/>
                 <span class="text-purple-200/80 font-normal">Clique un chiffre pour l'auditer.</span>
             </div>
@@ -209,6 +209,34 @@
                     <div :class="['mt-2 px-1 flex gap-2', isSidebarCollapsed ? 'flex-col' : '']">
                         <button @click="undo" :disabled="!canUndo" :title="'Annuler (' + undoCount + ' disponible' + (undoCount > 1 ? 's' : '') + ')'" :class="['flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all border', canUndo ? 'bg-slate-700 hover:bg-amber-600 text-white border-slate-600' : 'bg-slate-900 text-slate-700 cursor-not-allowed border-slate-800']">↩<span v-if="!isSidebarCollapsed"> Undo</span></button>
                         <button @click="redo" :disabled="!canRedo" :title="'Refaire (' + redoCount + ' disponible' + (redoCount > 1 ? 's' : '') + ')'" :class="['flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all border', canRedo ? 'bg-slate-700 hover:bg-blue-600 text-white border-slate-600' : 'bg-slate-900 text-slate-700 cursor-not-allowed border-slate-800']">↪<span v-if="!isSidebarCollapsed"> Redo</span></button>
+                    </div>
+                    <!-- v34.08 : Actions IA — anciennement 3 FAB flottants qui recouvraient
+                         ce menu sur desktop (position: fixed + md:left-6, exactement la
+                         largeur de la sidebar). Intégrées au pied du menu, dans le même
+                         langage visuel que le footer VPS/Export juste en dessous : elles
+                         ne flottent plus jamais par-dessus rien. -->
+                    <div :class="['mt-3 pt-3 border-t border-slate-800', isSidebarCollapsed ? '' : 'px-1']">
+                        <p v-if="!isSidebarCollapsed" class="text-[9px] text-slate-500 font-black uppercase tracking-widest text-center mb-2">Actions IA</p>
+                        <div :class="isSidebarCollapsed ? 'flex flex-col items-center gap-2' : 'flex items-center gap-2'">
+                            <button @click="showCfoModal = true" title="CFO & Audit"
+                                :class="['rounded-lg flex items-center justify-center border-2 transition-all hover:scale-105',
+                                         isSidebarCollapsed ? 'w-10 h-10 text-lg' : 'flex-1 h-11 text-xl',
+                                         showCfoModal ? 'bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-fuchsia-500/40 hover:border-fuchsia-400']">
+                                🧠
+                            </button>
+                            <button @click="ouvrirReleve()" title="Journal / Relevé"
+                                :class="['rounded-lg flex items-center justify-center border-2 transition-all hover:scale-105 bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-indigo-400/60',
+                                         isSidebarCollapsed ? 'w-10 h-10 text-lg' : 'flex-1 h-11 text-xl']">
+                                📑
+                            </button>
+                            <button @click="toggleMerlin"
+                                :title="merlinActive ? 'Désactiver Merlin (Echap)' : 'Activer Merlin — Audit IA d\'un champ'"
+                                :class="['merlin-wand-btn rounded-lg flex items-center justify-center border-2 transition-all hover:scale-105',
+                                         isSidebarCollapsed ? 'w-10 h-10 text-lg' : 'flex-1 h-11 text-xl',
+                                         merlinActive ? 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-purple-500/40 hover:border-purple-400']">
+                                🪄
+                            </button>
+                        </div>
                     </div>
                 </nav>
             </div>
@@ -6438,8 +6466,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.07 Bulle-Exercice";
+                    const CURRENT_VERSION = "34.08 Sidebar-Footer";
                     const CHANGELOG = [
+        { version: "34.08 Sidebar-Footer", date: "2026-09-16", changes: [
+            "ERGONOMIE CORRIGÉE — les 3 boutons ronds (🧠 CFO, 📑 Journal, 🪄 Merlin) flottaient en position fixed, ancrés md:left-6 : exactement la largeur de la sidebar. Sur desktop ils recouvraient les derniers liens du menu (Undo/Redo, pied VPS), rendus non cliquables.",
+            "CHOIX — intégration en pied de sidebar plutôt que déplacement en bas à droite. La sidebar avait déjà ce pattern : un footer conditionnel sous flex flex-col justify-between (colonne d'icônes 💾📤📄 repliée, panneau VPS/Drive déplié). Les 3 actions IA rejoignent ce pied dans le même langage visuel — pas un nouveau motif d'interaction (speed dial) à apprendre pour un ERP.",
+            "DESKTOP : les 3 boutons ne sont plus fixed. Nouveau bloc « Actions IA » en dernier enfant de la nav, avant le pied VPS — colonne d'icônes 10×10 replié, ligne pleine largeur dépliée.",
+            "MOBILE : inchangé au pixel près — la sidebar n'existe pas (v-if=\"!isMobile\"), les 3 boutons restent flottants en bas à droite, juste scopés v-if=\"isMobile\" et débarrassés des classes md:* désormais mortes.",
+            "La bulle d'astuce « Mode Merlin actif », ancrée sur l'ancienne position du bouton (bottom-6 left-6), est scopée mobile pour la même raison : sur desktop elle pointerait vers un bouton qui n'est plus là. Le titre du bouton dans la sidebar suffit.",
+            "Non touché : la bulle de réponse de Merlin (résultat de l'audit, panneau modal transitoire) — hors du périmètre signalé, elle n'est pas une gêne permanente."
+        ] },
         { version: "34.07 Bulle-Exercice", date: "2026-09-16", changes: [
             "RUPTURE DE COHÉRENCE TEMPORELLE CORRIGÉE — la bulle « Dépenses Annuelles » chaînait les cycles du cycle courant jusqu'à Décembre de l'exercice affiché, puis montrait TOUT le chaînage. En vue 2027 elle affichait le solde T0 de septembre 2026 en tête, les obligations de fin 2026 dans la liste (11 Sept, 20 Oct, 20 Nov, 20 Déc…) et des totaux à cheval sur deux exercices.",
             "LE CHAÎNAGE N'ÉTAIT PAS LE FAUTIF — c'est lui qui donne le solde d'ouverture de 2027, c'est-à-dire l'atterrissage au 31 décembre 2026. Ce qui manquait, c'est la FENÊTRE : ce qui précède l'exercice affiché est déjà contenu dans ce solde d'ouverture, le réafficher ligne à ligne le comptait deux fois à l'œil. Le moteur calcule, la fenêtre montre — deux temps désormais distincts.",
