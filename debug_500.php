@@ -118,20 +118,44 @@ try {
 }
 
 /* ── 6. Appel HTTP réel ──────────────────────────────────────────────────── */
+// v35.3 : ext-curl est, elle aussi, optionnelle — elle manquait sur ce VPS et
+//   faisait planter le diagnostic lui-même. On tente curl, puis le flux HTTP
+//   natif, et à défaut on le dit au lieu de mourir.
 titre('6. APPEL HTTP RÉEL (boucle locale)');
 $url = 'https://n8n.beau.ink/finance/pending_commit.php';
-$ch = curl_init($url);
-curl_setopt_array($ch, [
-    CURLOPT_POST => true, CURLOPT_POSTFIELDS => $PAYLOAD,
-    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-    CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30,
-]);
-$out  = curl_exec($ch);
-$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$err  = curl_error($ch);
-curl_close($ch);
-if ($err) { ko("curl : $err"); }
-else {
+$out = null; $code = null; $err = null;
+
+if (function_exists('curl_init')) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true, CURLOPT_POSTFIELDS => $PAYLOAD,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30,
+    ]);
+    $out  = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch) ?: null;
+    curl_close($ch);
+} elseif (ini_get('allow_url_fopen')) {
+    info('ext-curl absente → repli sur le flux HTTP natif');
+    $ctx = stream_context_create(['http' => [
+        'method' => 'POST', 'header' => "Content-Type: application/json\r\n",
+        'content' => $PAYLOAD, 'timeout' => 30, 'ignore_errors' => true,
+    ]]);
+    $out = @file_get_contents($url, false, $ctx);
+    if ($out === false) { $err = 'file_get_contents a échoué'; }
+    foreach (($http_response_header ?? []) as $h) {
+        if (preg_match('#^HTTP/\S+\s+(\d{3})#', $h, $m)) $code = (int)$m[1];
+    }
+} else {
+    ko('ni ext-curl ni allow_url_fopen → appel HTTP impossible depuis ce script.');
+    info('Testez à la main :  curl -i -X POST -H "Content-Type: application/json" \\');
+    info('    -d \'' . $PAYLOAD . '\' \\');
+    info('    ' . $url);
+}
+
+if ($err)            { ko("appel HTTP : $err"); }
+elseif ($out !== null) {
     ($code >= 200 && $code < 300) ? ok("HTTP $code") : ko("HTTP $code  ← le corps ci-dessous donne la cause exacte");
     echo "\n", substr($out, 0, 2000), "\n";
 }

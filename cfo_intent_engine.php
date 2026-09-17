@@ -1126,7 +1126,15 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
                 if (oget($x,'id') === $normKey) { $c = $x; break; }
                 if ($normKey !== '' && strpos(cfo_norm_str(oget($x,'label')), $normKey) !== false) { $c = $x; break; }
             }
-            if (!$c) { $log['status']='error'; $log['reason']='Compte introuvable: '.$K; break; }
+            if (!$c) {
+                // v35.3 : même raison qu'au-dessus — nommer les comptes existants.
+                $dispo = [];
+                foreach ($comptes as $x) { $n = oget($x,'label') ?: oget($x,'id'); if ($n) $dispo[] = $n; }
+                $log['status']='error';
+                $log['reason']='Compte introuvable: '.$K;
+                $log['comptes_disponibles']=$dispo;
+                break;
+            }
             $oldVal = (float)(oget($c,'solde',0) ?: 0);
             oset($c,'solde', $oldVal + (float)(oget($op,'montant',0) ?: 0));
             $log['status']='success'; $log['action']='Mise a jour compte'; $log['compte']=oget($c,'label');
@@ -1181,7 +1189,17 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
                 $nm = cfo_norm_str(oget($x,'name') ?: oget($x,'nom',''));
                 if ($normKey !== '' && strpos($nm, $normKey) !== false) { $asset = $x; break; }
             }
-            if (!$asset) { $log['status']='error'; $log['reason']='Actif introuvable dans masterAssets: '.$K; break; }
+            if (!$asset) {
+                // v35.3 : une erreur qui ne nomme pas les cibles possibles est une
+                //   impasse — le modèle ne peut que réessayer au hasard. On liste
+                //   les actifs réels pour qu'il se corrige au tour suivant.
+                $dispo = [];
+                foreach ($assets as $x) { $n = oget($x,'name') ?: oget($x,'nom'); if ($n) $dispo[] = $n; }
+                $log['status']='error';
+                $log['reason']='Actif introuvable dans masterAssets: '.$K;
+                $log['actifs_disponibles']=$dispo;
+                break;
+            }
             $changes = [];
             $scenarioMap = ['conservateur'=>'value','pessimiste'=>'val_pessimiste','optimiste'=>'val_optimiste'];
             if (oget($op,'scenario')) {
@@ -1371,8 +1389,16 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
         'status' => $hasErrors ? 'partial_error' : 'ok',
         'ops_summary' => ['total'=>count($allOpsLog),'success'=>count($successOps),'errors'=>count($errorOps),'skipped'=>count($skipOps)],
         'resultats_par_annee' => $resultsByYear,
+        // v35.3 : la projection ne se limite plus à 4 clés fixes. Les branches qui
+        //   échouent sur un nom introuvable joignent la liste des noms réellement
+        //   présents (*_disponibles) ; sans ce report, l'agent reçoit « introuvable »
+        //   sans savoir quoi proposer, et redemande le même nom en boucle.
         'error_ops' => $hasErrors ? array_map(function ($o) {
-            return ['op'=>oget($o['op'],'type'),'key'=>oget($o['op'],'key'),'annee'=>$o['annee'],'reason'=>$o['log']['reason'] ?? null];
+            $e = ['op'=>oget($o['op'],'type'),'key'=>oget($o['op'],'key'),'annee'=>$o['annee'],'reason'=>$o['log']['reason'] ?? null];
+            foreach ($o['log'] as $k => $v) {
+                if (substr($k, -12) === '_disponibles') $e[$k] = $v;
+            }
+            return $e;
         }, $errorOps) : null,
         'redistribution_required' => count($redistribution) ? $redistribution : null,
         'auto_cloned_years' => count($autoCloned) ? $autoCloned : null,
