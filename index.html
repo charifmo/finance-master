@@ -1477,7 +1477,12 @@
                                     <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Prix m²</span><div class="flex items-center gap-2"><input type="number" v-model.number="projetStudio.prixM2" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/><span class="text-xs text-gray-400">DH</span></div></div>
                                     <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Surface</span><div class="flex items-center gap-2"><input type="number" v-model.number="projetStudio.surface" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/><span class="text-xs text-gray-400">m²</span></div></div>
                                     <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Avance payée</span><div class="flex items-center gap-2"><input type="number" v-model.number="projetStudio.avance" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/><span class="text-xs text-gray-400">DH</span></div></div>
-                                    <div class="flex justify-between font-black pt-4 border-t text-gray-800"><span class="uppercase">Reste Promoteur</span><span class="text-lg">{{ formatMAD(studioCalc.restePromoteur) }}</span></div>
+                                    <div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600">Restitution promoteur</span><div class="flex items-center gap-2"><input type="number" v-model.number="projetStudio.restitutionPromoteur" @input="handleDataChange" class="w-28 text-right p-2 border rounded-lg font-bold bg-gray-50 outline-none"/><span class="text-xs text-gray-400">DH</span></div></div>
+                                    <div class="flex justify-between pt-4 border-t text-gray-500"><span class="uppercase tracking-widest text-[10px] font-black pt-1">Prix Total Bien</span><span class="text-sm font-bold tabular-nums whitespace-nowrap">{{ formatMAD(studioCalc.prixTotal) }}</span></div>
+                                    <div class="flex justify-between font-black text-gray-800"><span class="uppercase">Reste Promoteur</span><span class="text-lg tabular-nums whitespace-nowrap">{{ formatMAD(studioCalc.restePromoteur) }}</span></div>
+                                    <!-- v35.4 : effort personnel net — dérivé, jamais saisi (voir fix_studio_contrat_v3540.mjs) -->
+                                    <div class="flex justify-between items-baseline pt-3 border-t"><span class="uppercase font-black text-indigo-700 text-sm">Apport Personnel Net</span><span class="text-lg font-black text-indigo-700 tabular-nums whitespace-nowrap">{{ formatMAD(studioCalc.apportNet) }}</span></div>
+                                    <p class="text-[10px] text-gray-400 italic leading-snug">Avance {{ formatMAD(projetStudio.avance) }} − reliquat crédit {{ formatMAD(projetStudio.surplusCredit) }} = {{ formatMAD((projetStudio.avance||0) - (projetStudio.surplusCredit||0)) }} décaissés, moins la restitution {{ formatMAD(projetStudio.restitutionPromoteur) }}.</p>
                                 </div>
                             </div>
                             <div class="bg-white p-8 rounded-2xl border shadow-sm">
@@ -6463,8 +6468,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "34.13 Chocs-Sans-Injection";
+                    const CURRENT_VERSION = "35.4 Studio-Contractuel";
                     const CHANGELOG = [
+        { version: "35.4 Studio-Contractuel", date: "2026-09-17", changes: [
+            "ONGLET PROJET STUDIO — le formulaire affichait encore les paramètres prévisionnels (767 000 DH empruntés, 5 416 DH/mois) alors que le contrat Bank Assafa est signé. Les 4 montants validés sont désormais reproduits au dirham près : prix 1 092 000 DH (42 m2 x 26 000), capital 765 560 DH, traite globale 5 445 DH/mois, apport personnel net 346 680 DH.",
+            "MÉCANIQUE — le capital et la traite ne sont pas des champs libres, ils sont DÉDUITS (capital = restePromoteur + taxes incluses + reliquat ; traite = annuité + assurance). Les cibles ont donc été atteintes par les entrées : surface 40 -> 42, taxes incluses dans le crédit 45 000 -> 43 560, assurance 480 -> 300, taux 4,7 -> 5,218 %.",
+            "TAUX IMPLICITE — en Mourabaha la banque fixe la traite, pas un taux d'intérêt. Les 4,7 % affichés jusqu'ici produisaient 5 226 DH/mois, soit 219 DH de moins que le contrat réel : le prévisionnel sous-estimait la charge de 52 478 DH sur 20 ans. Le champ porte désormais le taux implicite du contrat (5,218 %), seul capable de reproduire les 5 445 DH.",
+            "AVANCE PAYÉE INCHANGÉE À 500 000 DH — les 346 680 DH validés sont un EFFORT NET, pas le versement au promoteur : 500 000 versés − 130 000 de reliquat crédit = 370 000 décaissés, − 23 320 de chèque de restitution = 346 680. Les saisir dans le champ « Avance payée » aurait porté le capital à 920 320 DH. Le montant apparaît donc en ligne dérivée « Apport Personnel Net », avec le détail du calcul sous les yeux, et un nouveau champ restitutionPromoteur (23 320 DH). Le bloc affiche aussi le Prix Total Bien, qui manquait.",
+            "MIGRATION — modifier les valeurs par défaut ne suffisait pas : projetStudio est stocké par année et executerImportFusion fait safeMerge(defauts, sauvegarde), où la valeur enregistrée gagne toujours. migrateStudioContratV354() réaligne les exercices existants, une seule fois (drapeau _studioContratV354 persisté dans soldesInitiaux) pour que les champs restent librement éditables ensuite."
+        ] },
         { version: "34.13 Chocs-Sans-Injection", date: "2026-09-16", changes: [
             "BUG CORRIGÉ (2e passe) — le « Total Chocs » du badge Poids (v34.11) sommait Math.abs(montant) sur TOUTES les lignes de depensesIrregulieres, dépenses ET injections confondues. Une ligne à montant négatif dans ce tableau n'est pas une dépense mal signée : c'est une INJECTION délibérée, étiquetée « Injection Banque » par l'app elle-même (remboursement, crédit débloqué — voir injecterFluxCashStudio, qui pousse un « Déblocage Crédit » à montant négatif pouvant atteindre plusieurs centaines de milliers de DH pour un achat immobilier). Cas signalé : Top 3 visible = 64 000 DH, badge affichait « Total Chocs 485 290 DH ».",
             "CORRECTIF — totalChocsAnnuel = chocsSorties (déjà calculé juste au-dessus, déjà filtré par le même tableau chocs que top3Chocs, donc par le toggle « inclure long terme »). Plus de Math.abs sur l'ensemble : les injections sont exclues du poids, exactement comme le client l'a précisé (chocs = dépenses ponctuelles — voyages, anniversaires, vidanges — jamais une entrée d'argent). Bénéfice additionnel : total, top3 et % du badge viennent désormais tous de la même liste filtrée — une incohérence interne de la v34.11 (le total, lui, ignorait le toggle) disparaît au passage.",
@@ -8102,7 +8114,11 @@
                         };
                     };
 
-                    const getDefaultProjetStudio = () => ({ prixM2: 26000, surface: 40, avance: 500000, taux: 4.5, duree: 20, taxSyndic: 70240, taxCouvertCredit: 45000, surplusCredit: 85000, assuranceMensuelle: 380, travaux: 80000, epargneDispo: 53000, compteSourceCash: 'courant' });
+                    // v35.4 : valeurs contractuelles Studio Guéliz (Bank Assafa, Mourabaha).
+                    //   surface 42 m2 x 26 000 = 1 092 000 ; capital 592 000 + 43 560 + 130 000
+                    //   = 765 560 ; traite 5 145 + 300 d'assurance = 5 445 DH/mois sur 20 ans.
+                    //   taux 5,218 % = taux IMPLICITE du contrat, voir le commentaire de studioCalc.
+                    const getDefaultProjetStudio = () => ({ prixM2: 26000, surface: 42, avance: 500000, taux: 5.218, duree: 20, taxSyndic: 70240, taxCouvertCredit: 43560, surplusCredit: 130000, assuranceMensuelle: 300, travaux: 80000, epargneDispo: 53000, compteSourceCash: 'courant', restitutionPromoteur: 23320 });
 
                     const state = getDefaultState();
                     const soldesInitiaux = ref(state.soldesInitiaux);
@@ -10176,6 +10192,36 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             .replace(/^_+|_+$/g, '').slice(0, 32) || 'x';
                     };
 
+                    // ═══════════════════════════════════════════════════════════════════
+                    // v35.4 — ALIGNEMENT DES EXERCICES DÉJÀ ENREGISTRÉS
+                    //   Changer getDefaultProjetStudio() ne suffit PAS : projetStudio est
+                    //   stocké par année dans donneesAnnuelles, et executerImportFusion fait
+                    //   safeMerge(defauts, donneesSauvegardees) — la valeur enregistrée gagne
+                    //   toujours. Sans cette migration, l'écran continuerait d'afficher
+                    //   767 000 DH et 5 416 DH/mois malgré les nouveaux défauts.
+                    //
+                    //   ONE-SHOT, PAS UN FORÇAGE PERMANENT : le drapeau _studioContratV354
+                    //   est persisté dans soldesInitiaux. Réécrire ces champs à chaque
+                    //   chargement rendrait le formulaire non éditable — on corrige une fois,
+                    //   puis l'utilisateur en reprend la main.
+                    // ═══════════════════════════════════════════════════════════════════
+                    const CONTRAT_STUDIO_V354 = { prixM2: 26000, surface: 42, avance: 500000, taxCouvertCredit: 43560, surplusCredit: 130000, taux: 5.218, duree: 20, assuranceMensuelle: 300, restitutionPromoteur: 23320 };
+                    const migrateStudioContratV354 = () => {
+                        try {
+                            const si = soldesInitiaux.value;
+                            if (!si || typeof si !== 'object' || si._studioContratV354) return;
+                            let n = 0;
+                            Object.values(donneesAnnuelles.value || {}).forEach(d => {
+                                if (!d || typeof d !== 'object') return;
+                                if (!d.projetStudio || typeof d.projetStudio !== 'object') d.projetStudio = getDefaultProjetStudio();
+                                Object.assign(d.projetStudio, CONTRAT_STUDIO_V354);
+                                n++;
+                            });
+                            si._studioContratV354 = true;
+                            if (n) addLog('✅ v35.4 : Studio aligné sur le contrat Bank Assafa (' + n + ' exercice(s)) — 765 560 DH empruntés, 5 445 DH/mois.', 'success');
+                        } catch (e) { addLog('v35.4 : harmonisation Studio ignorée (' + e.message + ')', 'warn'); }
+                    };
+
                     const migrateCategoriesV22 = () => {
                         try {
                             if (!soldesInitiaux.value) return;
@@ -10430,6 +10476,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             anneeAffichage.value = _now.getFullYear();
                             // v22.00 P1 : migration référentiel catégories (idempotente, post-hydratation)
                             migrateCategoriesV22();
+                            migrateStudioContratV354(); // v35.4 : paramètres contractuels du Studio
                             forceUpdateCalculations();
                             // v17.8 : reset du flag après que Vue a flushed ses watchers asynchrones
                             setTimeout(() => { _importInProgress.value = false; }, 200);
@@ -13295,7 +13342,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const p = projetStudio.value || {}; const prixHT = (Number(p.prixM2)||0) * (Number(p.surface)||0); const resteP = prixHT - (Number(p.avance)||0); const s = Number(p.surplusCredit) || 0; const cap = resteP + (Number(p.taxCouvertCredit)||0) + s;
                         const t = (Number(p.taux)||0)/100/12; const n = (Number(p.duree)||0)*12; const mens = t===0?(n>0?cap/n:0):(cap*t)/(1-Math.pow(1+t,-n));
                         const assur = Number(p.assuranceMensuelle) || 0; const cashReq = ((Number(p.taxSyndic)||0) - (Number(p.taxCouvertCredit)||0)) + (Number(p.travaux)||0);
-                        return { prixTotal: prixHT, restePromoteur: resteP, capitalEmprunte: cap, mensualite: mens, totalMensuel: mens + assur, coutTotalCredit: (mens*n)-cap, cashRequis: cashReq, cashRestant: (Number(p.epargneDispo)||0)+s-cashReq, surplus: s };
+                        // v35.4 : apportNet = ce qui sort RÉELLEMENT de la poche.
+                        //   L'avance versée au promoteur n'est pas l'effort personnel : le reliquat
+                        //   débloqué par la banque revient en trésorerie, et le promoteur restitue
+                        //   un chèque. 500 000 - 130 000 - 23 320 = 346 680 DH.
+                        const apportNet = (Number(p.avance)||0) - s - (Number(p.restitutionPromoteur)||0);
+                        return { prixTotal: prixHT, restePromoteur: resteP, capitalEmprunte: cap, mensualite: mens, totalMensuel: mens + assur, coutTotalCredit: (mens*n)-cap, cashRequis: cashReq, cashRestant: (Number(p.epargneDispo)||0)+s-cashReq, surplus: s, apportNet };
                     });
                     
 
