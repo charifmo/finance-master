@@ -31,23 +31,42 @@
 //         Le dossier ./pending doit être accessible en écriture par www-data.
 // ============================================================================
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Accept');
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+// v35.1 : en CLI (script de diagnostic qui inclut ce fichier), header() n'a pas
+//   de sens et déclenche « headers already sent » — on ne l'appelle qu'en web.
+if (PHP_SAPI !== 'cli') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Accept');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// v35.1 — FILET ANTI-500-MUET
+// Une erreur fatale non rattrapable (mémoire épuisée, temps dépassé, parse
+// error d'un fichier inclus) ne passe par aucun try/catch : PHP meurt, le
+// reverse-proxy renvoie un 500 sans corps, et la cause disparaît. Ce handler
+// de shutdown la récupère via error_get_last() et la renvoie en JSON avec le
+// FICHIER et la LIGNE exacts. Coût nul quand tout va bien.
+// ────────────────────────────────────────────────────────────────────────────
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if (!$e || !in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) return;
+    if (!headers_sent()) { http_response_code(500); header('Content-Type: application/json; charset=utf-8'); }
+    echo "\n", json_encode([
+        'status'  => 'error',
+        'error'   => 'FATAL_PHP',
+        'message' => $e['message'],
+        'file'    => $e['file'],
+        'line'    => $e['line'],
+        'hint'    => 'Erreur fatale non rattrapable (mémoire, timeout, parse). Voir file/line.',
+        'pending_saved' => false,
+    ], JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+});
 
 require_once __DIR__ . '/cfo_intent_engine.php';
-
-$pendingDir = __DIR__ . '/pending';
-if (!is_dir($pendingDir)) { @mkdir($pendingDir, 0775, true); }
-if (!is_dir($pendingDir) || !is_writable($pendingDir)) {
-    http_response_code(500);
-    echo json_encode(['error' => 'pending dir not writable', 'path' => $pendingDir]);
-    exit;
-}
 
 function sanitize_session_id($s) {
     $clean = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string)$s);
@@ -57,6 +76,24 @@ function session_file($sessionId, $dir) {
     $clean = sanitize_session_id($sessionId);
     if ($clean === '') return null;
     return $dir . '/' . $clean . '.json';
+}
+
+// v35.1 : inclus depuis un script CLI de diagnostic (debug_500.php) → on ne
+//   définit que les fonctions et on rend la main, sans jouer le routage HTTP.
+if (PHP_SAPI === 'cli') { return; }
+
+$pendingDir = __DIR__ . '/pending';
+if (!is_dir($pendingDir)) { @mkdir($pendingDir, 0775, true); }
+if (!is_dir($pendingDir) || !is_writable($pendingDir)) {
+    http_response_code(500);
+    echo json_encode([
+        'status' => 'error',
+        'error'  => 'PENDING_DIR_NOT_WRITABLE',
+        'path'   => $pendingDir,
+        'hint'   => 'chown -R www-data:www-data ' . __DIR__ . ' puis vérifier que ' . $pendingDir . ' existe et est inscriptible.',
+        'pending_saved' => false,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -187,9 +224,24 @@ if ($method === 'POST') {
         try {
             $res = cfo_compile($body->calls, $fd, $ctx);
         } catch (Throwable $e) {
+            // v35.1 : le message seul ne suffisait pas à localiser la panne.
+            //   On renvoie la classe, le fichier, la ligne et les premières
+            //   frames — c'est ce corps que le nœud n8n relaie désormais tel quel.
             http_response_code(500);
-            echo json_encode(['status'=>'error','error'=>'COMPILE_EXCEPTION','message'=>$e->getMessage(),'pending_saved'=>false],
-                             JSON_UNESCAPED_UNICODE);
+            $frames = [];
+            foreach (array_slice($e->getTrace(), 0, 5) as $f) {
+                $frames[] = ($f['function'] ?? '?') . '() @ ' . basename($f['file'] ?? '?') . ':' . ($f['line'] ?? '?');
+            }
+            echo json_encode([
+                'status'  => 'error',
+                'error'   => 'COMPILE_EXCEPTION',
+                'class'   => get_class($e),
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $frames,
+                'pending_saved' => false,
+            ], JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
             exit;
         }
 
