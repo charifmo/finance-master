@@ -53,22 +53,52 @@ function onew() { return new stdClass(); }
    1. NORMALISATION & DISTANCE
    ══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * v35.2 — Translittération des accents, MAJUSCULES COMPRISES.
+ *
+ * Le piège : sans mbstring, strtolower() travaille octet par octet et ne
+ * touche qu'aux A-Z ASCII. « É » (0xC3 0x89) lui survit intact, puis se fait
+ * effacer par le filtre [^a-z0-9] — « ÉCOLE » deviendrait « cole » et ne
+ * matcherait plus « ecole ». La table couvre donc les deux casses, et elle
+ * s'applique AVANT la mise en minuscules.
+ */
+const CFO_TRANSLIT = [
+    'À'=>'a','Á'=>'a','Â'=>'a','Ä'=>'a','Ã'=>'a','Å'=>'a','Ç'=>'c',
+    'È'=>'e','É'=>'e','Ê'=>'e','Ë'=>'e','Ì'=>'i','Í'=>'i','Î'=>'i','Ï'=>'i',
+    'Ñ'=>'n','Ò'=>'o','Ó'=>'o','Ô'=>'o','Ö'=>'o','Õ'=>'o','Ù'=>'u','Ú'=>'u',
+    'Û'=>'u','Ü'=>'u','Ý'=>'y','Œ'=>'oe','Æ'=>'ae',
+    'à'=>'a','á'=>'a','â'=>'a','ä'=>'a','ã'=>'a','å'=>'a','ç'=>'c',
+    'è'=>'e','é'=>'e','ê'=>'e','ë'=>'e','ì'=>'i','í'=>'i','î'=>'i','ï'=>'i',
+    'ñ'=>'n','ò'=>'o','ó'=>'o','ô'=>'o','ö'=>'o','õ'=>'o','ù'=>'u','ú'=>'u',
+    'û'=>'u','ü'=>'u','ý'=>'y','ÿ'=>'y','œ'=>'oe','æ'=>'ae','ß'=>'ss',
+];
+
+/**
+ * Minuscules sans dépendre de mbstring.
+ *
+ * mbstring est une extension OPTIONNELLE, absente de beaucoup d'installations
+ * PHP par défaut — et son absence tuait tout le moteur par un
+ * « Call to undefined function mb_strtolower() » (v35.2). On l'utilise quand
+ * elle est là (comportement Unicode complet), sinon on retombe sur la table
+ * de translittération + strtolower, ce qui couvre le latin dont on a besoin.
+ */
+function cfo_lower($s): string {
+    $s = (string)$s;
+    if (function_exists('mb_strtolower')) return mb_strtolower($s, 'UTF-8');
+    return strtolower(strtr($s, CFO_TRANSLIT));
+}
+
 /** Équivalent de normStr() : minuscules, accents retirés, non-alphanum → espace. */
 function cfo_norm_str($s): string {
-    $s = mb_strtolower((string)$s, 'UTF-8');
+    $s = cfo_lower($s);
     if (class_exists('Normalizer')) {
         $d = Normalizer::normalize($s, Normalizer::FORM_D);
-        if ($d !== false) $s = preg_replace('/\p{Mn}+/u', '', $d);
-    } else {
-        // Repli sans l'extension intl : table explicite, jamais iconv//TRANSLIT
-        // dont le résultat dépend de la locale du serveur.
-        $s = strtr($s, [
-            'à'=>'a','á'=>'a','â'=>'a','ä'=>'a','ã'=>'a','å'=>'a','ç'=>'c',
-            'è'=>'e','é'=>'e','ê'=>'e','ë'=>'e','ì'=>'i','í'=>'i','î'=>'i','ï'=>'i',
-            'ñ'=>'n','ò'=>'o','ó'=>'o','ô'=>'o','ö'=>'o','õ'=>'o','ù'=>'u','ú'=>'u',
-            'û'=>'u','ü'=>'u','ý'=>'y','ÿ'=>'y','œ'=>'oe','æ'=>'ae',
-        ]);
+        if ($d !== false && $d !== null) $s = preg_replace('/\p{Mn}+/u', '', $d);
     }
+    // Table explicite : indispensable sans intl, inoffensive avec (les accents
+    // ont déjà été décomposés). Jamais iconv//TRANSLIT, dont le résultat dépend
+    // de la locale du serveur.
+    $s = strtr($s, CFO_TRANSLIT);
     $s = preg_replace('/[^a-z0-9]+/', ' ', $s);
     return trim($s);
 }
@@ -1019,7 +1049,7 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             $opId = oget($op,'id', null); $opNom = oget($op,'nom', null);
             $arr = array_values(array_filter($arr, function ($d) use ($opId, $opNom) {
                 if ($opId !== null && (float)oget($d,'id') === (float)$opId) return false;
-                if ($opNom !== null && mb_strtolower(trim((string)oget($d,'nom'))) === mb_strtolower(trim((string)$opNom))) return false;
+                if ($opNom !== null && cfo_lower(trim((string)oget($d,'nom'))) === cfo_lower(trim((string)$opNom))) return false;
                 return true;
             }));
             oset($y,'depensesIrregulieres',$arr);

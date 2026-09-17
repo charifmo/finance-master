@@ -76,6 +76,13 @@ if (!is_object($fd)) {
     exit(1);
 }
 ok('état chargé — ' . number_format(strlen(json_encode($fd)) / 1024, 1) . ' Ko');
+if ($src === 'file' && file_exists(__DIR__ . '/db_config.php')) {
+    ko('db_config.php existe mais Postgres n\'a PAS répondu → repli sur finance_data.json.');
+    info('L\'app tourne donc sur le fichier plat, pas sur la base. C\'est précisément ce que');
+    info('la v16.3 (« Bilan Indestructible ») cherchait à éviter. Le fichier est gitignored,');
+    info('donc un git reset ne l\'efface pas — mais la persistance Postgres est inopérante.');
+    info('Corriger l\'hôte dans db_config.php, puis relancer ce script pour confirmer.');
+}
 $annees = isset($fd->donneesAnnuelles) ? array_keys(get_object_vars($fd->donneesAnnuelles)) : [];
 info('exercices : ' . (count($annees) ? implode(', ', $annees) : 'AUCUN'));
 info('masterAssets : ' . (isset($fd->masterAssets) && is_array($fd->masterAssets) ? count($fd->masterAssets) . ' actif(s)' : 'absent'));
