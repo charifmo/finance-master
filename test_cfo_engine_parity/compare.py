@@ -33,18 +33,44 @@ def canon(o, path=""):
 #   v35.6 : la trace de résolution demandé→résolu (compte, objectif, épargne,
 #   ...), succès compris. Le JS ne l'a jamais produite — aucune trace de ce
 #   qu'il résolvait réellement n'existait avant ce ticket.
+#   v36.0 : le rapport de normalisation des arguments (alias redressés, types
+#   convertis, paramètres ignorés). Le JS n'avait aucun contrat d'arguments —
+#   il lisait chaque clé à la main, donc n'avait rien à rapporter.
 AJOUTS_PHP_ASSUMES = {
     'res.annee_defaut_utilisee',
     'res.annee_defaut_source',
     'res.exercices_touches',
     'res.resolutions',
+    'res.arguments_normalises',
+#   v36.0 : le relevé littéral des écritures, produit par le serveur pour que la
+#   confirmation lue à l'utilisateur ne dépende plus de la mémoire du modèle.
+    'res.operations_appliquees',
 }
+
+# v36.0 — Clés v19 d'un Smart Goal que le PHP écrit désormais EN PLUS du schéma
+# historique. L'application lit en priorité montant_cible/montant_actuel/libelle
+# et ne retombe sur target/current/name que s'ils sont absents (migrateGoalV19,
+# index.html) : n'écrire que le legacy rendait toute modification d'un objectif
+# déjà migré INVISIBLE à l'écran. Les valeurs métier restent comparées au JS —
+# seule la présence des doublons de schéma est tolérée, et un test dédié
+# (test_schema_goals.php) vérifie qu'ils ne divergent jamais entre eux.
+GOAL_V19_KEYS = {'libelle', 'montant_cible', 'montant_actuel', 'type', 'date_cible',
+                 'comptesLies', 'versement_mensuel'}
+_RE_GOAL = re.compile(r'^etat\.wealthGoals\[\d+\]\.(\w+)$')
+
+# v36.0 — update_smart_goal entre au catalogue : la liste renvoyée en cas
+# d'appel hors catalogue compte donc une entrée de plus que la référence JS.
+VALEURS_PHP_ASSUMEES = {'res.catalogue'}
 
 def diff(a, b, p=""):
     out = []
     if isinstance(a, dict) and isinstance(b, dict):
         for k in sorted(set(a) | set(b)):
-            if k not in a and ("%s.%s" % (p, k)) in AJOUTS_PHP_ASSUMES: continue
+            chemin = "%s.%s" % (p, k)
+            if k not in a and chemin in AJOUTS_PHP_ASSUMES: continue
+            m = _RE_GOAL.match(chemin)
+            if k not in a and m and m.group(1) in GOAL_V19_KEYS: continue
+            if chemin in VALEURS_PHP_ASSUMEES: continue
             if k not in a: out.append("%s.%s: absent JS" % (p, k))
             elif k not in b: out.append("%s.%s: absent PHP" % (p, k))
             else: out += diff(a[k], b[k], "%s.%s" % (p, k))

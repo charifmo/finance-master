@@ -404,9 +404,303 @@ function cfo_years($args, array $ctx = []): array {
     return [(int)date('Y')];
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   4bis. CONTRAT D'ARGUMENTS — SOURCE UNIQUE DE VÉRITÉ (v36.0)
+   ──────────────────────────────────────────────────────────────────────────
+   AVANT : chaque fonction du catalogue lisait ses arguments à la main, avec
+   son propre vocabulaire et zéro tolérance. oget($a,'name') ne répondait qu'à
+   « name » : un modèle qui envoyait goal_name, libelle, nom ou titre voyait sa
+   valeur silencieusement ignorée, et l'opération partait avec un champ vide.
+   C'est la cause structurelle du « il faut dicter à l'agent les paramètres
+   exacts » — dont versement_mensuel (v35.6) n'était qu'un symptôme parmi
+   d'autres : il en existait un par fonction, et rien ne les signalait.
+
+   MAINTENANT : cette table décrit le contrat. Elle sert à TROIS choses, ce qui
+   rend toute dérive impossible par construction :
+     1. cfo_normalize_args()  — alias → canonique, coercition de type,
+                                contrôle du requis, rapport de ce qui a bougé
+     2. la génération du schéma JSON des outils n8n (tools_schema.php)
+     3. les messages d'erreur, qui nomment les paramètres réellement attendus
+
+   Les alias ne sont pas décoratifs : ils encodent ce qu'un modèle produit
+   spontanément (français/anglais, singulier/pluriel, synonymes métier).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Paramètres acceptés par TOUTES les fonctions (ciblage temporel). */
+function cfo_arg_spec_commun(): array {
+    return [
+        'years' => ['type'=>'int_list', 'aliases'=>['year','annee','annees','exercice','exercices','target_year','fiscal_year'],
+                    'desc'=>"Exercice(s) cible(s), ex [2027]. Absent = exercice affiché par l'application."],
+        'notes' => ['type'=>'string', 'aliases'=>['note','commentaire','comment','remarque'],
+                    'desc'=>"Commentaire libre, jamais interprété par le moteur."],
+    ];
+}
+
+function cfo_arg_spec(): array {
+    // Alias récurrents, factorisés pour rester cohérents d'une fonction à l'autre.
+    $A_NOM = ['nom','libelle','label','titre','name','intitule','designation'];
+    $A_MONTANT = ['montant','amount','valeur','value','somme','montant_dh'];
+
+    return [
+    'create_smart_goal' => ['desc'=>"Crée un objectif d'épargne (Smart Goal). Idempotent : si le libellé existe déjà, l'objectif est mis à jour au lieu d'être dupliqué.",
+        'params'=>[
+        'name'              => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['goal_name','objectif','goal']),'desc'=>"Libellé de l'objectif."],
+        'target_amount'     => ['type'=>'number','required'=>true,'min'=>1,'aliases'=>['target','cible','montant_cible','objectif_montant','goal_amount','montant_objectif'],'desc'=>"Montant à atteindre (DH). Strictement positif."],
+        'initial_funding'   => ['type'=>'number','aliases'=>['current','initial','depart','montant_actuel','montant_initial','deja_epargne','starting_amount'],'desc'=>"Somme déjà épargnée au départ (DH). Défaut 0."],
+        'versement_mensuel' => ['type'=>'number','min'=>0,'aliases'=>['monthly_contribution','monthly','versement','versement_mois','mensualite','contribution_mensuelle','epargne_mensuelle'],'desc'=>"Versement mensuel prévu (DH). Sans lui, l'application affiche « Aucun versement mensuel défini »."],
+        'date_cible'        => ['type'=>'string','aliases'=>['target_date','deadline','echeance','date_objectif'],'desc'=>"Échéance visée, format AAAA-MM."],
+    ]],
+
+    'update_smart_goal' => ['desc'=>"Modifie un objectif EXISTANT (cible, versement mensuel, libellé). N'ajoute pas de fonds : voir add_funds_to_goal.",
+        'params'=>[
+        'name'              => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['goal_name','objectif','goal']),'desc'=>"Objectif visé (libellé approximatif accepté)."],
+        'target_amount'     => ['type'=>'number','min'=>1,'aliases'=>['target','cible','montant_cible','nouveau_cible'],'desc'=>"Nouveau montant cible (REMPLACE). Strictement positif."],
+        'versement_mensuel' => ['type'=>'number','aliases'=>['monthly_contribution','monthly','versement','versement_mois','mensualite','contribution_mensuelle','epargne_mensuelle'],'desc'=>"Nouveau versement mensuel (REMPLACE, jamais cumulé)."],
+        'new_name'          => ['type'=>'string','aliases'=>['nouveau_nom','rename','nouveau_libelle'],'desc'=>"Renomme l'objectif."],
+        'date_cible'        => ['type'=>'string','aliases'=>['target_date','deadline','echeance'],'desc'=>"Échéance AAAA-MM."],
+    ]],
+
+    'add_funds_to_goal' => ['desc'=>"Ajoute (ou retire, si négatif) des fonds à un objectif EXISTANT. INCRÉMENTAL.",
+        'params'=>[
+        'name'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['goal_name','objectif','goal']),'desc'=>"Objectif visé."],
+        'amount' => ['type'=>'number','required'=>true,'aliases'=>array_merge($A_MONTANT,['funds','versement_ponctuel','ajout']),'desc'=>"Somme à ajouter (DH). Négatif pour retirer."],
+        'versement_mensuel' => ['type'=>'number','aliases'=>['monthly_contribution','monthly','versement','mensualite'],'desc'=>"Fixe aussi le versement mensuel (REMPLACE)."],
+    ]],
+
+    'set_recurring_savings' => ['desc'=>"Crée ou remplace un virement d'épargne mensuel récurrent.",
+        // v36.0 : sans montant NI pourcentage, l'ancien code créait une ligne
+        //   d'épargne à 0 DH — une donnée incomplète que personne n'a demandée.
+        'au_moins_un' => ['fixed_amount', 'percentage_of_reliquat'],
+        'params'=>[
+        'name'           => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['poche','objectif_epargne','savings_name']),'desc'=>"Libellé de la ligne d'épargne."],
+        'fixed_amount'   => ['type'=>'number','aliases'=>array_merge($A_MONTANT,['montant_fixe','monthly_amount','mensuel']),'desc'=>"Montant mensuel fixe (DH). Exclusif avec percentage_of_reliquat."],
+        'percentage_of_reliquat' => ['type'=>'number','aliases'=>['percentage','pourcentage','pct','percent','part_du_reliquat'],'desc'=>"Pourcentage du net mensuel du compte courant. Le backend calcule mois par mois : ne fournis alors AUCUN montant."],
+        'source_account' => ['type'=>'string','aliases'=>['source','compte_source','account','depuis','from_account','compte'],'desc'=>"Compte débité (nom approximatif accepté, résolu côté serveur). Défaut : courant."],
+        'exceptions'     => ['type'=>'raw','aliases'=>['exceptions_mensuelles','overrides'],'desc'=>"Exceptions mensuelles [{moisDebut,moisFin,nouvelleValeur}]."],
+    ]],
+
+    'update_recurring_savings' => ['desc'=>"Modifie le montant (et/ou le nom) d'un virement d'épargne EXISTANT.",
+        'params'=>[
+        'name'     => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['poche','savings_name']),'desc'=>"Ligne d'épargne visée."],
+        'amount'   => ['type'=>'number','required'=>true,'aliases'=>array_merge($A_MONTANT,['fixed_amount','montant_fixe','nouveau_montant']),'desc'=>"Nouveau montant mensuel (REMPLACE)."],
+        'new_name' => ['type'=>'string','aliases'=>['nouveau_nom','rename','nouveau_libelle'],'desc'=>"Renomme la ligne."],
+    ]],
+
+    'remove_recurring_savings' => ['desc'=>"Supprime un virement d'épargne récurrent.",
+        'params'=>['name'=>['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['poche','savings_name']),'desc'=>"Ligne d'épargne à supprimer."]]],
+
+    'update_asset_valuation' => ['desc'=>"Réévalue un actif du patrimoine. REMPLACE la valeur.",
+        'params'=>[
+        'asset_name'      => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['actif','asset','bien','propriete']),'desc'=>"Actif visé (nom approximatif accepté)."],
+        'new_value'       => ['type'=>'number','required'=>true,'min'=>0,'aliases'=>array_merge($A_MONTANT,['new_valuation','nouvelle_valeur','valorisation']),'desc'=>"Nouvelle valeur (DH). Jamais négative."],
+        'scenario'        => ['type'=>'string','aliases'=>['scenario_foncier','variante','hypothese'],'desc'=>"conservateur | pessimiste | optimiste (foncier uniquement)."],
+        'valeur_actuelle' => ['type'=>'number','aliases'=>['current_value','valeur_marche'],'desc'=>"Valeur de marché courante, distincte du prix d'acquisition."],
+    ]],
+
+    'add_fixed_expense' => ['desc'=>"Crée une charge fixe mensuelle.",
+        'params'=>[
+        'name'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['charge','depense','expense_name']),'desc'=>"Libellé de la charge."],
+        'amount' => ['type'=>'number','required'=>true,'aliases'=>$A_MONTANT,'desc'=>"Montant mensuel (DH)."],
+    ]],
+    'update_fixed_expense' => ['desc'=>"Modifie une charge fixe EXISTANTE. REMPLACE le montant.",
+        'params'=>[
+        'name'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['charge','depense','expense_name']),'desc'=>"Charge visée."],
+        'amount' => ['type'=>'number','required'=>true,'aliases'=>$A_MONTANT,'desc'=>"Nouveau montant mensuel (DH)."],
+    ]],
+    'remove_fixed_expense' => ['desc'=>"Supprime une charge fixe.",
+        'params'=>['name'=>['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['charge','depense']),'desc'=>"Charge à supprimer."]]],
+
+    'add_variable_expense' => ['desc'=>"Crée une charge variable.",
+        'params'=>[
+        'name'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['charge','depense']),'desc'=>"Libellé."],
+        'amount' => ['type'=>'number','required'=>true,'aliases'=>$A_MONTANT,'desc'=>"Montant (DH)."],
+        'period' => ['type'=>'string','aliases'=>['periode','frequence','frequency','rythme'],'desc'=>"mois | semaine. Défaut : mois."],
+    ]],
+    'update_variable_expense' => ['desc'=>"Modifie une charge variable, ou une de ses sous-lignes via sub_target.",
+        'params'=>[
+        'name'       => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['charge','depense']),'desc'=>"Charge visée."],
+        'amount'     => ['type'=>'number','required'=>true,'aliases'=>$A_MONTANT,'desc'=>"Nouveau montant (DH)."],
+        'sub_target' => ['type'=>'string','aliases'=>['sous_ligne','detail','sous_categorie','subcategory'],'desc'=>"Sous-ligne précise à modifier."],
+        'period'     => ['type'=>'string','aliases'=>['periode','frequence'],'desc'=>"mois | semaine."],
+    ]],
+
+    'add_income' => ['desc'=>"Crée un revenu mensuel.",
+        'params'=>[
+        'name'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['revenu','income_name','source']),'desc'=>"Libellé du revenu."],
+        'amount' => ['type'=>'number','required'=>true,'aliases'=>array_merge($A_MONTANT,['base','salaire']),'desc'=>"Montant mensuel (DH)."],
+    ]],
+    'update_income' => ['desc'=>"Modifie un revenu EXISTANT. REMPLACE le montant.",
+        'params'=>[
+        'name'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['revenu','income_name']),'desc'=>"Revenu visé."],
+        'amount' => ['type'=>'number','required'=>true,'aliases'=>array_merge($A_MONTANT,['base','salaire']),'desc'=>"Nouveau montant mensuel (DH)."],
+    ]],
+
+    'add_one_off_expense' => ['desc'=>"Dépense exceptionnelle datée (« choc »). Montant positif = sortie.",
+        'params'=>[
+        'name'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['depense','choc','evenement']),'desc'=>"Libellé."],
+        'amount' => ['type'=>'number','required'=>true,'aliases'=>$A_MONTANT,'desc'=>"Montant (DH). Négatif = entrée d'argent."],
+        'month'  => ['type'=>'number','min'=>1,'max'=>12,'aliases'=>['mois','month_number','numero_mois'],'desc'=>"Mois 1-12. Défaut : 1."],
+    ]],
+
+    'create_account' => ['desc'=>"Crée un compte bancaire.",
+        'params'=>[
+        'label'   => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['account_name','compte','nom_compte']),'desc'=>"Libellé du compte."],
+        'balance' => ['type'=>'number','aliases'=>array_merge($A_MONTANT,['solde','solde_initial','initial_balance']),'desc'=>"Solde d'ouverture (DH). Défaut 0."],
+    ]],
+    'adjust_account_balance' => ['desc'=>"Crédite (+) ou débite (−) un compte. INCRÉMENTAL.",
+        'params'=>[
+        'account' => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['compte','account_name','nom_compte']),'desc'=>"Compte visé (nom approximatif accepté)."],
+        'amount'  => ['type'=>'number','required'=>true,'aliases'=>$A_MONTANT,'desc'=>"Variation (DH). Négatif pour débiter."],
+    ]],
+    'set_initial_balance' => ['desc'=>"Fixe un solde initial. REMPLACE.",
+        'params'=>[
+        'account' => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['compte','account_name','poche']),'desc'=>"Clé de solde initial (courant, urgence, lt...)."],
+        'amount'  => ['type'=>'number','required'=>true,'aliases'=>array_merge($A_MONTANT,['solde','balance']),'desc'=>"Nouveau solde (DH)."],
+    ]],
+
+    'clone_year' => ['desc'=>"Duplique un exercice budgétaire complet.",
+        'params'=>[
+        'from_year' => ['type'=>'number','required'=>true,'aliases'=>['source_year','depuis','annee_source','from'],'desc'=>"Exercice source."],
+        'to_year'   => ['type'=>'number','required'=>true,'aliases'=>['target_year','vers','annee_cible','to'],'desc'=>"Exercice créé."],
+    ]],
+    ];
+}
+/**
+ * v36.0 — COERCITION NUMÉRIQUE TOLÉRANTE.
+ *   Un modèle écrit « 5 445 DH », « 5.445,50 », « 1 092 000 », « 15 % » ou
+ *   " 7000 ". is_numeric() rejette tout cela, et l'ancien code retombait
+ *   silencieusement sur 0 ou sur la valeur par défaut : une charge passait à
+ *   zéro sans que personne ne le voie. On normalise avant de juger.
+ *   Retourne null si ce n'est décidément pas un nombre — jamais 0 par défaut,
+ *   pour que l'appelant distingue « absent » de « vaut zéro ».
+ */
+function cfo_coerce_number($v) {
+    if (is_int($v) || is_float($v)) return $v + 0;
+    if (is_bool($v) || $v === null) return null;
+    if (is_array($v) || is_object($v)) return null;
+    $s = trim((string)$v);
+    if ($s === '') return null;
+    $s = str_replace(["\xC2\xA0", ' ', "\t", 'DH', 'dh', 'MAD', 'mad', '%'], '', $s);
+    // « 1.092.000,50 » (fr) vs « 1,092,000.50 » (en) : le DERNIER séparateur
+    // rencontré est le décimal, les précédents sont des séparateurs de milliers.
+    $lastComma = strrpos($s, ','); $lastDot = strrpos($s, '.');
+    if ($lastComma !== false && $lastDot !== false) {
+        if ($lastComma > $lastDot) { $s = str_replace('.', '', $s); $s = str_replace(',', '.', $s); }
+        else                       { $s = str_replace(',', '', $s); }
+    } elseif ($lastComma !== false) {
+        // Une seule virgule : décimale si 1-2 chiffres derrière, sinon milliers.
+        $s = (strlen($s) - $lastComma - 1) <= 2 ? str_replace(',', '.', $s) : str_replace(',', '', $s);
+    }
+    if (!preg_match('/^-?\d+(\.\d+)?$/', $s)) return null;
+    return $s + 0;
+}
+
+/** Liste d'entiers tolérante : 2027, "2027", [2027], ["2026","2027"], "2026,2027". */
+function cfo_coerce_int_list($v): ?array {
+    if ($v === null || $v === '') return null;
+    $items = is_array($v) ? $v : (is_string($v) ? preg_split('/[,;\s]+/', trim($v)) : [$v]);
+    $out = [];
+    foreach ($items as $it) {
+        $n = cfo_coerce_number($it);
+        if ($n !== null && (int)$n > 1900 && (int)$n < 2200) $out[] = (int)$n;
+    }
+    return count($out) ? array_values(array_unique($out)) : null;
+}
+
+/**
+ * v36.0 — NORMALISATION DES ARGUMENTS SELON LE CONTRAT.
+ *
+ *   Traduit ce que le modèle a VOULU dire vers ce que le moteur attend :
+ *     • alias → clé canonique      (goal_name, libelle, nom → name)
+ *     • coercition de type         ("5 445 DH" → 5445 ; "2027" → [2027])
+ *     • contrôle du requis         (manquant = refus explicite, pas 0 muet)
+ *     • inventaire des inconnus    (jamais jetés en silence)
+ *
+ *   Renvoie [$argsNormalises, $rapport]. Le rapport remonte jusque dans la
+ *   réponse : un paramètre redressé ou ignoré devient une information, pas un
+ *   comportement invisible.
+ */
+function cfo_normalize_args(string $fn, $a): array {
+    $spec = cfo_arg_spec()[$fn] ?? null;
+    $params = array_merge($spec['params'] ?? [], cfo_arg_spec_commun());
+
+    $out = onew();
+    $rapport = ['renommes'=>[], 'convertis'=>[], 'inconnus'=>[], 'manquants'=>[], 'hors_bornes'=>[]];
+    if (!is_object($a) && !is_array($a)) $a = onew();
+    if (is_array($a)) { $tmp = onew(); foreach ($a as $k=>$v) oset($tmp,(string)$k,$v); $a = $tmp; }
+
+    // Index alias → canonique (normalisé, pour tolérer casse/accents/tirets).
+    $index = [];
+    foreach ($params as $canon => $def) {
+        $index[cfo_norm_str($canon)] = $canon;
+        foreach (($def['aliases'] ?? []) as $al) {
+            $k = cfo_norm_str($al);
+            if (!isset($index[$k])) $index[$k] = $canon;   // le canonique gagne toujours
+        }
+    }
+
+    foreach (okeys($a) as $rawKey) {
+        $val = oget($a, $rawKey);
+        $canon = $index[cfo_norm_str($rawKey)] ?? null;
+        if ($canon === null) {
+            if ($val !== null && $val !== '') $rapport['inconnus'][] = (string)$rawKey;
+            continue;
+        }
+        if ($canon !== (string)$rawKey) $rapport['renommes'][] = $rawKey.' → '.$canon;
+        // Le canonique déjà posé n'est jamais écrasé par un alias.
+        if (ohas($out, $canon) && oget($out, $canon) !== null) continue;
+
+        switch ($params[$canon]['type'] ?? 'string') {
+            case 'number': {
+                $n = cfo_coerce_number($val);
+                if ($n === null) { if ($val !== null && $val !== '') $rapport['inconnus'][] = $rawKey.' (non numérique : '.json_encode($val).')'; break; }
+                // v36.0 : une valeur hors bornes n'est PAS silencieusement corrigée.
+                //   create_objectif remplaçait une cible ≤ 0 par 10 000 DH inventés,
+                //   et un mois à 99 était stocké tel quel. On refuse, on ne devine pas.
+                $min = $params[$canon]['min'] ?? null; $max = $params[$canon]['max'] ?? null;
+                if (($min !== null && $n < $min) || ($max !== null && $n > $max)) {
+                    $rapport['hors_bornes'][] = $canon.' = '.$n.' (attendu : '
+                        .($min !== null ? '≥ '.$min : '').(($min !== null && $max !== null) ? ' et ' : '')
+                        .($max !== null ? '≤ '.$max : '').')';
+                    break;
+                }
+                if (!is_int($val) && !is_float($val)) $rapport['convertis'][] = $canon.' : '.json_encode($val).' → '.$n;
+                oset($out, $canon, $n); break;
+            }
+            case 'int_list': {
+                $l = cfo_coerce_int_list($val);
+                if ($l === null) break;
+                if (!is_array($val) || $l !== array_map('intval', (array)$val)) $rapport['convertis'][] = $canon.' : '.json_encode($val).' → '.json_encode($l);
+                oset($out, $canon, $l); break;
+            }
+            case 'raw': oset($out, $canon, $val); break;
+            default: {
+                if (is_array($val) || is_object($val)) { $rapport['inconnus'][] = $rawKey.' (objet attendu texte)'; break; }
+                $s = trim((string)$val);
+                if ($s !== '') oset($out, $canon, $s);
+            }
+        }
+    }
+
+    foreach ($params as $canon => $def) {
+        if (!empty($def['required']) && (!ohas($out, $canon) || oget($out, $canon) === null || oget($out, $canon) === '')) {
+            $rapport['manquants'][] = $canon;
+        }
+    }
+    // v36.0 : contrainte « au moins un parmi », pour les fonctions dont deux
+    //   paramètres s'excluent mais dont l'absence des deux n'a aucun sens.
+    $auMoinsUn = $spec['au_moins_un'] ?? null;
+    if (is_array($auMoinsUn) && count($auMoinsUn)) {
+        $trouve = false;
+        foreach ($auMoinsUn as $k) { if (ohas($out, $k) && oget($out, $k) !== null) { $trouve = true; break; } }
+        if (!$trouve) $rapport['manquants'][] = 'au moins un parmi : ' . implode(' | ', $auMoinsUn);
+    }
+    return [$out, $rapport];
+}
+
 function cfo_catalog_names(): array {
     return [
-        'create_smart_goal','add_funds_to_goal','set_recurring_savings','update_recurring_savings',
+        'create_smart_goal','update_smart_goal','add_funds_to_goal','set_recurring_savings','update_recurring_savings',
         'remove_recurring_savings','update_asset_valuation','add_fixed_expense','update_fixed_expense',
         'remove_fixed_expense','add_variable_expense','update_variable_expense','add_income','update_income',
         'add_one_off_expense','create_account','adjust_account_balance','set_initial_balance','clone_year',
@@ -430,7 +724,16 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
         case 'create_smart_goal':
             return [cfo_obj(['action'=>'add','category'=>'objectif','target'=>oget($a,'name'),'label'=>oget($a,'name'),
                 'amount'=>$num('initial_funding'),'target_amount'=>$num('target_amount'),'years'=>$yrs,'notes'=>oget($a,'notes'),
-                'versement_mensuel'=>$versementMensuel])];
+                'versement_mensuel'=>$versementMensuel,'date_cible'=>oget($a,'date_cible')])];
+
+        // v36.0 : modifier un objectif sans y verser de fonds n'existait pas.
+        //   add_funds_to_goal imposait un `amount` : pour changer une cible ou un
+        //   versement mensuel, le modèle devait feindre un versement de 0.
+        case 'update_smart_goal':
+            return [cfo_obj(['action'=>'modify','category'=>'objectif','target'=>oget($a,'name'),
+                'amount'=>null,'years'=>$yrs,'notes'=>oget($a,'notes'),
+                'versement_mensuel'=>$versementMensuel,'target_amount'=>$num('target_amount', null),
+                'label'=>oget($a,'new_name'),'date_cible'=>oget($a,'date_cible')])];
 
         case 'add_funds_to_goal':
             // v35.6 : args.amount reste incrémental (documenté "objectif EXISTANT") ;
@@ -492,7 +795,10 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
             return [cfo_obj(['action'=>'remove','category'=>'epargne','target'=>oget($a,'name'),'years'=>$yrs])];
 
         case 'update_asset_valuation': {
-            $ch = cfo_obj(['action'=>'modify','category'=>'actif','target'=>oget($a,'asset_name'),'amount'=>$num('new_value')]);
+            // v36.0 : masterAssets est global, mais l'exercice doit être DÉCLARÉ —
+            //   il conditionne le scellé d'étanchéité et ce qui est rapporté au
+            //   modèle. Sans lui, l'opération était attribuée à l'année civile.
+            $ch = cfo_obj(['action'=>'modify','category'=>'actif','target'=>oget($a,'asset_name'),'amount'=>$num('new_value'),'years'=>$yrs]);
             if (oget($a, 'scenario')) oset($ch, 'sub_target', oget($a, 'scenario'));
             if (oget($a, 'valeur_actuelle', null) !== null) oset($ch, 'valeur_actuelle', oget($a, 'valeur_actuelle'));
             return [$ch];
@@ -523,12 +829,13 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
             return [cfo_obj(['action'=>'add','category'=>'depense_ponctuelle','target'=>oget($a,'name'),'label'=>oget($a,'name'),
                 'amount'=>$num('amount'),'month'=>(int)($num('month', 1) ?: 1),'years'=>$yrs])];
 
+        // v36.0 : comptes et soldes sont globaux eux aussi — même raison qu'au-dessus.
         case 'create_account':
-            return [cfo_obj(['action'=>'add','category'=>'compte','target'=>oget($a,'label'),'label'=>oget($a,'label'),'amount'=>$num('balance')])];
+            return [cfo_obj(['action'=>'add','category'=>'compte','target'=>oget($a,'label'),'label'=>oget($a,'label'),'amount'=>$num('balance'),'years'=>$yrs])];
         case 'adjust_account_balance':
-            return [cfo_obj(['action'=>'modify','category'=>'compte','target'=>oget($a,'account'),'amount'=>$num('amount')])];
+            return [cfo_obj(['action'=>'modify','category'=>'compte','target'=>oget($a,'account'),'amount'=>$num('amount'),'years'=>$yrs])];
         case 'set_initial_balance':
-            return [cfo_obj(['action'=>'set_balance','category'=>'solde','balance_key'=>oget($a,'account','courant'),'amount'=>$num('amount')])];
+            return [cfo_obj(['action'=>'set_balance','category'=>'solde','balance_key'=>oget($a,'account','courant'),'amount'=>$num('amount'),'years'=>$yrs])];
         case 'clone_year':
             return [cfo_obj(['action'=>'clone_year','category'=>'annee','clone_from_year'=>(int)$num('from_year'),'years'=>[(int)$num('to_year')]])];
     }
@@ -544,14 +851,55 @@ const CFO_POOL_MAP = [
     'charge_variable' => 'chargesVariables', 'epargne' => 'epargne',
 ];
 
-function cfo_resolve_entity($target, $category, $fd): array {
+/**
+ * @param array|null $annees Exercices auxquels la résolution est BORNÉE (v36.0).
+ *
+ * v36.0 — ÉTANCHÉITÉ. Le résolveur balayait TOUTES les années de
+ *   donneesAnnuelles, sans jamais savoir laquelle l'opération visait. Deux
+ *   conséquences, toutes deux observées :
+ *     • une ligne homonyme dans un autre exercice rendait la cible « ambiguë »
+ *       et bloquait une écriture pourtant explicitement datée — avec un message
+ *       absurde (« Précise : "Long Terme" ou "Long Terme" ? ») ;
+ *     • la clé retenue pouvait appartenir à l'exercice voisin, puis être
+ *       appliquée à l'exercice visé.
+ *   La résolution est désormais bornée aux exercices de l'opération. Repli
+ *   explicite (et signalé) sur les autres années uniquement si la cible n'existe
+ *   nulle part dans l'exercice visé — ce qui garde le diagnostic utile
+ *   (« cette ligne existe en 2026, pas en 2027 ») sans jamais écrire à l'aveugle.
+ */
+function cfo_resolve_entity($target, $category, $fd, ?array $annees = null): array {
     $normT = cfo_norm_str($target);
-    $candidates = []; $seen = [];
     $catKeys = ($category && isset(CFO_POOL_MAP[$category])) ? [$category] : array_keys(CFO_POOL_MAP);
-
     $da = oget($fd, 'donneesAnnuelles', onew());
-    foreach (okeys($da) as $yr) {
-        $y = oget($da, $yr); if (!is_object($y)) continue;
+
+    $toutesAnnees = array_map('strval', okeys($da));
+    $cibles = ($annees !== null && count($annees))
+        ? array_values(array_intersect($toutesAnnees, array_map('strval', $annees)))
+        : $toutesAnnees;
+    if (!count($cibles)) $cibles = $toutesAnnees;
+
+    $res = cfo_collecter_candidats($normT, $target, $category, $catKeys, $da, $cibles, $fd);
+    if (!empty($res['resolved']) || $annees === null) return $res;
+
+    // Rien dans l'exercice visé : on regarde ailleurs, pour DIRE où ça se trouve.
+    $hors = array_values(array_diff($toutesAnnees, $cibles));
+    if (!count($hors)) return $res;
+    $ailleurs = cfo_collecter_candidats($normT, $target, $category, $catKeys, $da, $hors, $fd);
+    if (!empty($ailleurs['resolved'])) {
+        return ['resolved'=>false,
+            'error'=>'"'.$target.'" n\'existe pas dans l\'exercice '.implode('/', $cibles)
+                     .' (trouvé dans '.implode('/', $hors).' : "'.$ailleurs['label'].'"). '
+                     .'Crée la ligne dans cet exercice, ou clone l\'année, avant de la modifier.',
+            'hors_exercice'=>true];
+    }
+    return $res;
+}
+
+/** Collecte + classement, bornés à une liste d'exercices (v36.0). */
+function cfo_collecter_candidats(string $normT, $target, $category, array $catKeys, $da, array $annees, $fd): array {
+    $candidates = []; $seen = [];
+    foreach ($annees as $yr) {
+        $y = oget($da, (string)$yr); if (!is_object($y)) continue;
         foreach ($catKeys as $cat) {
             $rawPool = oget($y, CFO_POOL_MAP[$cat], onew());
             // epargne v17.99 = tableau d'objets {id, nom, ...} → clé technique 'ep_'+id
@@ -713,6 +1061,82 @@ function cfo_resolve_source_compte($raw, $fd): array {
         'warning' => 'source_account "'.$raw.'" non reconnu parmi les comptes — repli sur "courant". '.($res['error'] ?? '')];
 }
 
+/**
+ * v36.0 — COHÉRENCE DES DEUX SCHÉMAS D'OBJECTIF.
+ *   L'application lit un Smart Goal en v19 (libelle, montant_cible,
+ *   montant_actuel, versement_mensuel) avec repli sur le schéma historique
+ *   (name, target, current) — voir migrateGoalV19 dans index.html. Le moteur
+ *   n'écrivait QUE l'historique. Tant que l'app relit tout de suite, sa
+ *   migration rattrape ; mais dès qu'un objectif déjà migré (donc porteur des
+ *   clés v19) était modifié par le moteur, seules les clés legacy bougeaient
+ *   et l'app continuait d'afficher les anciennes valeurs v19, prioritaires.
+ *   On tient donc les deux jeux alignés à chaque écriture.
+ */
+/**
+ * v36.0 — SCELLÉ DES EXERCICES NON CIBLÉS.
+ *   L'étanchéité inter-exercices ne doit pas reposer sur la bonne conduite de
+ *   chaque branche d'écriture : il y en a trop, et une seule suffit à trahir.
+ *   On prend donc l'empreinte de chaque exercice que l'opération NE vise PAS,
+ *   avant application, et on la revérifie après. Si l'une bouge, le lot entier
+ *   est refusé et rien n'est persisté — la garantie devient vérifiable au lieu
+ *   d'être seulement promise.
+ */
+function cfo_empreinte_annees($fd, array $annesExclues): array {
+    $da = oget($fd, 'donneesAnnuelles'); $out = [];
+    if (!is_object($da)) return $out;
+    $exclues = array_map('strval', $annesExclues);
+    foreach (okeys($da) as $yr) {
+        if (in_array((string)$yr, $exclues, true)) continue;
+        $out[(string)$yr] = md5((string)json_encode(oget($da, (string)$yr)));
+    }
+    return $out;
+}
+
+/**
+ * v36.0 — RÉSOLUTION DES ACTIFS (fd.masterAssets[]).
+ *   Dernière poche à dépendre encore d'un « premier nom qui contient la
+ *   sous-chaîne », sans distance ni ambiguïté : deux biens aux noms voisins
+ *   ("Local Bouskoura" / "Local Bouskoura 2") pouvaient se substituer l'un à
+ *   l'autre en silence, et une réévaluation atterrir sur le mauvais bien —
+ *   un actif se chiffrant en centaines de milliers de DH.
+ *   La clé retenue est le nom canonique : masterAssets n'a pas d'identifiant
+ *   fiable côté moteur (id absent sur les actifs créés hors application).
+ */
+function cfo_resolve_actif($target, $fd): array {
+    $normT = cfo_norm_str($target);
+    $candidates = [];
+    $assets = oget($fd, 'masterAssets');
+    if (is_array($assets)) {
+        foreach ($assets as $x) {
+            if (!is_object($x)) continue;
+            $lbl = oget($x,'name') ?: (oget($x,'nom') ?: '');
+            if ($lbl === '') continue;
+            $normL = cfo_norm_str($lbl);
+            $candidates[] = ['key'=>$lbl, 'label'=>$lbl, 'category'=>'actif',
+                'dist'=>cfo_levenshtein($normT, $normL), 'contains'=>cfo_str_contains_either($normL, $normT)];
+        }
+    }
+    if (!count($candidates)) {
+        return ['resolved'=>false, 'error'=>'"'.$target.'" introuvable : aucun actif enregistré dans masterAssets.'];
+    }
+    return cfo_rank_candidates($target, $normT, $candidates);
+}
+
+function cfo_goal_sync_schema($g): void {
+    if (!is_object($g)) return;
+    $lbl = oget($g,'libelle') ?: oget($g,'name');
+    if ($lbl !== null && $lbl !== '') { oset($g,'name',$lbl); oset($g,'libelle',$lbl); }
+    $tgt = oget($g,'target'); if ($tgt === null) $tgt = oget($g,'montant_cible');
+    if ($tgt !== null) { oset($g,'target',$tgt + 0); oset($g,'montant_cible',$tgt + 0); }
+    $cur = oget($g,'current'); if ($cur === null) $cur = oget($g,'montant_actuel');
+    if ($cur !== null) { oset($g,'current',$cur + 0); oset($g,'montant_actuel',$cur + 0); }
+    $vm = oget($g,'versement_mensuel');
+    oset($g,'versement_mensuel', ($vm === null) ? 0 : $vm + 0);
+    if (oget($g,'type') === null) oset($g,'type','libre');
+    if (oget($g,'date_cible') === null) oset($g,'date_cible','');
+    if (!is_array(oget($g,'comptesLies'))) oset($g,'comptesLies',[]);
+}
+
 function cfo_resolve_goal($target, $fd): array {
     $normT = cfo_norm_str($target);
     $candidates = [];
@@ -772,10 +1196,14 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
                 //   sur le $target brut, non résolu.
                 case 'compte':      return [$o(['type'=>'update_compte','key'=>$resolvedKey,'montant'=>$amt])];
                 case 'objectif':    return [$o(['type'=>'update_objectif','key'=>$resolvedKey,'montant'=>$amt,
-                    'versement_mensuel'=>oget($change,'versement_mensuel', null)])];
+                    'versement_mensuel'=>oget($change,'versement_mensuel', null),
+                    'target_amount'=>oget($change,'target_amount', null),
+                    'date_cible'=>oget($change,'date_cible', null),
+                    'nouveau_label'=>$newLabel ?: null])];
                 case 'actif':
                 case 'foncier': {
-                    $op = $o(['type'=>'update_master_asset','key'=>oget($change,'target_key') ?: $target,'montant'=>$amt]);
+                    // v36.0 : clé résolue par cfo_resolve_actif (target_key n'a jamais été posé).
+                    $op = $o(['type'=>'update_master_asset','key'=>$resolvedKey ?: $target,'montant'=>$amt]);
                     $scen = $subTarget ?: oget($change, 'sous_categorie', null);
                     if ($scen) oset($op, 'scenario', $scen);
                     foreach (['taux_credit','annees_total','annees_restantes','apport_personnel','montant_credit','valeur_actuelle'] as $f) {
@@ -802,7 +1230,8 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
                 case 'depense_ponctuelle': return [$o(['type'=>'add_depense_ponctuelle','annee'=>$annee,'mois'=>(int)(oget($change,'month') ?: 1),'nom'=>$newLabel ?: $target,'montant'=>$amt ?? 0])];
                 case 'compte':   return [$o(['type'=>'create_compte','label'=>$newLabel ?: $target,'montant'=>$amt ?? 0])];
                 case 'objectif': return [$o(['type'=>'create_objectif','name'=>$newLabel ?: $target,'current'=>$amt ?? 0,
-                    'target_amount'=>oget($change,'target_amount', 0),'versement_mensuel'=>oget($change,'versement_mensuel', null)])];
+                    'target_amount'=>oget($change,'target_amount', 0),'versement_mensuel'=>oget($change,'versement_mensuel', null),
+                    'date_cible'=>oget($change,'date_cible', null)])];
             }
             return null;
 
@@ -1369,7 +1798,33 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
                 oset($goal,'versement_mensuel', $vVers);
                 $ch['versement_mensuel'] = ['avant'=>$oldV,'apres'=>$vVers];
             }
-            if (!count($ch)) { $log['status']='error'; $log['reason']='aucun champ fourni (ni montant, ni versement_mensuel)'; break; }
+            // v36.0 : cible, échéance et renommage étaient injoignables en update —
+            //   il fallait supprimer puis recréer l'objectif, en perdant son historique.
+            $vTgt = cfo_pick_num($op, ['target_amount']);
+            if ($vTgt !== null && $vTgt > 0) {
+                $oldT = oget($goal,'target',0);
+                oset($goal,'target', $vTgt); oset($goal,'montant_cible', $vTgt);
+                $ch['target'] = ['avant'=>$oldT,'apres'=>$vTgt];
+            }
+            $vDate = cfo_pick_str($op, ['date_cible']);
+            if ($vDate !== null && preg_match('/^\d{4}-\d{2}$/', $vDate)) {
+                $ch['date_cible'] = ['avant'=>oget($goal,'date_cible',''),'apres'=>$vDate];
+                oset($goal,'date_cible', $vDate);
+            }
+            $vLbl = cfo_pick_str($op, ['nouveau_label']);
+            if ($vLbl !== null && $vLbl !== '') {
+                $ch['libelle'] = ['avant'=>oget($goal,'libelle') ?: oget($goal,'name'),'apres'=>$vLbl];
+                oset($goal,'name', $vLbl); oset($goal,'libelle', $vLbl);
+            }
+            if (!count($ch)) {
+                $log['status']='error';
+                $log['reason']='Aucun champ modifiable fourni. Attendus : amount (versement ponctuel), versement_mensuel, target_amount, date_cible, new_name.';
+                break;
+            }
+            // v36.0 : cohérence des deux schémas. L'app lit montant_cible/montant_actuel
+            //   (v19) avec repli sur target/current (legacy) ; le moteur n'écrivait que
+            //   le legacy. On tient les deux à jour pour qu'aucune lecture ne diverge.
+            cfo_goal_sync_schema($goal);
             $log['status']='success'; $log['action']='Mise a jour objectif';
             $log['cible']=oget($goal,'libelle') ?: oget($goal,'name'); $log['changes']=$ch; break;
         }
@@ -1384,17 +1839,23 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
                     $oldVal = (float)(oget($x,'current',0) ?: 0);
                     oset($x,'current', $oldVal + (float)(oget($op,'current',0) ?: 0));
                     if ($vVers !== null) oset($x,'versement_mensuel', $vVers);
+                    $vTgtDedup = cfo_pick_num($op, ['target_amount']);
+                    if ($vTgtDedup !== null && $vTgtDedup > 0) oset($x,'target', $vTgtDedup);
+                    cfo_goal_sync_schema($x);
                     $log['status']='success'; $log['action']='Objectif existant — current incremente';
                     $log['cible']=oget($x,'libelle') ?: oget($x,'name'); $log['avant']=$oldVal; $log['apres']=oget($x,'current'); break 2;
                 }
             }
             $tgt = (float)(oget($op,'target_amount',0) ?: 0);
             $newGoal = cfo_obj(['name'=>$goalName,'target'=>($tgt > 0 ? $tgt : 10000),'current'=>(float)(oget($op,'current',0) ?: 0)]);
+            $vDate = cfo_pick_str($op, ['date_cible']);
+            if ($vDate !== null && preg_match('/^\d{4}-\d{2}$/', $vDate)) oset($newGoal, 'date_cible', $vDate);
             // v35.6 : bug 1 — versement_mensuel manquait ici, seule voie d'écriture au
             //   moment de la création. L'app le lit ensuite via migrateGoalV19
             //   (Number(o.versement_mensuel) || 0) : sans cette ligne, tout objectif
             //   créé par l'agent retombait à 0, quoi que le modèle ait demandé.
             if ($vVers !== null) oset($newGoal, 'versement_mensuel', $vVers);
+            cfo_goal_sync_schema($newGoal);
             $goals[] = $newGoal; oset($fd,'wealthGoals',$goals);
             $log['status']='success'; $log['action']='Creation objectif';
             $log['cible']=oget($newGoal,'name'); $log['target']=oget($newGoal,'target'); $log['current']=oget($newGoal,'current');
@@ -1408,10 +1869,18 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
         case 'update_foncier': {
             $assets = oget($fd,'masterAssets');
             if (!is_array($assets) || !count($assets)) { $log['status']='error'; $log['reason']='Aucun actif dans masterAssets'; break; }
+            // v36.0 : $K est le nom canonique retenu par cfo_resolve_actif.
+            //   Égalité exacte d'abord ; le « contains » ne sert plus que de repli
+            //   défensif pour un appel direct qui n'aurait pas traversé la phase 1.
             $normKey = cfo_norm_str($K); $asset = null;
             foreach ($assets as $x) {
-                $nm = cfo_norm_str(oget($x,'name') ?: oget($x,'nom',''));
-                if ($normKey !== '' && strpos($nm, $normKey) !== false) { $asset = $x; break; }
+                if (cfo_norm_str(oget($x,'name') ?: oget($x,'nom','')) === $normKey) { $asset = $x; break; }
+            }
+            if (!$asset) {
+                foreach ($assets as $x) {
+                    $nm = cfo_norm_str(oget($x,'name') ?: oget($x,'nom',''));
+                    if ($normKey !== '' && strpos($nm, $normKey) !== false) { $asset = $x; break; }
+                }
             }
             if (!$asset) {
                 // v35.3 : une erreur qui ne nomme pas les cibles possibles est une
@@ -1493,7 +1962,9 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
     list($anneeDefaut, $anneeSource) = cfo_resolve_annee_defaut($ctx, $fd);
     $ctx['anneeDefaut'] = $anneeDefaut;
 
-    foreach ($calls as $call) {
+    // v36.0 : rapport de normalisation, agrégé sur tous les appels du lot.
+    $normReport = []; $argErrors = [];
+    foreach ($calls as $idx => $call) {
         $fn   = oget($call, 'function', oget($call, 'name', oget($call, 'endpoint')));
         $args = oget($call, 'args', oget($call, 'arguments', oget($call, 'parameters', onew())));
         if (!$fn || !in_array($fn, $catalog, true)) {
@@ -1506,7 +1977,43 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
                 'pending_saved' => false,
             ];
         }
+        // v36.0 : alias → canonique, coercition de type, contrôle du requis.
+        //   AVANT, chaque fonction lisait ses arguments à la main : un nom de
+        //   paramètre non prévu était jeté en silence et l'opération partait
+        //   avec un champ vide. Désormais le contrat (cfo_arg_spec) tranche,
+        //   et ce qu'il redresse ou refuse est rapporté.
+        list($args, $rap) = cfo_normalize_args($fn, $args);
+        if (count($rap['renommes']) || count($rap['convertis']) || count($rap['inconnus'])) {
+            $normReport[] = array_filter([
+                'appel' => $idx, 'fonction' => $fn,
+                'renommes'  => $rap['renommes']  ?: null,
+                'convertis' => $rap['convertis'] ?: null,
+                'inconnus'  => $rap['inconnus']  ?: null,
+            ]);
+        }
+        if (count($rap['manquants']) || count($rap['hors_bornes'])) {
+            $attendus = [];
+            foreach ((cfo_arg_spec()[$fn]['params'] ?? []) as $k => $d) {
+                $attendus[] = $k . (!empty($d['required']) ? ' (requis)' : '') . ' — ' . ($d['desc'] ?? '');
+            }
+            $argErrors[] = array_filter([
+                'appel'=>$idx, 'fonction'=>$fn,
+                'parametres_manquants'=>$rap['manquants'] ?: null,
+                'valeurs_hors_bornes'=>$rap['hors_bornes'] ?: null,
+                'parametres_attendus'=>$attendus, 'recu'=>array_values(okeys($args))]);
+            continue;
+        }
         foreach (cfo_translate_call($fn, $args, $ctx) as $ch) $changes[] = $ch;
+    }
+
+    // v36.0 : un argument requis absent n'écrit RIEN. Mieux vaut un refus qui
+    //   nomme le paramètre manquant qu'une ligne créée à 0 DH ou sans libellé.
+    if (count($argErrors)) {
+        return ['status'=>'error', 'error'=>'ERROR_ARGUMENTS_INCOMPLETS',
+                'message'=>"Des paramètres requis manquent. Rien n'a été écrit. Complète-les et relance.",
+                'arguments_invalides'=>$argErrors,
+                'arguments_normalises'=>$normReport ?: null,
+                'pending_saved'=>false];
     }
     if (!count($changes)) {
         return ['status'=>'error','error'=>'Aucun change produit par le catalogue.','pending_saved'=>false];
@@ -1521,20 +2028,30 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
     //   par cfo_resolve_compte()/cfo_resolve_goal(), avec le même classement et
     //   la même détection d'ambiguïté que revenus/charges/épargne, au lieu du
     //   "premier libellé qui contient la sous-chaîne" sans aucun garde-fou.
-    $NO_FUZZY = ['depense_ponctuelle','annee','solde','studio','actif','foncier'];
+    // v36.0 : 'actif' et 'foncier' rejoignent les poches résolues. Il ne reste
+    //   dans NO_FUZZY que ce qui n'est PAS une entité nommée : une date, une clé
+    //   de solde, un champ du simulateur studio, une dépense ponctuelle datée.
+    $NO_FUZZY = ['depense_ponctuelle','annee','solde','studio'];
     // Catégories qui ont leur propre résolveur dédié (pas de pool par année).
-    $RESOLVER_DEDIE = ['compte' => 'cfo_resolve_compte', 'objectif' => 'cfo_resolve_goal'];
+    $RESOLVER_DEDIE = ['compte' => 'cfo_resolve_compte', 'objectif' => 'cfo_resolve_goal',
+                       'actif' => 'cfo_resolve_actif', 'foncier' => 'cfo_resolve_actif'];
 
     foreach ($changes as $i => $change) {
         $action = oget($change,'action'); $category = oget($change,'category');
         $target = oget($change,'target'); $rawYears = oget($change,'years');
-        $years = is_array($rawYears) ? array_map('intval', $rawYears) : [(int)($rawYears ?: date('Y'))];
+        // v36.0 : dernier repli d'exercice. Il tapait encore date('Y') en direct,
+        //   court-circuitant toute la résolution de la v35.5 : un change sans
+        //   `years` atterrissait sur l'année civile même quand le contexte disait
+        //   2027. On passe par l'exercice résolu — une seule décision, un seul
+        //   endroit.
+        $years = is_array($rawYears) ? array_map('intval', $rawYears) : [(int)($rawYears ?: $anneeDefaut)];
 
         $resolvedKey = null; $resolvedCat = $category; $resolvedLabel = null;
         if (in_array($action, $NEEDS_RESOLVE, true) && $target && $category && !in_array($category, $NO_FUZZY, true)) {
+            // v36.0 : la résolution est bornée aux exercices de l'opération.
             $res = isset($RESOLVER_DEDIE[$category])
                 ? call_user_func($RESOLVER_DEDIE[$category], $target, $fd)
-                : cfo_resolve_entity($target, $category, $fd);
+                : cfo_resolve_entity($target, $category, $fd, $years);
             if (empty($res['resolved'])) {
                 $clarifications[] = ['change_index'=>$i,'target'=>$target,'category'=>$category,'action'=>$action,
                     'error'=>$res['error'] ?? 'non résolu', 'ambiguous'=>$res['ambiguous'] ?? false, 'choices'=>$res['choices'] ?? null];
@@ -1580,6 +2097,11 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
     $snapshotBefore = [];
     foreach ($allYears as $yr) $snapshotBefore[$yr] = cfo_snapshot($fd, $yr);
 
+    // v36.0 : empreinte AVANT mutation des exercices hors périmètre.
+    //   Posée après sanitize_pre et l'auto-clonage, qui ont le droit de toucher
+    //   l'état ; seules les écritures métier sont surveillées ici.
+    $scelleAvant = cfo_empreinte_annees($fd, $allYears);
+
     // ── Phase 3 : build + apply ──
     $allOpsLog = [];
     foreach ($resolved as $rc) {
@@ -1603,6 +2125,26 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
         }
     }
 
+    // v36.0 : vérification du scellé. Un exercice hors périmètre qui a bougé
+    //   est une corruption silencieuse : on refuse le lot entier plutôt que de
+    //   persister un état dont une partie n'a été demandée par personne.
+    $scelleApres = cfo_empreinte_annees($fd, $allYears);
+    $violations = [];
+    foreach ($scelleAvant as $yr => $h) {
+        if (!isset($scelleApres[$yr])) { $violations[] = ['exercice'=>(int)$yr,'anomalie'=>'exercice supprimé']; continue; }
+        if ($scelleApres[$yr] !== $h) $violations[] = ['exercice'=>(int)$yr,'anomalie'=>'contenu modifié'];
+    }
+    foreach ($scelleApres as $yr => $h) {
+        if (!isset($scelleAvant[$yr])) $violations[] = ['exercice'=>(int)$yr,'anomalie'=>'exercice créé hors périmètre'];
+    }
+    if (count($violations)) {
+        return ['status'=>'error', 'error'=>'ERROR_ETANCHEITE_EXERCICE',
+                'message'=>"Des exercices NON ciblés ont été modifiés. Le lot est refusé, rien n'a été enregistré.",
+                'exercices_cibles'=>array_map('intval', $allYears),
+                'violations'=>$violations,
+                'pending_saved'=>false];
+    }
+
     // ── Phase 4 : snapshot « après » + delta ──
     $resultsByYear = [];
     foreach ($allYears as $yr) {
@@ -1620,7 +2162,7 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
 
     $successOps = []; $errorOps = []; $skipOps = []; $redistribution = [];
     // v35.6 : trace de résolution demandé→résolu, succès compris (voir cfo_rank_candidates).
-    $resolutions = [];
+    $resolutions = []; $operations = [];
     foreach ($allOpsLog as $o) {
         $st = $o['log']['status'] ?? null;
         if ($st === 'error') $errorOps[] = $o;
@@ -1630,6 +2172,30 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
         if (isset($o['log']['cible_demandee'])) {
             $resolutions[] = ['annee'=>$o['annee'], 'demande'=>$o['log']['cible_demandee'],
                 'resolu'=>$o['log']['resolved_label'] ?? null, 'status'=>$st];
+        }
+        // v36.0 : relevé littéral de ce qui a été écrit, produit par le SERVEUR.
+        //   Un lot de deux appels individuellement valides mais dont le modèle a
+        //   interverti les montants est indétectable côté moteur : les deux sont
+        //   cohérents pris isolément. Ce qui EST corrigeable, c'est que la phrase
+        //   de confirmation lue à l'utilisateur vienne de la mémoire du modèle.
+        //   Elle vient désormais d'ici — cible réellement touchée, avant, après —
+        //   donc une interversion se voit AVANT le OUI, pas après.
+        if ($st !== 'error') {
+            $l = $o['log'];
+            $avant = $l['avant'] ?? null; $apres = $l['apres'] ?? null;
+            if ($avant === null && isset($l['changes']) && is_array($l['changes'])) {
+                foreach ($l['changes'] as $champ => $d) {
+                    if (is_array($d) && array_key_exists('avant', $d)) { $avant = $d['avant']; $apres = $d['apres']; break; }
+                }
+            }
+            $operations[] = array_filter([
+                'annee'   => $o['annee'],
+                'action'  => $l['action'] ?? oget($o['op'], 'type'),
+                'cible'   => $l['cible'] ?? $l['compte'] ?? $l['key'] ?? oget($o['op'], 'key'),
+                'avant'   => $avant,
+                'apres'   => $apres === null ? ($l['valeur'] ?? null) : $apres,
+                'statut'  => $st ?: 'success',
+            ], function ($v) { return $v !== null; });
         }
     }
 
@@ -1643,6 +2209,7 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
         // v35.5 : rendre l'annee visible. Le modele doit pouvoir dire a
         //   l'utilisateur SUR QUEL EXERCICE il vient d'ecrire, et se corriger
         //   si le defaut ne correspond pas a la conversation.
+        'arguments_normalises' => $normReport ?: null,
         'annee_defaut_utilisee' => $anneeDefaut,
         'annee_defaut_source'   => $anneeSource,
         'exercices_touches'     => array_map('intval', array_keys($resultsByYear)),
@@ -1663,6 +2230,9 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
         //   modèle de vérifier IMMÉDIATEMENT "j'ai visé X, le serveur a bien touché X"
         //   avant d'annoncer un résultat à l'utilisateur, au lieu de le découvrir après coup.
         'resolutions' => count($resolutions) ? $resolutions : null,
+        // v36.0 : à lire à l'utilisateur AVANT de demander confirmation. C'est le
+        //   relevé du serveur, pas le souvenir du modèle.
+        'operations_appliquees' => count($operations) ? $operations : null,
         'redistribution_required' => count($redistribution) ? $redistribution : null,
         'auto_cloned_years' => count($autoCloned) ? $autoCloned : null,
         'sanitize_report' => ['pre'=>$sanitize_pre,'post'=>$sanitize_post,'total_purged'=>$totalDirt],

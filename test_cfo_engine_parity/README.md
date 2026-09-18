@@ -43,3 +43,20 @@ fautes de frappe, redistribution proportionnelle sur sous-lignes, ciblage d'une
 sous-ligne, transfert entre comptes en deux appels, épargne en pourcentage du
 reliquat, clonage d'année, auto-création d'un exercice absent, multi-exercices,
 cible introuvable (clarification), et appel hors catalogue.
+
+---
+
+## v36.0 — Les quatre suites
+
+Tout se joue depuis la racine du dépôt : `./run_tests.sh`
+
+| Suite | Ce qu'elle garantit |
+|---|---|
+| `compare.py` | **Parité** JS/PHP sur 27 cas : le port serveur produit le même résultat ET le même état muté que le moteur d'origine. Les divergences intentionnelles sont listées dans `AJOUTS_PHP_ASSUMES` / `GOAL_V19_KEYS`, chacune avec son motif. |
+| `test_robustesse.php` | **Matrice 19 fonctions × 4 axes** (args canoniques / alias sales / requis manquant / étanchéité 2026) + 8 valeurs aberrantes. La couverture est dérivée de `cfo_catalog_names()` : une fonction ajoutée sans cas de test fait échouer la suite. |
+| `test_resolution.php` | **Discipline de résolution** sur les quatre poches : nom approximatif accepté, homonyme ex æquo bloqué, correspondance exacte prioritaire, cible introuvable refusée sans écriture, homonyme d'un autre exercice sans effet. |
+| `test_schema_goals.php` | **Cohérence des deux schémas** d'un Smart Goal (v19 ↔ legacy) sur tous les chemins d'écriture. |
+
+Et `php tools_schema.php --check` vérifie que le schéma des outils n8n n'a pas
+dérivé du contrat d'arguments PHP. Les deux ne peuvent plus diverger en silence :
+`--inject` régénère le workflow depuis `cfo_arg_spec()`.
