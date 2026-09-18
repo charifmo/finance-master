@@ -418,17 +418,38 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
     $yrs = cfo_years($a, $ctx);   // v35.5 : le contexte porte l'exercice expose au modele
     $num = function ($k, $d = 0) use ($a) { $v = oget($a, $k); return is_numeric($v) ? $v + 0 : $d; };
 
+    // v35.6 : bug 1 — versement_mensuel n'était lu par AUCUNE des deux fonctions
+    //   du cycle de vie d'un Smart Goal. Le champ existe côté appli
+    //   (migrateGoalV19 : Number(o.versement_mensuel) || 0) mais rien côté moteur
+    //   ne l'écrivait jamais : un objectif nouvellement créé retombait donc
+    //   systématiquement à 0, avec l'alerte "Aucun versement mensuel défini".
+    $versementMensuel = oget($a, 'versement_mensuel', null);
+    $versementMensuel = (is_numeric($versementMensuel)) ? $versementMensuel + 0 : null;
+
     switch ($fn) {
         case 'create_smart_goal':
             return [cfo_obj(['action'=>'add','category'=>'objectif','target'=>oget($a,'name'),'label'=>oget($a,'name'),
-                'amount'=>$num('initial_funding'),'target_amount'=>$num('target_amount'),'years'=>$yrs,'notes'=>oget($a,'notes')])];
+                'amount'=>$num('initial_funding'),'target_amount'=>$num('target_amount'),'years'=>$yrs,'notes'=>oget($a,'notes'),
+                'versement_mensuel'=>$versementMensuel])];
 
         case 'add_funds_to_goal':
+            // v35.6 : args.amount reste incrémental (documenté "objectif EXISTANT") ;
+            //   versement_mensuel, lui, est un SET, pas un ajout — un versement mensuel
+            //   ne s'additionne pas à lui-même à chaque appel. amount peut être omis
+            //   (défaut 0) pour un appel qui ne fait QUE changer le versement mensuel.
             return [cfo_obj(['action'=>'modify','category'=>'objectif','target'=>oget($a,'name'),
-                'amount'=>$num('amount'),'years'=>$yrs,'notes'=>oget($a,'notes')])];
+                'amount'=>$num('amount'),'years'=>$yrs,'notes'=>oget($a,'notes'),
+                'versement_mensuel'=>$versementMensuel])];
 
         case 'set_recurring_savings': {
             $out = [];
+            // v35.6 : source_account était stocké TEL QUEL, sans jamais être vérifié
+            //   contre les comptes réels (fd.comptes[]) — un nom approximatif ou mal
+            //   orthographié atterrissait tel quel dans sourceCompte, un champ que le
+            //   frontend attend au format 'courant' / 'cpt_<id>' (voir le <select> du
+            //   Studio). Résolu une seule fois, hors de la boucle années : la cible ne
+            //   change pas d'une année à l'autre dans un même appel.
+            $srcResolution = cfo_resolve_source_compte(oget($a, 'source_account', null), $ctx['financeData']);
             foreach ($yrs as $yr) {
                 $pct = oget($a, 'percentage_of_reliquat', null);
                 if ($pct !== null && $pct !== '') {
@@ -447,15 +468,16 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
                         $exceptions[] = cfo_obj(['moisDebut'=>(int)$mois,'moisFin'=>(int)$mois,'nouvelleValeur'=>$amt]);
                     }
                     $out[] = cfo_obj(['action'=>'add','category'=>'epargne','target'=>oget($a,'name'),'label'=>oget($a,'name'),
-                        'amount'=>0,'sourceCompte'=>oget($a,'source_account','courant'),'years'=>[$yr],
-                        'exceptions'=>$exceptions,'notes'=>oget($a,'notes')]);
+                        'amount'=>0,'sourceCompte'=>$srcResolution['key'],'sourceCompteAvertissement'=>$srcResolution['warning'],
+                        'years'=>[$yr], 'exceptions'=>$exceptions,'notes'=>oget($a,'notes')]);
                     continue;
                 }
                 // Mode 2 — montant fixe mensuel
                 $fixed = oget($a, 'fixed_amount', null);
                 $amount = is_numeric($fixed) ? $fixed + 0 : $num('amount');
                 $ch = cfo_obj(['action'=>'add','category'=>'epargne','target'=>oget($a,'name'),'label'=>oget($a,'name'),
-                    'amount'=>$amount,'sourceCompte'=>oget($a,'source_account','courant'),'years'=>[$yr],'notes'=>oget($a,'notes')]);
+                    'amount'=>$amount,'sourceCompte'=>$srcResolution['key'],'sourceCompteAvertissement'=>$srcResolution['warning'],
+                    'years'=>[$yr],'notes'=>oget($a,'notes')]);
                 if (is_array(oget($a, 'exceptions'))) oset($ch, 'exceptions', oget($a, 'exceptions'));
                 $out[] = $ch;
             }
@@ -561,8 +583,29 @@ function cfo_resolve_entity($target, $category, $fd): array {
         }
     }
 
+    return cfo_rank_candidates($target, $normT, $candidates);
+}
+
+/**
+ * v35.6 — CLASSEMENT PARTAGÉ, EXTRAIT DE cfo_resolve_entity.
+ *   Sert désormais aussi cfo_resolve_compte() et cfo_resolve_goal() : les
+ *   comptes bancaires et les Smart Goals passaient jusqu'ici par un simple
+ *   "premier match qui contient la sous-chaîne demandée" (update_compte,
+ *   update_objectif), SANS AUCUNE détection d'ambiguïté — contrairement aux
+ *   revenus/charges/épargne qui bénéficient déjà de ce classement. Deux
+ *   comptes ou deux objectifs aux noms proches ("Fonds d'urgence" /
+ *   "Fonds d'urgence Voyage") pouvaient donc se faire écraser silencieusement
+ *   par un match approximatif, sans jamais remonter d'alerte.
+ *
+ * v35.6 — AMBIGUÏTÉ ÉLARGIE : l'ancien test n'arrêtait le moteur que sur une
+ *   ÉGALITÉ STRICTE de distance entre les deux meilleurs candidats. Un
+ *   quasi-ex-æquo (distance 3 vs 4, par exemple deux comptes d'épargne aux
+ *   libellés voisins) passait au travers et prenait silencieusement le
+ *   premier de la paire. Le seuil devient une marge (±1), pas une égalité.
+ */
+function cfo_rank_candidates(string $target, string $normT, array $candidates): array {
     if (!count($candidates)) {
-        return ['resolved'=>false, 'error'=>'"'.$target.'" introuvable'.($category ? ' dans '.$category : '').'. Finance data vide ou catégorie incorrecte.'];
+        return ['resolved'=>false, 'error'=>'"'.$target.'" introuvable. Finance data vide ou catégorie incorrecte.'];
     }
 
     // Tri stable : "contains" d'abord, puis distance croissante.
@@ -580,7 +623,7 @@ function cfo_resolve_entity($target, $category, $fd): array {
     $thresh = max(4, (int)floor(strlen($normT) * 0.55));
 
     if ($second && $second['contains'] && $best['contains'] && $best['key'] !== $second['key']
-        && $best['dist'] === $second['dist'] && $best['category'] === $second['category']) {
+        && abs($best['dist'] - $second['dist']) <= 1 && $best['category'] === $second['category']) {
         return ['resolved'=>false, 'ambiguous'=>true, 'choices'=>[$best, $second],
             'error'=>'"'.$target.'" est ambigu. Précise : "'.$best['label'].'" ('.$best['key'].') ou "'.$second['label'].'" ('.$second['key'].') ?'];
     }
@@ -589,6 +632,104 @@ function cfo_resolve_entity($target, $category, $fd): array {
         return ['resolved'=>false, 'error'=>'"'.$target.'" ne correspond à aucune ligne connue. Lignes proches : '.$sugg];
     }
     return ['resolved'=>true, 'key'=>$best['key'], 'label'=>$best['label'], 'category'=>$best['category']];
+}
+
+/**
+ * v35.6 — RÉSOLUTION DES COMPTES BANCAIRES (fd.comptes[]).
+ *   update_compte/adjust_account_balance comparaient jusqu'ici la clé
+ *   normalisée à oget($x,'id') via ===, une comparaison string/int qui ne
+ *   peut jamais être vraie : la branche "id exact" était du code mort. Seul
+ *   le "premier libellé qui contient la sous-chaîne" fonctionnait, sans
+ *   garde-fou. "CTO", "Dépenses annuelles", "Fonds d'urgence" sont des
+ *   libellés de comptes réels (fd.comptes[].label) : ils passent désormais
+ *   par le même classement Levenshtein + ambiguïté que revenus/charges/épargne.
+ *   L'alias "courant" (sans article, sans "compte") pointe vers le compte de
+ *   type 'courant' quand il existe, en plus de son propre libellé réel.
+ */
+function cfo_resolve_compte($target, $fd): array {
+    $normT = cfo_norm_str($target);
+    $candidates = [];
+    $comptesArr = oget($fd, 'comptes');
+    if (is_array($comptesArr)) {
+        foreach ($comptesArr as $c) {
+            if (!is_object($c)) continue;
+            $id = oget($c, 'id'); if ($id === null || $id === '') continue;
+            $lbl = oget($c, 'label') ?: (oget($c, 'nom') ?: ('Compte ' . $id));
+            $normL = cfo_norm_str($lbl);
+            $dist = cfo_levenshtein($normT, $normL);
+            $contains = cfo_str_contains_either($normL, $normT);
+            if (oget($c, 'type') === 'courant') {
+                $dAlias = cfo_levenshtein($normT, 'courant');
+                $cAlias = cfo_str_contains_either('courant', $normT);
+                if ($dAlias < $dist) { $dist = $dAlias; $contains = $contains || $cAlias; }
+                elseif ($cAlias) { $contains = true; }
+            }
+            $candidates[] = ['key'=>'cpt_' . $id, 'label'=>$lbl, 'category'=>'compte', 'dist'=>$dist, 'contains'=>$contains];
+        }
+    }
+    if (!count($candidates)) {
+        return ['resolved'=>false, 'error'=>'"'.$target.'" introuvable parmi les comptes. Aucun compte enregistré (fd.comptes vide).'];
+    }
+    return cfo_rank_candidates($target, $normT, $candidates);
+}
+
+/**
+ * v35.6 — RÉSOLUTION DES SMART GOALS (fd.wealthGoals[]).
+ *   update_objectif prenait jusqu'ici le PREMIER objectif dont le nom
+ *   contenait la sous-chaîne demandée, sans distance ni ambiguïté — et
+ *   quand rien ne matchait, il créait SILENCIEUSEMENT un nouvel objectif à
+ *   10 000 DH de cible (« upsert »). Deux défauts à la fois : un objectif
+ *   existant proche pouvait absorber la mise à jour d'un autre, et un nom
+ *   mal orthographié créait un objectif fantôme au lieu de signaler l'échec
+ *   — alors qu'add_funds_to_goal documente explicitement « objectif EXISTANT ».
+ *   Les Smart Goals n'ont pas d'identifiant stable côté moteur (cfo_obj ne
+ *   pose pas d'id) : la clé résolue est le libellé canonique lui-même,
+ *   recherché ensuite par égalité normalisée exacte — jamais par sous-chaîne.
+ */
+/**
+ * v35.6 — RÉSOLUTION DE sourceCompte POUR UNE ÉPARGNE RÉCURRENTE.
+ *   set_recurring_savings stockait oget($a,'source_account','courant') tel
+ *   quel, sans jamais le vérifier contre fd.comptes[] — alors que le champ
+ *   est conventionnellement 'courant' ou 'cpt_<id>' (voir le <select> "Source
+ *   du Cash Requis" du Studio, index.html). Un nom de compte approximatif
+ *   ("CTO" pour "Bourse / CTO") atterrissait tel quel dans les données,
+ *   invisible pour tout sélecteur qui compare des clés structurées.
+ *   Ne bloque JAMAIS l'opération : source_account est un champ secondaire
+ *   d'un appel dont la cible principale est la ligne d'épargne elle-même.
+ *   Un échec de résolution retombe sur 'courant' avec un avertissement
+ *   explicite plutôt que de stocker une chaîne muette que rien ne relira.
+ */
+function cfo_resolve_source_compte($raw, $fd): array {
+    if ($raw === null || $raw === '') return ['key' => 'courant', 'warning' => null];
+    $norm = cfo_norm_str($raw);
+    if ($norm === '' || $norm === 'courant' || $norm === 'compte courant') {
+        return ['key' => 'courant', 'warning' => null];
+    }
+    $res = cfo_resolve_compte($raw, $fd);
+    if (!empty($res['resolved'])) {
+        return ['key' => $res['key'], 'warning' => null];
+    }
+    return ['key' => 'courant',
+        'warning' => 'source_account "'.$raw.'" non reconnu parmi les comptes — repli sur "courant". '.($res['error'] ?? '')];
+}
+
+function cfo_resolve_goal($target, $fd): array {
+    $normT = cfo_norm_str($target);
+    $candidates = [];
+    $goals = oget($fd, 'wealthGoals');
+    if (is_array($goals)) {
+        foreach ($goals as $g) {
+            if (!is_object($g)) continue;
+            $lbl = oget($g, 'libelle') ?: (oget($g, 'name') ?: 'Objectif');
+            $normL = cfo_norm_str($lbl);
+            $candidates[] = ['key'=>$lbl, 'label'=>$lbl, 'category'=>'objectif',
+                'dist'=>cfo_levenshtein($normT, $normL), 'contains'=>cfo_str_contains_either($normL, $normT)];
+        }
+    }
+    if (!count($candidates)) {
+        return ['resolved'=>false, 'error'=>'"'.$target.'" introuvable parmi les objectifs. Aucun Smart Goal enregistré — crée-le d\'abord avec create_smart_goal.'];
+    }
+    return cfo_rank_candidates($target, $normT, $candidates);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -625,8 +766,13 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
                 case 'epargne':     return [$o(['type'=>'update_epargne','key'=>$resolvedKey,'valeur'=>$amt,'label'=>$newLabel ?: null])];
                 case 'studio':      return [$o(['type'=>'set_projet_studio','annee'=>$annee,'key'=>oget($change,'studio_key') ?: ($resolvedKey ?: 'travaux'),'valeur'=>$amt])];
                 case 'solde':       return [$o(['type'=>'set_solde_initial','key'=>oget($change,'balance_key') ?: ($resolvedKey ?: 'courant'),'valeur'=>$amt])];
-                case 'compte':      return [$o(['type'=>'update_compte','key'=>oget($change,'target_key') ?: $target,'montant'=>$amt])];
-                case 'objectif':    return [$o(['type'=>'update_objectif','key'=>oget($change,'target_key') ?: $target,'montant'=>$amt])];
+                // v35.6 : $resolvedKey vient désormais de cfo_resolve_compte()/cfo_resolve_goal()
+                //   (Levenshtein + ambiguïté) — oget($change,'target_key') n'a jamais été posé
+                //   nulle part dans ce fichier, c'était un repli mort qui retombait toujours
+                //   sur le $target brut, non résolu.
+                case 'compte':      return [$o(['type'=>'update_compte','key'=>$resolvedKey,'montant'=>$amt])];
+                case 'objectif':    return [$o(['type'=>'update_objectif','key'=>$resolvedKey,'montant'=>$amt,
+                    'versement_mensuel'=>oget($change,'versement_mensuel', null)])];
                 case 'actif':
                 case 'foncier': {
                     $op = $o(['type'=>'update_master_asset','key'=>oget($change,'target_key') ?: $target,'montant'=>$amt]);
@@ -648,13 +794,15 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
                 case 'epargne': {
                     $op = $o(['type'=>'add_epargne','key'=>$baseKey,'label'=>$newLabel ?: $target,'valeur'=>$amt ?? 0]);
                     if (oget($change,'sourceCompte')) oset($op, 'sourceCompte', oget($change,'sourceCompte'));
+                    if (oget($change,'sourceCompteAvertissement')) oset($op, 'sourceCompteAvertissement', oget($change,'sourceCompteAvertissement'));
                     if (oget($change,'linkedAccountId', null) !== null) oset($op, 'linkedAccountId', oget($change,'linkedAccountId'));
                     if (is_array(oget($change,'exceptions'))) oset($op, 'exceptions', oget($change,'exceptions'));
                     return [$op];
                 }
                 case 'depense_ponctuelle': return [$o(['type'=>'add_depense_ponctuelle','annee'=>$annee,'mois'=>(int)(oget($change,'month') ?: 1),'nom'=>$newLabel ?: $target,'montant'=>$amt ?? 0])];
                 case 'compte':   return [$o(['type'=>'create_compte','label'=>$newLabel ?: $target,'montant'=>$amt ?? 0])];
-                case 'objectif': return [$o(['type'=>'create_objectif','name'=>$newLabel ?: $target,'current'=>$amt ?? 0,'target_amount'=>oget($change,'target_amount', 0)])];
+                case 'objectif': return [$o(['type'=>'create_objectif','name'=>$newLabel ?: $target,'current'=>$amt ?? 0,
+                    'target_amount'=>oget($change,'target_amount', 0),'versement_mensuel'=>oget($change,'versement_mensuel', null)])];
             }
             return null;
 
@@ -1007,6 +1155,8 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             $si = oget($fd,'soldesInitiaux');
             if (!ohas($si,'ep_'.$newId)) oset($si,'ep_'.$newId, 0);
             $log['id']=$newId; $log['key']='ep_'.$newId; $log['cible']=$lbl; $log['created']=true; $log['valeur']=$v;
+            $log['source_compte']=oget($newEp,'sourceCompte');
+            if (oget($op,'sourceCompteAvertissement')) $log['source_compte_avertissement']=oget($op,'sourceCompteAvertissement');
             if (count(oget($newEp,'exceptions'))) $log['exceptions_count']=count(oget($newEp,'exceptions'));
             break;
         }
@@ -1152,12 +1302,25 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             $log['status']='success'; $log['action']='Creation compte'; $log['compte']=oget($op,'label'); $log['solde']=oget($op,'montant'); break;
         }
         case 'update_compte': {
+            // v35.6 : $K est désormais 'cpt_<id>', posé par cfo_resolve_compte()
+            //   (Levenshtein + ambiguïté). L'ancienne comparaison oget($x,'id') === $normKey
+            //   comparait un int à une chaîne normalisée via === : elle ne pouvait
+            //   JAMAIS être vraie, c'était du code mort — seul le "premier libellé qui
+            //   contient la sous-chaîne" fonctionnait réellement, sans détection
+            //   d'ambiguïté. "CTO" / "Fonds d'urgence" / "Dépenses annuelles" sont
+            //   exactement le genre de libellés de comptes visés par ce ticket.
             $comptes = oget($fd,'comptes');
             if (!is_array($comptes) || !count($comptes)) { $log['status']='error'; $log['reason']='Aucun compte existant'; break; }
+            $wantId = (strpos((string)$K, 'cpt_') === 0) ? substr((string)$K, 4) : (string)$K;
             $normKey = cfo_norm_str($K); $c = null;
             foreach ($comptes as $x) {
-                if (oget($x,'id') === $normKey) { $c = $x; break; }
-                if ($normKey !== '' && strpos(cfo_norm_str(oget($x,'label')), $normKey) !== false) { $c = $x; break; }
+                if ((string)oget($x,'id') === $wantId) { $c = $x; break; }
+            }
+            if (!$c) {
+                // Repli défensif : $K brut, non résolu (appel direct hors phase 1).
+                foreach ($comptes as $x) {
+                    if ($normKey !== '' && strpos(cfo_norm_str(oget($x,'label')), $normKey) !== false) { $c = $x; break; }
+                }
             }
             if (!$c) {
                 // v35.3 : même raison qu'au-dessus — nommer les comptes existants.
@@ -1176,39 +1339,67 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
 
         /* ── WEALTH : OBJECTIFS & ACTIFS (top-level fd.*) ──────────── */
         case 'update_objectif': {
+            // v35.6 : $K est désormais le libellé EXACT résolu par cfo_resolve_goal()
+            //   (Levenshtein + ambiguïté), plus une sous-chaîne brute — recherche par
+            //   égalité normalisée, pas par contains. Et surtout : PLUS D'UPSERT
+            //   SILENCIEUX. add_funds_to_goal documente "objectif EXISTANT" ; créer un
+            //   objectif fantôme à 10 000 DH quand le nom ne matchait rien était
+            //   exactement le genre de mutation invisible que ce ticket signale.
             if (!is_array(oget($fd,'wealthGoals'))) oset($fd,'wealthGoals',[]);
             $goals = oget($fd,'wealthGoals'); $normKey = cfo_norm_str($K); $goal = null;
-            foreach ($goals as $x) { if ($normKey !== '' && strpos(cfo_norm_str(oget($x,'name')), $normKey) !== false) { $goal = $x; break; } }
-            if (!$goal) {
-                // Upsert : objectif introuvable → création automatique
-                $newGoal = cfo_obj(['name'=>(string)($K ?: 'Nouvel objectif'),'target'=>10000,'current'=>(float)(oget($op,'montant',0) ?: 0)]);
-                $goals[] = $newGoal; oset($fd,'wealthGoals',$goals);
-                $log['status']='success'; $log['action']='Upsert objectif (creation auto)';
-                $log['cible']=oget($newGoal,'name'); $log['target']=oget($newGoal,'target'); $log['current']=oget($newGoal,'current'); break;
+            foreach ($goals as $x) {
+                if (cfo_norm_str(oget($x,'libelle') ?: oget($x,'name')) === $normKey) { $goal = $x; break; }
             }
-            $oldVal = (float)(oget($goal,'current',0) ?: 0);
-            oset($goal,'current', $oldVal + (float)(oget($op,'montant',0) ?: 0));
-            $log['status']='success'; $log['action']='Mise a jour objectif (incremental)';
-            $log['cible']=oget($goal,'name'); $log['avant']=$oldVal; $log['apres']=oget($goal,'current'); break;
+            if (!$goal) {
+                $dispo = [];
+                foreach ($goals as $x) { $n = oget($x,'libelle') ?: oget($x,'name'); if ($n) $dispo[] = $n; }
+                $log['status']='error'; $log['reason']='Objectif introuvable: '.$K;
+                $log['objectifs_disponibles']=$dispo; break;
+            }
+            $ch = [];
+            $vAmount = cfo_pick_num($op, ['montant']);
+            if ($vAmount !== null && $vAmount != 0) {
+                $oldVal = (float)(oget($goal,'current',0) ?: 0);
+                oset($goal,'current', $oldVal + $vAmount);
+                $ch['current'] = ['avant'=>$oldVal,'apres'=>oget($goal,'current')];
+            }
+            $vVers = cfo_pick_num($op, ['versement_mensuel']);
+            if ($vVers !== null) {
+                $oldV = oget($goal,'versement_mensuel',0);
+                oset($goal,'versement_mensuel', $vVers);
+                $ch['versement_mensuel'] = ['avant'=>$oldV,'apres'=>$vVers];
+            }
+            if (!count($ch)) { $log['status']='error'; $log['reason']='aucun champ fourni (ni montant, ni versement_mensuel)'; break; }
+            $log['status']='success'; $log['action']='Mise a jour objectif';
+            $log['cible']=oget($goal,'libelle') ?: oget($goal,'name'); $log['changes']=$ch; break;
         }
         case 'create_objectif': {
             if (!is_array(oget($fd,'wealthGoals'))) oset($fd,'wealthGoals',[]);
             $goals = oget($fd,'wealthGoals');
             $goalName = trim((string)(oget($op,'name') ?: 'Nouvel objectif'));
             $normNew = cfo_norm_str($goalName);
+            $vVers = cfo_pick_num($op, ['versement_mensuel']);
             foreach ($goals as $x) {
-                if (cfo_norm_str(oget($x,'name')) === $normNew) {
+                if (cfo_norm_str(oget($x,'libelle') ?: oget($x,'name')) === $normNew) {
                     $oldVal = (float)(oget($x,'current',0) ?: 0);
                     oset($x,'current', $oldVal + (float)(oget($op,'current',0) ?: 0));
+                    if ($vVers !== null) oset($x,'versement_mensuel', $vVers);
                     $log['status']='success'; $log['action']='Objectif existant — current incremente';
-                    $log['cible']=oget($x,'name'); $log['avant']=$oldVal; $log['apres']=oget($x,'current'); break 2;
+                    $log['cible']=oget($x,'libelle') ?: oget($x,'name'); $log['avant']=$oldVal; $log['apres']=oget($x,'current'); break 2;
                 }
             }
             $tgt = (float)(oget($op,'target_amount',0) ?: 0);
             $newGoal = cfo_obj(['name'=>$goalName,'target'=>($tgt > 0 ? $tgt : 10000),'current'=>(float)(oget($op,'current',0) ?: 0)]);
+            // v35.6 : bug 1 — versement_mensuel manquait ici, seule voie d'écriture au
+            //   moment de la création. L'app le lit ensuite via migrateGoalV19
+            //   (Number(o.versement_mensuel) || 0) : sans cette ligne, tout objectif
+            //   créé par l'agent retombait à 0, quoi que le modèle ait demandé.
+            if ($vVers !== null) oset($newGoal, 'versement_mensuel', $vVers);
             $goals[] = $newGoal; oset($fd,'wealthGoals',$goals);
             $log['status']='success'; $log['action']='Creation objectif';
-            $log['cible']=oget($newGoal,'name'); $log['target']=oget($newGoal,'target'); $log['current']=oget($newGoal,'current'); break;
+            $log['cible']=oget($newGoal,'name'); $log['target']=oget($newGoal,'target'); $log['current']=oget($newGoal,'current');
+            if ($vVers !== null) $log['versement_mensuel']=$vVers;
+            break;
         }
 
         /* ── MASTER ASSET ENGINE v17.0 (productif + foncier unifiés) ─ */
@@ -1326,24 +1517,37 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
     // ── Phase 1 : résolution, AVANT toute mutation ──
     $resolved = []; $clarifications = [];
     $NEEDS_RESOLVE = ['modify','remove','rename','add_exception','remove_exception'];
-    $NO_FUZZY = ['depense_ponctuelle','annee','solde','studio','compte','objectif','actif','foncier'];
+    // v35.6 : 'compte' et 'objectif' sortent de NO_FUZZY — ils passent désormais
+    //   par cfo_resolve_compte()/cfo_resolve_goal(), avec le même classement et
+    //   la même détection d'ambiguïté que revenus/charges/épargne, au lieu du
+    //   "premier libellé qui contient la sous-chaîne" sans aucun garde-fou.
+    $NO_FUZZY = ['depense_ponctuelle','annee','solde','studio','actif','foncier'];
+    // Catégories qui ont leur propre résolveur dédié (pas de pool par année).
+    $RESOLVER_DEDIE = ['compte' => 'cfo_resolve_compte', 'objectif' => 'cfo_resolve_goal'];
 
     foreach ($changes as $i => $change) {
         $action = oget($change,'action'); $category = oget($change,'category');
         $target = oget($change,'target'); $rawYears = oget($change,'years');
         $years = is_array($rawYears) ? array_map('intval', $rawYears) : [(int)($rawYears ?: date('Y'))];
 
-        $resolvedKey = null; $resolvedCat = $category;
+        $resolvedKey = null; $resolvedCat = $category; $resolvedLabel = null;
         if (in_array($action, $NEEDS_RESOLVE, true) && $target && $category && !in_array($category, $NO_FUZZY, true)) {
-            $res = cfo_resolve_entity($target, $category, $fd);
+            $res = isset($RESOLVER_DEDIE[$category])
+                ? call_user_func($RESOLVER_DEDIE[$category], $target, $fd)
+                : cfo_resolve_entity($target, $category, $fd);
             if (empty($res['resolved'])) {
                 $clarifications[] = ['change_index'=>$i,'target'=>$target,'category'=>$category,'action'=>$action,
                     'error'=>$res['error'] ?? 'non résolu', 'ambiguous'=>$res['ambiguous'] ?? false, 'choices'=>$res['choices'] ?? null];
                 continue;
             }
-            $resolvedKey = $res['key']; $resolvedCat = $res['category'];
+            $resolvedKey = $res['key']; $resolvedCat = $res['category']; $resolvedLabel = $res['label'] ?? null;
         }
-        $resolved[] = ['change'=>$change,'key'=>$resolvedKey,'cat'=>$resolvedCat,'years'=>$years];
+        $resolved[] = ['change'=>$change,'key'=>$resolvedKey,'cat'=>$resolvedCat,'years'=>$years,
+            // v35.6 : ce que le modèle a demandé vs. ce qui a été résolu — porté
+            //   jusque dans le log de chaque op (succès compris), pour qu'une
+            //   éventuelle mauvaise résolution soit visible IMMÉDIATEMENT dans
+            //   la réponse au lieu de n'être découverte qu'en rouvrant l'appli.
+            'target_demande'=>$target, 'resolved_label'=>$resolvedLabel];
     }
 
     // Clarification nécessaire → on rend la main SANS avoir muté quoi que ce soit
@@ -1388,7 +1592,13 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
                 continue;
             }
             foreach ($ops as $op) {
-                $allOpsLog[] = ['annee'=>$annee, 'op'=>$op, 'log'=>cfo_apply_op($fd, $op, $annee)];
+                $log = cfo_apply_op($fd, $op, $annee);
+                // v35.6 : la cible demandée et son libellé résolu voyagent jusqu'au
+                //   log — y compris en cas de succès — pour rendre une mauvaise
+                //   résolution visible dès cette réponse.
+                if ($rc['target_demande'] !== null) $log['cible_demandee'] = $rc['target_demande'];
+                if ($rc['resolved_label'] !== null) $log['resolved_label'] = $rc['resolved_label'];
+                $allOpsLog[] = ['annee'=>$annee, 'op'=>$op, 'log'=>$log];
             }
         }
     }
@@ -1409,12 +1619,18 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
     $sanitize_post = cfo_sanitize_finance_data($fd);
 
     $successOps = []; $errorOps = []; $skipOps = []; $redistribution = [];
+    // v35.6 : trace de résolution demandé→résolu, succès compris (voir cfo_rank_candidates).
+    $resolutions = [];
     foreach ($allOpsLog as $o) {
         $st = $o['log']['status'] ?? null;
         if ($st === 'error') $errorOps[] = $o;
         elseif ($st === 'skip') $skipOps[] = $o;
         else $successOps[] = $o;
         if (!empty($o['log']['requires_redistribution'])) $redistribution[] = $o['log'];
+        if (isset($o['log']['cible_demandee'])) {
+            $resolutions[] = ['annee'=>$o['annee'], 'demande'=>$o['log']['cible_demandee'],
+                'resolu'=>$o['log']['resolved_label'] ?? null, 'status'=>$st];
+        }
     }
 
     $totalDirt = array_sum($sanitize_pre) + array_sum($sanitize_post);
@@ -1443,6 +1659,10 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
             }
             return $e;
         }, $errorOps) : null,
+        // v35.6 : ce que chaque cible approximative a résolu, succès compris — permet au
+        //   modèle de vérifier IMMÉDIATEMENT "j'ai visé X, le serveur a bien touché X"
+        //   avant d'annoncer un résultat à l'utilisateur, au lieu de le découvrir après coup.
+        'resolutions' => count($resolutions) ? $resolutions : null,
         'redistribution_required' => count($redistribution) ? $redistribution : null,
         'auto_cloned_years' => count($autoCloned) ? $autoCloned : null,
         'sanitize_report' => ['pre'=>$sanitize_pre,'post'=>$sanitize_post,'total_purged'=>$totalDirt],

@@ -30,10 +30,14 @@ def canon(o, path=""):
 #   v35.5 : l'exercice retenu par défaut et sa provenance. Le JS retombait en
 #   silence sur l'horloge du serveur ; c'est précisément le bug corrigé, donc
 #   la parité ne peut pas exiger de reproduire ce silence.
+#   v35.6 : la trace de résolution demandé→résolu (compte, objectif, épargne,
+#   ...), succès compris. Le JS ne l'a jamais produite — aucune trace de ce
+#   qu'il résolvait réellement n'existait avant ce ticket.
 AJOUTS_PHP_ASSUMES = {
     'res.annee_defaut_utilisee',
     'res.annee_defaut_source',
     'res.exercices_touches',
+    'res.resolutions',
 }
 
 def diff(a, b, p=""):
