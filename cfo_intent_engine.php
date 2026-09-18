@@ -913,10 +913,49 @@ function cfo_collecter_candidats(string $normT, $target, $category, array $catKe
                 if (isset($seen[$dk])) continue; $seen[$dk] = true;
                 $item = oget($pool, $key);
                 $lbl  = oget($item, 'label') ?: (oget($item, 'nom') ?: $key);
-                $normL = cfo_norm_str($lbl); $normK = cfo_norm_str($key);
-                $dist = min(cfo_levenshtein($normT, $normL), cfo_levenshtein($normT, $normK));
-                $contains = cfo_str_contains_either($normL, $normT) || cfo_str_contains_either($normK, $normT);
-                $candidates[] = ['key'=>$key,'label'=>$lbl,'category'=>$cat,'dist'=>$dist,'contains'=>$contains];
+
+                // v36.1 — UNE LIGNE D'ÉPARGNE SE DÉSIGNE AUSSI PAR SA DESTINATION.
+                //   Le champ « Nom de l'objectif » est facultatif dans l'interface et
+                //   reste vide en pratique : l'utilisateur identifie ses virements par
+                //   le compte visé (« VERS : Épargne Long Terme »), pas par un libellé
+                //   qu'il n'a jamais saisi. Le moteur ne résolvait QUE par nom : sur des
+                //   lignes sans nom, « Épargne Long Terme » ne correspondait à rien et
+                //   le résolveur répondait en clés techniques (ep_101, ep_102…),
+                //   inexploitables pour le modèle comme pour l'utilisateur. On ajoute
+                //   donc le libellé du compte lié — et celui du compte source — comme
+                //   désignations légitimes de la ligne.
+                //   Chaque désignation porte une PRIORITÉ : 0 pour un libellé
+                //   réellement saisi, 1 pour une désignation déduite du compte lié.
+                //   Un nom que l'utilisateur a tapé prime toujours sur un alias que
+                //   le moteur infère — sans quoi deux lignes « Bourse / CTO » (l'une
+                //   nommée, l'autre liée au compte du même nom) se retrouvaient
+                //   ex æquo, avec un message de levée d'ambiguïté impossible à
+                //   trancher : « Précise : "Bourse / CTO" ou "Bourse / CTO" ? ».
+                $designations = [[$lbl, 0, null]];
+                if ($cat === 'epargne') {
+                    foreach (cfo_libelles_comptes_lies($item, $fd) as $alias) $designations[] = [$alias, 1, 'compte lié'];
+                }
+
+                $normK = cfo_norm_str($key);
+                $dist = cfo_levenshtein($normT, $normK);
+                $contains = cfo_str_contains_either($normK, $normT);
+                $labelAffiche = $lbl !== '' ? $lbl : $key; $prio = 2; $via = null;
+                foreach ($designations as $d) {
+                    list($texte, $p, $source) = $d;
+                    if ($texte === null || $texte === '') continue;
+                    $nd = cfo_norm_str($texte);
+                    if ($nd === '') continue;
+                    $dd = cfo_levenshtein($normT, $nd);
+                    $cc = cfo_str_contains_either($nd, $normT);
+                    // La meilleure désignation gagne, et c'est ELLE qu'on affiche :
+                    // dire « résolu → Épargne Long Terme » est utile, « → ep_103 » ne l'est pas.
+                    if (($cc && !$contains) || ($cc === $contains && $dd < $dist)
+                        || ($cc === $contains && $dd === $dist && $p < $prio)) {
+                        $dist = $dd; $contains = $cc; $labelAffiche = $texte; $prio = $p; $via = $source;
+                    }
+                }
+                $candidates[] = ['key'=>$key,'label'=>$labelAffiche,'category'=>$cat,
+                                 'dist'=>$dist,'contains'=>$contains,'priorite'=>$prio,'via'=>$via];
             }
         }
     }
@@ -963,6 +1002,9 @@ function cfo_rank_candidates(string $target, string $normT, array $candidates): 
     usort($candidates, function ($a, $b) {
         if ($a['contains'] !== $b['contains']) return $a['contains'] ? -1 : 1;
         if ($a['dist'] !== $b['dist']) return $a['dist'] <=> $b['dist'];
+        // v36.1 : à égalité, un libellé saisi l'emporte sur une désignation déduite.
+        $pa = $a['priorite'] ?? 0; $pb = $b['priorite'] ?? 0;
+        if ($pa !== $pb) return $pa <=> $pb;
         return $a['_i'] <=> $b['_i'];
     });
 
@@ -971,9 +1013,18 @@ function cfo_rank_candidates(string $target, string $normT, array $candidates): 
     $thresh = max(4, (int)floor(strlen($normT) * 0.55));
 
     if ($second && $second['contains'] && $best['contains'] && $best['key'] !== $second['key']
-        && abs($best['dist'] - $second['dist']) <= 1 && $best['category'] === $second['category']) {
+        && abs($best['dist'] - $second['dist']) <= 1 && $best['category'] === $second['category']
+        // v36.1 : un libellé saisi n'est pas ambigu face à une désignation déduite.
+        && ($best['priorite'] ?? 0) === ($second['priorite'] ?? 0)) {
+        // v36.1 : deux choix affichés à l'identique sont indécidables pour
+        //   l'utilisateur (« Précise : "X" ou "X" ? »). On dit d'où vient chacun.
+        $decrire = function ($c) {
+            $txt = '"' . $c['label'] . '"';
+            if (!empty($c['via'])) $txt .= ' (' . $c['via'] . ')';
+            return $txt . ' [' . $c['key'] . ']';
+        };
         return ['resolved'=>false, 'ambiguous'=>true, 'choices'=>[$best, $second],
-            'error'=>'"'.$target.'" est ambigu. Précise : "'.$best['label'].'" ('.$best['key'].') ou "'.$second['label'].'" ('.$second['key'].') ?'];
+            'error'=>'"'.$target.'" est ambigu : '.$decrire($best).' ou '.$decrire($second).' ? Précise laquelle.'];
     }
     if (!$best['contains'] && $best['dist'] > $thresh) {
         $sugg = implode(', ', array_map(function ($c) { return '"'.$c['label'].'"'; }, array_slice($candidates, 0, 4)));
@@ -1120,6 +1171,46 @@ function cfo_resolve_actif($target, $fd): array {
         return ['resolved'=>false, 'error'=>'"'.$target.'" introuvable : aucun actif enregistré dans masterAssets.'];
     }
     return cfo_rank_candidates($target, $normT, $candidates);
+}
+
+/**
+ * v36.1 — Désignations alternatives d'une ligne d'épargne : le libellé du
+ *   compte de DESTINATION (linkedAccountId) et celui du compte SOURCE
+ *   (sourceCompte, format 'cpt_<id>'). Ce sont les seuls repères dont dispose
+ *   l'utilisateur quand la ligne n'a pas de nom — et c'est le cas par défaut.
+ */
+/**
+ * v36.1 — Nom lisible d'une ligne d'épargne pour les journaux et le relevé
+ *   d'opérations. Sans nom saisi, on désigne la ligne par sa destination :
+ *   « → Épargne Long Terme » vaut infiniment mieux que la chaîne vide ou ep_103.
+ */
+function cfo_nommer_epargne($ep, $fd): string {
+    $nom = trim((string)(oget($ep, 'nom') ?: oget($ep, 'label', '')));
+    if ($nom !== '') return $nom;
+    $alias = cfo_libelles_comptes_lies($ep, $fd);
+    if (count($alias)) return '→ ' . $alias[0];
+    return 'ep_' . (string)oget($ep, 'id', '?');
+}
+
+function cfo_libelles_comptes_lies($item, $fd): array {
+    $comptes = oget($fd, 'comptes');
+    if (!is_array($comptes)) return [];
+    $index = [];
+    foreach ($comptes as $c) {
+        if (!is_object($c)) continue;
+        $id = oget($c, 'id'); if ($id === null || $id === '') continue;
+        $lb = oget($c, 'label') ?: oget($c, 'nom');
+        if ($lb) $index[(string)$id] = $lb;
+    }
+    $out = [];
+    $lien = oget($item, 'linkedAccountId', null);
+    if ($lien !== null && $lien !== '' && isset($index[(string)$lien])) $out[] = $index[(string)$lien];
+    $src = (string)(oget($item, 'sourceCompte', '') ?: '');
+    if (strpos($src, 'cpt_') === 0) {
+        $sid = substr($src, 4);
+        if (isset($index[$sid])) $out[] = $index[$sid];
+    }
+    return $out;
 }
 
 function cfo_goal_sync_schema($g): void {
@@ -1543,7 +1634,7 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             $v = cfo_pick_num($op, ['valeur','montant','value','amount']);
             if ($v === null) { $log['status']='error'; $log['reason']='valeur manquante'; break; }
             $old = oget($ep,'valeur'); oset($ep,'valeur',$v);
-            $log['cible']=oget($ep,'nom') ?: oget($ep,'label'); $log['avant']=$old; $log['apres']=$v; break;
+            $log['cible']=cfo_nommer_epargne($ep, $fd); $log['avant']=$old; $log['apres']=$v; break;
         }
         case 'add_epargne': {
             if (!$y) { $log['status']='skip'; $log['reason']='année absente'; break; }
@@ -1610,7 +1701,10 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             if ($v !== null)   { $ch['valeur'] = ['avant'=>oget($ep,'valeur'),'apres'=>$v]; oset($ep,'valeur',$v); }
             if ($lbl !== null) { $ch['label']  = ['avant'=>oget($ep,'nom') ?: oget($ep,'label'),'apres'=>$lbl]; oset($ep,'nom',$lbl); oset($ep,'label',$lbl); }
             if (!count($ch)) { $log['status']='error'; $log['reason']='aucun champ fourni'; break; }
-            $log['cible']=oget($ep,'nom') ?: oget($ep,'label'); $log['changes']=$ch; break;
+            // v36.1 : une ligne sans nom doit quand même être nommable dans le
+            //   relevé — sinon la phrase de confirmation dit « cible : "" ».
+            $log['cible'] = cfo_nommer_epargne($ep, $fd);
+            $log['changes']=$ch; break;
         }
         case 'add_epargne_exception': {
             if (!$y) { $log['status']='error'; $log['reason']='année absente'; break; }

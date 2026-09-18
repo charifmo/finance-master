@@ -99,6 +99,37 @@ $msg = $r['clarifications_needed'][0]['error'] ?? '';
 verdict('ligne absente de 2027 → refus explicite', 'needs_clarification', $r['status']);
 verdict('  → message nomme l\'exercice qui la contient', true, strpos($msg, '2026') !== false, $msg);
 
+// 6. v36.1 — Ligne d'épargne SANS NOM, désignée par son compte de destination.
+//    Cas réel : le champ « Nom de l'objectif » est facultatif dans l'interface et
+//    reste vide ; l'utilisateur désigne ses virements par « VERS : <compte> ».
+//    Le moteur ne résolvait que par nom et ne trouvait donc jamais ces lignes —
+//    il répondait en clés techniques (ep_101, ep_102…).
+$fd = etat();
+$fd->donneesAnnuelles->{'2027'}->epargne = [
+    (object)['id'=>101,'nom'=>'','label'=>'','valeur'=>4000,'sourceCompte'=>'courant','linkedAccountId'=>90,'exceptions'=>[]],
+    (object)['id'=>103,'nom'=>'','label'=>'','valeur'=>2000,'sourceCompte'=>'courant','linkedAccountId'=>91,'exceptions'=>[]],
+];
+$r = run('[{"function":"update_recurring_savings","args":{"name":"Bourse / CTO","amount":7000,"year":2027}}]', $fd);
+verdict('épargne sans nom : résolue par son compte lié', 'ok', $r['status']);
+$parId = [];
+foreach ($fd->donneesAnnuelles->{'2027'}->epargne as $e) $parId[$e->id] = (int)$e->valeur;
+verdict('  → la BONNE ligne a bougé', 7000, $parId[103] ?? -1);
+verdict('  → l\'autre est intacte', 4000, $parId[101] ?? -1);
+verdict('  → relevé lisible (pas de cible vide)', '→ Bourse / CTO',
+        $r['operations_appliquees'][0]['cible'] ?? '?');
+
+// 7. Le nom saisi reste prioritaire sur le compte lié quand il existe.
+$fd = etat();
+$fd->donneesAnnuelles->{'2027'}->epargne = [
+    (object)['id'=>201,'nom'=>'Bourse / CTO','label'=>'Bourse / CTO','valeur'=>1000,'sourceCompte'=>'courant','linkedAccountId'=>90,'exceptions'=>[]],
+    (object)['id'=>202,'nom'=>'','label'=>'','valeur'=>2000,'sourceCompte'=>'courant','linkedAccountId'=>91,'exceptions'=>[]],
+];
+$r = run('[{"function":"update_recurring_savings","args":{"name":"Bourse / CTO","amount":5000,"year":2027}}]', $fd);
+$p2 = [];
+foreach ($fd->donneesAnnuelles->{'2027'}->epargne as $e) $p2[$e->id] = (int)$e->valeur;
+verdict('nom saisi prioritaire sur le compte lié', 5000, $p2[201] ?? -1);
+verdict('  → la ligne sans nom est intacte', 2000, $p2[202] ?? -1);
+
 echo "  " . str_repeat('─', 78) . "\n";
 printf("  %s — %d contrôle(s) en échec\n\n", $ko ? '❌ ÉCHEC' : '✅ TOUT PASSE', $ko);
 exit($ko ? 1 : 0);
