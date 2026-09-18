@@ -364,11 +364,44 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
 
 function cfo_obj(array $a) { $o = onew(); foreach ($a as $k => $v) { if ($v !== null) $o->{$k} = $v; } return $o; }
 
-function cfo_years($args): array {
+/**
+ * v35.5 — RÉSOLUTION DE L'EXERCICE CIBLE.
+ *
+ * Le repli historique etait `date('Y')`, c'est-a-dire l'HORLOGE DU SERVEUR.
+ * Des que le modele omettait `year` — ce qu'il fait des que l'annee n'est pas
+ * reecrite dans le dernier message — toute operation atterrissait sur l'annee
+ * civile, quel que soit l'exercice reellement discute. C'est la fuite
+ * inter-annees signalee : lecture et ecriture sur 2026 pendant que la
+ * conversation portait sur 2027.
+ *
+ * Nouvel ordre, du plus explicite au plus faible :
+ *   1. years[] / year / annee passes dans l'appel        (intention explicite)
+ *   2. annee_contexte : l'exercice REELLEMENT expose au modele, transmis par
+ *      le noeud n8n. C'est le seul repli qui garantit « ce que l'agent a lu
+ *      est ce qu'il ecrit ».
+ *   3. soldesInitiaux.anneeActuelle : l'exercice courant de l'application.
+ *   4. date('Y') : dernier recours, conserve pour ne jamais echouer.
+ */
+function cfo_resolve_annee_defaut(array $ctx, $fd): array {
+    $a = $ctx['anneeContexte'] ?? null;
+    if ($a !== null && $a !== '' && (int)$a > 0) return [(int)$a, 'annee_contexte'];
+    if (is_object($fd)) {
+        $si = oget($fd, 'soldesInitiaux');
+        if (is_object($si)) {
+            $aa = oget($si, 'anneeActuelle');
+            if ($aa !== null && $aa !== '' && (int)$aa > 0) return [(int)$aa, 'soldesInitiaux.anneeActuelle'];
+        }
+    }
+    return [(int)date('Y'), 'horloge_serveur'];
+}
+
+function cfo_years($args, array $ctx = []): array {
     $ys = oget($args, 'years');
     if (is_array($ys) && count($ys)) return array_map('intval', $ys);
     $one = oget($args, 'year', oget($args, 'annee', null));
-    return [(int)($one ?: date('Y'))];
+    if ($one !== null && $one !== '' && (int)$one > 0) return [(int)$one];
+    if (isset($ctx['anneeDefaut']) && (int)$ctx['anneeDefaut'] > 0) return [(int)$ctx['anneeDefaut']];
+    return [(int)date('Y')];
 }
 
 function cfo_catalog_names(): array {
@@ -382,7 +415,7 @@ function cfo_catalog_names(): array {
 
 /** Traduit un appel du catalogue en « changes » canoniques. */
 function cfo_translate_call(string $fn, $a, array $ctx): array {
-    $yrs = cfo_years($a);
+    $yrs = cfo_years($a, $ctx);   // v35.5 : le contexte porte l'exercice expose au modele
     $num = function ($k, $d = 0) use ($a) { $v = oget($a, $k); return is_numeric($v) ? $v + 0 : $d; };
 
     switch ($fn) {
@@ -1264,6 +1297,10 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
     $changes = [];
     $ctx = array_merge(['financeData' => $fd, 'monthlyNetFromPayload' => null], $ctx);
     $ctx['financeData'] = $fd;
+    // v35.5 : l'exercice par defaut est resolu UNE fois, et sa provenance est
+    //   renvoyee au modele. Une annee choisie par defaut n'est plus invisible.
+    list($anneeDefaut, $anneeSource) = cfo_resolve_annee_defaut($ctx, $fd);
+    $ctx['anneeDefaut'] = $anneeDefaut;
 
     foreach ($calls as $call) {
         $fn   = oget($call, 'function', oget($call, 'name', oget($call, 'endpoint')));
@@ -1387,6 +1424,12 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
 
     return [
         'status' => $hasErrors ? 'partial_error' : 'ok',
+        // v35.5 : rendre l'annee visible. Le modele doit pouvoir dire a
+        //   l'utilisateur SUR QUEL EXERCICE il vient d'ecrire, et se corriger
+        //   si le defaut ne correspond pas a la conversation.
+        'annee_defaut_utilisee' => $anneeDefaut,
+        'annee_defaut_source'   => $anneeSource,
+        'exercices_touches'     => array_map('intval', array_keys($resultsByYear)),
         'ops_summary' => ['total'=>count($allOpsLog),'success'=>count($successOps),'errors'=>count($errorOps),'skipped'=>count($skipOps)],
         'resultats_par_annee' => $resultsByYear,
         // v35.3 : la projection ne se limite plus à 4 clés fixes. Les branches qui

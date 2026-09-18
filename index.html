@@ -6468,8 +6468,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "35.4 Studio-Contractuel";
+                    const CURRENT_VERSION = "35.5 Annee-Verrouillee";
                     const CHANGELOG = [
+        { version: "35.5 Annee-Verrouillee", date: "2026-09-18", changes: [
+            "BUG 2 — FUITE INTER-ANNÉES, reproduite puis corrigée. Le sélecteur d'exercice du contexte CFO ne cherchait un millésime que dans la QUESTION COURANTE. Dès que l'année était citée un tour plus tôt puis suivie d'une relance (« et mes versements ? »), repli silencieux sur l'année de l'application. Reproduction exacte du cas signalé : l'ancien code renvoie 2026 (total versements 10 500 DH — le chiffre faux annoncé), le nouveau renvoie 2027 (13 000 DH — celui de l'interface). L'historique récent sert désormais de repli, le millésime explicite de la question restant prioritaire.",
+            "BUG 2, second trou — le résumé des exercices non exposés comptait revenus, charges fixes et dépenses irrégulières, mais PAS l'épargne. Le modèle n'avait aucun moyen de connaître les versements d'une autre année et comblait avec ce qu'il avait sous la main. versements_planifies et total_versements_planifies sont ajoutés par exercice : quelques dizaines d'octets qui suppriment la possibilité même de l'hallucination.",
+            "BUG 2, côté écriture — cfo_years() retombait sur date('Y'), l'HORLOGE DU SERVEUR. Toute opération sans year atterrissait sur l'année civile quel que soit l'exercice discuté. Nouvel ordre : year explicite > annee_contexte (l'exercice réellement exposé au modèle, transmis par n8n) > soldesInitiaux.anneeActuelle > horloge. La réponse porte désormais annee_defaut_utilisee, annee_defaut_source et exercices_touches : l'année choisie n'est plus une décision invisible.",
+            "BUG 1 — LE SMART GOAL N'A JAMAIS ÉCHOUÉ. Vérifié de bout en bout : l'engine crée bien l'objectif, _internal.finance_data le contient avec tous les exercices, le Committer poste ce bloc entier et save_data.php écrit le corps brut sans filtrer. L'écriture aboutit — puis elle est écrasée. L'auto-backup de l'onglet ouvert poste l'état EN MÉMOIRE toutes les 15 minutes sans jamais relire le serveur : dernier écrivain gagne, et le commit de l'agent disparaît sans qu'aucune erreur n'apparaisse nulle part.",
+            "CORRECTIF BUG 1 — l'auto-backup (chemin non surveillé) relit une signature de l'état serveur avant d'écrire. Si elle a changé depuis notre dernier échange, il n'écrit PAS et l'annonce explicitement. La sauvegarde manuelle reste inconditionnelle : elle est intentionnelle. Une perte de données silencieuse devient un conflit visible."
+        ] },
         { version: "35.4 Studio-Contractuel", date: "2026-09-17", changes: [
             "ONGLET PROJET STUDIO — le formulaire affichait encore les paramètres prévisionnels (767 000 DH empruntés, 5 416 DH/mois) alors que le contrat Bank Assafa est signé. Les 4 montants validés sont désormais reproduits au dirham près : prix 1 092 000 DH (42 m2 x 26 000), capital 765 560 DH, traite globale 5 445 DH/mois, apport personnel net 346 680 DH.",
             "MÉCANIQUE — le capital et la traite ne sont pas des champs libres, ils sont DÉDUITS (capital = restePromoteur + taxes incluses + reliquat ; traite = annuité + assurance). Les cibles ont donc été atteintes par les entrées : surface 40 -> 42, taxes incluses dans le crédit 45 000 -> 43 560, assurance 480 -> 300, taux 4,7 -> 5,218 %.",
@@ -8023,6 +8030,25 @@
                     const serverLogs = ref([]);
                     const SERVER_PATH = '/finance/save_data.php';
                     const DATA_PATH = '/finance/finance_data.json';
+
+                    // v35.5 — GARDE-FOU ANTI-ECRASEMENT
+                    //   Signature bon marche de l'etat serveur tel qu'on l'a vu pour la
+                    //   derniere fois. Sert uniquement a repondre a une question : le
+                    //   serveur a-t-il change sous nos pieds depuis ? (agent CFO, autre
+                    //   onglet, autre appareil). Pas de crypto ici : on veut detecter une
+                    //   difference, pas se premunir d'une collision hostile.
+                    let _serverSignature = null;
+                    const _sig = (txt) => {
+                        const t = String(txt || '');
+                        let h = 5381;
+                        for (let i = 0; i < t.length; i++) h = (((h << 5) + h) ^ t.charCodeAt(i)) >>> 0;
+                        return t.length + ':' + h.toString(36);
+                    };
+                    const _lireSignatureServeur = async () => {
+                        const res = await fetch(DATA_PATH + '?t=' + Date.now(), { cache: 'no-store' });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return _sig(await res.text());
+                    };
                     
                     // DRIVE
                     const syncStatus = ref('disconnected');
@@ -10020,7 +10046,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (text.startsWith('<!DOCTYPE html>')) { addLog("CONFLIT : Caddy envoie vers n8n.", 'error'); serverSyncStatus.value = 'error'; return; }
 
                             let data = JSON.parse(text);
-                            if (data.status === 'ok') { serverSyncStatus.value = 'synced'; serverLastSync.value = new Date().toLocaleTimeString(); addLog("Sauvegarde VPS OK.", 'success'); } 
+                            if (data.status === 'ok') {
+                                serverSyncStatus.value = 'synced'; serverLastSync.value = new Date().toLocaleTimeString(); addLog("Sauvegarde VPS OK.", 'success');
+                                // v35.5 : notre ecriture devient la nouvelle reference, sinon
+                                //   l'auto-backup suivant prendrait notre propre trace pour
+                                //   une modification tierce et refuserait de sauvegarder.
+                                try { _serverSignature = await _lireSignatureServeur(); } catch (_) { _serverSignature = null; }
+                            } 
                             else { throw new Error(data.message); }
                         } catch(e) { serverSyncStatus.value = 'error'; addLog(`ÉCHEC: ${e.message}`, 'error'); }
                     };
@@ -15005,6 +15037,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             });
                             if (res.ok) {
                                 const text = await res.text();
+                                _serverSignature = _sig(text); // v35.5 : reference anti-ecrasement
                                 if(!text || text.trim()==="") {
                                     addLog("Fichier vide. Chargement de vos données récupérées.", "warn");
                                     migrateCategoriesV22(); // v22.00 P1 : init référentiel sur défaut
@@ -15030,6 +15063,18 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             const ms = Math.max(1, Number(parametres.value.backupIntervalMinutes) || 15) * 60000;
                             _backupTimer = setInterval(async () => {
                                 try {
+                                    // v35.5 : l'auto-backup n'ecrase JAMAIS une ecriture qu'il n'a
+                                    //   pas vue. C'est par ce chemin que le commit de l'agent CFO
+                                    //   disparaissait, sans la moindre erreur affichee.
+                                    if (_serverSignature !== null) {
+                                        let sigDistante = null;
+                                        try { sigDistante = await _lireSignatureServeur(); } catch (_) { sigDistante = null; }
+                                        if (sigDistante !== null && sigDistante !== _serverSignature) {
+                                            serverSyncStatus.value = 'error';
+                                            addLog('⛔ Auto-backup ANNULÉ : le serveur a été modifié depuis votre chargement (agent CFO, autre onglet ou autre appareil). Sauvegarder maintenant écraserait cette modification. Rechargez la page pour la récupérer, ou cliquez « Sauver sur VPS » pour imposer votre version.', 'error');
+                                            return;
+                                        }
+                                    }
                                     await saveToServer();
                                     addLog('🔄 Auto-backup VPS — ' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), 'success');
                                     autoBackupToast.value = true;

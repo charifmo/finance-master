@@ -219,6 +219,11 @@ if ($method === 'POST') {
         $ctx = [
             'monthlyNetFromPayload' => (isset($body->surplus_mensuel_net_courant) && is_array($body->surplus_mensuel_net_courant))
                 ? $body->surplus_mensuel_net_courant : null,
+            // v35.5 : exercice REELLEMENT expose au modele (_contexte.exercice_expose).
+            //   Sans lui, une operation sans `year` retombait sur l'horloge du
+            //   serveur : l'agent lisait 2027 et ecrivait dans 2026.
+            'anneeContexte' => (isset($body->annee_contexte) && (int)$body->annee_contexte > 0)
+                ? (int)$body->annee_contexte : null,
         ];
 
         try {

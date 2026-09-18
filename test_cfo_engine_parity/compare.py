@@ -24,10 +24,23 @@ def canon(o, path=""):
     if isinstance(o, float) and o == int(o): return int(o)
     return o
 
+# Clés que le PHP ajoute VOLONTAIREMENT et que le JS d'origine ne pouvait pas
+# produire. Elles n'altèrent aucun calcul — l'état muté reste comparé à
+# l'identique — mais exposent une décision jusque-là implicite.
+#   v35.5 : l'exercice retenu par défaut et sa provenance. Le JS retombait en
+#   silence sur l'horloge du serveur ; c'est précisément le bug corrigé, donc
+#   la parité ne peut pas exiger de reproduire ce silence.
+AJOUTS_PHP_ASSUMES = {
+    'res.annee_defaut_utilisee',
+    'res.annee_defaut_source',
+    'res.exercices_touches',
+}
+
 def diff(a, b, p=""):
     out = []
     if isinstance(a, dict) and isinstance(b, dict):
         for k in sorted(set(a) | set(b)):
+            if k not in a and ("%s.%s" % (p, k)) in AJOUTS_PHP_ASSUMES: continue
             if k not in a: out.append("%s.%s: absent JS" % (p, k))
             elif k not in b: out.append("%s.%s: absent PHP" % (p, k))
             else: out += diff(a[k], b[k], "%s.%s" % (p, k))
