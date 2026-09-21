@@ -60,6 +60,28 @@ function cfo_build_tool_schema(): array {
     }
     unset($pv);
 
+    // v37.0 — REQUIS PAR FONCTION. Un schéma qui se contente de lister tous les
+    //   paramètres possibles n'impose rien : le modèle pouvait omettre un
+    //   libellé ou un montant sans que le schéma bronche, et c'est le moteur qui
+    //   refusait en bout de chaîne. Un allOf de if/then rend chaque champ vital
+    //   obligatoire POUR SA FONCTION, donc contrôlé avant même l'appel.
+    $contraintes = [];
+    foreach ($spec as $fn => $def) {
+        $req = [];
+        foreach ($def['params'] as $k => $d) if (!empty($d['required'])) $req[] = $k;
+        // « au moins un parmi » : exprimé en anyOf, chaque branche exigeant l'un d'eux.
+        $auMoins = $def['au_moins_un'] ?? null;
+        if (!count($req) && !$auMoins) continue;
+        $alors = [];
+        if (count($req)) $alors['properties'] = ['args' => ['required' => $req]];
+        if ($auMoins) {
+            $branches = [];
+            foreach ($auMoins as $k) $branches[] = ['required' => [$k]];
+            $alors['properties']['args']['anyOf'] = $branches;
+        }
+        $contraintes[] = ['if' => ['properties' => ['function' => ['const' => $fn]]], 'then' => $alors];
+    }
+
     return [
         'type' => 'object',
         'required' => ['calls'],
@@ -71,6 +93,7 @@ function cfo_build_tool_schema(): array {
             'items' => [
                 'type' => 'object',
                 'required' => ['function', 'args'],
+                'allOf' => $contraintes,
                 'properties' => [
                     'function' => [
                         'type' => 'string',
@@ -82,7 +105,12 @@ function cfo_build_tool_schema(): array {
                         'description' => "Arguments de CETTE fonction uniquement. Utilise les noms canoniques ci-dessous. "
                                        . "Le serveur accepte aussi les synonymes courants et les montants ecrits en toutes lettres "
                                        . "(« 5 445 DH »), mais il te renvoie alors arguments_normalises : lis-le, il dit ce qu'il a "
-                                       . "redresse et ce qu'il a IGNORE. Un parametre requis manquant = refus, rien n'est ecrit.",
+                                       . "redresse et ce qu'il a IGNORE. Un parametre requis manquant = refus, rien n'est ecrit. "
+                                       . "INTEGRITE : ne laisse JAMAIS un libelle vide — si l'utilisateur n'en donne pas, compose un "
+                                       . "libelle descriptif (destination du virement, nature de la charge, mois de la depense). "
+                                       . "Verifie que les comptes cites existent dans le contexte avant de les nommer, et n'envoie un "
+                                       . "montant negatif que la ou il a un sens metier (une depense ponctuelle negative = une entree "
+                                       . "d'argent ; un virement d'epargne ou une charge ne peut pas etre negatif).",
                         'properties' => $props,
                         'additionalProperties' => true,
                     ],

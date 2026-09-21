@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")"
 echo "▸ Syntaxe PHP"
-for f in cfo_intent_engine.php pending_commit.php tools_schema.php save_data.php; do
+for f in cfo_intent_engine.php cfo_integrity.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php; do
     [ -f "$f" ] && php -l "$f" > /dev/null && echo "  ✅ $f"
 done
 echo "▸ Schéma n8n ↔ contrat d'arguments"
@@ -18,4 +18,6 @@ echo "▸ Discipline de résolution (comptes / objectifs / actifs / épargne)"
 php test_resolution.php | tail -2
 echo "▸ Cohérence des schémas d'objectif"
 php test_schema_goals.php | tail -2
+echo "▸ Intégrité des données écrites"
+php test_integrite.php | tail -2
 echo "✅ Toutes les suites passent."

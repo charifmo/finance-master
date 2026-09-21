@@ -218,7 +218,17 @@ function cfo_sanitize_finance_data($fd): array {
             }
             if (oget($o, 'label', null) === null && oget($o, 'nom', null)) oset($o, 'label', (string)oget($o, 'nom'));
             if (oget($o, 'nom', null)   === null && oget($o, 'label', null)) oset($o, 'nom', (string)oget($o, 'label'));
-            $r['epargne'] += cfo_purge_keys($o, CFO_SYN_NUM_CHARGE) + cfo_purge_keys($o, CFO_SYN_LBL);
+            // v37.0 — NE PAS PURGER 'nom' ICI. C'ÉTAIT LA CAUSE RACINE.
+            //   Pour les revenus et les charges, l'interface affiche `label` et
+            //   `nom` n'est qu'un synonyme légitime à purger. Pour l'ÉPARGNE, le
+            //   template lie `obj.nom` (index.html:2408 en desktop, 3569 en
+            //   mobile) : purger cette clé effaçait, à CHAQUE commit du CFO, le
+            //   libellé de toutes les lignes de virement de tous les exercices.
+            //   D'où les champs « Nom de l'objectif » vides à l'écran, qu'on a
+            //   longtemps pris pour une saisie utilisateur ou un défaut d'agent.
+            //   Les deux clés sont synchronisées juste au-dessus : aucune n'est
+            //   orpheline, et l'affichage survit désormais à l'écriture.
+            $r['epargne'] += cfo_purge_keys($o, CFO_SYN_NUM_CHARGE);
         }
         foreach ((oget($y, 'depensesIrregulieres') ?: []) as $d) {
             if (!is_object($d)) continue;
@@ -403,6 +413,8 @@ function cfo_years($args, array $ctx = []): array {
     if (isset($ctx['anneeDefaut']) && (int)$ctx['anneeDefaut'] > 0) return [(int)$ctx['anneeDefaut']];
     return [(int)date('Y')];
 }
+
+require_once __DIR__ . '/cfo_integrity.php';   // v37.0 : intégrité partagée moteur ↔ réparation
 
 /* ══════════════════════════════════════════════════════════════════════════
    4bis. CONTRAT D'ARGUMENTS — SOURCE UNIQUE DE VÉRITÉ (v36.0)
@@ -2219,6 +2231,13 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
         }
     }
 
+    // v37.0 : INTÉGRITÉ À L'ÉCRITURE. Bornée aux exercices ciblés — les autres
+    //   sont sous scellé et ne doivent pas bouger, même pour être « réparés ».
+    //   Les collections globales (comptes, objectifs, actifs) ne sont pas
+    //   scellées : elles sont incluses. Un libellé vide n'atteint donc plus le
+    //   disque, il est auto-nommé selon son contexte et la correction est dite.
+    $integrite = cfo_integrite_passe($fd, array_map('strval', $allYears), true);
+
     // v36.0 : vérification du scellé. Un exercice hors périmètre qui a bougé
     //   est une corruption silencieuse : on refuse le lot entier plutôt que de
     //   persister un état dont une partie n'a été demandée par personne.
@@ -2304,6 +2323,10 @@ function cfo_compile(array $calls, $fd, array $ctx = []): array {
         //   l'utilisateur SUR QUEL EXERCICE il vient d'ecrire, et se corriger
         //   si le defaut ne correspond pas a la conversation.
         'arguments_normalises' => $normReport ?: null,
+        // v37.0 : corrections d'intégrité appliquées à l'écriture (libellé vide
+        //   auto-nommé, montant retypé, compte lié fantôme délié...). Rien ne se
+        //   répare en silence.
+        'integrite_corrections' => count($integrite) ? $integrite : null,
         'annee_defaut_utilisee' => $anneeDefaut,
         'annee_defaut_source'   => $anneeSource,
         'exercices_touches'     => array_map('intval', array_keys($resultsByYear)),

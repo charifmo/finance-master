@@ -191,6 +191,7 @@
                     <button @click="activeTab = 'studio'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Projet Studio' : null"><span class="text-base leading-none shrink-0">🏢</span><span v-if="!isSidebarCollapsed" class="truncate">Projet Studio</span></button>
                     <button @click="activeTab = 'wealth'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'wealth' ? 'bg-gradient-to-r from-emerald-600 to-teal-700 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Patrimoine & Objectifs' : null"><span class="text-base leading-none shrink-0">💎</span><span v-if="!isSidebarCollapsed" class="truncate">Patrimoine & Objectifs</span></button>
                     <!-- v26.80 : bouton CFO supprimé de la sidebar — accès via FAB flottant 🧠 -->
+                    <button @click="activeTab = 'supervision'; if (!aiMemoryChargee) chargerAiMemory()" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'supervision' ? 'bg-gradient-to-r from-indigo-600 to-violet-700 shadow-lg shadow-indigo-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Supervision IA' : null"><span class="text-base leading-none shrink-0">🧠</span><span v-if="!isSidebarCollapsed" class="truncate">Supervision IA</span></button>
                     <button @click="activeTab = 'settings'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'settings' ? 'bg-slate-700 shadow-lg' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Paramètres' : null"><span class="text-base leading-none shrink-0">🛠️</span><span v-if="!isSidebarCollapsed" class="truncate">Paramètres</span></button>
                     </template>
                     <!-- ─── Onglets mode RÉALISÉ (Phase 3) ─── -->
@@ -2623,6 +2624,79 @@
                 </div>
 
 
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <!-- ━━ v37.0 : SUPERVISION IA — mémoire RAG + conversations ━━ -->
+                <div v-if="activeTab === 'supervision'" class="max-w-6xl mx-auto space-y-6">
+                    <div class="flex items-center justify-between border-b pb-4 flex-wrap gap-3">
+                        <h2 class="text-2xl font-bold text-gray-800">🧠 Supervision IA</h2>
+                        <div class="flex items-center gap-2">
+                            <input v-model="aiMemoryFiltre" @keyup.enter="chargerAiMemory" type="search" placeholder="Filtrer…" class="w-44 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400"/>
+                            <button @click="chargerAiMemory" :disabled="aiMemoryChargement" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-black text-xs uppercase tracking-widest transition-colors">
+                                {{ aiMemoryChargement ? '⏳ Lecture…' : '🔄 Rafraîchir' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Erreur de connexion : on dit CE QUI a échoué, pas « erreur » -->
+                    <div v-if="aiMemoryErreur" class="bg-red-50 border-2 border-red-200 rounded-2xl p-5">
+                        <p class="font-black text-red-800 text-sm uppercase tracking-widest mb-2">⛔ {{ aiMemoryErreur.code || 'Erreur' }}</p>
+                        <p class="text-sm text-red-700">{{ aiMemoryErreur.message }}</p>
+                        <div v-if="aiMemoryErreur.hotes" class="mt-3 text-[11px] text-red-600 font-mono bg-white/60 rounded-lg p-3 space-y-1">
+                            <div v-for="(msg, h) in aiMemoryErreur.hotes" :key="h"><b>{{ h }}</b> : {{ msg }}</div>
+                        </div>
+                        <p v-if="aiMemoryErreur.indice" class="text-[11px] text-red-600 italic mt-3">{{ aiMemoryErreur.indice }}</p>
+                    </div>
+
+                    <div v-if="aiMemoryAvertissement" class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[11px] text-amber-800 font-bold">
+                        ⚠️ {{ aiMemoryAvertissement }}
+                    </div>
+
+                    <!-- Onglets -->
+                    <div class="inline-flex rounded-xl bg-white border border-gray-200 p-1 shadow-sm">
+                        <button v-for="t in [['rag','📚 Règles mémorisées', aiMemoryRag.length],['chat','💬 Conversations', aiMemoryChat.length]]" :key="t[0]"
+                                @click="aiMemoryOnglet = t[0]"
+                                :class="['px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-colors', aiMemoryOnglet === t[0] ? 'bg-indigo-600 text-white shadow' : 'text-indigo-600 hover:bg-indigo-50']">
+                            {{ t[1] }} <span class="opacity-70">({{ t[2] }})</span>
+                        </button>
+                    </div>
+
+                    <!-- ══ Règles mémorisées (RAG) ══ -->
+                    <div v-show="aiMemoryOnglet === 'rag'" class="space-y-3">
+                        <p v-if="!aiMemoryRag.length && !aiMemoryChargement" class="text-center text-gray-400 text-sm py-8 italic">Aucune règle mémorisée.</p>
+                        <div v-for="r in aiMemoryRag" :key="'rag_'+r.id" class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:border-indigo-200 transition-colors">
+                            <div class="flex items-start justify-between gap-4 mb-2">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-indigo-500">Règle #{{ r.id }}</span>
+                                <span class="text-[10px] text-gray-400 font-bold shrink-0">{{ r.longueur }} car.</span>
+                            </div>
+                            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ r.texte }}</p>
+                            <div v-if="r.metadata" class="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1.5">
+                                <span v-for="(v, k) in aiMetaPlate(r.metadata)" :key="k" class="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border border-gray-200">{{ k }} : {{ v }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ══ Conversations ══ -->
+                    <div v-show="aiMemoryOnglet === 'chat'" class="space-y-4">
+                        <p v-if="!aiMemoryChat.length && !aiMemoryChargement" class="text-center text-gray-400 text-sm py-8 italic">Aucune conversation enregistrée.</p>
+                        <div v-for="(grp, sess) in aiMemoryChatParSession" :key="sess" class="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                            <div class="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-600 font-mono truncate">🔗 {{ sess }}</span>
+                                <span class="text-[10px] text-gray-400 font-bold shrink-0">{{ grp.length }} message(s)</span>
+                            </div>
+                            <div class="p-4 space-y-3">
+                                <div v-for="m in grp" :key="'msg_'+m.id" :class="['flex gap-3', m.auteur === 'Vous' ? 'justify-end' : 'justify-start']">
+                                    <div :class="['max-w-[80%] rounded-2xl px-4 py-2.5 border', m.auteur === 'Vous' ? 'bg-indigo-50 border-indigo-100' : 'bg-gray-50 border-gray-100']">
+                                        <div class="flex items-baseline gap-2 mb-1">
+                                            <span :class="['text-[10px] font-black uppercase tracking-widest', m.auteur === 'Vous' ? 'text-indigo-600' : 'text-emerald-600']">{{ m.auteur }}</span>
+                                            <span class="text-[9px] text-gray-400 font-bold">{{ aiDateCourte(m.date) }}</span>
+                                        </div>
+                                        <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">{{ m.contenu }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div v-if="activeTab === 'settings'" class="max-w-5xl mx-auto space-y-8">
                     <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">🛠️ Paramètres de l'Application</h2>
 
@@ -6468,8 +6542,19 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "36.1 Epargne-Sans-Nom";
+                    const CURRENT_VERSION = "37.0 Integrite-Supervision";
                     const CHANGELOG = [
+        { version: "37.0 Integrite-Supervision", date: "2026-09-21", changes: [
+            "CAUSE RACINE DES LIBELLÉS VIDES — trouvée, et ce n'était ni l'interface ni l'agent. cfo_sanitize_finance_data SUPPRIMAIT la clé `nom` de chaque ligne d'épargne, en la traitant comme un simple synonyme de `label`. Or c'est précisément `obj.nom` que le template Vue affiche (index.html:2408 desktop, 3569 mobile) : chaque commit du CFO vidait donc le champ « Nom de l'objectif » de TOUTES les lignes, de TOUS les exercices. Pour les revenus et les charges l'interface lit bien `label`, la purge y reste correcte — l'épargne était le seul cas inversé. Ma réponse précédente attribuait ces noms vides à une saisie utilisateur : c'était faux.",
+            "COUCHE D'INTÉGRITÉ UNIQUE (cfo_integrity.php) — une seule définition de « donnée saine », deux points d'appel : le moteur à chaque écriture, et le balayage de réparation sur l'historique. Elle garantit qu'aucun libellé vide, montant non numérique, signe incohérent ou compte lié fantôme n'atteint le disque. Chaque correction est RAPPORTÉE (integrite_corrections) : rien ne se répare en silence.",
+            "AUTO-NOMMAGE CONTEXTUEL — un libellé manquant n'est pas remplacé par « Sans nom », qui ne renseigne personne et réintroduirait le problème. Un virement prend le nom de son compte de destination (« Virement vers Épargne Long Terme »), une dépense ponctuelle son mois et son sens (une dépense négative est une ENTRÉE d'argent), un objectif sa cible.",
+            "ÉTANCHÉITÉ PRÉSERVÉE — l'intégrité à l'écriture est bornée aux exercices ciblés. Un exercice hors périmètre n'est pas touché, même pour être « réparé » : le scellé prime sur la bonne intention. Le balayage global, lui, est explicite et lancé à la main.",
+            "SCHÉMA n8n VERROUILLÉ PAR FONCTION — un schéma qui liste tous les paramètres possibles n'impose rien. Un allOf de if/then rend désormais chaque champ vital obligatoire POUR SA FONCTION (19 contraintes), y compris le « au moins un parmi » de set_recurring_savings. Plus une instruction d'intégrité permanente dans le prompt CFO : libellé jamais vide, comptes vérifiés avant d'être cités, montants positifs sauf dépense ponctuelle, exercice explicite.",
+            "repair_finance_data.php DEVIENT UN BALAYAGE GLOBAL — inventaire, nettoyage de format, intégrité sur toutes les collections de tous les exercices, objectifs sans versement, et signalements non corrigés automatiquement. Idempotent : le second passage annonce « aucune anomalie ». La table de montants codés en dur de la v36.1 a été RETIRÉE : une réparation ponctuelle rejouée à chaque lancement écraserait vos saisies futures.",
+            "NOUVEAU — ESPACE 🧠 SUPERVISION IA. Deux onglets : les règles mémorisées par l'agent (finance_vectors, colonne embedding jamais lue) et l'historique des conversations (chat_history), groupé par session et rendu en bulles lisibles. Le JSON LangChain est décodé côté serveur pour n'exposer que l'auteur et le texte. Filtre plein texte et bouton de rafraîchissement ; chargement paresseux pour ne pas peser sur le démarrage.",
+            "get_ai_memory.php — connexion PDO avec REPLI SUR PLUSIEURS HÔTES (postgres-psy, localhost, 127.0.0.1, postgres, db) et, surtout, il DIT lequel a répondu : la panne DNS de postgres-psy devient diagnosticable au lieu d'être une erreur opaque. Introspection des colonnes avant tout SELECT, donc une table absente ou renommée donne un message explicite et n'empêche pas l'autre de s'afficher.",
+            "⚠️ EXPOSITION — cet endpoint renvoie vos conversations. Aucun fichier de ce dossier n'est authentifié (save_data.php accepte d'écraser tout l'état financier sans contrôle) : un jeton FACULTATIF est prévu via 'ai_memory_token' dans db_config.php. Sans lui l'endpoint répond mais affiche un bandeau d'avertissement dans l'application."
+        ] },
         { version: "36.1 Epargne-Sans-Nom", date: "2026-09-18", changes: [
             "AUDIT DE CLÉS DEMANDÉ — résultat : AUCUN décalage. Le template lie goal.versement_mensuel (ligne 2263), migrateGoalV19 lit o.versement_mensuel (ligne 9566), le moteur écrit versement_mensuel. Même chose pour le bloc violet : obj.nom et obj.valeur, exactement ce que le moteur écrit. L'hypothèse d'un nom de clé divergent est écartée, preuve à l'appui.",
             "LA VRAIE CAUSE — les lignes de virement n'ont PAS DE NOM. Le champ « Nom de l'objectif » est facultatif et reste vide en pratique : l'utilisateur désigne ses virements par leur destination (« VERS : Épargne Long Terme »), jamais par un libellé qu'il n'a pas saisi. Or le moteur ne résolvait QUE par nom : « Épargne Long Terme » ne correspondait à aucune ligne, et le résolveur répondait en clés techniques (ep_101, ep_102…) — inexploitables. Reproduit à l'identique avant correction : status=needs_clarification, aucune ligne touchée.",
@@ -8057,6 +8142,84 @@
                     const serverLogs = ref([]);
                     const SERVER_PATH = '/finance/save_data.php';
                     const DATA_PATH = '/finance/finance_data.json';
+                    const AI_MEMORY_PATH = '/finance/get_ai_memory.php';
+
+                    // ═══ v37.0 — SUPERVISION IA ═══════════════════════════════════
+                    //   Lecture seule des deux tables Postgres de l'agent. Le
+                    //   chargement est PARESSEUX : rien n'est demandé tant que
+                    //   l'onglet n'est pas ouvert, pour ne pas peser sur le démarrage.
+                    const aiMemoryOnglet = ref('rag');
+                    const aiMemoryRag = ref([]);
+                    const aiMemoryChat = ref([]);
+                    const aiMemoryChargement = ref(false);
+                    const aiMemoryChargee = ref(false);
+                    const aiMemoryErreur = ref(null);
+                    const aiMemoryAvertissement = ref(null);
+                    const aiMemoryFiltre = ref('');
+
+                    const chargerAiMemory = async () => {
+                        aiMemoryChargement.value = true;
+                        aiMemoryErreur.value = null;
+                        try {
+                            const q = aiMemoryFiltre.value.trim();
+                            const url = AI_MEMORY_PATH + '?limit=200' + (q ? '&q=' + encodeURIComponent(q) : '') + '&t=' + Date.now();
+                            const res = await fetch(url, { cache: 'no-store' });
+                            const txt = await res.text();
+                            let d;
+                            try { d = JSON.parse(txt); }
+                            catch (e) {
+                                // Réponse non-JSON = presque toujours une page d'erreur du
+                                // serveur web. On montre le début brut : « JSON invalide »
+                                // tout seul n'aide personne à diagnostiquer.
+                                throw { code: 'REPONSE_ILLISIBLE', message: 'Le serveur n\'a pas renvoyé de JSON : ' + txt.slice(0, 200) };
+                            }
+                            if (d.status === 'error') throw { code: d.error, message: d.message, hotes: d.hotes_tentes, indice: d.indice };
+                            aiMemoryRag.value = (d.rag && d.rag.regles) || [];
+                            aiMemoryChat.value = (d.chat && d.chat.messages) || [];
+                            aiMemoryAvertissement.value = d.avertissement || null;
+                            // Une table absente n'empêche pas l'autre de s'afficher.
+                            const partiels = [d.rag && d.rag.erreur, d.chat && d.chat.erreur].filter(Boolean);
+                            if (partiels.length) aiMemoryErreur.value = { code: 'TABLE_INDISPONIBLE', message: partiels.join(' · ') };
+                            aiMemoryChargee.value = true;
+                            addLog('🧠 Supervision IA : ' + aiMemoryRag.value.length + ' règle(s), ' + aiMemoryChat.value.length + ' message(s) — hôte ' + (d.hote || '?'), 'success');
+                        } catch (e) {
+                            aiMemoryErreur.value = (e && e.code) ? e : { code: 'INJOIGNABLE', message: (e && e.message) || String(e) };
+                            addLog('🧠 Supervision IA indisponible : ' + aiMemoryErreur.value.message, 'error');
+                        } finally {
+                            aiMemoryChargement.value = false;
+                        }
+                    };
+
+                    // Les messages arrivent du plus récent au plus ancien ; dans une
+                    // session on les relit dans l'ordre de la conversation.
+                    const aiMemoryChatParSession = computed(() => {
+                        const g = {};
+                        for (const m of aiMemoryChat.value) {
+                            const k = m.session_id || '(sans session)';
+                            (g[k] = g[k] || []).push(m);
+                        }
+                        for (const k of Object.keys(g)) g[k].reverse();
+                        return g;
+                    });
+
+                    // Métadonnées aplaties : un objet imbriqué rendrait « [object Object] ».
+                    const aiMetaPlate = (meta) => {
+                        const out = {};
+                        const plat = (o, prefixe) => {
+                            if (o === null || typeof o !== 'object') { out[prefixe || 'valeur'] = String(o); return; }
+                            if (Array.isArray(o)) { out[prefixe || 'valeur'] = o.join(', '); return; }
+                            for (const [k, v] of Object.entries(o)) plat(v, prefixe ? prefixe + '.' + k : k);
+                        };
+                        try { plat(meta, ''); } catch (e) { return {}; }
+                        return out;
+                    };
+
+                    const aiDateCourte = (d) => {
+                        if (!d) return '';
+                        const t = new Date(String(d).replace(' ', 'T'));
+                        if (isNaN(t.getTime())) return String(d);
+                        return t.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                    };
 
                     // v35.5 — GARDE-FOU ANTI-ECRASEMENT
                     //   Signature bon marche de l'etat serveur tel qu'on l'a vu pour la
@@ -15120,6 +15283,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, appMode, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio,
+                        // v37.0 — Supervision IA
+                        aiMemoryOnglet, aiMemoryRag, aiMemoryChat, aiMemoryChargement, aiMemoryChargee,
+                        aiMemoryErreur, aiMemoryAvertissement, aiMemoryFiltre, chargerAiMemory,
+                        aiMemoryChatParSession, aiMetaPlate, aiDateCourte,
                         surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip,
                         surplusMoisMoyennes, surplusMoyenneHorsMoisCourant, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerFactures, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
                         // v22.90 Double-Pilotage

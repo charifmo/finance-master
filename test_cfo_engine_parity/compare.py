@@ -45,6 +45,10 @@ AJOUTS_PHP_ASSUMES = {
 #   v36.0 : le relevé littéral des écritures, produit par le serveur pour que la
 #   confirmation lue à l'utilisateur ne dépende plus de la mémoire du modèle.
     'res.operations_appliquees',
+#   v37.0 : les corrections d'intégrité appliquées à l'écriture (libellé vide
+#   auto-nommé, montant retypé, compte lié fantôme délié). Le JS n'avait aucune
+#   couche d'intégrité — il écrivait ce qu'on lui donnait.
+    'res.integrite_corrections',
 }
 
 # v36.0 — Clés v19 d'un Smart Goal que le PHP écrit désormais EN PLUS du schéma
@@ -60,7 +64,21 @@ _RE_GOAL = re.compile(r'^etat\.wealthGoals\[\d+\]\.(\w+)$')
 
 # v36.0 — update_smart_goal entre au catalogue : la liste renvoyée en cas
 # d'appel hors catalogue compte donc une entrée de plus que la référence JS.
-VALEURS_PHP_ASSUMEES = {'res.catalogue'}
+#
+# v37.0 — LE JS DE RÉFÉRENCE PORTE LE BUG, ET C'EST TOUT L'ENJEU.
+# Le moteur d'origine purgeait la clé `nom` de chaque ligne d'épargne, en la
+# traitant comme un simple synonyme de `label`. Or c'est `obj.nom` que le
+# template Vue affiche (index.html:2408 desktop, 3569 mobile) : chaque commit
+# vidait donc le champ « Nom de l'objectif » de toutes les lignes. Le PHP ne
+# purge plus cette clé. La parité ne peut pas exiger de reproduire un bug qui
+# efface l'affichage — ces trois écarts sont la CORRECTION, pas une régression.
+VALEURS_PHP_ASSUMEES = {
+    'res.catalogue',
+    'res.sanitize_report.pre.epargne',
+    'res.sanitize_report.post.epargne',
+    'res.sanitize_report.total_purged',
+}
+_RE_EPARGNE_NOM = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\.epargne\[\d+\]\.nom$')
 
 def diff(a, b, p=""):
     out = []
@@ -71,6 +89,8 @@ def diff(a, b, p=""):
             m = _RE_GOAL.match(chemin)
             if k not in a and m and m.group(1) in GOAL_V19_KEYS: continue
             if chemin in VALEURS_PHP_ASSUMEES: continue
+            # v37.0 : `nom` désormais conservé sur les lignes d'épargne (voir ci-dessus).
+            if k not in a and _RE_EPARGNE_NOM.match(chemin): continue
             if k not in a: out.append("%s.%s: absent JS" % (p, k))
             elif k not in b: out.append("%s.%s: absent PHP" % (p, k))
             else: out += diff(a[k], b[k], "%s.%s" % (p, k))

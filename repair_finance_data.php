@@ -1,30 +1,28 @@
 <?php
 /**
  * ============================================================================
- *  repair_finance_data.php — remise en état des données déjà persistées
+ *  repair_finance_data.php — AUDIT & RÉPARATION GLOBALE (v37.0)
  * ----------------------------------------------------------------------------
  *  USAGE, sur le VPS :
  *      cd /var/www/finance
- *      php repair_finance_data.php            # simulation, n'écrit RIEN
- *      php repair_finance_data.php --apply    # applique, après sauvegarde
+ *      php repair_finance_data.php              # audit complet, n'écrit RIEN
+ *      php repair_finance_data.php --apply      # applique, après sauvegarde
+ *      php repair_finance_data.php --apply --lier-objectifs
+ *                                               # + déduit les versements
+ *                                                 mensuels manquants
  *
- *  POURQUOI CE SCRIPT EXISTE
- *    La v36.0 empêche le moteur d'écrire des données incomplètes. Elle ne
- *    répare pas ce qui a DÉJÀ été écrit par les versions précédentes. Deux
- *    séquelles visibles à l'écran :
- *      • les Smart Goals créés avant la v35.6 n'ont pas de versement_mensuel
- *        (d'où « Aucun versement mensuel défini ») ;
- *      • ceux créés sans cible valide portent 10 000 DH — une valeur INVENTÉE
- *        par l'ancien create_objectif, jamais demandée par personne.
- *    Plus la remise à plat des virements d'épargne 2027.
+ *  CE QU'IL FAIT
+ *    Balayage de TOUTES les collections, de TOUS les exercices, avec la MÊME
+ *    couche d'intégrité que le moteur applique à l'écriture (cfo_integrity.php).
+ *    Une seule définition de « donnée saine », deux points d'appel : ce qui est
+ *    refusé en écriture est réparé dans l'historique, et réciproquement.
  *
- *  PRINCIPE : ce script ne devine rien.
- *    - Les montants des virements viennent de la table FLUX ci-dessous, qui
- *      reprend mot pour mot la consigne du ticket.
- *    - Le versement mensuel de chaque objectif est DÉDUIT du virement qui
- *      alimente le compte correspondant — pas inventé.
- *    - Les cibles à 10 000 DH sont SIGNALÉES, jamais modifiées d'office :
- *      seul l'utilisateur connaît le vrai montant.
+ *  CE QU'IL NE FAIT PAS, DÉLIBÉRÉMENT
+ *    Aucun montant métier codé en dur. Une table de valeurs figée dans un
+ *    script de maintenance écrase les saisies de l'utilisateur au prochain
+ *    lancement : la réparation ponctuelle des virements 2027 (v36.1) a été
+ *    appliquée et vérifiée, elle n'a pas à être rejouée éternellement.
+ *    Le script ne corrige que ce qui est structurellement invalide.
  * ============================================================================
  */
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI uniquement.\n"); }
@@ -33,160 +31,170 @@ require_once __DIR__ . '/cfo_intent_engine.php';
 require_once __DIR__ . '/pending_commit.php';   // en CLI : charge les fonctions, ne route pas
 
 $APPLIQUER = in_array('--apply', $argv, true);
-$ANNEE     = '2027';
+$LIER      = in_array('--lier-objectifs', $argv, true);
 
-/** Virements mensuels planifiés, désignés par le LIBELLÉ DU COMPTE destinataire. */
-$FLUX = [
-    'Compte urgence'      => 4000,
-    'depenses annuels'    => 2000,
-    'Épargne Long Terme'  => 7000,
-];
+function l($s = '') { echo $s . "\n"; }
+function titre($t) { l(); l('── ' . $t . ' ' . str_repeat('─', max(0, 70 - mb_strlen($t)))); }
 
-$CIBLE_INVENTEE = 10000;   // valeur que l'ancien moteur posait faute de mieux
-
-function ligne($s = '') { echo $s . "\n"; }
-function titre($t) { ligne(); ligne('── ' . $t . ' ' . str_repeat('─', max(0, 68 - strlen($t)))); }
-
-ligne();
-ligne('  REMISE EN ÉTAT DE finance_data — ' . date('c'));
-ligne('  Mode : ' . ($APPLIQUER ? '*** APPLICATION ***' : 'simulation (aucune écriture)'));
+l();
+l('  AUDIT & RÉPARATION GLOBALE — ' . date('c'));
+l('  Mode : ' . ($APPLIQUER ? '*** APPLICATION ***' : 'audit seul (aucune écriture)'));
 
 list($fd, $src) = cfo_load_finance_state();
-if (!is_object($fd)) { ligne('❌ État financier illisible (source: ' . $src . ').'); exit(1); }
-ligne('  Source : ' . $src);
+if (!is_object($fd)) { l('  ❌ État financier illisible (source: ' . $src . ').'); exit(1); }
+l('  Source : ' . $src);
 
 $avantJson = json_encode($fd, JSON_UNESCAPED_UNICODE);
 $modifs = 0;
 
-/* ── Index des comptes, par libellé normalisé ─────────────────────────────── */
-$parLibelle = [];
-foreach ((oget($fd, 'comptes') ?: []) as $c) {
-    if (!is_object($c)) continue;
-    $lb = oget($c, 'label') ?: oget($c, 'nom');
-    if ($lb) $parLibelle[cfo_norm_str($lb)] = ['id' => oget($c, 'id'), 'label' => $lb];
+/* ── 1. Inventaire ────────────────────────────────────────────────────────── */
+titre('1. INVENTAIRE');
+$da = oget($fd, 'donneesAnnuelles');
+$exercices = is_object($da) ? array_map('strval', okeys($da)) : [];
+sort($exercices);
+l(sprintf('  Exercices        : %s', $exercices ? implode(', ', $exercices) : 'AUCUN'));
+l(sprintf('  Comptes          : %d', count(oget($fd, 'comptes') ?: [])));
+l(sprintf('  Objectifs        : %d', count(oget($fd, 'wealthGoals') ?: [])));
+l(sprintf('  Actifs           : %d', count(oget($fd, 'masterAssets') ?: [])));
+foreach ($exercices as $yr) {
+    $y = oget($da, $yr); if (!is_object($y)) continue;
+    $parts = [];
+    foreach (cfo_poches_annuelles() as $champ => $poche) {
+        $p = oget($y, $champ);
+        $parts[] = sprintf('%s %d', $champ, is_array($p) ? count($p) : (is_object($p) ? count(okeys($p)) : 0));
+    }
+    l(sprintf('    %s : %s', $yr, implode(' · ', $parts)));
 }
 
-/* ── 1. Virements d'épargne de l'exercice ─────────────────────────────────── */
-titre('1. VIREMENTS MENSUELS PLANIFIÉS ' . $ANNEE);
-$annee = oget(oget($fd, 'donneesAnnuelles'), $ANNEE);
-if (!is_object($annee)) {
-    ligne('  ❌ Exercice ' . $ANNEE . ' absent — rien à faire ici.');
-} else {
-    cfo_ep_migrate($annee);
-    $pool = oget($annee, 'epargne');
-    if (!is_array($pool)) { $pool = []; oset($annee, 'epargne', $pool); }
+/* ── 2. Nettoyage de format (même passe que le moteur) ────────────────────── */
+titre('2. NETTOYAGE DE FORMAT (synonymes, champs dérivés)');
+$rapSan = cfo_sanitize_finance_data($fd);
+$totalSan = array_sum($rapSan);
+l($totalSan ? '  ' . $totalSan . ' clé(s) parasite(s) purgée(s) : ' . json_encode($rapSan)
+            : '  Rien à purger.');
+if ($totalSan) $modifs += $totalSan;
 
-    foreach ($FLUX as $libelleCompte => $montant) {
-        $cle = cfo_norm_str($libelleCompte);
-        if (!isset($parLibelle[$cle])) {
-            ligne(sprintf('  ⚠️  %-22s compte introuvable — ligne ignorée', $libelleCompte));
+/* ── 3. Intégrité : TOUTES collections, TOUS exercices ────────────────────── */
+titre('3. INTÉGRITÉ — balayage global');
+$corrections = cfo_integrite_passe($fd, null, $APPLIQUER);
+if (!count($corrections)) {
+    l('  ✅ Aucune anomalie. La base est structurellement saine.');
+} else {
+    $parType = [];
+    foreach ($corrections as $c) {
+        $parType[$c['quoi']] = ($parType[$c['quoi']] ?? 0) + 1;
+        l(sprintf('  %s %-26s %-28s %s → %s',
+            $APPLIQUER ? '✏️ ' : '  ', $c['ou'], $c['quoi'],
+            json_encode($c['avant'], JSON_UNESCAPED_UNICODE),
+            json_encode($c['apres'], JSON_UNESCAPED_UNICODE)));
+    }
+    l();
+    l('  Récapitulatif par type :');
+    arsort($parType);
+    foreach ($parType as $t => $n) l(sprintf('    %-32s %d', $t, $n));
+    $modifs += count($corrections);
+}
+
+/* ── 4. Objectifs sans versement mensuel (opt-in) ─────────────────────────── */
+titre('4. OBJECTIFS SANS VERSEMENT MENSUEL');
+$comptes = cfo_index_comptes($fd);
+$sansVersement = [];
+foreach ((oget($fd, 'wealthGoals') ?: []) as $g) {
+    if (!is_object($g)) continue;
+    if ((float)(oget($g, 'versement_mensuel', 0) ?: 0) <= 0) $sansVersement[] = $g;
+}
+if (!count($sansVersement)) {
+    l('  Tous les objectifs ont un versement mensuel.');
+} elseif (!$LIER) {
+    foreach ($sansVersement as $g) l(sprintf('  ⚠️  %-32s versement 0 — « Aucun versement mensuel défini » à l\'écran',
+                                             oget($g, 'libelle') ?: oget($g, 'name')));
+    l();
+    l('     Relancez avec --lier-objectifs pour DÉDUIRE ces versements des');
+    l('     virements d\'épargne existants (le montant vient de vos données,');
+    l('     il n\'est pas inventé). Les versements déjà renseignés ne sont');
+    l('     jamais écrasés.');
+} else {
+    // Candidats : les virements d'épargne de tous les exercices, nommés par leur
+    // libellé ou par le compte qu'ils alimentent.
+    $flux = [];
+    foreach ($exercices as $yr) {
+        $y = oget($da, $yr); if (!is_object($y)) continue;
+        foreach ((oget($y, 'epargne') ?: []) as $ep) {
+            if (!is_object($ep)) continue;
+            $v = (float)(oget($ep, 'valeur', 0) ?: 0);
+            if ($v <= 0) continue;
+            $noms = [cfo_nommer_epargne($ep, $fd)];
+            foreach (cfo_libelles_comptes_lies($ep, $fd) as $al) $noms[] = $al;
+            foreach ($noms as $nm) {
+                $nm = ltrim((string)$nm, '→ ');
+                if ($nm !== '' && !isset($flux[$nm])) $flux[$nm] = $v;
+            }
+        }
+    }
+    foreach ($sansVersement as $g) {
+        $nom = oget($g, 'libelle') ?: oget($g, 'name', '');
+        $cands = [];
+        foreach ($flux as $nm => $v) {
+            $nl = cfo_norm_str($nm);
+            $cands[] = ['key'=>$nm, 'label'=>$nm, 'category'=>'flux',
+                        'dist'=>cfo_levenshtein(cfo_norm_str($nom), $nl),
+                        'contains'=>cfo_str_contains_either($nl, cfo_norm_str($nom))];
+        }
+        $res = count($cands) ? cfo_rank_candidates($nom, cfo_norm_str($nom), $cands) : ['resolved'=>false];
+        if (empty($res['resolved'])) {
+            l(sprintf('  ·  %-32s aucun virement rapprochable — laissé tel quel', $nom));
             continue;
         }
-        $idCompte = $parLibelle[$cle]['id'];
-        $trouvee = null;
-        foreach ($pool as $ep) {
-            if (is_object($ep) && (string)oget($ep, 'linkedAccountId') === (string)$idCompte) { $trouvee = $ep; break; }
-        }
-        if (!$trouvee) {
-            ligne(sprintf('  ⚠️  %-22s aucun virement ne pointe vers ce compte — non créé (à faire depuis l\'app)', $libelleCompte));
-            continue;
-        }
-        $old = (float)(oget($trouvee, 'valeur', 0) ?: 0);
-        if ((float)$montant === $old) {
-            ligne(sprintf('  ✅ %-22s %7s DH/mois — déjà correct', $libelleCompte, number_format($montant, 0, ',', ' ')));
-            continue;
-        }
-        ligne(sprintf('  ✏️  %-22s %7s → %s DH/mois', $libelleCompte,
-              number_format($old, 0, ',', ' '), number_format($montant, 0, ',', ' ')));
-        if ($APPLIQUER) { oset($trouvee, 'valeur', $montant + 0); }
+        $v = $flux[$res['key']];
+        l(sprintf('  ✏️  %-32s versement 0 → %s DH/mois (virement « %s »)',
+                  $nom, number_format($v, 0, ',', ' '), $res['key']));
+        if ($APPLIQUER) { oset($g, 'versement_mensuel', $v); cfo_goal_sync_schema($g); }
         $modifs++;
     }
 }
 
-/* ── 2. Smart Goals : versement mensuel déduit du virement correspondant ──── */
-titre('2. SMART GOALS — versement mensuel');
-$goals = oget($fd, 'wealthGoals');
-if (!is_array($goals) || !count($goals)) {
-    ligne('  Aucun objectif enregistré.');
-} else {
-    foreach ($goals as $g) {
-        if (!is_object($g)) continue;
-        $nom = oget($g, 'libelle') ?: oget($g, 'name', '(sans nom)');
-        $vm  = (float)(oget($g, 'versement_mensuel', 0) ?: 0);
-
-        // Le versement attendu est celui du virement qui alimente le compte
-        // correspondant. Le rapprochement passe par le MÊME classement que le
-        // moteur (Levenshtein + ambiguïté) : un simple « contains » échouait sur
-        // « Fonds d'urgence » ↔ « Compte urgence » et sur les pluriels
-        // (« Dépenses Annuelles » ↔ « depenses annuels »).
-        $attendu = null; $compteRapproche = null;
-        $cands = [];
-        foreach ($FLUX as $libelleCompte => $montant) {
-            $nl = cfo_norm_str($libelleCompte);
-            $cands[] = ['key'=>$libelleCompte, 'label'=>$libelleCompte, 'category'=>'compte',
-                        'dist'=>cfo_levenshtein(cfo_norm_str($nom), $nl),
-                        'contains'=>cfo_str_contains_either($nl, cfo_norm_str($nom))];
-        }
-        if (count($cands)) {
-            $res = cfo_rank_candidates($nom, cfo_norm_str($nom), $cands);
-            if (!empty($res['resolved'])) { $compteRapproche = $res['key']; $attendu = $FLUX[$res['key']]; }
-        }
-        if ($attendu === null) {
-            ligne(sprintf('  ·  %-28s versement %6s — aucun virement rapprochable, laissé tel quel',
-                  $nom, number_format($vm, 0, ',', ' ')));
-        } elseif ((float)$attendu === $vm) {
-            ligne(sprintf('  ✅ %-28s versement %6s DH/mois — déjà correct', $nom, number_format($vm, 0, ',', ' ')));
-        } else {
-            ligne(sprintf('  ✏️  %-28s versement %6s → %s DH/mois (virement vers « %s »)',
-                  $nom, number_format($vm, 0, ',', ' '), number_format($attendu, 0, ',', ' '), $compteRapproche));
-            if ($APPLIQUER) oset($g, 'versement_mensuel', $attendu + 0);
-            $modifs++;
-        }
-        cfo_goal_sync_schema($g);   // aligne les deux schémas (v19 ↔ legacy)
-    }
-}
-
-/* ── 3. Cibles inventées : signalées, jamais corrigées d'office ───────────── */
-titre('3. CIBLES SUSPECTES (valeur inventée par l\'ancien moteur)');
-$suspects = 0;
-foreach ((is_array($goals) ? $goals : []) as $g) {
+/* ── 5. Signalements sans correction automatique ──────────────────────────── */
+titre('5. À VÉRIFIER PAR VOUS (non corrigé automatiquement)');
+$alertes = 0;
+foreach ((oget($fd, 'wealthGoals') ?: []) as $g) {
     if (!is_object($g)) continue;
-    $cible = (float)(oget($g, 'montant_cible', oget($g, 'target', 0)) ?: 0);
-    if ((float)$CIBLE_INVENTEE === $cible) {
-        $suspects++;
-        ligne(sprintf('  ⚠️  %-28s cible = %s DH', oget($g, 'libelle') ?: oget($g, 'name'),
-              number_format($cible, 0, ',', ' ')));
+    $c = (float)(oget($g, 'montant_cible', oget($g, 'target', 0)) ?: 0);
+    if ($c === 10000.0) {
+        $alertes++;
+        l(sprintf('  ⚠️  %-32s cible = 10 000 DH — valeur qu\'inventait l\'ancien moteur', oget($g, 'libelle') ?: oget($g, 'name')));
     }
 }
-if ($suspects) {
-    ligne();
-    ligne('     Ces ' . $suspects . ' cible(s) valent exactement ' . number_format($CIBLE_INVENTEE, 0, ',', ' ') . ' DH : c\'est la valeur que');
-    ligne('     l\'ancien create_objectif posait quand aucune cible valide n\'était fournie.');
-    ligne('     Je ne les modifie PAS — je ne connais pas le vrai montant. Corrigez-les');
-    ligne('     dans l\'application, ou demandez au CFO « fixe la cible de X à Y DH ».');
-} else {
-    ligne('  Aucune.');
+foreach ($exercices as $yr) {
+    $y = oget($da, $yr); if (!is_object($y)) continue;
+    foreach ((oget($y, 'epargne') ?: []) as $ep) {
+        if (!is_object($ep)) continue;
+        if ((float)(oget($ep, 'valeur', 0) ?: 0) === 0.0) {
+            $alertes++;
+            l(sprintf('  ⚠️  %s : virement « %s » à 0 DH/mois — sans effet', $yr, cfo_nommer_epargne($ep, $fd)));
+        }
+    }
 }
+if (!$alertes) l('  Rien à signaler.');
 
-/* ── 4. Écriture ──────────────────────────────────────────────────────────── */
-titre('4. RÉSULTAT');
-if (!$modifs) { ligne('  Rien à changer. État déjà conforme.'); exit(0); }
+/* ── 6. Écriture ──────────────────────────────────────────────────────────── */
+titre('6. RÉSULTAT');
+if (!$modifs) { l('  Base déjà saine. Rien à écrire.'); l(); exit(0); }
 if (!$APPLIQUER) {
-    ligne('  ' . $modifs . ' correction(s) identifiée(s). AUCUNE écriture (simulation).');
-    ligne('  Pour appliquer :  php repair_finance_data.php --apply');
+    l('  ' . $modifs . ' correction(s) identifiée(s). AUCUNE écriture (audit seul).');
+    l('  Pour appliquer :  php repair_finance_data.php --apply' . ($LIER ? ' --lier-objectifs' : ''));
+    l();
     exit(0);
 }
 
 $sauvegarde = __DIR__ . '/finance_data.backup-' . date('Ymd-His') . '.json';
 if (file_put_contents($sauvegarde, $avantJson) === false) {
-    ligne('  ❌ Sauvegarde impossible (' . $sauvegarde . ') — écriture ANNULÉE.');
+    l('  ❌ Sauvegarde impossible (' . $sauvegarde . ') — écriture ANNULÉE.');
     exit(1);
 }
-ligne('  Sauvegarde de l\'état précédent : ' . basename($sauvegarde));
+l('  Sauvegarde de l\'état précédent : ' . basename($sauvegarde));
 
 $raw = json_encode($fd, JSON_UNESCAPED_UNICODE);
 $ecrit = false;
-
 $cfgFile = __DIR__ . '/db_config.php';
 if (file_exists($cfgFile) && extension_loaded('pdo_pgsql')) {
     $cfg = include $cfgFile;
@@ -197,20 +205,20 @@ if (file_exists($cfgFile) && extension_loaded('pdo_pgsql')) {
         $st = $pdo->prepare('INSERT INTO finance_state (id, data, updated_at) VALUES (1, :d::jsonb, now())
                              ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()');
         $st->execute([':d' => $raw]);
-        ligne('  ✅ Écrit dans Postgres (finance_state).');
+        l('  ✅ Écrit dans Postgres (finance_state).');
         $ecrit = true;
     } catch (Exception $e) {
-        ligne('  ⚠️  Postgres indisponible (' . $e->getMessage() . ') → repli fichier.');
+        l('  ⚠️  Postgres indisponible (' . $e->getMessage() . ') → repli fichier.');
     }
 }
 if (!$ecrit) {
     $f = __DIR__ . '/finance_data.json';
-    if (file_put_contents($f, $raw, LOCK_EX) === false) { ligne('  ❌ Écriture fichier impossible.'); exit(1); }
-    ligne('  ✅ Écrit dans ' . basename($f) . ' (' . strlen($raw) . ' octets).');
+    if (file_put_contents($f, $raw, LOCK_EX) === false) { l('  ❌ Écriture fichier impossible.'); exit(1); }
+    l('  ✅ Écrit dans ' . basename($f) . ' (' . strlen($raw) . ' octets).');
 }
-ligne();
-ligne('  ⚠️  FERMEZ L\'ONGLET de l\'application AVANT de relancer ce script, puis');
-ligne('      rechargez la page. Un onglet resté ouvert pousse son état en mémoire');
-ligne('      toutes les 15 min et écraserait cette réparation (garde-fou v35.5).');
-ligne();
+l();
+l('  ⚠️  FERMEZ L\'ONGLET de l\'application avant de lancer ce script, puis');
+l('      rechargez la page. Un onglet resté ouvert pousse son état en mémoire');
+l('      toutes les 15 min et écraserait cette réparation.');
+l();
 exit(0);

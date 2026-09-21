@@ -17,4 +17,10 @@ return [
     'dbname'   => 'charif_finance_db',  // Nom de la base
     'user'     => 'CHANGE_ME',          // Utilisateur Postgres
     'password' => 'CHANGE_ME',          // Mot de passe — NE JAMAIS COMMITER
+
+    // v37.0 — Jeton FACULTATIF pour get_ai_memory.php (Supervision IA).
+    //   Cet endpoint expose les règles mémorisées ET l'historique des
+    //   conversations. Sans jeton il répond quand même, mais signale son
+    //   ouverture. Décommentez pour exiger ?token=... (ou X-Auth-Token) :
+    // 'ai_memory_token' => 'remplacez-par-une-chaine-longue-et-aleatoire',
 ];
