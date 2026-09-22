@@ -18,9 +18,8 @@ return [
     'user'     => 'CHANGE_ME',          // Utilisateur Postgres
     'password' => 'CHANGE_ME',          // Mot de passe — NE JAMAIS COMMITER
 
-    // v37.0 — Jeton FACULTATIF pour get_ai_memory.php (Supervision IA).
-    //   Cet endpoint expose les règles mémorisées ET l'historique des
-    //   conversations. Sans jeton il répond quand même, mais signale son
-    //   ouverture. Décommentez pour exiger ?token=... (ou X-Auth-Token) :
-    // 'ai_memory_token' => 'remplacez-par-une-chaine-longue-et-aleatoire',
+    // v37.2 — Aucun jeton applicatif ici : la Supervision IA est protégée en
+    //   AMONT par `basic_auth` sur /finance/ dans le Caddyfile (voir
+    //   CADDY_SECURITE.md). Un jeton aurait dû être écrit en clair dans
+    //   index.html pour que l'interface s'en serve — donc lisible par tous.
 ];

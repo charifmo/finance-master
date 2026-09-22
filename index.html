@@ -2676,7 +2676,14 @@
                         <div v-for="r in aiMemoryRag" :key="'rag_'+r.id" class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:border-indigo-200 transition-colors">
                             <div class="flex items-start justify-between gap-4 mb-2">
                                 <span class="text-[10px] font-black uppercase tracking-widest text-indigo-500">Règle #{{ r.id }}</span>
-                                <span class="text-[10px] text-gray-400 font-bold shrink-0">{{ r.longueur }} car.</span>
+                                <div class="flex items-center gap-3 shrink-0">
+                                    <span class="text-[10px] text-gray-400 font-bold">{{ r.longueur }} car.</span>
+                                    <button @click="oublierRegle(r)" :disabled="aiSuppressionEnCours === r.id"
+                                            class="text-red-400 hover:text-red-600 disabled:text-gray-300 disabled:cursor-wait text-lg leading-none transition-colors"
+                                            title="Oublier cette règle définitivement">
+                                        {{ aiSuppressionEnCours === r.id ? '⏳' : '🗑️' }}
+                                    </button>
+                                </div>
                             </div>
                             <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ r.texte }}</p>
                             <div v-if="r.metadata" class="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1.5">
@@ -6552,8 +6559,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.1 Supervision-Epuree";
+                    const CURRENT_VERSION = "37.2 Caddy-Et-Oubli";
                     const CHANGELOG = [
+        { version: "37.2 Caddy-Et-Oubli", date: "2026-09-22", changes: [
+            "JETON APPLICATIF RETIRÉ — il aurait dû être écrit en clair dans index.html pour que l'interface s'en serve, donc lisible par quiconque affiche la source. Une sécurité en trompe-l'œil vaut moins que pas de sécurité, parce qu'elle rassure à tort. La protection passe à Caddy (basic_auth sur /finance/), documentée dans CADDY_SECURITE.md : elle couvre TOUTE l'application, y compris save_data.php qui acceptait jusqu'ici d'écraser l'intégralité de l'état financier sans le moindre contrôle.",
+            "SUPPRESSION D'UNE RÈGLE MÉMORISÉE — icône 🗑️ sur chaque carte, confirmation qui RAPPELLE le texte visé (demander « voulez-vous supprimer ? » sans dire quoi invite à cliquer oui par réflexe), retrait immédiat de la liste puis rechargement. POST {action:'delete_vector', id:N} vers get_ai_memory.php.",
+            "LE CODE NE FAIT PAS CONFIANCE AVEUGLÉMENT — entre un git pull et la mise à jour du Caddyfile, il existe une fenêtre où un endpoint de destruction serait ouvert à tout internet. Le serveur cherche donc la PREUVE d'une authentification amont (PHP_AUTH_USER, REMOTE_USER, en-tête Authorization Basic) et refuse toute suppression à défaut — la lecture, elle, continue. Échouer en refusant de détruire, jamais en détruisant.",
+            "ANTI-CSRF — une authentification basique est rejouée automatiquement par le navigateur : un site tiers pourrait déclencher une suppression à votre insu. La requête doit porter un en-tête que seul du JavaScript peut poser (donc soumis au contrôle CORS) et provenir de la même origine. Identifiant contrôlé comme entier strictement positif, requête préparée.",
+            "FILET DE RÉCUPÉRATION — toute règle supprimée est archivée en JSONL (texte, métadonnées, auteur, horodatage) AVANT l'exécution du DELETE. Si l'archive ne peut pas être écrite, la suppression est ANNULÉE. « Définitivement » se dit à l'utilisateur, pas à la base.",
+            "VÉRIFIÉ contre un vrai PostgreSQL : refus sans authentification (base intacte), suppression effective derrière auth avec archivage nominatif, et six garde-fous exercés — en-tête CSRF absent, origine étrangère, identifiant non entier (tentative d'injection SQL), identifiant négatif, identifiant inexistant, action inconnue."
+        ] },
         { version: "37.1 Supervision-Epuree", date: "2026-09-22", changes: [
             "SUPERVISION IA — MÉTADONNÉES TECHNIQUES ÉCARTÉES. Les chargeurs de documents accrochent à chaque vecteur des clés qui décrivent le FICHIER d'origine et non la règle métier : loc.lines.from/to, blobType, pageNumber, pdf.*. Elles noyaient les seules informations utiles. Le tri se fait côté serveur (get_ai_memory.php) : la charge utile diminue aussi, et la règle vit à un seul endroit. C'est une liste de REFUS et non d'autorisation — une clé métier imprévue reste visible plutôt que de disparaître en silence.",
             "VECTEURS TROP COURTS FILTRÉS — un texte de moins de 30 caractères n'est pas une règle, c'est un résidu d'indexation (une date, un tag isolé « regle » ou « tg_1595… »). Le filtre est appliqué EN SQL (char_length, pas length : un « é » ne doit pas peser double en UTF-8) et AVANT le LIMIT — filtrer après coup aurait rendu le paramètre limit trompeur, en demandant 200 lignes pour n'en afficher que 40.",
@@ -8178,6 +8193,53 @@
                     const aiMemoryToutVoir = ref(false);
                     const aiMemorySeuil = ref(30);
                     const aiMemoryEcartes = ref(0);
+                    const aiSuppressionEnCours = ref(null);
+
+                    // v37.2 — Oublier une règle mémorisée.
+                    //   La confirmation RAPPELLE le texte visé : « voulez-vous
+                    //   supprimer ? » sans dire quoi invite à cliquer oui par réflexe.
+                    const oublierRegle = async (regle) => {
+                        if (!regle || !regle.id) return;
+                        const extrait = String(regle.texte || '').slice(0, 140) + (String(regle.texte || '').length > 140 ? '…' : '');
+                        const ok = confirm('Voulez-vous vraiment oublier cette règle définitivement ?\n\n« ' + extrait + ' »\n\n'
+                                         + "L'agent cessera de s'en servir. Une copie est conservée côté serveur "
+                                         + '(vectors_supprimes.jsonl) si vous deviez la retrouver.');
+                        if (!ok) return;
+                        aiSuppressionEnCours.value = regle.id;
+                        try {
+                            const res = await fetch(AI_MEMORY_PATH, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    // Exigé par le serveur : un en-tête personnalisé force le
+                                    // contrôle CORS, ce qu'un formulaire tiers ne peut pas faire.
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({ action: 'delete_vector', id: regle.id }),
+                            });
+                            const txt = await res.text();
+                            let d; try { d = JSON.parse(txt); } catch (e) { d = null; }
+                            if (!d || d.status !== 'ok') {
+                                // L'échec le plus probable a une cause précise et une solution :
+                                // on la donne, plutôt que d'afficher un code d'erreur.
+                                const cause = (d && d.error === 'PROTECTION_ABSENTE')
+                                    ? "La suppression est bloquée tant que /finance/ n'est pas protégé par Caddy (basic_auth). "
+                                      + 'La lecture continue de fonctionner. Voir CADDY_SECURITE.md.'
+                                    : ((d && d.message) || txt.slice(0, 200));
+                                throw new Error(cause);
+                            }
+                            // Retrait immédiat de la liste, sans attendre le rechargement :
+                            // l'écran doit refléter l'action au moment où elle est faite.
+                            aiMemoryRag.value = aiMemoryRag.value.filter(x => x.id !== regle.id);
+                            addLog('🗑️ Règle #' + regle.id + ' oubliée (archivée dans ' + (d.archive || 'l\'archive') + ').', 'success');
+                            await chargerAiMemory();
+                        } catch (e) {
+                            aiMemoryErreur.value = { code: 'SUPPRESSION_REFUSEE', message: (e && e.message) || String(e) };
+                            addLog('🗑️ Suppression refusée : ' + aiMemoryErreur.value.message, 'error');
+                        } finally {
+                            aiSuppressionEnCours.value = null;
+                        }
+                    };
 
                     const chargerAiMemory = async () => {
                         aiMemoryChargement.value = true;
@@ -15314,7 +15376,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         aiMemoryOnglet, aiMemoryRag, aiMemoryChat, aiMemoryChargement, aiMemoryChargee,
                         aiMemoryErreur, aiMemoryAvertissement, aiMemoryFiltre, chargerAiMemory,
                         aiMemoryChatParSession, aiMetaPlate, aiDateCourte,
-                        aiMemoryToutVoir, aiMemorySeuil, aiMemoryEcartes,
+                        aiMemoryToutVoir, aiMemorySeuil, aiMemoryEcartes, aiSuppressionEnCours, oublierRegle,
                         surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip,
                         surplusMoisMoyennes, surplusMoyenneHorsMoisCourant, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerFactures, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
                         // v22.90 Double-Pilotage

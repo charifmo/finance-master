@@ -1,24 +1,27 @@
 <?php
 /**
  * ============================================================================
- *  get_ai_memory.php — supervision de la mémoire de l'agent (v37.0)
+ *  get_ai_memory.php — supervision de la mémoire de l'agent (v37.2)
  * ----------------------------------------------------------------------------
  *  GET /finance/get_ai_memory.php              → les deux tables
  *  GET /finance/get_ai_memory.php?table=rag    → règles mémorisées seules
  *  GET /finance/get_ai_memory.php?table=chat   → conversations seules
  *  Paramètres : limit (défaut 100, max 500), q (filtre plein texte simple)
  *
- *  ⚠️  EXPOSITION — À LIRE
- *  Cet endpoint renvoie des RÈGLES MÉTIER et des CONVERSATIONS PASSÉES. C'est
- *  plus sensible que le reste de l'application. Aucun autre fichier de ce
- *  dossier n'est protégé (save_data.php accepte d'écraser tout l'état financier
- *  sans authentification) : je ne prétends donc pas « sécuriser » quoi que ce
- *  soit ici, mais je ne veux pas aggraver l'exposition en silence.
+ *  POST (JSON) {action:"delete_vector", id:N}  → supprime une règle mémorisée
  *
- *  Pour exiger un jeton, ajoutez dans db_config.php :
- *      'ai_memory_token' => 'une-chaine-longue-et-aleatoire',
- *  puis appelez avec ?token=... (ou l'en-tête X-Auth-Token). Sans cette clé,
- *  l'endpoint répond mais signale son ouverture dans le champ `avertissement`.
+ *  ⚠️  PROTECTION — ELLE EST EN AMONT, DANS CADDY
+ *  Cet endpoint renvoie des RÈGLES MÉTIER et des CONVERSATIONS, et sait
+ *  désormais SUPPRIMER. La protection est assurée par `basic_auth` sur
+ *  /finance/ dans le Caddyfile — voir CADDY_SECURITE.md à la racine du dépôt.
+ *
+ *  Le jeton applicatif de la v37.0 a été retiré : il aurait dû être écrit en
+ *  clair dans index.html pour que l'interface s'en serve, donc lisible par
+ *  quiconque affiche la source. Une sécurité en trompe-l'œil vaut moins que
+ *  pas de sécurité, parce qu'elle rassure à tort.
+ *
+ *  Ce fichier ne SUPPOSE pas que Caddy est en place : il en cherche la preuve
+ *  (auth_amont) et refuse toute suppression à défaut.
  *
  *  La colonne `embedding` n'est JAMAIS lue : des milliers de flottants, inutiles
  *  à l'écran et coûteux à transporter.
@@ -41,18 +44,39 @@ if (!file_exists($cfgFile)) {
 $cfg = include $cfgFile;
 if (!is_array($cfg)) sortie(['status'=>'error','error'=>'CONFIG_INVALIDE','message'=>'db_config.php ne retourne pas un tableau.'], 503);
 
-/* ── Jeton facultatif ─────────────────────────────────────────────────────── */
-$tokenAttendu = $cfg['ai_memory_token'] ?? null;
-$avertissement = null;
-if ($tokenAttendu) {
-    $fourni = $_GET['token'] ?? ($_SERVER['HTTP_X_AUTH_TOKEN'] ?? '');
-    if (!hash_equals((string)$tokenAttendu, (string)$fourni)) {
-        sortie(['status'=>'error','error'=>'NON_AUTORISE','message'=>'Jeton manquant ou invalide.'], 403);
+/* ══════════════════════════════════════════════════════════════════════════
+   v37.2 — LA PROTECTION EST EN AMONT (Caddy), MAIS ON VÉRIFIE QU'ELLE Y EST
+   ──────────────────────────────────────────────────────────────────────────
+   Le jeton 'ai_memory_token' est SUPPRIMÉ : il ne pouvait pas être utilisé par
+   l'application sans être écrit en clair dans index.html, donc lisible par
+   quiconque affiche la source. C'était une sécurité en trompe-l'œil.
+
+   Caddy protège désormais /finance/ par basic_auth. Mais ce fichier ne se
+   CONTENTE PAS de le supposer : entre le `git pull` et la mise à jour du
+   Caddyfile il existe une fenêtre pendant laquelle un endpoint de SUPPRESSION
+   serait ouvert à tout internet. On cherche donc une preuve que la requête est
+   bien passée par une authentification, et à défaut la LECTURE reste permise
+   (comportement actuel, rien n'est cassé) mais la SUPPRESSION est refusée.
+   Échouer en refusant de détruire, jamais en détruisant.
+   ══════════════════════════════════════════════════════════════════════════ */
+function auth_amont(): ?string {
+    foreach (['PHP_AUTH_USER', 'REMOTE_USER', 'REDIRECT_REMOTE_USER'] as $k) {
+        if (!empty($_SERVER[$k])) return (string)$_SERVER[$k];
     }
-} else {
-    $avertissement = "Endpoint ouvert : aucun 'ai_memory_token' dans db_config.php. "
-                   . "Vos conversations sont lisibles par quiconque connaît l'URL.";
+    // Selon la passerelle (php-fpm, mod_php, proxy), l'en-tête arrive sous
+    // l'un ou l'autre nom. On accepte les deux plutôt que d'en privilégier un.
+    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+    if (stripos((string)$h, 'basic ') === 0) {
+        $d = base64_decode(substr((string)$h, 6), true);
+        if ($d !== false && strpos($d, ':') !== false) return explode(':', $d, 2)[0];
+    }
+    return null;
 }
+$utilisateurAmont = auth_amont();
+$avertissement = $utilisateurAmont === null
+    ? "Aucune authentification détectée en amont : ce chemin n'est pas protégé par Caddy. "
+    . "La lecture reste possible, la SUPPRESSION est refusée tant que basic_auth n'est pas actif sur /finance/."
+    : null;
 
 if (!extension_loaded('pdo_pgsql')) {
     sortie(['status'=>'error','error'=>'PDO_PGSQL_ABSENT',
@@ -88,6 +112,117 @@ if (!$pdo) {
             'message'=>"Aucun hôte Postgres n'a répondu.",
             'hotes_tentes'=>$echecs,
             'indice'=>"Corrigez 'host' dans db_config.php avec celui qui fonctionne depuis ce conteneur."], 503);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   v37.2 — SUPPRESSION D'UNE RÈGLE MÉMORISÉE
+   ──────────────────────────────────────────────────────────────────────────
+   POST JSON {action:"delete_vector", id:N}
+
+   TROIS VERROUS, dans cet ordre :
+     1. AUTH AMONT — la requête doit porter la trace d'une authentification
+        (Caddy basic_auth). À défaut, refus : mieux vaut un bouton qui ne
+        marche pas encore qu'un endpoint de destruction ouvert au monde.
+     2. MÊME ORIGINE — une authentification basique est rejouée
+        automatiquement par le navigateur : un site tiers pourrait déclencher
+        une suppression à votre insu (CSRF). On exige un en-tête que seul du
+        JavaScript peut poser (donc soumis au contrôle CORS) et une origine
+        identique à l'hôte.
+     3. IDENTIFIANT ENTIER — requête préparée, jamais de concaténation.
+
+   ET UN FILET : la ligne supprimée est archivée en JSONL avant l'exécution.
+   « Oublier définitivement » se dit à l'utilisateur, pas à la base — une
+   règle effacée par erreur doit pouvoir être relue.
+   ══════════════════════════════════════════════════════════════════════════ */
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    $corps = json_decode((string)file_get_contents('php://input'), true) ?: [];
+    $action = $corps['action'] ?? '';
+
+    if ($action !== 'delete_vector') {
+        sortie(['status'=>'error','error'=>'ACTION_INCONNUE',
+                'message'=>"Action non reconnue. Attendu : {action:'delete_vector', id:N}."], 400);
+    }
+
+    // Verrou 1 — preuve d'authentification en amont
+    if ($utilisateurAmont === null) {
+        sortie(['status'=>'error','error'=>'PROTECTION_ABSENTE',
+                'message'=>"Suppression refusée : aucune authentification détectée sur ce chemin. "
+                         . "Activez basic_auth sur /finance/ dans le Caddyfile (voir CADDY_SECURITE.md), "
+                         . "puis rechargez la page.",
+                'lecture_possible'=>true], 403);
+    }
+
+    // Verrou 2 — même origine (anti-CSRF)
+    if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === '') {
+        sortie(['status'=>'error','error'=>'ENTETE_MANQUANT',
+                'message'=>"En-tête X-Requested-With absent : requête rejetée (protection CSRF)."], 400);
+    }
+    $hote = $_SERVER['HTTP_HOST'] ?? '';
+    $origine = $_SERVER['HTTP_ORIGIN'] ?? ($_SERVER['HTTP_REFERER'] ?? '');
+    if ($origine !== '') {
+        $hOrigine = parse_url($origine, PHP_URL_HOST);
+        if ($hOrigine !== null && strcasecmp((string)$hOrigine, (string)preg_replace('/:\d+$/', '', $hote)) !== 0) {
+            sortie(['status'=>'error','error'=>'ORIGINE_ETRANGERE',
+                    'message'=>"Requête émise depuis « {$hOrigine} », qui n'est pas « {$hote} ». Rejetée."], 403);
+        }
+    }
+
+    // Verrou 3 — identifiant entier strictement positif
+    $id = $corps['id'] ?? null;
+    if (!is_int($id) && !(is_string($id) && ctype_digit($id))) {
+        sortie(['status'=>'error','error'=>'ID_INVALIDE',
+                'message'=>"Identifiant attendu : un entier. Reçu : " . json_encode($id)], 400);
+    }
+    $id = (int)$id;
+    if ($id <= 0) sortie(['status'=>'error','error'=>'ID_INVALIDE','message'=>'Identifiant doit être positif.'], 400);
+
+    try {
+        $dispo = colonnes($pdo, 'finance_vectors');
+        if (!$dispo) throw new RuntimeException("table 'finance_vectors' absente de cette base");
+        if (!in_array('id', $dispo, true)) throw new RuntimeException("la table n'a pas de colonne 'id' : suppression par identifiant impossible");
+        $cTxt = col($dispo, ['text', 'content', 'document', 'page_content', 'texte']);
+        $cMet = col($dispo, ['metadata', 'meta', 'metadatas']);
+
+        // Relire la ligne AVANT de la détruire — pour l'archiver et pour
+        // pouvoir dire à l'utilisateur ce qui a réellement disparu.
+        $selArch = array_filter(['id', $cTxt, $cMet]);
+        $sl = $pdo->prepare('SELECT ' . implode(', ', array_map(fn($c) => '"' . $c . '"', $selArch))
+                          . ' FROM finance_vectors WHERE id = :id');
+        $sl->execute([':id' => $id]);
+        $ligne = $sl->fetch(PDO::FETCH_ASSOC);
+        if (!$ligne) {
+            sortie(['status'=>'error','error'=>'INTROUVABLE',
+                    'message'=>"Aucune règle ne porte l'identifiant {$id}. Rien n'a été supprimé."], 404);
+        }
+
+        // Filet : archive append-only. Un échec d'écriture ANNULE la suppression.
+        $archive = __DIR__ . '/vectors_supprimes.jsonl';
+        $entree = json_encode([
+            'supprime_le'  => date('c'),
+            'par'          => $utilisateurAmont,
+            'id'           => (int)$ligne['id'],
+            'texte'        => $cTxt ? (string)$ligne[$cTxt] : null,
+            'metadata'     => $cMet ? decodeJson($ligne[$cMet] ?? null) : null,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (@file_put_contents($archive, $entree . "\n", FILE_APPEND | LOCK_EX) === false) {
+            sortie(['status'=>'error','error'=>'ARCHIVE_IMPOSSIBLE',
+                    'message'=>"Impossible d'écrire l'archive " . basename($archive) . " — suppression ANNULÉE. "
+                             . "Vérifiez les droits d'écriture du dossier.",
+                    'supprime'=>false], 500);
+        }
+
+        $sd = $pdo->prepare('DELETE FROM finance_vectors WHERE id = :id');
+        $sd->execute([':id' => $id]);
+
+        $extrait = $cTxt ? (string)$ligne[$cTxt] : '';
+        sortie(['status'=>'ok', 'supprime'=>true, 'id'=>$id,
+                'lignes_supprimees'=>$sd->rowCount(),
+                'extrait'=>mb_substr($extrait, 0, 120),
+                'archive'=>basename($archive),
+                'par'=>$utilisateurAmont]);
+    } catch (Throwable $e) {
+        sortie(['status'=>'error','error'=>'SUPPRESSION_ECHOUEE','message'=>$e->getMessage(),'supprime'=>false], 500);
+    }
 }
 
 /* ── Introspection : on ne SELECT que des colonnes qui existent ───────────── */
