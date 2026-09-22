@@ -101,6 +101,34 @@ function col(array $dispo, array $cands): ?string {
     foreach ($cands as $c) if (in_array($c, $dispo, true)) return $c;
     return null;
 }
+/**
+ * v37.1 — MÉTADONNÉES TECHNIQUES ÉCARTÉES.
+ *   Les chargeurs de documents (LangChain & co) accrochent à chaque vecteur
+ *   des clés de découpage — loc.lines.from/to, blobType, pageNumber, pdf.* —
+ *   qui décrivent le FICHIER d'origine, pas la règle métier. À l'écran elles
+ *   noient les seules informations utiles (source, tags, catégorie).
+ *   Liste de REFUS et non d'autorisation, volontairement : une clé métier que
+ *   je n'ai pas prévue doit rester visible plutôt que disparaître en silence.
+ *   ?meta=all rend tout, pour inspecter une règle en détail.
+ */
+const META_TECHNIQUES = [
+    'loc', 'blobType', 'blob', 'pageNumber', 'totalPages', 'pdf', 'info',
+    'version', 'lines', 'chunk', 'chunkIndex', 'chunk_index', 'charCount',
+    'tokenCount', 'hash', 'checksum', 'mtime', 'ctime', 'size', 'encoding',
+    'mimetype', 'mime_type', 'contentType', 'embedding', 'vector', '_id',
+];
+function meta_utile($meta, bool $tout) {
+    if ($tout || !is_array($meta)) return $meta;
+    $garde = [];
+    foreach ($meta as $k => $v) {
+        if (in_array((string)$k, META_TECHNIQUES, true)) continue;
+        // Une valeur vide n'apporte rien à l'écran non plus.
+        if ($v === null || $v === '' || $v === []) continue;
+        $garde[$k] = $v;
+    }
+    return $garde ?: null;   // null → le frontend n'affiche aucun bandeau
+}
+
 function decodeJson($v) {
     if (is_array($v) || is_object($v)) return $v;
     if (!is_string($v) || $v === '') return null;
@@ -111,6 +139,11 @@ function decodeJson($v) {
 $limite = max(1, min(500, (int)($_GET['limit'] ?? 100)));
 $filtre = trim((string)($_GET['q'] ?? ''));
 $table  = $_GET['table'] ?? 'all';
+// v37.1 : un vecteur dont le texte tient en moins de 30 caractères n'est pas
+//   une règle — c'est un résidu d'indexation (une date, un tag isolé du type
+//   « regle » ou « tg_1595… »). Seuil ajustable, 0 pour tout voir.
+$minLen  = max(0, min(10000, (int)($_GET['min_len'] ?? 30)));
+$metaAll = in_array(strtolower((string)($_GET['meta'] ?? '')), ['all', 'full', '1'], true);
 $out = ['status'=>'ok', 'hote'=>$hoteRetenu, 'genere_a'=>date('c')];
 if ($avertissement) $out['avertissement'] = $avertissement;
 
@@ -125,10 +158,17 @@ if ($table === 'all' || $table === 'rag') {
         if (!$cTxt) throw new RuntimeException('aucune colonne de texte reconnue (colonnes : ' . implode(', ', $dispo) . ')');
 
         $sel = array_filter([$cId, $cTxt, $cMet]);
-        $sql = 'SELECT ' . implode(', ', array_map(fn($c) => '"' . $c . '"', $sel)) . ' FROM finance_vectors';
-        $params = [];
-        if ($filtre !== '') { $sql .= ' WHERE "' . $cTxt . '" ILIKE :q'; $params[':q'] = '%' . $filtre . '%'; }
-        $sql .= ($cId ? ' ORDER BY "' . $cId . '" DESC' : '') . ' LIMIT ' . $limite;
+        // v37.1 : le tri se fait EN SQL, avant le LIMIT. Filtrer en PHP après
+        //   coup aurait rendu `limit` trompeur : on aurait demandé 200 lignes
+        //   pour n'en afficher que 40, sans que personne ne sache pourquoi.
+        //   char_length (et non length) pour compter des CARACTÈRES en UTF-8 :
+        //   un « é » ne doit pas peser double dans le seuil.
+        $ou = []; $params = [];
+        if ($filtre !== '') { $ou[] = '"' . $cTxt . '" ILIKE :q'; $params[':q'] = '%' . $filtre . '%'; }
+        if ($minLen > 0)    { $ou[] = 'char_length("' . $cTxt . '") > :minlen'; $params[':minlen'] = $minLen; }
+        $sql = 'SELECT ' . implode(', ', array_map(fn($c) => '"' . $c . '"', $sel)) . ' FROM finance_vectors'
+             . (count($ou) ? ' WHERE ' . implode(' AND ', $ou) : '')
+             . ($cId ? ' ORDER BY "' . $cId . '" DESC' : '') . ' LIMIT ' . $limite;
         $st = $pdo->prepare($sql); $st->execute($params);
 
         $regles = [];
@@ -138,10 +178,25 @@ if ($table === 'all' || $table === 'rag') {
                 'id'        => $cId ? $r[$cId] : null,
                 'texte'     => $texte,
                 'longueur'  => mb_strlen($texte),
-                'metadata'  => $cMet ? decodeJson($r[$cMet] ?? null) : null,
+                'metadata'  => $cMet ? meta_utile(decodeJson($r[$cMet] ?? null), $metaAll) : null,
             ];
         }
-        $out['rag'] = ['total' => count($regles), 'regles' => $regles];
+        // Combien de vecteurs le seuil a-t-il écartés ? Un compteur qui baisse
+        // sans explication inquiète : on dit ce qui a été mis de côté.
+        $ecartes = 0;
+        if ($minLen > 0) {
+            try {
+                $sc = $pdo->prepare('SELECT count(*) AS n FROM finance_vectors WHERE char_length("' . $cTxt . '") <= :minlen');
+                $sc->execute([':minlen' => $minLen]);
+                $ecartes = (int)($sc->fetch(PDO::FETCH_ASSOC)['n'] ?? 0);
+            } catch (Throwable $e) { $ecartes = 0; }
+        }
+        $out['rag'] = [
+            'total'            => count($regles),
+            'regles'           => $regles,
+            'seuil_caracteres' => $minLen,
+            'ecartes_trop_courts' => $ecartes,
+        ];
     } catch (Throwable $e) {
         $out['rag'] = ['erreur' => $e->getMessage(), 'regles' => [], 'total' => 0];
     }

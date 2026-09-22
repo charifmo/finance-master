@@ -2662,6 +2662,16 @@
 
                     <!-- ══ Règles mémorisées (RAG) ══ -->
                     <div v-show="aiMemoryOnglet === 'rag'" class="space-y-3">
+                        <!-- v37.1 : dire ce qui est masqué, et laisser le voir -->
+                        <div v-if="aiMemoryEcartes > 0 || aiMemoryToutVoir" class="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex-wrap">
+                            <span class="text-[11px] text-slate-600 font-bold">
+                                <template v-if="!aiMemoryToutVoir">{{ aiMemoryEcartes }} vecteur(s) de moins de {{ aiMemorySeuil }} caractères masqué(s) — résidus d'indexation (dates, tags isolés).</template>
+                                <template v-else>Affichage complet : tous les vecteurs et toutes les métadonnées techniques.</template>
+                            </span>
+                            <button @click="aiMemoryToutVoir = !aiMemoryToutVoir; chargerAiMemory()" class="text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-800 underline shrink-0">
+                                {{ aiMemoryToutVoir ? 'Revenir au tri' : 'Tout afficher' }}
+                            </button>
+                        </div>
                         <p v-if="!aiMemoryRag.length && !aiMemoryChargement" class="text-center text-gray-400 text-sm py-8 italic">Aucune règle mémorisée.</p>
                         <div v-for="r in aiMemoryRag" :key="'rag_'+r.id" class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:border-indigo-200 transition-colors">
                             <div class="flex items-start justify-between gap-4 mb-2">
@@ -6542,8 +6552,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.0 Integrite-Supervision";
+                    const CURRENT_VERSION = "37.1 Supervision-Epuree";
                     const CHANGELOG = [
+        { version: "37.1 Supervision-Epuree", date: "2026-09-22", changes: [
+            "SUPERVISION IA — MÉTADONNÉES TECHNIQUES ÉCARTÉES. Les chargeurs de documents accrochent à chaque vecteur des clés qui décrivent le FICHIER d'origine et non la règle métier : loc.lines.from/to, blobType, pageNumber, pdf.*. Elles noyaient les seules informations utiles. Le tri se fait côté serveur (get_ai_memory.php) : la charge utile diminue aussi, et la règle vit à un seul endroit. C'est une liste de REFUS et non d'autorisation — une clé métier imprévue reste visible plutôt que de disparaître en silence.",
+            "VECTEURS TROP COURTS FILTRÉS — un texte de moins de 30 caractères n'est pas une règle, c'est un résidu d'indexation (une date, un tag isolé « regle » ou « tg_1595… »). Le filtre est appliqué EN SQL (char_length, pas length : un « é » ne doit pas peser double en UTF-8) et AVANT le LIMIT — filtrer après coup aurait rendu le paramètre limit trompeur, en demandant 200 lignes pour n'en afficher que 40.",
+            "RIEN N'EST MASQUÉ EN SILENCE — l'onglet affiche combien de vecteurs ont été écartés et sous quel seuil, avec un bouton « Tout afficher » qui recharge sans filtre ni nettoyage (min_len=0&meta=all). Un compteur qui baisse sans explication inquiète plus qu'il ne rassure. Seuil ajustable par ?min_len= pour un usage direct de l'endpoint.",
+            "AFFICHAGE PROPRE — des métadonnées entièrement techniques deviennent null plutôt qu'un objet vide : aucun bandeau fantôme ne s'affiche sous une règle."
+        ] },
         { version: "37.0 Integrite-Supervision", date: "2026-09-21", changes: [
             "CAUSE RACINE DES LIBELLÉS VIDES — trouvée, et ce n'était ni l'interface ni l'agent. cfo_sanitize_finance_data SUPPRIMAIT la clé `nom` de chaque ligne d'épargne, en la traitant comme un simple synonyme de `label`. Or c'est précisément `obj.nom` que le template Vue affiche (index.html:2408 desktop, 3569 mobile) : chaque commit du CFO vidait donc le champ « Nom de l'objectif » de TOUTES les lignes, de TOUS les exercices. Pour les revenus et les charges l'interface lit bien `label`, la purge y reste correcte — l'épargne était le seul cas inversé. Ma réponse précédente attribuait ces noms vides à une saisie utilisateur : c'était faux.",
             "COUCHE D'INTÉGRITÉ UNIQUE (cfo_integrity.php) — une seule définition de « donnée saine », deux points d'appel : le moteur à chaque écriture, et le balayage de réparation sur l'historique. Elle garantit qu'aucun libellé vide, montant non numérique, signe incohérent ou compte lié fantôme n'atteint le disque. Chaque correction est RAPPORTÉE (integrite_corrections) : rien ne se répare en silence.",
@@ -8156,13 +8172,22 @@
                     const aiMemoryErreur = ref(null);
                     const aiMemoryAvertissement = ref(null);
                     const aiMemoryFiltre = ref('');
+                    // v37.1 : le serveur écarte les vecteurs trop courts et les
+                    //   métadonnées de découpage (loc.lines, blobType, pdf.*).
+                    //   Ces trois refs ne servent qu'à le DIRE et à le désactiver.
+                    const aiMemoryToutVoir = ref(false);
+                    const aiMemorySeuil = ref(30);
+                    const aiMemoryEcartes = ref(0);
 
                     const chargerAiMemory = async () => {
                         aiMemoryChargement.value = true;
                         aiMemoryErreur.value = null;
                         try {
                             const q = aiMemoryFiltre.value.trim();
-                            const url = AI_MEMORY_PATH + '?limit=200' + (q ? '&q=' + encodeURIComponent(q) : '') + '&t=' + Date.now();
+                            const url = AI_MEMORY_PATH + '?limit=200'
+                                      + (q ? '&q=' + encodeURIComponent(q) : '')
+                                      + (aiMemoryToutVoir.value ? '&min_len=0&meta=all' : '')
+                                      + '&t=' + Date.now();
                             const res = await fetch(url, { cache: 'no-store' });
                             const txt = await res.text();
                             let d;
@@ -8175,6 +8200,8 @@
                             }
                             if (d.status === 'error') throw { code: d.error, message: d.message, hotes: d.hotes_tentes, indice: d.indice };
                             aiMemoryRag.value = (d.rag && d.rag.regles) || [];
+                            aiMemorySeuil.value = (d.rag && d.rag.seuil_caracteres) || 0;
+                            aiMemoryEcartes.value = (d.rag && d.rag.ecartes_trop_courts) || 0;
                             aiMemoryChat.value = (d.chat && d.chat.messages) || [];
                             aiMemoryAvertissement.value = d.avertissement || null;
                             // Une table absente n'empêche pas l'autre de s'afficher.
@@ -15287,6 +15314,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         aiMemoryOnglet, aiMemoryRag, aiMemoryChat, aiMemoryChargement, aiMemoryChargee,
                         aiMemoryErreur, aiMemoryAvertissement, aiMemoryFiltre, chargerAiMemory,
                         aiMemoryChatParSession, aiMetaPlate, aiDateCourte,
+                        aiMemoryToutVoir, aiMemorySeuil, aiMemoryEcartes,
                         surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip,
                         surplusMoisMoyennes, surplusMoyenneHorsMoisCourant, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerFactures, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
                         // v22.90 Double-Pilotage

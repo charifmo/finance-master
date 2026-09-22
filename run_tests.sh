@@ -20,4 +20,6 @@ echo "▸ Cohérence des schémas d'objectif"
 php test_schema_goals.php | tail -2
 echo "▸ Intégrité des données écrites"
 php test_integrite.php | tail -2
+echo "▸ Tri du bruit (Supervision IA)"
+php test_supervision.php | tail -2
 echo "✅ Toutes les suites passent."
