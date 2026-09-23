@@ -6559,8 +6559,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.4 Reponse-Jamais-Muette";
+                    const CURRENT_VERSION = "37.5 Schema-Lisible-Gemini";
                     const CHANGELOG = [
+        { version: "37.5 Schema-Lisible-Gemini", date: "2026-09-23", changes: [
+            "CAUSE RÉELLE DE LA RÉPONSE MUETTE (exécution n8n #1005, « Lissage Dépenses Annuelles à 24 000 DH ») — l'agent échouait avec « Received tool input did not match expected schema — Required at calls[0].function / calls[0].args ». Ce n'était pas l'authentification.",
+            "MÉCANIQUE — la v37.0 avait ajouté au schéma de l'Intent Compiler un allOf de 19 if/then (requis par fonction). Gemini ne sait pas lire ces mots-clés : il ne voyait plus les champs function/args et envoyait un objet mal formé, que n8n rejetait AVANT l'outil. Preuve : les exécutions #996 à #1000 appelaient update_smart_goal correctement avec le même schéma sans allOf.",
+            "CORRECTIF — allOf retiré de tools_schema.php et du workflow (changement d'une ligne ; le reste du schéma est identique à l'octet près). Les requis par fonction restent imposés par la description de chaque fonction et par le moteur, qui refuse un paramètre manquant avec un message que le modèle lit et corrige. Vérifié en production : l'appel update_smart_goal {name, target_amount: 24000} arrive désormais intact.",
+            "VERROU — php tools_schema.php (donc --check et run_tests.sh) refuse tout mot-clé que Gemini ne comprend pas : allOf, anyOf, oneOf, not, if/then/else, const, $ref. L'ancien schéma en contenait 59.",
+            "SECOND BLOCAGE, DERRIÈRE — une fois l'appel réparé, pending_commit.php répondait 401 : n8n 2.x interdit $env dans les nœuds Code par défaut, donc FINANCE_USER/FINANCE_PASS étaient illisibles bien que définis. Il faut N8N_BLOCK_ENV_ACCESS_IN_NODE=false dans le docker-compose ; N8N_AUTH_CADDY.md l'indique désormais, avec la commande de vérification."
+        ] },
         { version: "37.4 Reponse-Jamais-Muette", date: "2026-09-23", changes: [
             "BUG SIGNALÉ — le CFO répondait « {\"session_id\":\"c44fdff8-…\"} » dans la bulle de conversation, au lieu d'une réponse. Mécanique exacte : le nœud « Respond Webhook » construit { html: $('AI Agent')…json.output, session_id: … }, et le nœud « AI Agent » porte continueOnFail. Quand l'agent échoue, n8n émet un item SANS clé output ; JSON.stringify supprime les valeurs undefined, il ne reste donc que { session_id }. Côté application, le dernier repli de lecture était « || raw » : le JSON entier atterrissait dans la bulle.",
             "CE QUI RENDAIT LA PANNE INDIAGNOSTICABLE — l'échec réel de l'agent (401, outil en erreur, itérations épuisées) n'apparaissait NULLE PART. L'utilisateur voyait un identifiant de session et devait deviner. Une erreur silencieuse coûte plus cher que l'erreur elle-même.",

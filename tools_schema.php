@@ -60,27 +60,16 @@ function cfo_build_tool_schema(): array {
     }
     unset($pv);
 
-    // v37.0 — REQUIS PAR FONCTION. Un schéma qui se contente de lister tous les
-    //   paramètres possibles n'impose rien : le modèle pouvait omettre un
-    //   libellé ou un montant sans que le schéma bronche, et c'est le moteur qui
-    //   refusait en bout de chaîne. Un allOf de if/then rend chaque champ vital
-    //   obligatoire POUR SA FONCTION, donc contrôlé avant même l'appel.
-    $contraintes = [];
-    foreach ($spec as $fn => $def) {
-        $req = [];
-        foreach ($def['params'] as $k => $d) if (!empty($d['required'])) $req[] = $k;
-        // « au moins un parmi » : exprimé en anyOf, chaque branche exigeant l'un d'eux.
-        $auMoins = $def['au_moins_un'] ?? null;
-        if (!count($req) && !$auMoins) continue;
-        $alors = [];
-        if (count($req)) $alors['properties'] = ['args' => ['required' => $req]];
-        if ($auMoins) {
-            $branches = [];
-            foreach ($auMoins as $k) $branches[] = ['required' => [$k]];
-            $alors['properties']['args']['anyOf'] = $branches;
-        }
-        $contraintes[] = ['if' => ['properties' => ['function' => ['const' => $fn]]], 'then' => $alors];
-    }
+    // v37.5 — PAS DE allOf / if / then / anyOf ICI. La v37.0 avait ajouté un
+    //   allOf de 19 if/then (requis par fonction). Gemini ne sait pas lire ces
+    //   mots-clés : il ne voyait plus les champs function/args de chaque appel
+    //   et envoyait un objet mal formé. n8n rejetait alors l'appel AVANT
+    //   l'outil (« Required at calls[0].function / calls[0].args ») et l'agent
+    //   entier échouait (exécution #1005). Les requis par fonction restent
+    //   imposés là où ils l'ont toujours été sans casse : la description de
+    //   chaque fonction (« args REQUIS : … ») et le moteur, qui refuse un
+    //   paramètre manquant avec un message que le modèle lit et corrige.
+    //   --check refuse désormais tout mot-clé que Gemini ne comprend pas.
 
     return [
         'type' => 'object',
@@ -93,7 +82,6 @@ function cfo_build_tool_schema(): array {
             'items' => [
                 'type' => 'object',
                 'required' => ['function', 'args'],
-                'allOf' => $contraintes,
                 'properties' => [
                     'function' => [
                         'type' => 'string',
@@ -120,7 +108,30 @@ function cfo_build_tool_schema(): array {
     ];
 }
 
+// v37.5 — Mots-clés JSON Schema que Gemini (function calling) ne sait pas lire.
+//   Leur présence fait disparaître les propriétés voisines côté modèle.
+function cfo_schema_mots_interdits(array $s, string $chemin = '#'): array {
+    static $INTERDITS = ['allOf', 'anyOf', 'oneOf', 'not', 'if', 'then', 'else', 'const', '$ref'];
+    $trouves = [];
+    foreach ($s as $k => $v) {
+        if (in_array($k, $INTERDITS, true)) $trouves[] = "$chemin/$k";
+        if (!is_array($v)) continue;
+        if ($k === 'properties') {              // ici les clés sont des NOMS de champs
+            foreach ($v as $nom => $sous) if (is_array($sous)) $trouves = array_merge($trouves, cfo_schema_mots_interdits($sous, "$chemin/properties/$nom"));
+        } else {
+            $trouves = array_merge($trouves, cfo_schema_mots_interdits($v, "$chemin/$k"));
+        }
+    }
+    return $trouves;
+}
+
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI uniquement.\n"); }
+
+$interdits = cfo_schema_mots_interdits(cfo_build_tool_schema());
+if ($interdits) {
+    fwrite(STDERR, "❌ Schéma incompatible Gemini (mots-clés non supportés) : " . implode(', ', $interdits) . "\n");
+    exit(3);
+}
 
 $schema = json_encode(cfo_build_tool_schema(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
 $mode = $argv[1] ?? '';

@@ -22,7 +22,16 @@ Sur le serveur n8n, ajoutez :
 ```bash
 FINANCE_USER=mohamed
 FINANCE_PASS=VotreMotDePasseEnClair
+N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 ```
+
+> **La 3e ligne est indispensable en n8n 2.x.** Depuis la v2, n8n interdit
+> `$env` dans les nœuds Code par défaut. Sans elle, `$env.FINANCE_USER` lève
+> une erreur, le `try/catch` l'avale, aucun en-tête ne part → **401**, alors
+> même que les deux variables sont bien définies dans le conteneur (cas vécu
+> le 23/09, v37.5). Vérification sans afficher le secret :
+> `docker exec n8n sh -c 'echo "${FINANCE_USER:+OK} ${FINANCE_PASS:+OK} $N8N_BLOCK_ENV_ACCESS_IN_NODE"'`
+> doit afficher `OK OK false`.
 
 * **Docker Compose** : dans `environment:` du service n8n.
 * **systemd** : dans le fichier `EnvironmentFile`, ou `Environment=` de l'unité.
