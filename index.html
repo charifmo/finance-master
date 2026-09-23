@@ -6559,8 +6559,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.2 Caddy-Et-Oubli";
+                    const CURRENT_VERSION = "37.4 Reponse-Jamais-Muette";
                     const CHANGELOG = [
+        { version: "37.4 Reponse-Jamais-Muette", date: "2026-09-23", changes: [
+            "BUG SIGNALÉ — le CFO répondait « {\"session_id\":\"c44fdff8-…\"} » dans la bulle de conversation, au lieu d'une réponse. Mécanique exacte : le nœud « Respond Webhook » construit { html: $('AI Agent')…json.output, session_id: … }, et le nœud « AI Agent » porte continueOnFail. Quand l'agent échoue, n8n émet un item SANS clé output ; JSON.stringify supprime les valeurs undefined, il ne reste donc que { session_id }. Côté application, le dernier repli de lecture était « || raw » : le JSON entier atterrissait dans la bulle.",
+            "CE QUI RENDAIT LA PANNE INDIAGNOSTICABLE — l'échec réel de l'agent (401, outil en erreur, itérations épuisées) n'apparaissait NULLE PART. L'utilisateur voyait un identifiant de session et devait deviner. Une erreur silencieuse coûte plus cher que l'erreur elle-même.",
+            "CORRECTIF APPLICATION — un lecteur unique (_lireReponseCFO) remplace les trois copies divergentes de « j.html || j.output || … || raw » (chat CFO et deux points de la bulle Merlin). Faute de contenu, il ne recopie JAMAIS le JSON : il affiche la cause quand le workflow l'a jointe, sinon explique que le nœud AI Agent a échoué et où regarder. Le contenu remonté est échappé — une cause hostile ne peut pas s'injecter dans la bulle.",
+            "CORRECTIF WORKFLOW — le responder émet désormais html TOUJOURS présent (chaîne vide plutôt qu'undefined, que JSON.stringify supprimerait) et joint erreur avec le message de l'agent. Vérifié en simulant les trois états (échec, succès, sortie vide) sur l'expression réelle extraite du fichier.",
+            "L'APPLICATION SEULE SUFFIT — testée contre l'ancien format de réponse : même sans réimport du workflow n8n, la bulle affiche une explication au lieu du JSON brut. Le réimport ajoute la cause précise, il n'est pas nécessaire pour que le symptôme disparaisse."
+        ] },
         { version: "37.2 Caddy-Et-Oubli", date: "2026-09-22", changes: [
             "JETON APPLICATIF RETIRÉ — il aurait dû être écrit en clair dans index.html pour que l'interface s'en serve, donc lisible par quiconque affiche la source. Une sécurité en trompe-l'œil vaut moins que pas de sécurité, parce qu'elle rassure à tort. La protection passe à Caddy (basic_auth sur /finance/), documentée dans CADDY_SECURITE.md : elle couvre TOUTE l'application, y compris save_data.php qui acceptait jusqu'ici d'écraser l'intégralité de l'état financier sans le moindre contrôle.",
             "SUPPRESSION D'UNE RÈGLE MÉMORISÉE — icône 🗑️ sur chaque carte, confirmation qui RAPPELLE le texte visé (demander « voulez-vous supprimer ? » sans dire quoi invite à cliquer oui par réflexe), retrait immédiat de la liste puis rechargement. POST {action:'delete_vector', id:N} vers get_ai_memory.php.",
@@ -8143,9 +8150,8 @@
                             const raw = await res.text();
                             let html = '';
                             try {
-                                const j = JSON.parse(raw);
-                                html = j.html || j.output || j.response || j.message || raw;
-                            } catch (_) { html = raw; }
+                                html = _lireReponseCFO(raw).html;   // v37.4 : jamais de JSON brut en bulle
+                            } catch (_) { html = _lireReponseCFO(raw).html; }
                             const t2 = new Date();
                             const time2 = t2.getHours().toString().padStart(2, '0') + ':' + t2.getMinutes().toString().padStart(2, '0');
                             cfoMessages.value.push({ role: 'agent', content: html, time: time2 });
@@ -8174,6 +8180,55 @@
                     const SERVER_PATH = '/finance/save_data.php';
                     const DATA_PATH = '/finance/finance_data.json';
                     const AI_MEMORY_PATH = '/finance/get_ai_memory.php';
+
+                    // ═══ v37.4 — LECTURE D'UNE RÉPONSE DU CFO ═══════════════════════
+                    //   Renvoie toujours du HTML affichable. Quand le workflow n'a
+                    //   produit aucun contenu, on explique au lieu de recopier le JSON
+                    //   brut dans la bulle — un identifiant de session affiché comme
+                    //   réponse ne renseigne personne et masque l'échec réel.
+                    const _echapper = (t) => String(t == null ? '' : t)
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                    const _lireReponseCFO = (raw) => {
+                        const brut = String(raw == null ? '' : raw).trim();
+                        let j = null;
+                        try { j = JSON.parse(brut); } catch (_) { j = null; }
+
+                        // Réponse non-JSON : c'est presque toujours une page d'erreur du
+                        // serveur web (401 de Caddy, 502, HTML d'erreur). On la montre
+                        // telle quelle si elle ressemble à du texte, jamais muette.
+                        if (j === null || typeof j !== 'object') {
+                            if (!brut) return { html: _blocErreur('Réponse vide', "Le workflow n'a rien renvoyé."), vide: true };
+                            return { html: brut, vide: false };
+                        }
+
+                        const contenu = j.html || j.output || j.response || j.message || j.text || '';
+                        if (contenu && String(contenu).trim()) return { html: String(contenu), vide: false };
+
+                        // Aucun contenu : on remonte la cause si le workflow l'a jointe.
+                        const cause = (j.error && (j.error.message || j.error))
+                                   || j.erreur || j.detail || null;
+                        const cles = Object.keys(j).join(', ') || '(aucune)';
+                        return {
+                            html: _blocErreur(
+                                "Le CFO n'a pas produit de réponse",
+                                cause
+                                    ? ('Cause remontée par le workflow : ' + _echapper(cause))
+                                    : ("Le nœud « AI Agent » de n8n a échoué : il porte continueOnFail, "
+                                      + "donc l'exécution continue sans le champ <code>output</code> et la "
+                                      + "réponse arrive vide. Ouvrez l'exécution dans n8n pour voir l'erreur réelle."),
+                                'Champs reçus : ' + _echapper(cles)
+                            ),
+                            vide: true,
+                        };
+                    };
+
+                    const _blocErreur = (titre, cause, detail) =>
+                        '<div style="border-left:3px solid #f43f5e;background:#fff1f2;padding:10px 14px;border-radius:8px">'
+                        + '<b style="color:#be123c">⚠️ ' + _echapper(titre) + '</b><br>'
+                        + '<span style="font-size:12px;line-height:1.5">' + cause + '</span>'
+                        + (detail ? '<br><span style="font-size:11px;opacity:.65">' + detail + '</span>' : '')
+                        + '</div>';
 
                     // ═══ v37.0 — SUPERVISION IA ═══════════════════════════════════
                     //   Lecture seule des deux tables Postgres de l'agent. Le
@@ -10177,7 +10232,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                             const raw = await res.text();
                             let html = '';
-                            try { const j = JSON.parse(raw); html = j.html || j.output || j.response || j.message || raw; } catch (_) { html = raw; }
+                            html = _lireReponseCFO(raw).html;   // v37.4
                             merlinBubble.value.html = html;
                         } catch (e) {
                             merlinBubble.value.error = 'Erreur de connexion au CFO : ' + (e.message || e);
@@ -10206,7 +10261,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                             const raw = await res.text();
                             let html = '';
-                            try { const j = JSON.parse(raw); html = j.html || j.output || j.response || j.message || raw; } catch (_) { html = raw; }
+                            html = _lireReponseCFO(raw).html;   // v37.4
                             merlinBubble.value.html = merlinBubble.value.html + html;
                         } catch (e) {
                             merlinBubble.value.error = 'Erreur : ' + (e.message || e);
