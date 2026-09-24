@@ -460,7 +460,7 @@ function cfo_arg_spec(): array {
         'target_amount'     => ['type'=>'number','required'=>true,'min'=>1,'aliases'=>['target','cible','montant_cible','objectif_montant','goal_amount','montant_objectif'],'desc'=>"Montant à atteindre (DH). Strictement positif."],
         'initial_funding'   => ['type'=>'number','aliases'=>['current','initial','depart','montant_actuel','montant_initial','deja_epargne','starting_amount'],'desc'=>"Somme déjà épargnée au départ (DH). Défaut 0."],
         'versement_mensuel' => ['type'=>'number','min'=>0,'aliases'=>['monthly_contribution','monthly','versement','versement_mois','mensualite','contribution_mensuelle','epargne_mensuelle'],'desc'=>"Versement mensuel prévu (DH). Sans lui, l'application affiche « Aucun versement mensuel défini »."],
-        'date_cible'        => ['type'=>'string','aliases'=>['target_date','deadline','echeance','date_objectif'],'desc'=>"Échéance visée, format AAAA-MM."],
+        'date_cible'        => ['type'=>'month','aliases'=>['target_date','deadline','echeance','date_objectif','date','mois_cible'],'desc'=>"Échéance visée. « AAAA-MM » de préférence ; AAAA-MM-JJ, MM/AAAA et « décembre 2027 » sont convertis."],
     ]],
 
     'update_smart_goal' => ['desc'=>"Modifie un objectif EXISTANT (cible, versement mensuel, libellé). N'ajoute pas de fonds : voir add_funds_to_goal.",
@@ -469,7 +469,7 @@ function cfo_arg_spec(): array {
         'target_amount'     => ['type'=>'number','min'=>1,'aliases'=>['target','cible','montant_cible','nouveau_cible'],'desc'=>"Nouveau montant cible (REMPLACE). Strictement positif."],
         'versement_mensuel' => ['type'=>'number','aliases'=>['monthly_contribution','monthly','versement','versement_mois','mensualite','contribution_mensuelle','epargne_mensuelle'],'desc'=>"Nouveau versement mensuel (REMPLACE, jamais cumulé)."],
         'new_name'          => ['type'=>'string','aliases'=>['nouveau_nom','rename','nouveau_libelle'],'desc'=>"Renomme l'objectif."],
-        'date_cible'        => ['type'=>'string','aliases'=>['target_date','deadline','echeance'],'desc'=>"Échéance AAAA-MM."],
+        'date_cible'        => ['type'=>'month','aliases'=>['target_date','deadline','echeance','date_objectif','date','mois_cible'],'desc'=>"Échéance visée. « AAAA-MM » de préférence ; AAAA-MM-JJ, MM/AAAA et « décembre 2027 » sont convertis."],
     ]],
 
     'add_funds_to_goal' => ['desc'=>"Ajoute (ou retire, si négatif) des fonds à un objectif EXISTANT. INCRÉMENTAL.",
@@ -607,6 +607,47 @@ function cfo_coerce_number($v) {
     return $s + 0;
 }
 
+/**
+ * v37.5 — MOIS CIBLE TOLÉRANT → « AAAA-MM ».
+ *   L'application stocke date_cible au format AAAA-MM (input type="month",
+ *   index.html:2268). La v36.0 se contentait de REJETER tout ce qui n'était
+ *   pas déjà à ce format — y compris « 2027-12-31 », la forme la plus
+ *   naturelle pour un modèle. Le champ était alors silencieusement ignoré,
+ *   l'opération échouait faute de champ modifiable, et le message d'erreur
+ *   réclamait... date_cible. Le modèle reessayait, en boucle, jusqu'à épuiser
+ *   ses itérations : l'agent mourait sans produire la moindre réponse.
+ *   On CONVERTIT désormais, au lieu d'exiger une forme précise.
+ */
+function cfo_coerce_mois($v): ?string {
+    if ($v === null) return null;
+    if (is_array($v) || is_object($v)) return null;
+    $s = trim((string)$v);
+    if ($s === '') return null;
+
+    $borne = function ($a, $m) {
+        $a = (int)$a; $m = (int)$m;
+        if ($a < 1900 || $a > 2200 || $m < 1 || $m > 12) return null;
+        return sprintf('%04d-%02d', $a, $m);
+    };
+    // AAAA-MM / AAAA-MM-JJ / AAAA-MM-JJTHH:MM (ISO, avec ou sans jour)
+    if (preg_match('/^(\d{4})[-\/](\d{1,2})(?:[-\/]\d{1,2})?(?:[T ].*)?$/', $s, $m)) return $borne($m[1], $m[2]);
+    // JJ/MM/AAAA ou MM/AAAA
+    if (preg_match('/^(?:\d{1,2}[-\/])?(\d{1,2})[-\/](\d{4})$/', $s, $m)) return $borne($m[2], $m[1]);
+    // « décembre 2027 », « dec 2027 », « December 2027 »
+    $mois = ['janv'=>1,'jan'=>1,'fevr'=>2,'fev'=>2,'feb'=>2,'mars'=>3,'mar'=>3,'avri'=>4,'avr'=>4,'apr'=>4,
+             'mai'=>5,'may'=>5,'juin'=>6,'jun'=>6,'juil'=>7,'jul'=>7,'aout'=>8,'aug'=>8,
+             'sept'=>9,'sep'=>9,'octo'=>10,'oct'=>10,'nove'=>11,'nov'=>11,'dece'=>12,'dec'=>12];
+    $n = cfo_norm_str($s);
+    if (preg_match('/(\d{4})/', $n, $ma)) {
+        foreach ($mois as $cle => $num) {
+            if (strpos($n, $cle) !== false) return $borne($ma[1], $num);
+        }
+        // Une année seule : « fin 2027 » se comprend comme décembre.
+        if (preg_match('/^(?:fin\s+|d[eu]\s+)?\d{4}$/', $n)) return $borne($ma[1], 12);
+    }
+    return null;
+}
+
 /** Liste d'entiers tolérante : 2027, "2027", [2027], ["2026","2027"], "2026,2027". */
 function cfo_coerce_int_list($v): ?array {
     if ($v === null || $v === '') return null;
@@ -684,6 +725,20 @@ function cfo_normalize_args(string $fn, $a): array {
                 if ($l === null) break;
                 if (!is_array($val) || $l !== array_map('intval', (array)$val)) $rapport['convertis'][] = $canon.' : '.json_encode($val).' → '.json_encode($l);
                 oset($out, $canon, $l); break;
+            }
+            case 'month': {
+                // v37.5 : on convertit ; et si c'est vraiment illisible, on le DIT.
+                //   Un champ fourni puis ignoré en silence est ce qui a fait
+                //   boucler le modèle jusqu'à la mort de l'agent.
+                $m = cfo_coerce_mois($val);
+                if ($m === null) {
+                    $rapport['hors_bornes'][] = $canon . ' = ' . json_encode($val)
+                        . " (format de date non reconnu — attendu « AAAA-MM », ex. 2027-12 ;"
+                        . " « 2027-12-31 », « 12/2027 » et « décembre 2027 » sont aussi acceptés)";
+                    break;
+                }
+                if ((string)$val !== $m) $rapport['convertis'][] = $canon . ' : ' . json_encode($val) . ' → ' . $m;
+                oset($out, $canon, $m); break;
             }
             case 'raw': oset($out, $canon, $val); break;
             default: {

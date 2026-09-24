@@ -24,4 +24,6 @@ echo "▸ Tri du bruit (Supervision IA)"
 php test_supervision.php | tail -2
 echo "▸ Lecture des réponses du CFO"
 node test_reponse_cfo.mjs | tail -2
+echo "▸ Conversion des dates cibles"
+php test_dates.php | tail -2
 echo "✅ Toutes les suites passent."
