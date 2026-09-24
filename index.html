@@ -72,6 +72,18 @@
         <!-- v17.45 : Toast auto-backup -->
         <transition name="fade"><div v-if="autoBackupToast" class="fixed bottom-6 right-6 z-[9999] bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-black flex items-center gap-2 border border-emerald-500/40">💾 Auto-backup VPS réussi</div></transition>
 
+        <!-- v37.7 : le serveur a bougé sous nos pieds et l'écran ne peut pas suivre tout seul -->
+        <transition name="fade">
+            <div v-if="serveurDivergent" class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-[92vw] max-w-2xl bg-amber-50 border-2 border-amber-400 text-amber-900 px-5 py-3 rounded-2xl shadow-2xl">
+                <p class="text-sm font-black">⚠️ Le serveur a été modifié depuis votre chargement</p>
+                <p class="text-[11px] font-bold leading-snug mt-1 opacity-90">L'agent CFO (ou un autre appareil) a écrit sur le VPS, et vous avez ici des modifications non sauvegardées. Recharger les perdra ; les garder écrasera l'écriture du serveur au prochain « Sauver sur VPS ».</p>
+                <div class="flex flex-wrap gap-2 mt-3">
+                    <button @click="forcerRechargementServeur()" :disabled="rafraichissementEnCours" :class="['px-3 py-1.5 rounded-lg text-white font-black text-[11px] uppercase tracking-widest transition-colors', rafraichissementEnCours ? 'bg-amber-400 cursor-wait' : 'bg-amber-600 hover:bg-amber-700']">{{ rafraichissementEnCours ? '⏳ Rechargement…' : '🔄 Recharger depuis le VPS' }}</button>
+                    <button @click="serveurDivergent = false" class="px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 text-amber-800 font-black text-[11px] uppercase tracking-widest transition-colors">Garder ma version</button>
+                </div>
+            </div>
+        </transition>
+
         <!-- v34.08 : les 3 actions IA quittent le flottant desktop pour le pied de sidebar
              (voir plus bas, dans le menu). Sur mobile — pas de sidebar — elles restent
              ici, flottantes, débarrassées des classes md:* qui les posaient sur le menu. -->
@@ -6559,8 +6571,18 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.6 Dates-Tolerantes";
+                    const CURRENT_VERSION = "37.7 Retour-Ecriture";
                     const CHANGELOG = [
+        { version: "37.7 Retour-Ecriture", date: "2026-09-24", changes: [
+            "LE MOTEUR ÉCRIVAIT BIEN — reproduction locale des trois « date cible = 2027-12 » sur vos objectifs (Fonds d'urgence, Lissage Dépenses Annuelles, Épargne Long Terme) : les trois passent, date_cible vaut 2027-12 dans l'état muté, et operations_appliquees les liste une à une. Le « ✓ appliqué » du CFO disait vrai.",
+            "C'EST L'ÉCRAN QUI NE SUIVAIT PAS — l'agent n'écrit pas dans l'onglet ouvert : il écrit sur le VPS (pending_commit.php compile, le nœud Committer relit le pending et le POSTe à save_data.php). Or executerImportFusion() n'était appelé qu'au montage de la page et à l'import d'un fichier. JAMAIS après un tour de conversation. L'onglet affichait donc, indéfiniment, l'état chargé au démarrage. Voilà le symptôme qui revient depuis la v35.5 : « le CFO dit que c'est appliqué, mais rien ne bouge dans l'UI ». Les champs DATE CIBLE vides de votre capture ne sont pas vides sur le serveur.",
+            "AGGRAVANT — le garde-fou anti-écrasement de la v35.5 voyait la divergence et se taisait. Il annulait l'auto-backup et écrivait une ligne dans un journal que personne n'ouvre : l'onglet devenait incapable de sauvegarder, sans le moindre signe à l'écran.",
+            "CORRECTIF — après CHAQUE échange avec le CFO (chat et Merlin, même webhook donc même Committer), l'application relit le serveur et compare la signature. Si l'état a changé et que l'onglet n'a rien à perdre, il se recharge et le dit dans le fil : « 🔄 Écran resynchronisé ». La confirmation vient désormais de l'état réellement relu, plus du récit du modèle.",
+            "ON N'ÉCRASE RIEN SANS DEMANDER — si vous avez des modifications non sauvegardées, aucun rechargement automatique : un bandeau nomme l'arbitrage (recharger perd vos saisies ; les garder écrasera l'écriture du serveur au prochain « Sauver sur VPS ») et vous laisse trancher. Le même bandeau s'affiche quand l'auto-backup refuse de partir.",
+            "TROUVÉ EN CHEMIN — run_tests.sh mentait. Chaque suite était tuyautée dans « tail -2 » : sous set -e, c'est le code de sortie de tail qui compte, pas celui de la suite. Une suite en échec affichait sa ligne « ❌ » puis le lanceur concluait « Toutes les suites passent » et rendait 0. Vérifié en sabotant le verrou anti-écrasement : 4 contrôles tombaient, le lanceur rendait quand même 0. Corrigé — et re-vérifié : il rend 1 et n'imprime plus le résumé vert.",
+            "UNE SUITE DE PLUS (9 au total) — la table de décision du rafraîchissement est verrouillée par 23 contrôles : serveur inchangé, écriture de l'agent, saisie locale en cours, réseau coupé, corps vide, JSON corrompu, absence de référence, et les deux issues du bandeau. Le sabotage du verrou en fait tomber 4 : la suite n'est pas décorative.",
+            "RESTE À VOUS — la valeur cible de 10 000 DH sur « Épargne Long Terme » et « Fonds d'urgence » vient du repli inventé par l'ancien moteur ; je ne la corrige pas d'office, c'est une décision financière. Le repli est en revanche devenu inatteignable depuis la v36.0 : target_amount est un paramètre requis, strictement positif."
+        ] },
         { version: "37.6 Dates-Tolerantes", date: "2026-09-24", changes: [
             "CE N'ÉTAIT PAS LA CAUSE DE LA PANNE — j'avais conclu que le rejet silencieux de date_cible faisait boucler le modèle jusqu'à épuiser ses itérations. Les logs n8n réels (exécution #1005) montrent autre chose : l'appel était rejeté par la validation de schéma AVANT d'atteindre l'outil, à cause du allOf de la v37.0 — voir v37.5. Mon diagnostic était une hypothèse plausible, pas un fait vérifié.",
             "LE BUG EST RÉEL MALGRÉ TOUT, et il aurait frappé au tour suivant. La v36.0 n'acceptait pour date_cible que le format AAAA-MM et rejetait tout le reste EN SILENCE, à commencer par « 2027-12-31 ». Le champ disparaissait, l'opération échouait faute de champ modifiable, et le message d'erreur réclamait… date_cible. Reproduit avant correction : 6 formats testés, 5 refusés sans un mot.",
@@ -8174,6 +8196,22 @@
                         } finally {
                             cfoLoading.value = false;
                             scrollCFOToBottom();
+                            // v37.7 : l'agent a pu écrire sur le VPS pendant ce tour.
+                            //   On relit, et on ne l'affirme que si c'est vrai.
+                            const maj = await rafraichirDepuisServeur();
+                            if (maj.applique) {
+                                cfoMessages.value.push({ role: 'agent', time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}),
+                                    content: '<div style="border-left:3px solid #059669;background:#ecfdf5;padding:8px 12px;border-radius:8px;font-size:12px">'
+                                           + '<b style="color:#047857">🔄 Écran resynchronisé</b><br>'
+                                           + 'Le serveur a été modifié pendant cet échange : les données affichées viennent d\'être rechargées depuis le VPS.</div>' });
+                                scrollCFOToBottom();
+                            } else if (maj.change) {
+                                cfoMessages.value.push({ role: 'agent', time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}),
+                                    content: '<div style="border-left:3px solid #f59e0b;background:#fffbeb;padding:8px 12px;border-radius:8px;font-size:12px">'
+                                           + '<b style="color:#b45309">⚠️ Le serveur a changé, l\'écran non</b><br>'
+                                           + 'Vous avez des modifications non sauvegardées : rien n\'a été rechargé pour ne pas les perdre. Le bandeau en haut de l\'écran vous laisse choisir.</div>' });
+                                scrollCFOToBottom();
+                            }
                         }
                     };
 
@@ -8396,6 +8434,84 @@
                         const res = await fetch(DATA_PATH + '?t=' + Date.now(), { cache: 'no-store' });
                         if (!res.ok) throw new Error('HTTP ' + res.status);
                         return _sig(await res.text());
+                    };
+
+                    // ═══ v37.7 — RETOUR D'ÉCRITURE ════════════════════════════════
+                    //   L'agent CFO écrit sur le VPS, pas dans cet onglet. Sans
+                    //   relecture, l'écran reste sur l'état chargé au démarrage et
+                    //   l'utilisateur conclut, à raison de ce qu'il voit, que rien
+                    //   n'a été appliqué. On relit donc le serveur après chaque tour
+                    //   de conversation — mais on n'écrase JAMAIS des modifications
+                    //   locales non sauvegardées sans le demander.
+                    const serveurDivergent = ref(false);
+                    const rafraichissementEnCours = ref(false);
+
+                    const _appliquerEtatServeur = (texte) => {
+                        try {
+                            const d = JSON.parse(texte);
+                            rafraichissementEnCours.value = true;
+                            executerImportFusion(d);
+                            _serverSignature = _sig(texte);
+                            serveurDivergent.value = false;
+                            // executerImportFusion réveille les watchers profonds
+                            // (wealthGoals, masterAssets, donneesAnnuelles) : sans ce
+                            // rétablissement différé, l'état repasserait « Modifié »
+                            //  alors qu'on vient au contraire de se caler sur le
+                            // serveur. 250 ms > les 200 ms du reset _importInProgress.
+                            setTimeout(() => {
+                                serverSyncStatus.value = 'synced';
+                                serverLastSync.value = new Date().toLocaleTimeString();
+                                rafraichissementEnCours.value = false;
+                            }, 250);
+                            addLog('🔄 État rechargé depuis le VPS — l\'écran reflète maintenant ce que contient le serveur.', 'success');
+                            return { change: true, applique: true };
+                        } catch (e) {
+                            rafraichissementEnCours.value = false;
+                            addLog('❌ Rechargement impossible : ' + (e.message || e), 'error');
+                            return { change: true, applique: false, raison: e.message || String(e) };
+                        }
+                    };
+
+                    //   Renvoie { change, applique } : « change » dit que le serveur
+                    //   a bougé, « applique » dit que l'écran a suivi. Les deux sont
+                    //   distincts — c'est précisément l'écart que l'utilisateur
+                    //   voyait sans pouvoir le nommer.
+                    const rafraichirDepuisServeur = async () => {
+                        if (_serverSignature === null) return { change: false, applique: false, raison: 'aucune référence serveur' };
+                        let texte = null;
+                        try {
+                            const res = await fetch(DATA_PATH + '?t=' + Date.now(), { cache: 'no-store' });
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                            texte = await res.text();
+                        } catch (e) {
+                            return { change: false, applique: false, raison: 'lecture impossible : ' + (e.message || e) };
+                        }
+                        if (!texte || !texte.trim()) return { change: false, applique: false, raison: 'réponse vide' };
+                        if (_sig(texte) === _serverSignature) return { change: false, applique: false };
+
+                        // Le serveur a bougé. Un seul cas autorise l'écrasement
+                        // silencieux : celui où l'onglet n'a rien à perdre.
+                        if (serverSyncStatus.value === 'modified') {
+                            serveurDivergent.value = true;
+                            addLog('⚠️ Le serveur a changé (agent CFO ou autre appareil) ALORS que vous avez des modifications non sauvegardées. Rien n\'a été rechargé : choisissez dans le bandeau.', 'warn');
+                            return { change: true, applique: false, raison: 'modifications locales non sauvegardées' };
+                        }
+                        return _appliquerEtatServeur(texte);
+                    };
+
+                    //   Choix explicite de l'utilisateur depuis le bandeau : le
+                    //   serveur gagne, les saisies locales non sauvegardées sont
+                    //   perdues. On le dit avant de le faire.
+                    const forcerRechargementServeur = async () => {
+                        if (serverSyncStatus.value === 'modified'
+                            && !confirm('Recharger l\'état du serveur ?\n\nVos modifications locales non sauvegardées seront perdues.')) return;
+                        try {
+                            const res = await fetch(DATA_PATH + '?t=' + Date.now(), { cache: 'no-store' });
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                            const texte = await res.text();
+                            if (!texte || !texte.trim()) { addLog('❌ Rechargement annulé : le serveur a renvoyé un contenu vide.', 'error'); return; }
+                            _appliquerEtatServeur(texte);
+                        } catch (e) { addLog('❌ Rechargement impossible : ' + (e.message || e), 'error'); }
                     };
                     
                     // DRIVE
@@ -10252,6 +10368,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             merlinBubble.value.error = 'Erreur de connexion au CFO : ' + (e.message || e);
                         } finally {
                             merlinBubble.value.loading = false;
+                            await rafraichirDepuisServeur(); // v37.7 : même webhook, même Committer
                         }
                     };
 
@@ -10281,6 +10398,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             merlinBubble.value.error = 'Erreur : ' + (e.message || e);
                         } finally {
                             merlinBubble.value.loading = false;
+                            await rafraichirDepuisServeur(); // v37.7 : même webhook, même Committer
                         }
                     };
 
@@ -15419,6 +15537,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                         try { sigDistante = await _lireSignatureServeur(); } catch (_) { sigDistante = null; }
                                         if (sigDistante !== null && sigDistante !== _serverSignature) {
                                             serverSyncStatus.value = 'error';
+                                            serveurDivergent.value = true; // v37.7 : le journal ne suffisait pas
                                             addLog('⛔ Auto-backup ANNULÉ : le serveur a été modifié depuis votre chargement (agent CFO, autre onglet ou autre appareil). Sauvegarder maintenant écraserait cette modification. Rechargez la page pour la récupérer, ou cliquez « Sauver sur VPS » pour imposer votre version.', 'error');
                                             return;
                                         }
@@ -15566,6 +15685,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         detailsComptesFinal, soldesProjetesJournal, getCompteLabel, getCompteIcone, getNomCompte,
                         getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
                         canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
+                        // v37.7 — retour d'écriture
+                        serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup
                     };
                 }
