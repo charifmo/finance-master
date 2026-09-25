@@ -209,6 +209,39 @@ console.log('\n  PROJECTION PATRIMONIALE — IDENTITÉ DE CAISSE\n  ' + '─'.re
     v('  → tout est à zéro, rien n\'est inventé', vide.every(x => x.liquidite === 0 && x.dette === 0 && x.net === 0));
 }
 
+/* ══ 13. ANCRAGE SUR LE RELEVÉ (fusion v37.8) ════════════════════════════
+      Pour une année dotée d'un budget détaillé, les liquidités de fin
+      d'année ne se recalculent pas : elles SONT l'atterrissage du Relevé.
+      Le piège est que l'ancrage ne doit PAS effacer ce que le budget
+      ignore — les événements du bac à sable, notamment. ─────────────────── */
+{
+    const ATTERRISSAGE = { 2026: 241020, 2027: 300000 };
+    const r = projeterPatrimoine(socle({
+        horizon: 3, liquiditeInitiale: 180000, surplusAnnuel: 999999,   // volontairement absurde
+        ancrageLiquidite: (a) => (a in ATTERRISSAGE ? ATTERRISSAGE[a] : null),
+    }));
+    eq('année budgétée : la liquidité EST l\'atterrissage', r[0].liquidite, 241020);
+    v('  → et la ligne se sait ancrée', r[0].ancree === true);
+    eq('  → l\'année suivante aussi, sans ré-empiler le surplus', r[1].liquidite, 300000);
+    eq('  → au-delà du budget, on extrapole avec le surplus', r[2].liquidite, 300000 + 999999);
+    v('  → la ligne extrapolée ne se dit pas ancrée', r[2].ancree === false);
+}
+{
+    // Un capex de 50 000 DH en année ancrée : le Relevé ne le connaît pas,
+    // l'ancrage de l'année suivante ne doit pas le faire disparaître.
+    const ATTERRISSAGE = { 2026: 200000, 2027: 260000 };
+    const choc = { id: 'c1', annee: 2026, mois: 5, type: 'capex', nom: 'Travaux', montant: 50000, sensChoc: 'sortie' };
+    const r = projeterPatrimoine(socle({
+        horizon: 2, liquiditeInitiale: 180000, surplusAnnuel: 0, evenements: [choc],
+        ancrageLiquidite: (a) => (a in ATTERRISSAGE ? ATTERRISSAGE[a] : null),
+    }));
+    eq('choc hors budget en année ancrée : déduit de l\'ancre', r[0].liquidite, 200000 - 50000);
+    eq('  → l\'année ancrée suivante le CONSERVE', r[1].liquidite, 260000 - 50000);
+    const derive = r.filter((x, k) => k > 0 && Math.abs(
+        x.liquidite - (r[k - 1].liquidite + x.fluxSurplus + x.fluxActifs + x.chocsPositifs - x.chocsNegatifs)) > 1);
+    v('  → l\'identité de caisse tient malgré l\'ancrage', derive.length === 0, JSON.stringify(derive.map(x => x.annee)));
+}
+
 console.log('  ' + '─'.repeat(80));
 console.log(ko ? `  ❌ ${ko} contrôle(s) en échec` : '  ✅ TOUT PASSE — 0 contrôle(s) en échec');
 process.exit(ko ? 1 : 0);

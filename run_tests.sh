@@ -12,6 +12,13 @@
 set -e
 cd "$(dirname "$0")"
 
+# v37.8 — Les deux suites « navigateur » (un seul atterrissage, simulateur)
+#   ont besoin de dépendances locales NON versionnées. Sans elles, elles
+#   s'ignorent proprement au lieu d'échouer :
+#       npm install --no-save vue@3 playwright-core chart.js
+#   Chromium est fourni par l'environnement (/opt/pw-browsers/chromium) ;
+#   sinon, pointer CHROMIUM=/chemin/vers/chrome.
+
 suite() {
     desc=$1; shift
     echo "▸ $desc"
@@ -41,5 +48,8 @@ suite "Lecture des réponses du CFO"                             node test_cfo_e
 suite "Conversion des dates cibles"                             php test_cfo_engine_parity/test_dates.php
 suite "Retour d'écriture (écran ↔ serveur)"                     node test_cfo_engine_parity/test_rafraichissement.mjs
 suite "Projection patrimoniale (identité de caisse)"            node test_cfo_engine_parity/test_projection.mjs
+suite "Objectifs adossés & clés de compte (PHP)"                php test_cfo_engine_parity/test_objectif_lie.php
+suite "Un seul atterrissage (bandeau = Relevé = IA = projection)" node test_cfo_engine_parity/test_une_seule_verite.mjs
+suite "Simulateur dans le navigateur (UI + Chart.js)"           node test_cfo_engine_parity/test_sandbox_ui.mjs
 
 echo "✅ Toutes les suites passent."
