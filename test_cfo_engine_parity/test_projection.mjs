@@ -22,8 +22,14 @@ const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(RACINE, 'index.html'), 'utf8').split('\r\n').join('\n');
 
 const DEBUT = 'const projeterPatrimoine = (p) => {';
-const FIN   = '\n                    //   L\'adaptateur Vue';
-const i = html.indexOf(DEBUT), j = html.indexOf(FIN);
+// Marqueur de fin : le premier commentaire de section qui SUIT la fonction pure.
+//   (Il a changé une fois lors de l'ajout du verdict v37.9 ; on en prend
+//   plusieurs, le premier trouvé gagne, pour ne plus casser sur un déplacement.)
+const FIN = ['\n                    // ═══════════════════════════════════════════════════════════════\n                    // v37.9 — DU TABLEAU AU VERDICT',
+             '\n                    //   L\'adaptateur Vue',
+             '\n                    const sandboxProjection = computed(']
+    .map(m => html.indexOf(m)).filter(x => x > 0).sort((a, b) => a - b)[0];
+const i = html.indexOf(DEBUT), j = FIN === undefined ? -1 : FIN;
 if (i < 0 || j < 0) { console.log('  ❌ projeterPatrimoine introuvable dans index.html'); process.exit(1); }
 const { projeterPatrimoine } = new Function(html.slice(i, j) + '\n return { projeterPatrimoine };')();
 

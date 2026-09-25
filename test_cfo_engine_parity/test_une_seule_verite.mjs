@@ -73,8 +73,14 @@ console.log('\n  UN SEUL ATTERRISSAGE (bandeau = Relevé = IA = projection)\n  '
     v('objectifs IA : montant réel des comptes liés (wealthGoalsCalc)', matrice.includes('wealthGoalsCalc'));
     const payload = corps('const _buildPayloadCFO = () => {', 'const consulterCFO = async');
     v('JSON objectifs_epargne : wealthGoalsCalc', /objectifs_epargne = \(wealthGoalsCalc\.value/.test(payload));
-    const sandbox = corps('const sandboxProjection = computed(() => {', 'const applySandbox = () => {');
-    v('projection pluriannuelle : ancrée sur le Relevé', sandbox.includes('_buildJournalReleve('));
+    // v37.9 : l'ancrage a quitté le corps du computed pour _sandboxSocle(), afin
+    //   d'être mémoïsé et rejouable par la dichotomie du verdict d'achat. La
+    //   garantie est la même — on élargit la tranche au lieu de la contorsionner.
+    //   (Le contrôle de bout en bout « projection pluriannuelle = Relevé », plus
+    //   bas, reste la preuve fonctionnelle ; celui-ci n'est qu'un garde-fou.)
+    const sandbox = corps('const _sandboxSocle = () => {', 'const applySandbox = () => {');
+    v('projection pluriannuelle : ancrée sur le Relevé',
+      sandbox.includes('_buildJournalReleve(') && sandbox.includes('ancrageLiquidite'));
     const dcf = corps('const detailsComptesFinal = computed(() => {', '});');
     v("bandeau : aucun compte filtré sur le préfixe 'cpt_'", !dcf.includes("startsWith('cpt_')"));
     const nbNorm = (html.match(/\/\^\\d\+\$\/\.test\(/g) || []).length;

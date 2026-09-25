@@ -2484,6 +2484,180 @@
                             </div>
                         </div>
                         <div class="p-6 cfo-collapsible-body space-y-5">
+                            <!-- ═══ v37.9 : RÉPARATION D'UNE APPLICATION DE SCÉNARIO ═══
+                                 L'ancien « Appliquer ce scénario » débitait le PRIX COMPLET
+                                 du bien sur le vrai compte courant. On le défait ici. -->
+                            <div v-if="reparationsScenario.length" class="rounded-2xl border-2 border-amber-400 bg-amber-50 p-5 space-y-3">
+                                <div>
+                                    <p class="text-sm font-black text-amber-900">🩹 Une application de scénario a débité votre compte courant</p>
+                                    <p class="text-[11px] font-bold text-amber-800 leading-snug mt-1">
+                                        Jusqu'à la v37.8, « Appliquer ce scénario » retirait du compte courant le <b>prix complet</b> du bien,
+                                        et non l'apport. Un achat simulé à 600 000 DH débitait donc 600 000 DH de vos vraies données —
+                                        ce qui suffit à faire plonger l'atterrissage sans qu'aucune dépense réelle n'ait eu lieu.
+                                        Voici ce que cette opération a écrit ; le bouton la défait exactement à l'envers.
+                                    </p>
+                                </div>
+                                <div v-for="r in reparationsScenario" :key="r.id"
+                                     class="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-amber-200 px-4 py-3">
+                                    <span class="text-base shrink-0">🏠</span>
+                                    <div class="flex-1 min-w-[12rem]">
+                                        <p class="text-xs font-black text-gray-800">{{ r.nom }}</p>
+                                        <p class="text-[10px] font-bold text-gray-500">Appliqué le {{ r.quand }} — actif créé payé comptant, sans crédit</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-rose-500">Débité du courant</p>
+                                        <p class="text-sm font-black text-rose-700 tabular-nums">− {{ formatMAD(r.montant) }}</p>
+                                    </div>
+                                    <button @click="annulerApplicationScenario(r)"
+                                        class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] uppercase tracking-widest shadow shrink-0 transition-colors">
+                                        Annuler cette application
+                                    </button>
+                                </div>
+                                <p class="text-[10px] text-amber-700 font-bold italic">
+                                    L'actif est retiré du patrimoine et le montant recrédité sur le compte courant. Réversible par Undo.
+                                    Vous pourrez ensuite ressaisir l'achat correctement ci-dessous — avec apport, crédit et loyer.
+                                </p>
+                            </div>
+
+                            <!-- L'actif a pu être supprimé à la main : le débit, lui, est resté. -->
+                            <details class="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                                <summary class="px-4 py-2.5 cursor-pointer text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100 select-none">
+                                    🩹 Mon compte courant a été débité à tort et l'actif n'est plus là
+                                </summary>
+                                <div class="p-4 space-y-3">
+                                    <p class="text-[11px] font-bold text-slate-600 leading-snug">
+                                        Si vous avez supprimé l'actif créé par un ancien « Appliquer ce scénario », le débit du compte courant, lui, est resté.
+                                        Indiquez le montant à recréditer — c'est le prix du bien tel qu'il avait été simulé.
+                                        Rien d'autre n'est touché, et l'opération est annulable par Undo.
+                                    </p>
+                                    <div class="flex flex-wrap items-end gap-3">
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-slate-500 block mb-1">Montant à recréditer (DH)</label>
+                                            <input type="number" v-model.number="reparationMontantLibre" step="10000" min="0"
+                                                class="w-48 bg-white border-2 border-slate-200 rounded-lg px-2 py-1.5 text-xs font-black text-slate-800 outline-none focus:border-slate-500 text-right"/>
+                                        </div>
+                                        <button @click="recrediterCompteCourant"
+                                            class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-black text-[10px] uppercase tracking-widest shadow transition-colors">
+                                            Recréditer le compte courant
+                                        </button>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <!-- ═══ v37.9 : LE VERDICT, AVANT LE TABLEAU ═══════════════
+                                 « Comment cette simulation va me permettre d'acheter ? »
+                                 En répondant aux deux seules questions qui décident. -->
+                            <div v-if="sandboxPointBas" :class="['rounded-2xl border-2 p-5', sandboxPointBas.liquidite >= 0 ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300']">
+                                <div class="flex items-start justify-between gap-4 flex-wrap">
+                                    <div>
+                                        <p class="text-[10px] font-black uppercase tracking-widest opacity-60">Verdict du scénario</p>
+                                        <p :class="['text-xl font-black mt-1', sandboxPointBas.liquidite >= 0 ? 'text-emerald-800' : 'text-rose-800']">
+                                            <template v-if="sandboxPointBas.liquidite >= 0">✅ Ce scénario tient</template>
+                                            <template v-else>⛔ Ce scénario vous met à découvert</template>
+                                        </p>
+                                        <p class="text-xs font-bold text-gray-700 mt-1">
+                                            Point bas de trésorerie : <span :class="['font-black', sandboxPointBas.liquidite >= 0 ? 'text-emerald-700' : 'text-rose-700']">{{ formatMAD(sandboxPointBas.liquidite) }}</span>
+                                            en <span class="font-black">{{ sandboxPointBas.annee }}</span>.
+                                        </p>
+                                    </div>
+                                    <div v-if="sandboxPointBas.liquidite >= 0" class="text-right">
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600">Marge mobilisable</p>
+                                        <p class="text-2xl font-black text-emerald-800 tabular-nums">{{ formatMAD(sandboxPointBas.liquidite) }}</p>
+                                        <p class="text-[10px] font-bold text-emerald-600 max-w-[16rem] leading-snug">C'est le cash que vous pouvez sortir sans jamais passer sous zéro — apport + frais compris.</p>
+                                    </div>
+                                    <div v-else class="text-right">
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-rose-600">Il manque</p>
+                                        <p class="text-2xl font-black text-rose-800 tabular-nums">{{ formatMAD(Math.abs(sandboxPointBas.liquidite)) }}</p>
+                                        <p class="text-[10px] font-bold text-rose-600 max-w-[16rem] leading-snug">à trouver avant {{ sandboxPointBas.annee }}, ou à retrancher des sorties ci-dessous.</p>
+                                    </div>
+                                </div>
+
+                                <!-- Capacité d'achat : la question « jusqu'à quel prix ? » -->
+                                <div v-if="sandboxCapaciteAchat" class="mt-4 pt-4 border-t-2 border-dashed border-gray-300">
+                                    <p v-if="sandboxCapaciteAchat.verdict === 'budget'" class="text-xs font-bold text-rose-800">
+                                        ⚠️ Votre trésorerie descend à {{ formatMAD(sandboxCapaciteAchat.sansAchat) }} <b>même sans cet achat</b>.
+                                        Ce n'est pas le bien qui est hors de portée : c'est le budget qu'il faut redresser d'abord — voir la décomposition ci-dessous.
+                                    </p>
+                                    <p v-else-if="sandboxCapaciteAchat.verdict === 'insensible'" class="text-xs font-bold text-gray-700">
+                                        ℹ️ Le point bas de votre trésorerie tombe <b>avant</b> cet achat, en {{ sandboxPointBas.annee }} : faire varier le prix ne le déplace pas.
+                                        La contrainte n'est pas le bien, c'est le creux de {{ formatMAD(sandboxPointBas.liquidite) }} qu'il faut d'abord traverser.
+                                        Déplacez l'achat plus tôt pour mesurer son effet, ou traitez le creux.
+                                    </p>
+                                    <div v-else class="flex items-baseline gap-3 flex-wrap">
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">Le scénario tient jusqu'à</p>
+                                        <p class="text-xl font-black text-indigo-800 tabular-nums">
+                                            {{ sandboxCapaciteAchat.verdict === 'plafond' ? '> ' : '' }}{{ formatMAD(sandboxCapaciteAchat.prixMax) }}
+                                        </p>
+                                        <p class="text-[10px] font-bold text-gray-500 leading-snug flex-1 min-w-[14rem]">
+                                            à rendement locatif et plan de financement constants (mêmes parts d'apport, de frais et de crédit, même rendement),
+                                            en restant toujours au-dessus de zéro. Le calcul tient compte de la mensualité supplémentaire, pas seulement de l'apport.
+                                            <span v-if="sandboxCapaciteAchat.anneeRupture">Au-delà, la trésorerie rompt en {{ sandboxCapaciteAchat.anneeRupture }}.</span>
+                                            <span v-if="sandboxCapaciteAchat.prixRetour" class="block mt-1 text-indigo-600">
+                                                À noter : au-delà de {{ formatMAD(sandboxCapaciteAchat.prixRetour) }} le scénario redevient tenable — un bien plus cher se loue plus cher et finit par porter sa charge.
+                                                La zone intenable est une bande, pas un plafond.
+                                            </span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Chaque achat planifié, en clair -->
+                                <div v-if="sandboxAchatsPlanifies.length" class="mt-4 pt-4 border-t-2 border-dashed border-gray-300 space-y-2">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">Rendement de l'opération</p>
+                                    <div v-for="a in sandboxAchatsPlanifies" :key="a.id" class="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[11px] font-bold text-gray-700 bg-white/70 rounded-lg px-3 py-2">
+                                        <span class="font-black text-gray-900">🏠 {{ a.nom }} <span class="text-gray-400 font-bold">({{ a.annee }})</span></span>
+                                        <span>Cash à sortir <span class="font-black text-rose-700 tabular-nums">{{ formatMAD(a.cashSorti) }}</span></span>
+                                        <span>Mensualité <span class="font-black text-amber-700 tabular-nums">{{ formatMAD(a.mensualite) }}</span></span>
+                                        <span>Loyer net <span class="font-black text-emerald-700 tabular-nums">{{ formatMAD(a.loyer) }}</span></span>
+                                        <span :class="['font-black', a.cashflow >= 0 ? 'text-emerald-700' : 'text-rose-700']">
+                                            Cash-flow {{ a.cashflow >= 0 ? '+' : '' }}{{ formatMAD(a.cashflow) }}/mois
+                                        </span>
+                                        <span v-if="a.effort !== null" :class="['px-1.5 py-0.5 rounded font-black', a.effort <= 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700']">
+                                            La mensualité absorbe {{ a.effort }} % du loyer
+                                        </span>
+                                        <span v-else class="text-gray-400 italic">Aucun loyer saisi — le bien ne s'autofinance pas</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ═══ v37.9 : POURQUOI CE CHIFFRE ? ══════════════════════ -->
+                            <details v-if="sandboxDecomposition && !sandboxDecomposition.sansBudget" class="rounded-2xl border-2 border-slate-300 bg-white overflow-hidden">
+                                <summary class="px-5 py-3 cursor-pointer text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 select-none">
+                                    🔍 D'où vient le chiffre de {{ sandboxDecomposition.annee }} ? — les postes qui sortent du cash, du plus lourd au plus léger
+                                </summary>
+                                <div class="p-5 space-y-3 border-t border-slate-200">
+                                    <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold text-gray-700">
+                                        <span>Sur {{ sandboxDecomposition.moisRestants }} mois restants de {{ sandboxDecomposition.annee }} :</span>
+                                        <span>Entrées <span class="font-black text-emerald-700 tabular-nums">{{ formatMAD(sandboxDecomposition.revenus) }}</span></span>
+                                        <span>Sorties <span class="font-black text-rose-700 tabular-nums">{{ formatMAD(sandboxDecomposition.sorties) }}</span></span>
+                                        <span>Solde <span :class="['font-black tabular-nums', sandboxDecomposition.solde >= 0 ? 'text-emerald-700' : 'text-rose-700']">{{ formatMAD(sandboxDecomposition.solde) }}</span></span>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <div v-for="l in sandboxDecomposition.lignes.slice(0, 12)" :key="l.cle"
+                                             class="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200">
+                                            <span class="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded shrink-0"
+                                                  :class="l.categorie === 'Mensualité de crédit' ? 'bg-amber-100 text-amber-700' : (l.categorie === 'Dépense ponctuelle' ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-600')">{{ l.categorie }}</span>
+                                            <span class="text-[11px] font-bold text-gray-800 flex-1 truncate">{{ l.nom }}</span>
+                                            <span v-if="l.mensuel" class="text-[10px] font-bold text-gray-400 tabular-nums shrink-0">{{ formatMAD(l.mensuel) }}/mois</span>
+                                            <span v-else-if="l.mois" class="text-[10px] font-bold text-gray-400 shrink-0">mois {{ l.mois }}</span>
+                                            <span class="text-[11px] font-black text-rose-700 tabular-nums shrink-0 w-28 text-right">{{ formatMAD(l.annuel) }}</span>
+                                            <button @click="allerAuPoste(l)" class="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-white border border-gray-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 shrink-0 transition-colors">Modifier →</button>
+                                        </div>
+                                        <p v-if="sandboxDecomposition.lignes.length > 12" class="text-[10px] text-gray-400 italic pt-1">
+                                            … et {{ sandboxDecomposition.lignes.length - 12 }} poste(s) plus léger(s).
+                                        </p>
+                                    </div>
+
+                                    <!-- La question qui revient : « c'est mon objectif d'épargne, non ? » -->
+                                    <div v-if="sandboxDecomposition.nbEpargne" class="text-[11px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 leading-snug">
+                                        ℹ️ Vos {{ sandboxDecomposition.nbEpargne }} versement(s) d'épargne ({{ formatMAD(sandboxDecomposition.epargneMensuelle) }}/mois) ne figurent pas dans cette liste, et c'est volontaire :
+                                        <b>ils ne changent pas l'atterrissage</b>. Un versement déplace l'argent d'une poche à l'autre, et le total compte toutes les poches —
+                                        y compris les comptes marqués « hors liquidité » et les poches virtuelles. Vérifié en retirant un versement : l'atterrissage ne bouge pas d'un dirham.
+                                        Pour les modifier malgré tout, c'est dans l'onglet Saisie, bloc violet « Épargne ».
+                                    </div>
+                                </div>
+                            </details>
+
                             <!-- Paramètres de simulation -->
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-gradient-to-r from-fuchsia-50/40 to-indigo-50/40 rounded-xl border border-fuchsia-100">
                                 <div>
@@ -2785,7 +2959,7 @@
 
                             <!-- Bouton Appliquer ce scénario -->
                             <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 pt-2 border-t-2 border-dashed border-fuchsia-200">
-                                <p class="text-[11px] text-gray-600 italic flex-1">⚠️ Appliquer ce scénario écrit définitivement les événements dans la vraie base (actifs, crédits, années futures). Action réversible uniquement via Undo.</p>
+                                <p class="text-[11px] text-gray-600 italic flex-1">⚠️ Appliquer ce scénario écrit les événements dans vos vraies données : actifs, crédits, années futures, et la trésorerie à hauteur des apports et des frais — jamais du prix du bien. Le détail vous est récapitulé avant validation, et un seul Undo défait l'ensemble.</p>
                                 <button @click="applySandbox" :disabled="!sandboxEvents.length"
                                     :class="['px-5 py-3 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-lg transition-colors', sandboxEvents.length ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-900/20' : 'bg-gray-300 cursor-not-allowed']">
                                     ✅ Appliquer ce scénario
@@ -6708,7 +6882,7 @@
     </div>
 
     <script>
-        const { createApp, ref, computed, watch, onMounted, onBeforeUnmount, toRaw } = Vue;
+        const { createApp, ref, computed, watch, onMounted, onBeforeUnmount, toRaw, nextTick } = Vue;
 
         const BaseChart = {
             template: '<canvas ref="canvasEl"></canvas>',
@@ -6731,8 +6905,21 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.8 Une-Seule-Verite-CashFlow";
+                    const CURRENT_VERSION = "37.9 Reparation-Et-Verdict";
                     const CHANGELOG = [
+        { version: "37.9 Reparation-Et-Verdict", date: "2026-09-25", changes: [
+            "LA CAUSE DU COMPTE COURANT À −600 000 DH. Jusqu'à la v37.8, « Appliquer ce scénario » exécutait littéralement : courantCompte.solde = solde − montant, où « montant » était le PRIX COMPLET du bien. Un achat simulé à 600 000 DH débitait donc 600 000 DH de vos VRAIES données, et créait un actif payé comptant (apport = prix, crédit = 0). Ce n'était pas une projection fausse : c'était une écriture dans le fichier. De là le patrimoine liquide à −554 300 DH et l'atterrissage négatif fin 2026, sans qu'aucune dépense réelle n'ait eu lieu.",
+            "RÉPARATION INTÉGRÉE — le simulateur retrouve ces applications et les défait, exactement à l'envers : l'actif est retiré, le montant est recrédité sur le compte courant. La signature est l'identifiant : « Appliquer ce scénario » est le seul à produire ma_<horodatage>_<suffixe> ; un actif saisi à la main s'appelle ma_<horodatage> sans suffixe. Vérifié : un actif saisi à la main posé à côté n'est pas confondu. La date d'application est affichée (elle est dans l'identifiant), et rien n'est fait sans confirmation. Si l'actif a déjà été supprimé mais que le débit est resté, un second bloc permet de recréditer le montant à la main.",
+            "UNDO NE FAISAIT RIEN — TROIS CAUSES, TOUTES MESURÉES. (1) Chaque modification était enregistrée DEUX fois : l'appel explicite à handleDataChange(), puis le watcher profond qui le rappelle. L'historique n'était qu'une suite de doublons, donc reculer d'un cran retombait sur l'état courant : Undo « marchait » sans rien changer. Mesuré : trois modifications successives faisaient passer le compteur de 1 à 3 à 5, et quatre Undo ne bougeaient rien. (2) Le verrou anti-réenregistrement était relâché sur la ligne suivant la restauration, alors que les watchers de Vue ne se déclenchent qu'au flush suivant : l'état restauré était aussitôt réenregistré, ce qui tuait Redo. (3) L'historique ne couvrait que 2 champs sur 8 — ni les objectifs, ni les actifs, ni les soldes initiaux. C'est pour cela que le débit du scénario était irrattrapable.",
+            "UNDO RÉPARÉ ET VÉRIFIÉ — instantanés dédoublonnés, verrou relâché après le flush, et TOUT le document couvert (mêmes champs que l'export, moins les identifiants Google Drive). Profondeur portée de 10 à 30 pas, qui sont maintenant 30 actions réelles et non 15. Un point zéro est posé au chargement : la toute première modification est désormais annulable, ce qui n'était pas le cas. Mesuré après correction : 3 modifications → 3 Undo → retour exact à l'état chargé, Redo fonctionnel, un actif créé annulé puis rétabli.",
+            "APPLIQUER UN SCÉNARIO, DÉSORMAIS — un récapitulatif chiffré ligne par ligne avant validation (ce qui sort du cash, ce qui entre à la dette, ce qui entre à l'actif), un instantané pris AVANT l'écriture, et un seul Undo pour tout défaire. La bannière promettait « réversible via Undo » alors que l'historique ignorait les actifs : la promesse est maintenant tenue.",
+            "LE VERDICT, AVANT LE TABLEAU — « en quoi cette simulation me permet d'acheter ? » Le simulateur répond maintenant en haut : point bas de trésorerie sur l'horizon et son année, marge réellement mobilisable (apport + frais compris), et par opération le cash à sortir, la mensualité, le loyer net, le cash-flow mensuel et la part du loyer absorbée par la mensualité.",
+            "JUSQU'À QUEL PRIX — ET LA QUESTION A-T-ELLE UN SENS ? Première version de ce calcul : une dichotomie supposant le point bas décroissant avec le prix. Mesuré, c'était faux : sur un scénario où la trésorerie touche son creux en 2026 et l'achat a lieu en 2027, le point bas vaut 900 000 DH pour TOUS les prix, de 1 % à 500 % — et la dichotomie renvoyait quand même « prix maximum finançable : 3 730 000 DH ». Un chiffre né du bruit. Remplacé par un balayage : on mesure, on n'affine que là où le balayage a établi la frontière, et quand le prix ne déplace pas le point bas on le DIT au lieu d'inventer un plafond.",
+            "ET LE CHIFFRE EST NOMMÉ POUR CE QU'IL EST — la zone tenable n'est pas toujours d'un seul tenant : au-delà du point de rupture, un bien plus cher se loue plus cher et finit par porter sa charge. Ce n'est donc pas un « prix maximum » mais « le scénario tient jusqu'à X DH », avec l'année de rupture et, le cas échéant, le prix à partir duquel il redevient tenable.",
+            "D'OÙ VIENT LE CHIFFRE — décomposition de l'année du point bas : chaque poste qui sort du cash, du plus lourd au plus léger, avec son montant mensuel, son coût sur les mois restants, sa nature (charge fixe, mensualité de crédit, charge variable, dépense ponctuelle) et un bouton qui emmène le modifier au bon endroit.",
+            "VOTRE HYPOTHÈSE ÉTAIT FAUSSE, ET C'EST MESURÉ — un versement d'épargne ne rend JAMAIS l'atterrissage négatif. Vérifié en retirant un versement de 2 000 DH/mois vers une poche virtuelle puis un de 3 000 DH/mois vers un compte marqué « hors liquidité » : l'atterrissage ne bouge pas d'un dirham. Retirer une charge fixe de 5 000 DH/mois le remonte de 20 000 DH (quatre mois restants). Un versement déplace l'argent d'une poche à l'autre, et le total les compte toutes. C'est écrit dans le panneau, pour ne plus chercher du mauvais côté.",
+            "AU PASSAGE, MA PROPRE SONDE M'A MENTI — en testant la frontière de prix, je mutais l'objet brut poussé dans le tableau réactif. Vue lit bien la nouvelle valeur mais ne notifie personne : le computed gardait son cache et j'ai cru un instant que le calcul de l'application était faux. Il était juste — le point bas décroît linéairement et croise zéro à 2 162 000 DH, exactement le chiffre annoncé. C'est le test qui a été corrigé."
+        ] },
         { version: "37.8 Une-Seule-Verite-CashFlow", date: "2026-09-25", changes: [
             "LE BUG, NOMMÉ PRÉCISÉMENT — le moteur de projection faisait chaque année « liquidité += surplus budgétaire » PUIS « liquidité += cash-flow net de l'actif ». Or le surplus budgétaire retranche déjà les mensualités de crédit (elles vivent dans chargesFixes sous les clés « credit* » — le code le disait lui-même en commentaire), et le cash-flow net vaut REX − SERVICE DE DETTE − impôt. Le service de la dette sortait donc DEUX FOIS de la trésorerie, chaque année, de façon cumulative. Le garde-fou « dejaCompte » ne protégeait que la troisième soustraction, jamais celle-là. C'est cela qui faisait plonger les liquidités dans le rouge sans qu'aucune dépense réelle n'existe.",
             "LA RÈGLE, DÉSORMAIS UNIQUE — Liquidité(N) = Liquidité(N−1) + surplus budgétaire + exploitation nette des actifs + chocs positifs − chocs négatifs. L'amortissement du capital NE TOUCHE PLUS la trésorerie : c'est une écriture de bilan, la mensualité en est déjà sortie une seule fois, par un canal choisi explicitement (le budget, ou le cash-flow de l'actif, jamais les deux). Un achat ne déduit que l'apport et les frais — jamais le prix du bien, jamais la dette.",
@@ -10329,29 +10516,41 @@
                         return rows;
                     };
 
-                    //   L'adaptateur Vue : il ne fait QUE rassembler les entrées. Toute
-                    //   la logique financière est au-dessus, dans la fonction pure.
-                    const sandboxProjection = computed(() => {
-                        calculationTick.value;
+                    // ═══════════════════════════════════════════════════════════════
+                    // v37.9 — DU TABLEAU AU VERDICT
+                    //   Un tableau de huit lignes ne dit pas « tu peux acheter ». Ce
+                    //   bloc répond aux deux seules questions qui comptent avant un
+                    //   achat : jusqu'où ma trésorerie descend-elle, et jusqu'à quel
+                    //   prix puis-je aller sans passer sous zéro.
+                    // ═══════════════════════════════════════════════════════════════
+
+                    //   Le socle ne dépend PAS des événements : on le construit une
+                    //   fois pour pouvoir rejouer la projection des dizaines de fois
+                    //   (dichotomie) sans recloner l'état ni recalculer le Relevé.
+                    const _sandboxSocle = () => {
                         const base = _sandboxBaseState();
-                        // Ancrage : même moteur que le Relevé, donc même dirham.
                         const _mbS = moisBudgetaire.value;
                         const _anneesBudget = Object.keys(donneesAnnuelles.value || {}).map(Number).filter(Number.isFinite);
                         const _derniereAnneeBudget = _anneesBudget.length ? Math.max(..._anneesBudget) : sandboxStartYear;
-                        const _atterrissageFinAnnee = (annee) => {
-                            const cyc = [];
-                            for (let a = _mbS.an; a <= annee; a++) for (let m = (a === _mbS.an ? _mbS.mois : 1); m <= 12; m++) cyc.push(m + '-' + a);
-                            return Number((_buildJournalReleve([], cyc) || {}).soldeAtterrissage) || 0;
+                        // Mémoïsation : l'atterrissage d'une année est une propriété du
+                        // budget, jamais du scénario simulé.
+                        const _cacheAncre = new Map();
+                        const _ancrage = (annee) => {
+                            if (!(sandboxSurplusAuto.value && annee >= _mbS.an && annee <= _derniereAnneeBudget
+                                  && !!(donneesAnnuelles.value || {})[annee])) return null;
+                            if (!_cacheAncre.has(annee)) {
+                                const cyc = [];
+                                for (let a = _mbS.an; a <= annee; a++) for (let m = (a === _mbS.an ? _mbS.mois : 1); m <= 12; m++) cyc.push(m + '-' + a);
+                                _cacheAncre.set(annee, Number((_buildJournalReleve([], cyc) || {}).soldeAtterrissage) || 0);
+                            }
+                            return _cacheAncre.get(annee);
                         };
-                        return projeterPatrimoine({
+                        return {
                             anneeDepart: sandboxStartYear,
-                            ancrageLiquidite: (annee) => (
-                                sandboxSurplusAuto.value && annee >= _mbS.an && annee <= _derniereAnneeBudget
-                                && !!(donneesAnnuelles.value || {})[annee]
-                            ) ? _atterrissageFinAnnee(annee) : null,
                             horizon: sandboxHorizon.value,
                             liquiditeInitiale: base.courant,
                             actifs: migrateAssetsV19(JSON.parse(JSON.stringify(base.assets))),
+                            ancrageLiquidite: _ancrage,
                             surplusAnnuel: sandboxSurplusAuto.value
                                 ? surplusBudgetaireAnnuel(_derniereAnneeBudget)
                                 : (Number(sandboxSurplusMensuel.value) || 0) * 12,
@@ -10359,13 +10558,199 @@
                             revaloOn: sandboxRevaloOn.value,
                             mensualitesDansBudget: sandboxMensualitesDansBudget.value,
                             revenusActifsDansBudget: sandboxRevenusActifsDansBudget.value,
-                            evenements: sandboxEvents.value,
                             normaliser: sandboxEventNormalise,
                             economieActif: assetEconomics,
                             amortissement: amortissementAnnuel,
                             mensualitePour: mensualiteClassique,
-                        });
+                        };
+                    };
+
+                    const sandboxProjection = computed(() => {
+                        calculationTick.value;
+                        return projeterPatrimoine(Object.assign(_sandboxSocle(), { evenements: sandboxEvents.value }));
                     });
+
+                    //   Le point bas : la seule ligne qui décide si un scénario tient.
+                    const sandboxPointBas = computed(() => {
+                        const rows = sandboxProjection.value || [];
+                        if (!rows.length) return null;
+                        return rows.reduce((m, r) => (r.liquidite < m.liquidite ? r : m), rows[0]);
+                    });
+
+                    const sandboxAchatsPlanifies = computed(() =>
+                        (sandboxEvents.value || []).map(sandboxEventNormalise)
+                            .filter(e => e.type === 'achat_locatif')
+                            .map(e => {
+                                const mens = mensualiteClassique(e.montantCredit, e.taux, e.dureeMois);
+                                const loyer = N(e.loyerMensuelNet);
+                                return {
+                                    id: e.id, nom: e.nom || 'Nouvel actif', annee: e.annee,
+                                    prix: N(e.prixAchat), cashSorti: N(e.apport) + N(e.frais),
+                                    credit: N(e.montantCredit), mensualite: Math.round(mens),
+                                    loyer: Math.round(loyer), cashflow: Math.round(loyer - mens),
+                                    // Taux d'effort : part du loyer absorbée par la mensualité.
+                                    effort: loyer > 0 ? Math.round((mens / loyer) * 100) : null,
+                                };
+                            })
+                    );
+
+                    //   JUSQU'À QUEL PRIX ? — et surtout : la question a-t-elle un sens ?
+                    //
+                    //   Première version de ce calcul : une dichotomie sur le prix, en
+                    //   supposant le point bas décroissant. Mesuré, c'était faux. Sur un
+                    //   scénario où la trésorerie touche son minimum en 2026 et l'achat
+                    //   a lieu en 2027, le point bas vaut 900 000 DH pour TOUS les prix,
+                    //   de 1 % à 500 % du prix visé — et la dichotomie renvoyait
+                    //   pourtant un « prix maximum finançable » de 3 730 000 DH. Un
+                    //   chiffre né du bruit, présenté avec aplomb.
+                    //
+                    //   Donc : on BALAIE au lieu de supposer. On mesure le point bas sur
+                    //   une grille de prix, et on n'affine que dans la zone où le balayage
+                    //   a effectivement établi la frontière. Si le point bas ne bouge pas
+                    //   avec le prix, on le DIT au lieu d'inventer un plafond.
+                    //
+                    //   Le loyer suit le prix : « à rendement constant » est la seule
+                    //   lecture honnête de « plus cher » — un bien deux fois plus cher se
+                    //   loue deux fois plus cher, sinon on compare deux actifs différents.
+                    const sandboxCapaciteAchat = computed(() => {
+                        const evs = (sandboxEvents.value || []).map(sandboxEventNormalise);
+                        const achats = evs.filter(e => e.type === 'achat_locatif');
+                        if (achats.length !== 1 || N(achats[0].prixAchat) <= 0) return null;
+                        const cible = achats[0];
+                        const socle = _sandboxSocle();
+                        const pointBas = (k) => {
+                            const variante = evs.map(e => e.id !== cible.id ? e : Object.assign({}, e, {
+                                prixAchat: N(e.prixAchat) * k, apport: N(e.apport) * k,
+                                frais: N(e.frais) * k, montantCredit: N(e.montantCredit) * k,
+                                loyerMensuelNet: N(e.loyerMensuelNet) * k,
+                            }));
+                            return projeterPatrimoine(Object.assign({}, socle, { evenements: variante }))
+                                .reduce((m, r) => Math.min(m, r.liquidite), Infinity);
+                        };
+
+                        const PAS = 0.1, MAX = 3;
+                        const grille = [];
+                        for (let k = 0; k <= MAX + 1e-9; k += PAS) grille.push({ k: Math.round(k * 100) / 100, bas: pointBas(k) });
+
+                        const sansAchat = grille[0].bas;
+                        if (sansAchat < 0) {
+                            return { verdict: 'budget', sansAchat: Math.round(sansAchat) };
+                        }
+
+                        // L'achat déplace-t-il seulement le point bas ?
+                        const valeurs = grille.map(g => g.bas);
+                        const amplitude = Math.max(...valeurs) - Math.min(...valeurs);
+                        if (amplitude <= 1) {
+                            return { verdict: 'insensible', sansAchat: Math.round(sansAchat) };
+                        }
+
+                        // Frontière de la zone tenable CONTIGUË depuis « pas d'achat ».
+                        //   Contiguë, et pas « maximale » : mesuré, la zone ne l'est pas
+                        //   toujours. Au-delà du point de rupture le scénario peut
+                        //   redevenir tenable, parce qu'un bien plus cher se loue plus
+                        //   cher et finit par porter sa propre charge. Annoncer ce
+                        //   chiffre comme un « prix maximum » serait faux ; c'est le
+                        //   premier prix qui casse le scénario, et c'est ce qu'on dit.
+                        let iDernierOk = 0;
+                        while (iDernierOk + 1 < grille.length && grille[iDernierOk + 1].bas >= 0) iDernierOk++;
+                        if (iDernierOk === grille.length - 1) {
+                            return { verdict: 'plafond', sansAchat: Math.round(sansAchat),
+                                     prixMax: Math.round(N(cible.prixAchat) * MAX) };
+                        }
+                        const iRetour = grille.findIndex((g, n) => n > iDernierOk + 1 && g.bas >= 0);
+                        // Affinage UNIQUEMENT entre le dernier point tenable et le premier
+                        // qui ne l'est pas : là, le balayage a établi le changement de signe.
+                        let bas = grille[iDernierOk].k, haut = grille[iDernierOk + 1].k;
+                        for (let n = 0; n < 18; n++) {
+                            const mid = (bas + haut) / 2;
+                            if (pointBas(mid) >= 0) bas = mid; else haut = mid;
+                        }
+                        return { verdict: 'frontiere', sansAchat: Math.round(sansAchat),
+                                 prixMax: Math.round(N(cible.prixAchat) * bas / 1000) * 1000,
+                                 prixRupture: Math.round(N(cible.prixAchat) * grille[iDernierOk + 1].k),
+                                 prixRetour: iRetour > 0 ? Math.round(N(cible.prixAchat) * grille[iRetour].k) : null,
+                                 anneeRupture: (() => {
+                                     const rows = projeterPatrimoine(Object.assign({}, socle, {
+                                         evenements: evs.map(e => e.id !== cible.id ? e : Object.assign({}, e, {
+                                             prixAchat: N(e.prixAchat) * haut, apport: N(e.apport) * haut,
+                                             frais: N(e.frais) * haut, montantCredit: N(e.montantCredit) * haut,
+                                             loyerMensuelNet: N(e.loyerMensuelNet) * haut,
+                                         })),
+                                     }));
+                                     const m = rows.reduce((x, r) => (r.liquidite < x.liquidite ? r : x), rows[0]);
+                                     return m.annee;
+                                 })() };
+                    });
+
+                    // ═══════════════════════════════════════════════════════════════
+                    // v37.9 — POURQUOI CE CHIFFRE ? DÉCOMPOSITION DE L'ANNÉE DU POINT BAS
+                    //
+                    //   MESURÉ AVANT D'ÊTRE ÉCRIT : un versement d'épargne NE CHANGE PAS
+                    //   l'atterrissage. Retirer un versement de 3 000 DH/mois vers un
+                    //   compte marqué « hors liquidité », puis un de 2 000 DH/mois vers
+                    //   une poche virtuelle, laisse l'atterrissage identique au dirham ;
+                    //   retirer une charge fixe de 5 000 DH/mois le remonte de 20 000 DH
+                    //   (quatre mois restants × 5 000). L'épargne déplace l'argent d'une
+                    //   poche à l'autre, et le Relevé compte TOUTES les poches. Ce qui
+                    //   creuse l'atterrissage, ce sont les sorties réelles — et elles
+                    //   seules figurent ci-dessous.
+                    // ═══════════════════════════════════════════════════════════════
+                    const sandboxDecomposition = computed(() => {
+                        const pb = sandboxPointBas.value;
+                        if (!pb) return null;
+                        const annee = pb.annee;
+                        const d = (donneesAnnuelles.value || {})[annee];
+                        if (!d) return { annee, sansBudget: true, lignes: [] };
+                        const mb = moisBudgetaire.value;
+                        // Le Relevé ne projette que les mois RESTANTS de l'année en cours.
+                        const moisRestants = (annee === mb.an) ? Math.max(0, 13 - mb.mois) : 12;
+                        const lignes = [];
+                        const estCredit = (k, l) => /credit|crédit|mourabaha|pr[eê]t|leasing|traite/i.test(String(k) + ' ' + String(l || ''));
+
+                        Object.entries(d.chargesFixes || {}).forEach(([k, f]) => {
+                            const m = N((f || {}).valeur);
+                            if (m <= 0) return;
+                            lignes.push({ cle: 'cf_' + k, nom: (f || {}).label || k, mensuel: Math.round(m),
+                                          annuel: Math.round(m * moisRestants), onglet: 'saisie',
+                                          categorie: estCredit(k, (f || {}).label) ? 'Mensualité de crédit' : 'Charge fixe' });
+                        });
+                        Object.entries(d.chargesVariables || {}).forEach(([k, c]) => {
+                            const m = ((c || {}).periode === 'semaine' ? N((c || {}).valeur) * 4.3 : N((c || {}).valeur));
+                            if (m <= 0) return;
+                            lignes.push({ cle: 'cv_' + k, nom: (c || {}).label || k, mensuel: Math.round(m),
+                                          annuel: Math.round(m * moisRestants), onglet: 'saisie', categorie: 'Charge variable' });
+                        });
+                        const irr = Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres
+                                  : Object.values(d.depensesIrregulieres || {});
+                        irr.forEach(x => {
+                            const m = N((x || {}).montant);
+                            if (m <= 0) return;
+                            if (annee === mb.an && N((x || {}).mois) < mb.mois) return;   // déjà passée
+                            lignes.push({ cle: 'ir_' + ((x || {}).id), nom: (x || {}).nom || 'Dépense', mensuel: 0,
+                                          annuel: Math.round(m), onglet: 'irregulieres',
+                                          categorie: 'Dépense ponctuelle', mois: N((x || {}).mois) });
+                        });
+                        lignes.sort((a, b) => b.annuel - a.annuel);
+
+                        const revenus = Object.values(d.revenus || {}).reduce((s, r) => s + N((r || {}).base) * moisRestants, 0);
+                        const sorties = lignes.reduce((s, l) => s + l.annuel, 0);
+                        const ep = Array.isArray(d.epargne) ? d.epargne : [];
+                        return {
+                            annee, sansBudget: false, moisRestants, lignes,
+                            revenus: Math.round(revenus), sorties: Math.round(sorties),
+                            solde: Math.round(revenus - sorties),
+                            epargneMensuelle: Math.round(ep.reduce((s, e) => s + N((e || {}).valeur), 0)),
+                            nbEpargne: ep.length,
+                        };
+                    });
+
+                    //   Emmener l'utilisateur sur le poste, dans la bonne année.
+                    const allerAuPoste = (ligne) => {
+                        const dec = sandboxDecomposition.value;
+                        if (dec && dec.annee) anneeAffichage.value = dec.annee;
+                        activeTab.value = (ligne && ligne.onglet) || 'saisie';
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    };
 
                     const sandboxAlertes = computed(() => {
                         const out = [];
@@ -10423,9 +10808,111 @@
                         };
                     });
 
+                    // ═══════════════════════════════════════════════════════════════
+                    // v37.9 — RÉPARER UNE APPLICATION DE SCÉNARIO
+                    //
+                    //   CE QUE FAISAIT L'ANCIEN « Appliquer ce scénario », mot pour mot :
+                    //       courantCompte.solde = (Number(courantCompte.solde) || 0) - montant;
+                    //   où `montant` était le PRIX COMPLET du bien. Un achat simulé à
+                    //   600 000 DH débitait donc 600 000 DH du vrai compte courant, et
+                    //   créait un actif payé comptant (apport = prix, crédit = 0).
+                    //   Ce n'était pas une projection : c'était une écriture dans les
+                    //   données réelles. Et Undo, cassé par ailleurs, ne la rattrapait
+                    //   pas. D'où un compte courant profondément négatif et un
+                    //   atterrissage dans le rouge, sans aucune dépense réelle.
+                    //
+                    //   La v37.8 ne débite plus que l'apport et les frais. Restent les
+                    //   applications déjà passées : ce bloc les retrouve et les défait,
+                    //   exactement à l'envers de ce que l'ancien code avait écrit.
+                    //
+                    //   SIGNATURE. L'identifiant tranche : « Appliquer ce scénario » est
+                    //   le seul à produire ma_<horodatage>_<suffixe>. Un actif créé à la
+                    //   main s'appelle ma_<horodatage> sans suffixe, les actifs d'origine
+                    //   ma_1 … ma_7. On ne devine pas : on propose, l'utilisateur tranche.
+                    // ═══════════════════════════════════════════════════════════════
+                    const _RE_ACTIF_SANDBOX = /^ma_(\d{10,})_[a-z0-9]{2,6}$/;
+
+                    const reparationsScenario = computed(() => {
+                        calculationTick.value;
+                        return (masterAssets.value || []).map(a => {
+                            const m = _RE_ACTIF_SANDBOX.exec(String((a || {}).id || ''));
+                            if (!m) return null;
+                            const valeur = N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value);
+                            // L'ancien moteur payait TOUT comptant : crédit nul et apport
+                            // égal à la valeur. Le nouveau pose un crédit, des frais et une
+                            // date de début — rien à réparer de ce côté.
+                            if (valeur <= 0) return null;
+                            if (N(a.montant_credit) > 0) return null;
+                            if (String(a.date_debut_credit || '')) return null;
+                            if (Math.abs(N(a.apport_personnel) - valeur) > 1) return null;
+                            const t = Number(m[1]);
+                            return {
+                                id: a.id, nom: a.name || 'Actif sans nom', montant: Math.round(valeur),
+                                quand: Number.isFinite(t) ? new Date(t).toLocaleString('fr-FR', {
+                                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
+                            };
+                        }).filter(Boolean);
+                    });
+
+                    const _compteCourantReel = () => (comptes.value || [])
+                        .find(c => c.type === 'courant' || c.type === 'liquide');
+
+                    const annulerApplicationScenario = (rep) => {
+                        const cpt = _compteCourantReel();
+                        if (!cpt) { alert("Aucun compte courant trouvé : impossible de recréditer."); return; }
+                        const avant = Number(cpt.solde) || 0;
+                        const apres = avant + N(rep.montant);
+                        if (!confirm(
+                            `Annuler l'application « ${rep.nom} » ?\n\n`
+                            + `• L'actif « ${rep.nom} » (${formatMAD(rep.montant)}) sera retiré du patrimoine.\n`
+                            + `• Le compte « ${cpt.label || 'courant'} » sera recrédité de ${formatMAD(rep.montant)} :\n`
+                            + `    ${formatMAD(avant)}  →  ${formatMAD(apres)}\n\n`
+                            + `C'est exactement l'inverse de ce que l'ancien simulateur avait écrit.\n`
+                            + `Annulable ensuite par Undo.`)) return;
+                        masterAssets.value = (masterAssets.value || []).filter(a => a.id !== rep.id);
+                        cpt.solde = apres;
+                        handleDataChange();
+                        forceUpdateCalculations();
+                        addLog(`🩹 Application de scénario annulée : « ${rep.nom} » retiré, ${formatMAD(rep.montant)} recrédités sur ${cpt.label || 'le compte courant'}.`, 'success');
+                    };
+
+                    //   L'actif a pu être supprimé à la main entre-temps : le débit, lui,
+                    //   est resté. On laisse alors corriger le solde directement, en
+                    //   disant ce qu'on fait et en le journalisant.
+                    const reparationMontantLibre = ref(0);
+                    const recrediterCompteCourant = () => {
+                        const montant = N(reparationMontantLibre.value);
+                        if (montant <= 0) { alert('Indiquez le montant à recréditer.'); return; }
+                        const cpt = _compteCourantReel();
+                        if (!cpt) { alert("Aucun compte courant trouvé."); return; }
+                        const avant = Number(cpt.solde) || 0;
+                        if (!confirm(
+                            `Recréditer ${formatMAD(montant)} sur « ${cpt.label || 'courant'} » ?\n\n`
+                            + `    ${formatMAD(avant)}  →  ${formatMAD(avant + montant)}\n\n`
+                            + `Aucun actif n'est touché. Annulable par Undo.`)) return;
+                        cpt.solde = avant + montant;
+                        handleDataChange();
+                        forceUpdateCalculations();
+                        addLog(`🩹 Compte « ${cpt.label || 'courant'} » recrédité de ${formatMAD(montant)} (correction manuelle).`, 'success');
+                        reparationMontantLibre.value = 0;
+                    };
+
                     const applySandbox = () => {
                         if (!sandboxEvents.value.length) { alert('Aucun événement à appliquer.'); return; }
-                        if (!confirm(`Appliquer ${sandboxEvents.value.length} événement(s) virtuel(s) au vrai patrimoine ? Cette opération modifie les actifs, crédits et années futures.`)) return;
+                        const _rec = sandboxEvents.value.map(sandboxEventNormalise).map(e => {
+                            if (e.type === 'achat_locatif') return `• ${e.nom} : ${formatMAD(N(e.apport) + N(e.frais))} de cash (apport + frais), ${formatMAD(e.montantCredit)} de crédit, actif à ${formatMAD(e.prixAchat)}`;
+                            if (e.type === 'capex') return `• ${e.nom} : ${e.sensChoc === 'entree' ? '+' : '−'} ${formatMAD(e.montant)} de trésorerie`;
+                            if (e.type === 'vente') return `• Vente : + ${formatMAD(e.montant)} net, crédit soldé, actif retiré`;
+                            return `• Remboursement anticipé : − ${formatMAD(e.montant)}`;
+                        }).join('\n');
+                        if (!confirm(
+                            `Appliquer ${sandboxEvents.value.length} événement(s) aux VRAIES données ?\n\n${_rec}\n\n`
+                            + `Un seul Undo défait l'ensemble.`)) return;
+                        // v37.9 : instantané AVANT écriture. Jusqu'ici la bannière
+                        //   promettait « réversible via Undo » alors que l'historique
+                        //   ignorait les actifs — la promesse était fausse, et c'est
+                        //   ainsi qu'un débit de scénario est resté dans les données.
+                        _saveSnapshot();
 
                         // 1) Générer les années futures manquantes
                         try {
@@ -10933,17 +11420,65 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const _historyIdx = ref(-1);
                     let _isHistoryOp = false;
 
+                    // v37.9 : TOUT le document éditable, pas deux champs sur huit.
+                    //   Même périmètre que getExportData(), moins gConfig (des
+                    //   identifiants Google Drive n'ont rien à faire dans un Undo).
+                    const _snapshotEtat = () => JSON.stringify({
+                        da:     toRaw(donneesAnnuelles.value),
+                        cpts:   toRaw(comptes.value),
+                        goals:  toRaw(wealthGoals.value),
+                        assets: toRaw(masterAssets.value),
+                        soldes: toRaw(soldesInitiaux.value),
+                        params: toRaw(parametres.value),
+                        studio: toRaw(studioExpl.value),
+                    });
+
                     const _saveSnapshot = () => {
                         if (_isHistoryOp || _importInProgress.value) return;
-                        try {
-                            const snap = JSON.stringify({ da: toRaw(donneesAnnuelles.value), cpts: toRaw(comptes.value) });
-                            if (_historyIdx.value < _history.value.length - 1) {
-                                _history.value = _history.value.slice(0, _historyIdx.value + 1);
-                            }
-                            _history.value.push(snap);
-                            if (_history.value.length > 10) _history.value.shift();
-                            _historyIdx.value = _history.value.length - 1;
-                        } catch(_) {}
+                        let snap;
+                        try { snap = _snapshotEtat(); } catch (_) { return; }
+                        // v37.9 : une seule action déclenchait DEUX enregistrements
+                        //   (l'appel explicite, puis le watcher profond). L'historique
+                        //   se remplissait de doublons et Undo retombait sur l'état
+                        //   courant. On refuse un instantané identique au sommet — ce
+                        //   qui rend la correction indépendante du moment où les
+                        //   watchers se déclenchent.
+                        if (_historyIdx.value >= 0 && _history.value[_historyIdx.value] === snap) return;
+                        if (_historyIdx.value < _history.value.length - 1) {
+                            _history.value = _history.value.slice(0, _historyIdx.value + 1);
+                        }
+                        _history.value.push(snap);
+                        // 10 pas, c'était l'équivalent de 5 actions réelles vu les
+                        // doublons. Sans doublons, 30 pas = 30 actions.
+                        if (_history.value.length > 30) { _history.value.shift(); }
+                        _historyIdx.value = _history.value.length - 1;
+                    };
+
+                    const _restaurerInstantane = (json) => {
+                        let e; try { e = JSON.parse(json); } catch (_) { return false; }
+                        _isHistoryOp = true;
+                        if (e.da)     donneesAnnuelles.value = e.da;
+                        if (e.cpts)   comptes.value          = e.cpts;
+                        if (e.goals)  wealthGoals.value       = e.goals;
+                        if (e.assets) masterAssets.value      = e.assets;
+                        if (e.soldes) soldesInitiaux.value    = e.soldes;
+                        if (e.params) parametres.value        = e.params;
+                        if (e.studio) studioExpl.value        = e.studio;
+                        // Les watchers profonds arrivent au flush suivant : relâcher le
+                        // verrou ici même, synchroniquement, le laissait rouvert quand
+                        // ils se déclenchaient — et la branche Redo était tronquée.
+                        nextTick(() => {
+                            _isHistoryOp = false;
+                            forceUpdateCalculations();
+                        });
+                        return true;
+                    };
+
+                    const _apresHistorique = () => {
+                        forceUpdateCalculations();
+                        serverSyncStatus.value = 'modified';
+                        clearTimeout(_autoSaveTimer);
+                        _autoSaveTimer = setTimeout(() => saveToServer(), 2000);
                     };
 
                     const canUndo = computed(() => _historyIdx.value > 0);
@@ -10953,30 +11488,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                     const undo = () => {
                         if (!canUndo.value) return;
-                        _isHistoryOp = true;
                         _historyIdx.value--;
-                        const snap = JSON.parse(_history.value[_historyIdx.value]);
-                        donneesAnnuelles.value = snap.da;
-                        comptes.value = snap.cpts;
-                        _isHistoryOp = false;
-                        forceUpdateCalculations();
-                        serverSyncStatus.value = 'modified';
-                        clearTimeout(_autoSaveTimer);
-                        _autoSaveTimer = setTimeout(() => saveToServer(), 2000);
+                        if (!_restaurerInstantane(_history.value[_historyIdx.value])) { _historyIdx.value++; return; }
+                        _apresHistorique();
                     };
 
                     const redo = () => {
                         if (!canRedo.value) return;
-                        _isHistoryOp = true;
                         _historyIdx.value++;
-                        const snap = JSON.parse(_history.value[_historyIdx.value]);
-                        donneesAnnuelles.value = snap.da;
-                        comptes.value = snap.cpts;
-                        _isHistoryOp = false;
-                        forceUpdateCalculations();
-                        serverSyncStatus.value = 'modified';
-                        clearTimeout(_autoSaveTimer);
-                        _autoSaveTimer = setTimeout(() => saveToServer(), 2000);
+                        if (!_restaurerInstantane(_history.value[_historyIdx.value])) { _historyIdx.value--; return; }
+                        _apresHistorique();
                     };
 
                     const handleDataChange = () => {
@@ -11499,7 +12020,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             migrateStudioContratV354(); // v35.4 : paramètres contractuels du Studio
                             forceUpdateCalculations();
                             // v17.8 : reset du flag après que Vue a flushed ses watchers asynchrones
-                            setTimeout(() => { _importInProgress.value = false; }, 200);
+                            setTimeout(() => {
+                                _importInProgress.value = false;
+                                // v37.9 : point zéro de l'historique. Sans lui, l'état
+                                //   chargé n'était JAMAIS enregistré (le flag d'import
+                                //   bloquait tout) et la toute première modification
+                                //   devenait irréversible — on ne pouvait pas revenir
+                                //   à ce qui venait d'être chargé du serveur.
+                                if (typeof _saveSnapshot === 'function') _saveSnapshot();
+                            }, 200);
                         } catch(err) {
                             _importInProgress.value = false; // reset aussi en cas d'erreur
                             addLog("Erreur de fusion: " + err.message, "error");
@@ -16203,6 +16732,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         sandboxMensualitesDansBudget, sandboxRevenusActifsDansBudget,
                         // v37.8 — refonte du simulateur
                         SANDBOX_TYPES, sandboxDetailFlux, sandboxEventIcone, sandboxAlertes,
+                        // v37.9 — verdict d'achat et décomposition du point bas
+                        sandboxPointBas, sandboxAchatsPlanifies, sandboxCapaciteAchat,
+                        sandboxDecomposition, allerAuPoste,
+                        reparationsScenario, annulerApplicationScenario,
+                        reparationMontantLibre, recrediterCompteCourant,
                         sandboxChartConfig, sandboxEcartFinancement, sandboxMensualiteEstimee,
                         comptes, parametres, comptesProjetes,
                         moisCibleProjection, anneeCibleProjectionComptes,
