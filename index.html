@@ -2265,7 +2265,8 @@
                                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                                     <div>
                                         <p class="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">Déjà épargné</p>
-                                        <input type="number" v-model.number="goal.montant_actuel" @input="syncGoalLegacy(goal)" min="0" class="w-full p-2 border border-gray-200 bg-white rounded-lg text-right font-black text-emerald-700 text-sm outline-none focus:ring-2 focus:ring-emerald-400"/>
+                                        <input v-if="!(goal.comptesLies || []).length" type="number" v-model.number="goal.montant_actuel" @input="syncGoalLegacy(goal)" min="0" class="w-full p-2 border border-gray-200 bg-white rounded-lg text-right font-black text-emerald-700 text-sm outline-none focus:ring-2 focus:ring-emerald-400"/>
+                                        <p v-else class="w-full p-2 border border-emerald-200 bg-emerald-50 rounded-lg text-right font-black text-emerald-700 text-sm" title="Solde réel du compte lié — se met à jour tout seul">{{ formatMAD((wealthGoalsCalc[idx] || {}).montant_actuel) }}</p>
                                     </div>
                                     <div>
                                         <p class="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">Objectif total</p>
@@ -2279,6 +2280,15 @@
                                         <p class="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">Date cible</p>
                                         <input type="month" v-model="goal.date_cible" @input="handleDataChange" class="w-full p-2 border border-gray-200 bg-white rounded-lg text-right font-black text-gray-700 text-xs outline-none focus:ring-2 focus:ring-emerald-400"/>
                                     </div>
+                                </div>
+                                <!-- v37.8 : un objectif adossé à un compte suit son solde réel ; sans lien, c'est un montant déclaré -->
+                                <div class="flex flex-wrap items-center gap-2 mb-3">
+                                    <p class="text-[9px] text-gray-400 font-black uppercase tracking-widest">Compte lié</p>
+                                    <select :value="(goal.comptesLies || [])[0] || ''" @change="lierObjectifCompte(goal, $event.target.value)" class="text-xs font-bold bg-white border border-gray-300 rounded-lg px-2 py-1 outline-none text-gray-700">
+                                        <option value="">Aucun — montant saisi à la main</option>
+                                        <option v-for="c in comptes" :key="'gl_' + c.id" :value="'cpt_' + c.id">{{ c.label }}</option>
+                                    </select>
+                                    <span v-if="!(goal.comptesLies || []).length" class="text-[10px] text-amber-600 font-bold">⚠️ Montant déclaré : il ne suit aucun compte</span>
                                 </div>
                                 <template v-for="calc in [wealthGoalsCalc[idx] || {}]" :key="'c'+idx">
                                     <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden mb-2">
@@ -2595,7 +2605,7 @@
                                     <thead class="bg-gradient-to-r from-fuchsia-700 to-purple-800 text-white">
                                         <tr>
                                             <th class="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Année</th>
-                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Solde Courant</th>
+                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Somme de tous les comptes en fin d'année. Années budgétées : Atterrissage Projeté du Relevé, au dirham.">Liquidités fin d'année</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Dette Totale</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Valeur Actifs</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Patrimoine Net</th>
@@ -6571,8 +6581,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.7 Retour-Ecriture";
+                    const CURRENT_VERSION = "37.8 Une-Seule-Verite";
                     const CHANGELOG = [
+        { version: "37.8 Une-Seule-Verite", date: "2026-09-25", changes: [
+            "BUG SIGNALÉ — fin 2027, quatre chiffres pour une seule réalité : bandeau 157 020 DH, Relevé de Comptes 241 020, tableau pluriannuel 257 074, et une matrice IA encore différente (Compte Courant fin 2026 annoncé à −16 226 DH alors que le Relevé donnait +5 816). Sur cette base fausse, le CFO avait recommandé puis exécuté un transfert de 18 000 DH pour combler un déficit qui n'existait pas.",
+            "CAUSE 1 — COMPTE FANTÔME : un virement d'épargne pointait vers « acc_1778171037229_a1ye » (id texte, sans préfixe cpt_). Le normaliseur ne préfixait que les id numériques : le Relevé ouvrait un second registre (84 000 DH fin 2027) que le bandeau filtrait en silence. Un normaliseur unique (_cleCompte) remplace les quatre copies de l'app ; le moteur PHP reçoit la même correction.",
+            "CAUSE 2 — L'IA LISAIT L'ANCIEN MOTEUR : la matrice envoyée au CFO venait encore de bilanLignes[].detailsComptes, le moteur abandonné en v34 par tout le reste de l'app. Sa branche « compte courant » testait un type 'courant' qui n'existe pas (le compte est 'liquide') et annonçait « surplus isolé » sur des soldes cumulés. La matrice lit désormais le moteur du Relevé, mois par mois, du mois en cours à décembre de l'année suivante, avec la variation de chaque mois et le total final — identique au dirham à l'Atterrissage Projeté.",
+            "CAUSE 3 — OBJECTIFS PRIS POUR DE L'ARGENT : « Fonds d'urgence 17 749 DH » était un chiffre saisi à la main, sans compte lié, que l'IA additionnait aux soldes. Le payload distingue maintenant « solde des comptes liés » de « montant DÉCLARÉ, pas un solde bancaire ». Chaque objectif peut être adossé à un compte (nouveau sélecteur « Compte lié ») : son montant suit alors le solde réel, et le moteur refuse de le « créditer » à la main en indiquant le bon geste (un transfert).",
+            "CAUSE 4 — TABLEAU PLURIANNUEL : il partait des soldes d'aujourd'hui, ajoutait un an de surplus du budget de l'année en cours (mois écoulés compris) et les loyers une seconde fois (case « loyers déjà dans mes revenus » décochée par défaut). Les années budgétées sont désormais ancrées sur l'Atterrissage du Relevé ; la case se coche seule quand le budget porte des lignes de loyer ; la colonne s'appelle « Liquidités fin d'année ».",
+            "VERROUS — test_une_seule_verite.mjs charge l'app dans un navigateur avec un compte à id texte et exige bandeau = Relevé = total IA = projection ; il échoue sur 21 contrôles avec la v37.7. test_objectif_lie.php couvre le moteur PHP."
+        ] },
         { version: "37.7 Retour-Ecriture", date: "2026-09-24", changes: [
             "LE MOTEUR ÉCRIVAIT BIEN — reproduction locale des trois « date cible = 2027-12 » sur vos objectifs (Fonds d'urgence, Lissage Dépenses Annuelles, Épargne Long Terme) : les trois passent, date_cible vaut 2027-12 dans l'état muté, et operations_appliquees les liste une à une. Le « ✓ appliqué » du CFO disait vrai.",
             "C'EST L'ÉCRAN QUI NE SUIVAIT PAS — l'agent n'écrit pas dans l'onglet ouvert : il écrit sur le VPS (pending_commit.php compile, le nœud Committer relit le pending et le POSTe à save_data.php). Or executerImportFusion() n'était appelé qu'au montage de la page et à l'import d'un fichier. JAMAIS après un tour de conversation. L'onglet affichait donc, indéfiniment, l'état chargé au démarrage. Voilà le symptôme qui revient depuis la v35.5 : « le CFO dit que c'est appliqué, mais rien ne bouge dans l'UI ». Les champs DATE CIBLE vides de votre capture ne sont pas vides sur le serveur.",
@@ -7933,14 +7951,25 @@
                             if (goals.length === 0) {
                                 lines.push('• (Aucun objectif Smart Goal enregistré)');
                             } else {
+                                // v37.8 : wealthGoalsCalc — si l'objectif est adossé à des comptes, son
+                                //   montant EST leur solde ; sinon c'est un chiffre déclaré à la main,
+                                //   que l'IA additionnait à tort aux soldes bancaires (17 749 DH « d'urgence »
+                                //   alors que le Compte urgence était à 0).
+                                const _calcs = wealthGoalsCalc.value || [];
                                 goals.forEach((g, i) => {
                                     if (!g) return;
-                                    const cur = Number(g.current) || 0;
-                                    const tgt = Number(g.target) || 0;
+                                    const c = _calcs[i] || migrateGoalV19(g);
+                                    const cur = Number(c.montant_actuel) || 0;
+                                    const tgt = Number(c.montant_cible) || 0;
                                     const pct = tgt > 0 ? Math.round((cur / tgt) * 100) : 0;
-                                    const reste = Math.max(0, tgt - cur);
-                                    let row = '• Objectif ' + (i + 1) + ' (' + (g.name || 'Sans nom') + ') : Montant actuel = ' + formatMAD(cur) + ' / Cible = ' + formatMAD(tgt) + ' (' + pct + '%)';
-                                    if (reste > 0 && surplus > 0) row += ' — reste ' + formatMAD(reste) + ' (~' + Math.ceil(reste / surplus) + ' mois au rythme actuel)';
+                                    const lies = (c.comptesLies || []).map(k => getNomCompte(k));
+                                    let row = '• Objectif ' + (i + 1) + ' (' + (c.libelle || c.name || 'Sans nom') + ') : ';
+                                    row += lies.length
+                                        ? 'solde des comptes liés (' + lies.join(', ') + ') = ' + formatMAD(cur)
+                                        : 'montant DÉCLARÉ = ' + formatMAD(cur) + ' (saisi à la main, lié à AUCUN compte : ce n\'est PAS un solde bancaire, ne l\'additionne jamais aux comptes)';
+                                    row += ' / Cible = ' + formatMAD(tgt) + ' (' + pct + '%)';
+                                    if (c.date_cible) row += ' — échéance ' + c.date_cible;
+                                    if (Number(c.versement_mensuel) > 0) row += ' — versement prévu ' + formatMAD(c.versement_mensuel) + '/mois';
                                     lines.push(row);
                                 });
                             }
@@ -7958,89 +7987,64 @@
                             }
                             lines.push('');
 
-                            lines.push('[MATRICE DES COMPTES MOIS PAR MOIS (Moteur Cash-Flow) — Année ' + aNum + ']');
-                            lines.push('RÈGLE DE LECTURE : Ces données sont calculées par le moteur Vue.js. Ne recalcule JAMAIS, n\'additionne JAMAIS les mois entre eux.');
-                            lines.push('  • Compte Courant → SURPLUS MENSUEL ISOLÉ (miroir exact du tableau "Surplus Détaillé"). Mois en cours = atterrissage réel de fin de mois (solde actuel + entrants restants − sortants restants − épargne). Mois futurs = potentiel intrinsèque du mois (entrants − sortants − épargne), SANS report du mois précédent. Chaque mois est autonome.');
-                            lines.push('  • Autres comptes (épargne, CTO…) → SOLDE CUMULATIF projeté en fin de mois.');
-                            const rowsAnnee = (bilanLignes.value || []).filter(b => Number(b.annee) === Number(aNum));
-                            // Clé du compte courant physique (pour mapper sourceCompte='courant')
-                            const _courantCpt = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
-                            const _courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : null;
-                            // v20.62 : Surplus mensuel par mois (source = surplusParMois, même moteur que popup SURPLUS RÉEL)
-                            const _surplusMois = surplusParMois.value || [];
-                            if (rowsAnnee.length === 0) {
-                                lines.push('• (Aucune ligne bilan calculée pour cette année)');
-                            } else {
-                                rowsAnnee.forEach(r => {
-                                    const m = r.mois; // v20.60 : r.mois est déjà "Juin 2026"
-                                    const dc = r.detailsComptes || {};
-                                    const de = r.detailsEpargne || {};
-
-                                    // Grouper les dépenses irrégulières par compte source
-                                    const irregByKey = {};
-                                    if (Array.isArray(r.detailsIrreg)) {
-                                        r.detailsIrreg.forEach(d => {
-                                            const src = d.sourceCompte || 'courant';
-                                            // Normaliser 'courant' → clé physique cpt_X
-                                            const key = (src === 'courant' && _courantKey) ? _courantKey : src;
-                                            const nom = d.nom || '?';
-                                            const mt = Math.abs(Number(d.montantPaye || d.montant || 0));
-                                            if (mt === 0) return;
-                                            if (!irregByKey[key]) irregByKey[key] = [];
-                                            irregByKey[key].push(nom + ' ' + formatMAD(mt));
-                                        });
-                                    }
-
-                                    // Comptes physiques avec annotation dépenses
-                                    // v20.51 : Itérer sur comptes.value (même logique que comptesProjetes)
-                                    // v20.62 : Compte Courant → surplus mensuel net (pas solde cumulatif)
-                                    lines.push('  ' + m + ' :');
-                                    const _cptsList = comptes.value || [];
-                                    const _hasCpts = _cptsList.some(c => ('cpt_' + c.id) in dc);
-                                    if (_hasCpts) {
-                                        _cptsList.forEach(c => {
-                                            const cptKey = 'cpt_' + c.id;
-                                            if (!(cptKey in dc)) return;
-                                            const lbl = c.label || getCompteLabel(cptKey) || cptKey;
-                                            let solde;
-                                            if (c.type === 'courant') {
-                                                // v28.00 Payload-Sync : MIROIR EXACT de surplusParMois (champ net isolé)
-                                                //   Mois courant → atterrissage réel (solde actuel + entrants - sortants - épargne)
-                                                //   Mois futurs  → potentiel intrinsèque isolé (entrants - sortants - épargne)
-                                                //   AUCUN cumul, AUCUN report — on NE retombe JAMAIS sur dc[cptKey] (cumulatif)
-                                                const spEntry = _surplusMois.find(s => s.mNum === r.numMois);
-                                                solde = (spEntry && spEntry.net != null) ? Math.round(spEntry.net) : 0;
-                                            } else {
-                                                // Autres comptes : solde cumulatif projeté (inchangé)
-                                                solde = Math.round(dc[cptKey]);
-                                            }
-                                            const exps = irregByKey[cptKey];
-                                            const prefix = (c.type === 'courant' && solde >= 0) ? '+' : '';
-                                            let entry = '    ' + lbl + ' : ' + prefix + formatMAD(solde);
-                                            if (c.type === 'courant') entry += ' (excédent mensuel)';
-                                            if (exps && exps.length) entry += '  ← A payé : ' + exps.join(' + ');
-                                            lines.push(entry);
-                                        });
-                                    } else {
-                                        let entry = '    Compte Courant : ' + formatMAD(r.soldeCourant || 0); // v20.60
-                                        const expsC = _courantKey ? irregByKey[_courantKey] : null;
-                                        if (expsC && expsC.length) entry += '  ← A payé : ' + expsC.join(' + ');
+                            // ═══ v37.8 : MATRICE = MOTEUR DU RELEVÉ DE COMPTES (SSOT) ═══════════════
+                            //   L'ancienne matrice lisait bilanLignes[].detailsComptes, un second moteur
+                            //   que le reste de l'application a quitté en v34 : l'IA recevait des soldes
+                            //   décalés d'environ 22 000 DH (Compte Courant fin 2026 : −16 226 au lieu
+                            //   de +5 816). Sa branche « compte courant » testait en plus un type
+                            //   'courant' qui n'existe pas (le compte est 'liquide') : code mort, et une
+                            //   consigne « surplus isolé » posée sur des soldes cumulés.
+                            //   Désormais : chaque solde est celui du Relevé à la même date, au dirham,
+                            //   du mois en cours jusqu'à décembre de l'année affichée — sans trou entre
+                            //   deux exercices.
+                            const _curM = moisBudgetaire.value.mois, _curA = moisBudgetaire.value.an;
+                            // horizon : l'année affichée, et au moins jusqu'à fin de l'année prochaine si
+                            //   elle est budgétée (« fin d'année et 2027 » ne doit pas laisser de trou)
+                            const _anneesDispo = Object.keys(donneesAnnuelles.value || {}).map(Number).filter(Number.isFinite);
+                            const _derniere = _anneesDispo.length ? Math.max(..._anneesDispo) : _curA;
+                            const _finA = Math.max(Number(aNum) || _curA, _curA, Math.min(_curA + 1, _derniere));
+                            const _mNoms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                            const _cptCourant = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
+                            const _cleCourant = _cptCourant ? 'cpt_' + _cptCourant.id : 'courant';
+                            lines.push('[MATRICE DES COMPTES MOIS PAR MOIS — ' + _mNoms[_curM] + ' ' + _curA + ' → Décembre ' + _finA + ']');
+                            lines.push('SOURCE : moteur du Relevé de Comptes. Chaque montant est le SOLDE du compte en fin de mois, identique au dirham à ce que l\'utilisateur voit dans son Relevé. Les soldes sont CUMULÉS : un mois inclut tous les mouvements précédents.');
+                            lines.push('RÈGLE DE LECTURE : ne recalcule JAMAIS un solde. La variation du mois est déjà indiquée entre parenthèses. Le total final est l\'Atterrissage Projeté du Relevé.');
+                            // point de départ = soldes réels d'aujourd'hui (pour la variation du mois en cours)
+                            let _prev = {};
+                            (comptes.value || []).forEach(c => { _prev['cpt_' + c.id] = Number(c.solde) || 0; });
+                            let _dernier = null;
+                            const _cycles = [];
+                            for (let a = _curA; a <= _finA; a++) {
+                                const dA = donneesAnnuelles.value[a] || {};
+                                const irrs = Array.isArray(dA.depensesIrregulieres) ? dA.depensesIrregulieres : Object.values(dA.depensesIrregulieres || {});
+                                for (let m = (a === _curA ? _curM : 1); m <= 12; m++) {
+                                    _cycles.push(m + '-' + a);
+                                    const soldes = (_buildJournalReleve([], _cycles.slice()) || {}).soldesFinaux || {};
+                                    // Mouvements ponctuels du mois, par compte (annotation, déjà inclus dans le solde)
+                                    const ponctuels = {};
+                                    irrs.forEach(d => {
+                                        if (!d || Number(d.mois) !== m) return;
+                                        if (a === _curA && m === _curM && d.paye) return; // déjà dans le solde d'aujourd'hui
+                                        const mt = Number(d.montant) || 0;
+                                        if (!mt) return;
+                                        const key = _cleCompte(d.sourceCompte || 'courant', _cleCourant);
+                                        (ponctuels[key] = ponctuels[key] || []).push((mt < 0 ? 'entrée ' : 'sortie ') + (d.nom || '?').trim() + ' ' + formatMAD(Math.abs(mt)));
+                                    });
+                                    lines.push('  ' + _mNoms[m] + ' ' + a + ((a === _curA && m === _curM) ? ' (mois en cours)' : '') + ' :');
+                                    Object.keys(soldes).forEach(k => {
+                                        const v = Math.round(Number(soldes[k]) || 0);
+                                        const dv = (k in _prev) ? v - Math.round(Number(_prev[k]) || 0) : null;
+                                        let entry = '    ' + getNomCompte(k) + ' : ' + formatMAD(v);
+                                        if (dv) entry += ' (variation du mois : ' + (dv > 0 ? '+' : '−') + formatMAD(Math.abs(dv)) + ')';
+                                        if (ponctuels[k]) entry += '  ← ' + ponctuels[k].join(' + ') + ' (déjà inclus)';
                                         lines.push(entry);
-                                    }
-                                    // Épargne non liée avec annotation
-                                    const partsE = Object.entries(de)
-                                        .filter(([k]) => !_epargneLinkedKeys.value.has(k))
-                                        .map(([k, v]) => {
-                                            const id = String(k).replace('ep_', '');
-                                            const obj = epArrYear.find(o => String(o.id) === id);
-                                            const lab = (obj && (obj.nom || obj.label)) || k;
-                                            const exps = irregByKey[k];
-                                            let s = '    ' + lab + ' : ' + formatMAD(v); // v20.60 : formatMAD inclut déjà " DH"
-                                            if (exps && exps.length) s += '  ← A payé : ' + exps.join(' + ');
-                                            return s;
-                                        });
-                                    if (partsE.length) partsE.forEach(s => lines.push(s));
-                                });
+                                    });
+                                    _prev = soldes; _dernier = soldes;
+                                }
+                            }
+                            if (_dernier) {
+                                const tot = Object.values(_dernier).reduce((sm, v) => sm + (Number(v) || 0), 0);
+                                lines.push('  ⇒ TOTAL DES COMPTES FIN DÉCEMBRE ' + _finA + ' (= Atterrissage Projeté du Relevé) : ' + formatMAD(Math.round(tot)));
                             }
                             lines.push('');
                             lines.push('============================================================');
@@ -8118,11 +8122,14 @@
                         }));
 
                         // 7. Objectifs d'épargne (avancement %)
-                        const objectifs_epargne = (wealthGoals.value || []).map(g => ({
-                            nom: g.name,
-                            objectif: Number(g.target) || 0,
-                            atteint: Number(g.current) || 0,
-                            avancement_pct: (g.target > 0) ? Math.round(g.current / g.target * 100) : 0,
+                        // v37.8 : montant réel si l'objectif est adossé à des comptes, sinon déclaré
+                        const objectifs_epargne = (wealthGoalsCalc.value || []).map(g => ({
+                            nom: g.libelle || g.name,
+                            objectif: Number(g.montant_cible) || 0,
+                            atteint: Number(g.montant_actuel) || 0,
+                            avancement_pct: (Number(g.montant_cible) > 0) ? Math.round(Number(g.montant_actuel) / Number(g.montant_cible) * 100) : 0,
+                            comptes_lies: (g.comptesLies || []).map(k => getNomCompte(k)),
+                            nature_du_montant: (g.comptesLies || []).length ? 'solde des comptes liés' : 'déclaré à la main — PAS un solde bancaire',
                         }));
 
                         // 8. Patrimoine net global (synthèse, pas le détail actif par actif)
@@ -9708,7 +9715,21 @@
                     // dans chargesFixes (clés "credit*") du budget, donc on ne les sort pas
                     // une seconde fois de la trésorerie. Les loyers, eux, n'y sont pas.
                     const sandboxMensualitesDansBudget = ref(true);
-                    const sandboxRevenusActifsDansBudget = ref(false);
+                    // v37.8 : « les loyers sont déjà dans mes revenus » était décoché par défaut.
+                    //   Or un budget qui porte des lignes Magasin / Appartement / Studio les
+                    //   compte déjà : la projection les ajoutait une seconde fois (+140 552 DH
+                    //   sur 2027). Détection automatique ; un clic de l'utilisateur l'emporte.
+                    const _sandboxLoyersChoix = ref(null); // null = automatique
+                    const _sandboxLoyersDetectes = computed(() => {
+                        const dAll = donneesAnnuelles.value || {};
+                        const d = dAll[sandboxStartYear] || dAll[Object.keys(dAll).map(Number).sort((x, y) => y - x)[0]] || {};
+                        return Object.entries(d.revenus || {}).some(([k, r]) =>
+                            N((r || {}).base) > 0 && /loyer|location|magasin|local|appart|studio|airbnb|bail/i.test(k + ' ' + ((r || {}).label || '')));
+                    });
+                    const sandboxRevenusActifsDansBudget = computed({
+                        get: () => (_sandboxLoyersChoix.value !== null ? _sandboxLoyersChoix.value : _sandboxLoyersDetectes.value),
+                        set: (v) => { _sandboxLoyersChoix.value = !!v; },
+                    });
                     const sandboxEvents = ref([]);
                     const sandboxForm = ref({
                         annee: sandboxStartYear + 1,
@@ -9800,18 +9821,48 @@
                         // Sandbox assets travaille en mémoire (schéma v19 garanti)
                         const sbAssets = migrateAssetsV19(JSON.parse(JSON.stringify(base.assets)));
                         // Surplus : dérivé du budget réel, ou saisie manuelle
+                        // v37.8 — UNE SEULE VÉRITÉ POUR LES ANNÉES BUDGÉTÉES
+                        //   Avant : départ = soldes d'aujourd'hui, puis +1 an de surplus du budget
+                        //   de l'année en cours (mois déjà écoulés compris) et +cash-flow des
+                        //   actifs (loyers comptés deux fois). La ligne 2027 affichait 257 074 DH
+                        //   quand le Relevé atterrissait à 241 020.
+                        //   Désormais : pour toute année dotée d'un budget détaillé, les liquidités
+                        //   de fin d'année SONT l'Atterrissage Projeté du Relevé (même moteur, même
+                        //   dirham). Au-delà, extrapolation depuis la dernière année budgétée.
+                        //   Les flux hors budget (événements du bac à sable, loyers ou mensualités
+                        //   non budgétés) s'ajoutent par-dessus, cumulés dans horsBudget.
+                        const _mbS = moisBudgetaire.value;
+                        const _anneesBudget = Object.keys(donneesAnnuelles.value || {}).map(Number).filter(Number.isFinite);
+                        const _derniereAnneeBudget = _anneesBudget.length ? Math.max(..._anneesBudget) : sandboxStartYear;
+                        const _atterrissageFinAnnee = (annee) => {
+                            const cyc = [];
+                            for (let a = _mbS.an; a <= annee; a++) for (let m = (a === _mbS.an ? _mbS.mois : 1); m <= 12; m++) cyc.push(m + '-' + a);
+                            return Number((_buildJournalReleve([], cyc) || {}).soldeAtterrissage) || 0;
+                        };
+                        const _ancre = (annee) => sandboxSurplusAuto.value && annee >= _mbS.an && annee <= _derniereAnneeBudget
+                            && !!(donneesAnnuelles.value || {})[annee];
+                        let horsBudget = 0;
                         let surplusAnnuel = sandboxSurplusAuto.value
-                            ? surplusBudgetaireAnnuel(sandboxStartYear)
+                            ? surplusBudgetaireAnnuel(_derniereAnneeBudget)
                             : (Number(sandboxSurplusMensuel.value) || 0) * 12;
 
                         for (let i = 0; i <= horizon; i++) {
                             const annee = sandboxStartYear + i;
                             let fluxSurplus = 0, fluxActifs = 0, capitalAmorti = 0,
                                 interetsAnnee = 0, serviceDette = 0, revalo = 0;
+                            const _courantAvant = courant;
+
+                            // Année en cours budgétée : liquidités de fin d'année = Relevé
+                            if (i === 0 && _ancre(annee)) {
+                                fluxSurplus = _atterrissageFinAnnee(annee) - (courant - horsBudget);
+                                courant += fluxSurplus;
+                            }
 
                             if (i > 0) {
                                 // ── 1. REVENUS ────────────────────────────────────────
-                                fluxSurplus = surplusAnnuel;
+                                fluxSurplus = _ancre(annee)
+                                    ? _atterrissageFinAnnee(annee) - (courant - horsBudget)
+                                    : surplusAnnuel;
                                 courant += fluxSurplus;
 
                                 sbAssets.forEach(a => {
@@ -9857,7 +9908,7 @@
                                 //   Érosion du pouvoir d'achat. Sur un surplus positif c'est
                                 //   bien s×(1−infl) ; sur un DÉFICIT, l'inflation le creuse au
                                 //   lieu de le réduire — d'où le raisonnement en valeur absolue.
-                                surplusAnnuel = surplusAnnuel - Math.abs(surplusAnnuel) * inflation;
+                                if (!_ancre(annee)) surplusAnnuel = surplusAnnuel - Math.abs(surplusAnnuel) * inflation;
                             }
 
                             // ── 5. ÉVÉNEMENTS de l'année (logique conservée) ──────────
@@ -9898,6 +9949,7 @@
                             if (yearEvents.length) {
                                 valeurActifs = sbAssets.reduce((s, a) => s + (N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value)), 0);
                             }
+                            horsBudget += (courant - _courantAvant - fluxSurplus);
                             rows.push({
                                 annee,
                                 courant: Math.round(courant),
@@ -11788,6 +11840,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     //   La logique de calcul est inchangée : seules les deux sources réactives
                     //   (_rFiltres / _rawCycles) deviennent des paramètres.
                     // ═══════════════════════════════════════════════════════════════════
+                    // ── v37.8 : UNE clé par compte, quelle que soit la forme de l'identifiant ──
+                    //   Les comptes créés par l'interface ont des id texte (acc_…), les comptes
+                    //   migrés des id numériques. L'ancien normaliseur ne préfixait que les id
+                    //   numériques : un virement vers « acc_…a1ye » ouvrait un second registre,
+                    //   compté par le Relevé mais ignoré du bandeau (84 000 DH d'écart fin 2027).
+                    const _cleCompte = (k, courantKey) => {
+                        if (k === null || k === undefined || k === '' || k === 'courant') return courantKey;
+                        const s = String(k);
+                        if (s.startsWith('cpt_') || s.startsWith('ep_')) return s;
+                        if (/^\d+$/.test(s) || (comptes.value || []).some(c => String(c.id) === s)) return 'cpt_' + s;
+                        return s;
+                    };
+
                     const _buildJournalReleve = (_filtresArg, _cyclesArg) => {
                         calculationTick.value;
                         // v25.30 Future-Restored : projection multi-cycles (présent + futur) avec bouclier temporel
@@ -11798,11 +11863,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                         const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
                         const courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
-                        const _normKey = (k) => {
-                            if (!k || k === 'courant') return courantKey;
-                            if (/^\d+$/.test(String(k))) return 'cpt_' + k;
-                            return k;
-                        };
+                        const _normKey = (k) => _cleCompte(k, courantKey); // v37.8
                         const _fxSrc  = _normKey(_si.compteChargesFixes || 'courant');
                         const _varSrc = _normKey(_si.compteChargesVariables || 'courant');
 
@@ -12294,11 +12355,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // ── Clé du Compte Courant (identique au journal) ──
                         const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
                         const courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
-                        const _normKey = (k) => {
-                            if (!k || k === 'courant') return courantKey;
-                            if (/^\d+$/.test(String(k))) return 'cpt_' + k;
-                            return k;
-                        };
+                        const _normKey = (k) => _cleCompte(k, courantKey); // v37.8
                         const _isCourant = (k) => _normKey(k) === courantKey;
                         const _fxSrc  = _normKey(_si.compteChargesFixes || 'courant');
                         const _varSrc = _normKey(_si.compteChargesVariables || 'courant');
@@ -12374,7 +12431,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // Épargne : ne compter que les virements sortant DU Compte Courant
                         const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
                         const _courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
-                        const _isCourantSrc = (k) => { if (!k || k === 'courant') return true; if (/^\d+$/.test(String(k))) return ('cpt_' + k) === _courantKey; return k === _courantKey; };
+                        const _isCourantSrc = (k) => _cleCompte(k, _courantKey) === _courantKey; // v37.8
                         const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {}))
                             .filter(Boolean)
                             .filter(obj => _isCourantSrc(obj.sourceCompte));
@@ -13908,6 +13965,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
                     // Synchronise les alias legacy (name/target/current) à chaque édition
                     const syncGoalLegacy = (g) => { g.name = g.libelle; g.target = N(g.montant_cible); g.current = N(g.montant_actuel); handleDataChange(); };
+                    // v37.8 : adosse un objectif à un compte (clé cpt_<id>) ou le détache
+                    const lierObjectifCompte = (g, cle) => { g.comptesLies = cle ? [cle] : []; handleDataChange(); };
 
                     // ═══════════════════════════════════════════════════════════════════
                     // v33.10 — INDÉPENDANCE FINANCIÈRE
@@ -14442,11 +14501,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const _log = (compte, mois, annee, libelle, montant, type) => {
                             // v17.32 : mapper 'courant' vers la clé physique cpt_<id> du compte courant
                             // v23.15 : résolution défensive — 'courant' | null | bare-id → clé physique
-                            const _resolveCle = (k) => {
-                                if (!k || k === 'courant') return courantCptKey || 'courant';
-                                if (/^\d+$/.test(String(k))) return 'cpt_' + k; // ID numérique sans préfixe
-                                return k;
-                            };
+                            const _resolveCle = (k) => _cleCompte(k, courantCptKey || 'courant'); // v37.8
                             const cle = _resolveCle(compte);
                             if (!_journal[cle]) _journal[cle] = [];
                             const entries = _journal[cle];
@@ -14479,11 +14534,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const courantCompte = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
                         const courantCptKey = courantCompte ? 'cpt_' + courantCompte.id : null;
                         // v23.15 : helper de normalisation utilisé partout dans les loops revenus/charges
-                        const _normKey = (k) => {
-                            if (!k || k === 'courant') return courantCptKey || 'courant';
-                            if (/^\d+$/.test(String(k))) return 'cpt_' + k;
-                            return k;
-                        };
+                        const _normKey = (k) => _cleCompte(k, courantCptKey || 'courant'); // v37.8
                         comptes.value.forEach(c => {
                             soldesComptes['cpt_' + c.id] = Number(c.solde) || 0;
                         });
@@ -15031,8 +15082,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const detailsComptesFinal = computed(() => {
                         const src = soldesProjetesJournal.value;
                         const out = {};
-                        Object.keys(src).forEach(k => { if (String(k).startsWith('cpt_')) out[k] = src[k]; });
-                        if (Object.keys(out).length) return out;
+                        // v37.8 : tout ce qui n'est pas une épargne virtuelle (ep_) est un compte.
+                        //   Filtrer sur 'cpt_' faisait disparaître EN SILENCE tout registre à la
+                        //   clé inattendue (84 000 DH absents du bandeau, présents au Relevé).
+                        Object.keys(src).forEach(k => { if (!String(k).startsWith('ep_')) out[k] = src[k]; });
+                        if (Object.keys(src).length) return out;
                         // repli : moteur bilan, si le journal n'a rien produit
                         const row = _derniereLigneCible.value;
                         return (row && row.detailsComptes) ? row.detailsComptes : {};
@@ -15042,7 +15096,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const src = soldesProjetesJournal.value;
                         const out = {};
                         Object.keys(src).forEach(k => { if (String(k).startsWith('ep_')) out[k] = src[k]; });
-                        if (Object.keys(out).length) return out;
+                        // v37.8 : le journal a parlé (même sans épargne virtuelle) → pas de repli
+                        //   sur l'ancien moteur bilan, qui réinjectait ses propres soldes.
+                        if (Object.keys(src).length) return out;
                         const row = _derniereLigneCible.value;
                         return (row && row.detailsEpargne) ? row.detailsEpargne : {};
                     });
@@ -15662,7 +15718,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         marketIntel, toggleMarketIntel, chargerMarketIntel, rafraichirMarketIntel,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
-                        migrateGoalV19, migrateGoalsV19, wealthGoalsCalc, addWealthGoal, syncGoalLegacy,
+                        migrateGoalV19, migrateGoalsV19, wealthGoalsCalc, addWealthGoal, syncGoalLegacy, lierObjectifCompte,
                         depensesHorsCreditsMensuel, mensualitesCreditsMensuel, salaireMensuel, independanceFinanciere,
                         studioExpl, studioExplTab, studioExploitationMois, studioExploitationTotaux,
                         studioScenarios, studioComparateur, studioSeuilEquilibre,

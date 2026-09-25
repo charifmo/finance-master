@@ -286,10 +286,15 @@ function cfo_compute_reliquat($fd, $yr) {
     return round($sumRev - $sumFix - $sumVar, 2);
 }
 
-function cfo_norm_key_c($k, string $courantKey): string {
-    if (!$k || $k === 'courant') return $courantKey;
-    if (preg_match('/^\d+$/', (string)$k)) return 'cpt_' . $k;
-    return (string)$k;
+// v37.8 : un id de compte texte (acc_…) sans préfixe désigne lui aussi un compte.
+//   Seuls les id numériques étaient reconnus : « acc_…n2jd » comme source d'un
+//   virement n'était pas vu comme le Compte Courant (même défaut que dans l'app).
+function cfo_norm_key_c($k, string $courantKey, array $idsComptes = []): string {
+    if ($k === null || $k === '' || $k === 'courant') return $courantKey;
+    $s = (string)$k;
+    if (strpos($s, 'cpt_') === 0 || strpos($s, 'ep_') === 0) return $s;
+    if (preg_match('/^\d+$/', $s) || in_array($s, $idsComptes, true)) return 'cpt_' . $s;
+    return $s;
 }
 
 function cfo_compute_monthly_net_courant($fd, $year): array {
@@ -303,10 +308,12 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
         if (is_object($c) && (oget($c, 'type') === 'courant' || oget($c, 'type') === 'liquide')) { $courantCpt = $c; break; }
     }
     $courantKey = $courantCpt ? 'cpt_' . oget($courantCpt, 'id') : 'courant';
-    $isC = function ($k) use ($courantKey) { return cfo_norm_key_c($k, $courantKey) === $courantKey; };
+    $idsComptes = [];
+    foreach ((oget($fd, 'comptes') ?: []) as $c) { if (is_object($c) && oget($c, 'id') !== null) $idsComptes[] = (string)oget($c, 'id'); }
+    $isC = function ($k) use ($courantKey, $idsComptes) { return cfo_norm_key_c($k, $courantKey, $idsComptes) === $courantKey; };
 
-    $fxSrc  = cfo_norm_key_c(oget($si, 'compteChargesFixes', 'courant'), $courantKey);
-    $varSrc = cfo_norm_key_c(oget($si, 'compteChargesVariables', 'courant'), $courantKey);
+    $fxSrc  = cfo_norm_key_c(oget($si, 'compteChargesFixes', 'courant'), $courantKey, $idsComptes);
+    $varSrc = cfo_norm_key_c(oget($si, 'compteChargesVariables', 'courant'), $courantKey, $idsComptes);
     $curA   = (int)(oget($si, 'anneeActuelle') ?: (int)date('Y'));
     $curM   = (int)(oget($si, 'moisActuel') ?: (((int)$year === $curA) ? (int)date('n') : 1));
 
@@ -1948,6 +1955,22 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             }
             $ch = [];
             $vAmount = cfo_pick_num($op, ['montant']);
+            // v37.8 : un objectif adossé à un compte AFFICHE le solde de ce compte.
+            //   Lui « ajouter des fonds » écrivait un chiffre que l'écran ignore — et que
+            //   l'IA relisait ensuite comme de l'argent réel (Lissage « 24 000 / 24 000 »
+            //   alors que le compte finissait l'année à 19 400).
+            $liesG = oget($goal,'comptesLies');
+            if ($vAmount !== null && $vAmount != 0 && is_array($liesG) && count($liesG)) {
+                $noms = [];
+                foreach ((oget($fd,'comptes') ?: []) as $c) {
+                    if (is_object($c) && in_array('cpt_' . oget($c,'id'), $liesG, true)) $noms[] = oget($c,'label') ?: oget($c,'id');
+                }
+                $log['status']='error';
+                $log['reason']="Objectif adossé au compte " . implode(', ', $noms ?: $liesG)
+                    . " : son montant EST le solde de ce compte, il ne se crédite pas à la main. "
+                    . "Pour y mettre de l'argent, simule un transfert (deux adjust_account_balance : débit du compte source, crédit de ce compte).";
+                break;
+            }
             if ($vAmount !== null && $vAmount != 0) {
                 $oldVal = (float)(oget($goal,'current',0) ?: 0);
                 oset($goal,'current', $oldVal + $vAmount);
