@@ -2530,10 +2530,14 @@
                             </div>
                             </details>
 
-                            <!-- Formulaire Nouvel événement virtuel -->
+                            <!-- ═══ v37.8 : formulaire POLYMORPHE ═══════════════════════
+                                 Un achat immobilier n'est pas « un montant ». Le
+                                 formulaire change de forme selon ce qu'on modélise. -->
                             <div class="p-4 bg-white rounded-xl border-2 border-dashed border-purple-300">
                                 <p class="text-[11px] font-black uppercase tracking-widest text-purple-700 mb-3">➕ Nouvel Événement Virtuel</p>
-                                <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+
+                                <!-- Ligne commune : quand, et quoi -->
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                                     <div>
                                         <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Année</label>
                                         <input type="number" v-model.number="sandboxForm.annee" :min="sandboxStartYear" :max="sandboxStartYear + sandboxHorizon"
@@ -2545,35 +2549,143 @@
                                             <option v-for="m in 12" :key="m" :value="m">{{ m }}</option>
                                         </select>
                                     </div>
-                                    <div>
+                                    <div class="col-span-2">
                                         <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Catégorie</label>
                                         <select v-model="sandboxForm.type" class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-purple-500">
-                                            <option value="achat">🛒 Achat actif</option>
-                                            <option value="vente">💸 Vente actif</option>
-                                            <option value="remboursement">🏦 Remb. anticipé</option>
+                                            <option v-for="t in SANDBOX_TYPES" :key="t.valeur" :value="t.valeur">{{ t.label }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- ── TYPE 1 : ACHAT IMMOBILIER LOCATIF ── -->
+                                <div v-if="sandboxForm.type === 'achat_locatif'" class="space-y-3">
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div class="col-span-2">
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Nom de l'actif</label>
+                                            <input v-model="sandboxForm.nom" type="text" placeholder="Ex : Appartement Gauthier"
+                                                class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-purple-500"/>
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Prix d'achat total</label>
+                                            <input type="number" v-model.number="sandboxForm.prixAchat" step="10000"
+                                                class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-purple-500 text-right"/>
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1" title="Notaire, enregistrement, agence">Frais d'acquisition</label>
+                                            <input type="number" v-model.number="sandboxForm.frais" step="1000"
+                                                class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-purple-500 text-right"/>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-rose-500 block mb-1" title="Seul montant réellement débité des liquidités">Apport personnel</label>
+                                            <input type="number" v-model.number="sandboxForm.apport" step="10000"
+                                                class="w-full bg-rose-50 border-2 border-rose-200 rounded-lg px-2 py-1.5 text-xs font-black text-rose-800 outline-none focus:border-rose-500 text-right"/>
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-amber-600 block mb-1">Montant du crédit</label>
+                                            <input type="number" v-model.number="sandboxForm.montantCredit" step="10000"
+                                                class="w-full bg-amber-50 border-2 border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-800 outline-none focus:border-amber-500 text-right"/>
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Taux (%)</label>
+                                            <input type="number" v-model.number="sandboxForm.taux" step="0.05"
+                                                class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-purple-500 text-right"/>
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Durée (mois)</label>
+                                            <input type="number" v-model.number="sandboxForm.dureeMois" step="12"
+                                                class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-purple-500 text-right"/>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                                        <div class="col-span-2">
+                                            <label class="text-[9px] font-black uppercase tracking-widest text-emerald-600 block mb-1" title="Net de charges : il alimente le surplus des années suivantes">Loyer mensuel net espéré</label>
+                                            <input type="number" v-model.number="sandboxForm.loyerMensuelNet" step="500"
+                                                class="w-full bg-emerald-50 border-2 border-emerald-200 rounded-lg px-2 py-1.5 text-xs font-black text-emerald-800 outline-none focus:border-emerald-500 text-right"/>
+                                        </div>
+                                        <div class="text-[10px] font-bold leading-tight">
+                                            <p class="text-gray-400 uppercase tracking-widest text-[8px]">Mensualité estimée</p>
+                                            <p class="text-gray-800 font-black tabular-nums">{{ formatMAD(sandboxMensualiteEstimee) }}</p>
+                                            <p :class="['tabular-nums', (sandboxForm.loyerMensuelNet - sandboxMensualiteEstimee) >= 0 ? 'text-emerald-600' : 'text-rose-600']">
+                                                Cash-flow {{ formatMAD(Math.round(sandboxForm.loyerMensuelNet - sandboxMensualiteEstimee)) }}/mois
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <button @click="addSandboxEvent" class="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-black text-[11px] uppercase tracking-widest shadow">+ Ajouter</button>
+                                        </div>
+                                    </div>
+                                    <p v-if="sandboxEcartFinancement !== 0" class="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                                        ⚠️ Plan de financement non bouclé : {{ formatMAD(Math.abs(sandboxEcartFinancement)) }}
+                                        {{ sandboxEcartFinancement > 0 ? 'ne sont couverts ni par l\'apport ni par le crédit' : 'de financement en trop' }}.
+                                    </p>
+                                    <p class="text-[10px] text-gray-500 italic">Seuls l'apport et les frais sortent des liquidités. Le prix du bien entre à l'actif, le crédit entre à la dette — ce sont des écritures de bilan, pas des sorties de caisse.</p>
+                                </div>
+
+                                <div v-else-if="sandboxForm.type === 'capex'" class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                                    <!-- TYPE 2 : CAPEX / CHOC DE TRÉSORERIE -->
+                                    <div class="col-span-2">
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Nom du choc</label>
+                                        <input v-model="sandboxForm.nom" type="text" placeholder="Ex : ravalement façade, 3 mois de vacance"
+                                            class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-amber-500"/>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Sens</label>
+                                        <select v-model="sandboxForm.sensChoc" class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-amber-500">
+                                            <option value="sortie">− Sortie de trésorerie</option>
+                                            <option value="entree">+ Entrée de trésorerie</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Cible</label>
-                                        <select v-if="sandboxForm.type !== 'achat'" v-model="sandboxForm.cible" class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-purple-500">
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Montant (DH)</label>
+                                        <input type="number" v-model.number="sandboxForm.montant" step="5000"
+                                            class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-amber-500 text-right"/>
+                                    </div>
+                                    <div class="col-span-2 md:col-span-4 flex items-center gap-3">
+                                        <p class="text-[10px] text-gray-500 italic flex-1">N'impacte que les liquidités de l'année choisie. Ni actif, ni dette.</p>
+                                        <button @click="addSandboxEvent" class="px-6 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-black text-[11px] uppercase tracking-widest shadow">+ Ajouter</button>
+                                    </div>
+                                </div>
+
+                                <div v-else-if="sandboxForm.type === 'vente'" class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                                    <!-- TYPE 3 : VENTE D'UN ACTIF -->
+                                    <div class="col-span-2">
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Actif à céder</label>
+                                        <select v-model="sandboxForm.cible" class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-emerald-500">
                                             <option value="">— choisir —</option>
                                             <option v-for="a in masterAssets" :key="a.id" :value="a.id">{{ a.name }}</option>
                                         </select>
-                                        <input v-else v-model="sandboxForm.cible" type="text" placeholder="Nom du nouvel actif"
-                                            class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-purple-500"/>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Prix net vendeur</label>
+                                        <input type="number" v-model.number="sandboxForm.montant" step="10000"
+                                            class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-emerald-500 text-right"/>
+                                    </div>
+                                    <div>
+                                        <button @click="addSandboxEvent" class="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest shadow">+ Ajouter</button>
+                                    </div>
+                                    <p class="col-span-2 md:col-span-4 text-[10px] text-gray-500 italic">L'actif sort du patrimoine, son capital restant dû est soldé, et le net de cession alimente les liquidités.</p>
+                                </div>
+
+                                <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                                    <!-- REMBOURSEMENT ANTICIPÉ -->
+                                    <div class="col-span-2">
+                                        <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Crédit à rembourser</label>
+                                        <select v-model="sandboxForm.cible" class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-rose-500">
+                                            <option value="">— choisir —</option>
+                                            <option v-for="a in masterAssets" :key="a.id" :value="a.id">{{ a.name }}</option>
+                                        </select>
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1">Montant (DH)</label>
                                         <input type="number" v-model.number="sandboxForm.montant" step="10000"
-                                            class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-purple-500 text-right"/>
+                                            class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-rose-500 text-right"/>
                                     </div>
-                                    <div class="flex items-end">
-                                        <button @click="addSandboxEvent" class="w-full py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-black text-[11px] uppercase tracking-widest shadow">+ Ajouter</button>
+                                    <div>
+                                        <button @click="addSandboxEvent" class="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-black text-[11px] uppercase tracking-widest shadow">+ Ajouter</button>
                                     </div>
+                                    <p class="col-span-2 md:col-span-4 text-[10px] text-gray-500 italic">Sortie de trésorerie plafonnée au capital restant dû de l'actif cible.</p>
                                 </div>
-                                <p v-if="sandboxForm.type === 'achat'" class="text-[10px] text-gray-500 mt-2 italic">Achat : le montant est débité du solde courant virtuel et l'actif est ajouté au patrimoine (non-productif par défaut).</p>
-                                <p v-else-if="sandboxForm.type === 'vente'" class="text-[10px] text-gray-500 mt-2 italic">Vente : l'actif sélectionné est retiré, son solde de crédit éventuel est apuré, et le net est crédité au solde courant virtuel.</p>
-                                <p v-else class="text-[10px] text-gray-500 mt-2 italic">Remboursement anticipé : le montant est débité du courant et déduit du crédit restant de l'actif cible.</p>
                             </div>
 
                             <!-- Liste des événements virtuels -->
@@ -2581,47 +2693,82 @@
                                 <p class="text-[11px] font-black uppercase tracking-widest text-gray-600">📋 Événements planifiés ({{ sandboxEvents.length }})</p>
                                 <div v-for="(ev, idx) in sandboxEventsSorted" :key="ev.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                     <span class="text-[10px] font-black bg-fuchsia-100 text-fuchsia-700 px-2 py-1 rounded">{{ ev.annee }}-{{ String(ev.mois).padStart(2, '0') }}</span>
-                                    <span class="text-[11px] font-bold text-gray-700">{{ ev.type === 'achat' ? '🛒 Achat' : ev.type === 'vente' ? '💸 Vente' : '🏦 Remb.' }}</span>
+                                    <span class="text-base shrink-0">{{ sandboxEventIcone(ev) }}</span>
                                     <span class="text-[11px] text-gray-600 flex-1 truncate">{{ sandboxEventLabel(ev) }}</span>
-                                    <span class="text-[11px] font-black text-gray-800">{{ formatMAD(ev.montant) }}</span>
                                     <button @click="removeSandboxEvent(ev.id)" class="p-1 rounded hover:bg-red-100 text-red-400 hover:text-red-600">🗑️</button>
                                 </div>
                             </div>
                             <div v-else class="text-center text-[11px] text-gray-400 italic py-2">Aucun événement virtuel. Ajoute-en un ci-dessus pour démarrer la simulation.</div>
 
+                            <!-- v37.8 : ce que le moteur n'a pas su faire boucler -->
+                            <div v-if="sandboxAlertes.length" class="space-y-1.5 p-3 rounded-xl bg-amber-50 border-2 border-amber-200">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-amber-700">⚠️ Points de vigilance du scénario</p>
+                                <p v-for="(al, k) in sandboxAlertes" :key="k" class="text-[11px] font-bold text-amber-800 leading-snug">
+                                    <span class="font-black">{{ al.annee }}</span> — {{ al.texte }}
+                                </p>
+                            </div>
+
+                            <!-- v37.8 : Liquidités (barres) vs Patrimoine net (courbe) -->
+                            <div class="rounded-xl border-2 border-purple-200 bg-white p-4">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-purple-700 mb-2">📈 Trésorerie & patrimoine sur {{ sandboxHorizon }} ans</p>
+                                <div class="relative h-56 md:h-64">
+                                    <base-chart :config="sandboxChartConfig"></base-chart>
+                                </div>
+                            </div>
+
                             <!-- Timeline / Projection annuelle -->
+                            <div class="flex items-center justify-between gap-3 flex-wrap">
+                                <p class="text-[11px] font-black uppercase tracking-widest text-gray-600">📊 Projection annuelle</p>
+                                <button @click="sandboxDetailFlux = !sandboxDetailFlux"
+                                    class="px-3 py-1.5 rounded-lg border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 font-black text-[10px] uppercase tracking-widest transition-colors">
+                                    {{ sandboxDetailFlux ? '[−] Masquer le détail des flux' : '[+] Afficher le détail des flux' }}
+                                </button>
+                            </div>
                             <div class="overflow-x-auto rounded-xl border-2 border-purple-200">
                                 <table class="w-full text-sm">
                                     <thead class="bg-gradient-to-r from-fuchsia-700 to-purple-800 text-white">
                                         <tr>
                                             <th class="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Année</th>
-                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Solde Courant</th>
+                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Liquidités</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Dette Totale</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Valeur Actifs</th>
                                             <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Patrimoine Net</th>
-                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Surplus budgétaire de l'année">+ Surplus</th>
-                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Cash-flow net des actifs productifs">+ Actifs</th>
-                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Capital de crédit remboursé dans l'année">− Capital</th>
-                                            <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest" title="Plus-value de revalorisation">▲ Revalo</th>
+                                            <template v-if="sandboxDetailFlux">
+                                                <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest bg-purple-900/40" title="Surplus budgétaire de l'année">+ Surplus</th>
+                                                <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest bg-purple-900/40" title="Exploitation nette des actifs, hors écritures de bilan">+ Actifs</th>
+                                                <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest bg-purple-900/40" title="Capital de crédit remboursé — écriture de bilan, aucune sortie de caisse">− Capital</th>
+                                                <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest bg-purple-900/40" title="Plus-value de revalorisation">▲ Revalo</th>
+                                                <th class="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest bg-purple-900/40" title="Apports, frais, capex, remboursements anticipés">− Chocs</th>
+                                            </template>
                                             <th class="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Événements</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="row in sandboxProjection" :key="row.annee" class="border-b border-purple-100 hover:bg-purple-50/40">
-                                            <td class="px-3 py-2 font-black text-gray-800">{{ row.annee }}</td>
-                                            <td :class="['px-3 py-2 text-right font-black tabular-nums', row.courant >= 0 ? 'text-blue-700' : 'text-red-600']">{{ formatMAD(row.courant) }}</td>
+                                        <tr v-for="row in sandboxProjection" :key="row.annee" :class="['border-b border-purple-100 hover:bg-purple-50/40', row.depart ? 'bg-slate-50' : '']">
+                                            <td class="px-3 py-2 font-black text-gray-800">
+                                                {{ row.annee }}
+                                                <span v-if="row.depart" class="block text-[8px] font-black uppercase tracking-widest text-slate-400">départ</span>
+                                            </td>
+                                            <td :class="['px-3 py-2 text-right font-black tabular-nums', row.liquidite >= 0 ? 'text-blue-700' : 'text-red-600']">{{ formatMAD(row.liquidite) }}</td>
                                             <td class="px-3 py-2 text-right font-black tabular-nums text-rose-700">{{ formatMAD(row.dette) }}</td>
                                             <td class="px-3 py-2 text-right font-black tabular-nums text-indigo-700">{{ formatMAD(row.valeurActifs) }}</td>
                                             <td :class="['px-3 py-2 text-right font-black tabular-nums', row.net >= 0 ? 'text-emerald-700' : 'text-red-600']">{{ formatMAD(row.net) }}</td>
-                                            <td :class="['px-3 py-2 text-right text-[11px] font-bold tabular-nums', row.fluxSurplus >= 0 ? 'text-gray-500' : 'text-rose-500']">{{ row.fluxSurplus ? formatMAD(row.fluxSurplus) : '—' }}</td>
-                                            <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-emerald-600">{{ row.fluxActifs ? formatMAD(row.fluxActifs) : '—' }}</td>
-                                            <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-rose-600">{{ row.capitalAmorti ? formatMAD(row.capitalAmorti) : '—' }}</td>
-                                            <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-indigo-500">{{ row.revalo ? formatMAD(row.revalo) : '—' }}</td>
+                                            <template v-if="sandboxDetailFlux">
+                                                <td :class="['px-3 py-2 text-right text-[11px] font-bold tabular-nums bg-purple-50/40', row.fluxSurplus >= 0 ? 'text-gray-500' : 'text-rose-500']">{{ row.fluxSurplus ? formatMAD(row.fluxSurplus) : '—' }}</td>
+                                                <td :class="['px-3 py-2 text-right text-[11px] font-bold tabular-nums bg-purple-50/40', row.fluxActifs >= 0 ? 'text-emerald-600' : 'text-rose-500']">{{ row.fluxActifs ? formatMAD(row.fluxActifs) : '—' }}</td>
+                                                <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-rose-600 bg-purple-50/40">{{ row.capitalAmorti ? formatMAD(row.capitalAmorti) : '—' }}</td>
+                                                <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-indigo-500 bg-purple-50/40">{{ row.revalo ? formatMAD(row.revalo) : '—' }}</td>
+                                                <td class="px-3 py-2 text-right text-[11px] font-bold tabular-nums text-amber-600 bg-purple-50/40">{{ row.chocsNegatifs ? formatMAD(row.chocsNegatifs) : '—' }}</td>
+                                            </template>
                                             <td class="px-3 py-2 text-[10px] text-gray-500">{{ row.events.length ? row.events.map(e => sandboxEventLabel(e)).join(' · ') : '—' }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
+                            <p v-if="sandboxDetailFlux" class="text-[10px] text-gray-500 italic leading-snug">
+                                « − Capital » est une écriture de bilan : la dette baisse, la trésorerie ne bouge pas — la mensualité en est déjà sortie une seule fois, par le budget ou par le cash-flow de l'actif.
+                                Variation des liquidités = + Surplus + Actifs − Chocs.
+                            </p>
 
                             <!-- Bouton Appliquer ce scénario -->
                             <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 pt-2 border-t-2 border-dashed border-fuchsia-200">
@@ -6571,8 +6718,19 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.7 Retour-Ecriture";
+                    const CURRENT_VERSION = "37.8 Simulateur-CashFlow";
                     const CHANGELOG = [
+        { version: "37.8 Simulateur-CashFlow", date: "2026-09-25", changes: [
+            "LE BUG, NOMMÉ PRÉCISÉMENT — le moteur de projection faisait chaque année « liquidité += surplus budgétaire » PUIS « liquidité += cash-flow net de l'actif ». Or le surplus budgétaire retranche déjà les mensualités de crédit (elles vivent dans chargesFixes sous les clés « credit* » — le code le disait lui-même en commentaire), et le cash-flow net vaut REX − SERVICE DE DETTE − impôt. Le service de la dette sortait donc DEUX FOIS de la trésorerie, chaque année, de façon cumulative. Le garde-fou « dejaCompte » ne protégeait que la troisième soustraction, jamais celle-là. C'est cela qui faisait plonger les liquidités dans le rouge sans qu'aucune dépense réelle n'existe.",
+            "LA RÈGLE, DÉSORMAIS UNIQUE — Liquidité(N) = Liquidité(N−1) + surplus budgétaire + exploitation nette des actifs + chocs positifs − chocs négatifs. L'amortissement du capital NE TOUCHE PLUS la trésorerie : c'est une écriture de bilan, la mensualité en est déjà sortie une seule fois, par un canal choisi explicitement (le budget, ou le cash-flow de l'actif, jamais les deux). Un achat ne déduit que l'apport et les frais — jamais le prix du bien, jamais la dette.",
+            "MOTEUR EXTRAIT ET TESTABLE — projeterPatrimoine() est une fonction PURE : ni ref Vue, ni fermeture sur l'état de l'application ; même les trois fonctions financières (économie d'un actif, amortissement, mensualité) entrent par paramètre. L'adaptateur Vue ne fait plus que rassembler les entrées. C'est ce qui permet de la rejouer hors navigateur — 40 contrôles dans test_projection.mjs. Sabotage vérifié : rétablir le double comptage en fait tomber 4, faire sortir l'amortissement de la caisse en fait tomber 10.",
+            "CONTRÔLE DE COHÉRENCE EMBARQUÉ — chaque ligne recompose sa propre variation de trésorerie à partir des flux qu'elle déclare. Tout écart signifie qu'un flux est passé sans être nommé (exactement ce qui se produisait avant) : la ligne le dit, dans le bandeau « Points de vigilance ». Y figurent aussi les plans de financement qui ne bouclent pas, les ventes dont le net ne couvre pas le capital restant dû, et les remboursements plafonnés.",
+            "ÉVÉNEMENTS POLYMORPHES — le champ « montant » unique est remplacé par trois formulaires. ACHAT IMMOBILIER LOCATIF : nom, prix d'achat, apport, frais d'acquisition, montant du crédit, taux, durée, loyer mensuel net — avec mensualité et cash-flow calculés en direct sous le formulaire, et l'écart de financement signalé avant l'ajout (apport + crédit = prix ; les frais sortent du cash en plus). CAPEX / CHOC DE TRÉSORERIE : n'impacte que les liquidités de l'année, ni actif ni dette, en sortie ou en entrée. VENTE : prix net vendeur, capital restant dû soldé, actif retiré du patrimoine.",
+            "LE LOYER D'UNE ACQUISITION ALIMENTE LES ANNÉES SUIVANTES — un bien acheté en année N porte, dès N+1, son loyer net moins sa mensualité, avec un crédit dont l'âge se compte depuis SON année d'achat et non depuis le début de la projection. Le loyer saisi étant net, les abattements de charges du moteur sont neutralisés sur ces actifs pour ne pas le rogner deux fois.",
+            "TABLEAU DÉSENCOMBRÉ — six colonnes par défaut : Année, Liquidités, Dette Totale, Valeur Actifs, Patrimoine Net, Événements. Les quatre colonnes techniques (+ Surplus, + Actifs, − Capital, ▲ Revalo) et les chocs passent derrière un bouton « [+] Afficher le détail des flux ». La ligne de départ est marquée comme telle : ce n'est pas une fin d'année projetée, c'est aujourd'hui.",
+            "GRAPHIQUE — liquidités en barres (rouges quand elles passent sous zéro) et patrimoine net en courbe, sur deux axes : le patrimoine se compte en millions, la trésorerie en milliers, et sur une échelle commune les barres disparaîtraient.",
+            "AU PASSAGE — les brouillons de simulation créés avant cette refonte sont relus, pas jetés : un ancien « achat » devient un achat payé comptant, avec son montant en apport."
+        ] },
         { version: "37.7 Retour-Ecriture", date: "2026-09-24", changes: [
             "LE MOTEUR ÉCRIVAIT BIEN — reproduction locale des trois « date cible = 2027-12 » sur vos objectifs (Fonds d'urgence, Lissage Dépenses Annuelles, Épargne Long Terme) : les trois passent, date_cible vaut 2027-12 dans l'état muté, et operations_appliquees les liste une à une. Le « ✓ appliqué » du CFO disait vrai.",
             "C'EST L'ÉCRAN QUI NE SUIVAIT PAS — l'agent n'écrit pas dans l'onglet ouvert : il écrit sur le VPS (pending_commit.php compile, le nœud Committer relit le pending et le POSTe à save_data.php). Or executerImportFusion() n'était appelé qu'au montage de la page et à l'import d'un fichier. JAMAIS après un tour de conversation. L'onglet affichait donc, indéfiniment, l'état chargé au démarrage. Voilà le symptôme qui revient depuis la v35.5 : « le CFO dit que c'est appliqué, mais rien ne bouge dans l'UI ». Les champs DATE CIBLE vides de votre capture ne sont pas vides sur le serveur.",
@@ -9696,6 +9854,7 @@
 
                     // ─────────────────────────────────────────────────────
                     // ── v20.00 : SANDBOX / PROJECTIONS ────────────────────
+                    // ── v37.8 : moteur réécrit en CASH-FLOW STRICT ────────
                     // ─────────────────────────────────────────────────────
                     const sandboxStartYear = new Date().getFullYear();
                     const sandboxHorizon = ref(7);
@@ -9709,13 +9868,53 @@
                     // une seconde fois de la trésorerie. Les loyers, eux, n'y sont pas.
                     const sandboxMensualitesDansBudget = ref(true);
                     const sandboxRevenusActifsDansBudget = ref(false);
+                    const sandboxDetailFlux = ref(false);        // v37.8 : colonnes techniques repliées
                     const sandboxEvents = ref([]);
-                    const sandboxForm = ref({
-                        annee: sandboxStartYear + 1,
-                        mois: 1,
-                        type: 'achat',
+
+                    // ═══════════════════════════════════════════════════════════════
+                    // v37.8 — TYPOLOGIE DES ÉVÉNEMENTS
+                    //   Un achat immobilier n'est pas « un montant ». C'est un prix, un
+                    //   apport, un crédit, un taux, une durée et un loyer : cinq flux
+                    //   distincts qui ne frappent NI le même poste NI la même année.
+                    //   Les trois formes ci-dessous remplacent le champ unique.
+                    // ═══════════════════════════════════════════════════════════════
+                    const SANDBOX_TYPES = [
+                        { valeur: 'achat_locatif', label: '🏠 Achat immobilier locatif', couleur: 'purple' },
+                        { valeur: 'capex',         label: '🔧 Capex / choc de trésorerie', couleur: 'amber' },
+                        { valeur: 'vente',         label: '💸 Vente d\'un actif',          couleur: 'emerald' },
+                        { valeur: 'remboursement', label: '🏦 Remboursement anticipé',     couleur: 'rose' },
+                    ];
+
+                    const _sandboxFormVide = (garder = {}) => ({
+                        annee: garder.annee || (sandboxStartYear + 1),
+                        mois: garder.mois || 1,
+                        type: garder.type || 'achat_locatif',
+                        // — achat locatif
+                        nom: '', prixAchat: 0, apport: 0, frais: 0,
+                        montantCredit: 0, taux: 4.5, dureeMois: 240, loyerMensuelNet: 0,
+                        // — capex / choc
+                        sensChoc: 'sortie',
+                        // — vente / remboursement
                         cible: '',
+                        // — montant générique (capex, vente, remboursement)
                         montant: 0,
+                    });
+                    const sandboxForm = ref(_sandboxFormVide());
+
+                    // Reste à financer d'un achat : le formulaire le montre en direct
+                    // plutôt que de laisser l'utilisateur découvrir l'incohérence dans
+                    // une colonne de la projection.
+                    const sandboxEcartFinancement = computed(() => {
+                        const f = sandboxForm.value;
+                        if (f.type !== 'achat_locatif') return 0;
+                        // apport + crédit = PRIX. Les frais d'acquisition sortent du
+                        // cash EN PLUS ; ils ne sont pas financés par le crédit.
+                        return Math.round(N(f.prixAchat) - N(f.apport) - N(f.montantCredit));
+                    });
+                    const sandboxMensualiteEstimee = computed(() => {
+                        const f = sandboxForm.value;
+                        if (f.type !== 'achat_locatif') return 0;
+                        return Math.round(mensualiteClassique(f.montantCredit, f.taux, f.dureeMois));
                     });
 
                     const sandboxEventsSorted = computed(() =>
@@ -9724,33 +9923,87 @@
                         )
                     );
 
-                    const sandboxEventLabel = (ev) => {
-                        if (!ev) return '';
-                        if (ev.type === 'achat') {
-                            return `Achat « ${ev.cible || 'Nouvel actif'} »`;
+                    // v37.8 : les brouillons enregistrés avant la refonte portaient
+                    //   { type:'achat', cible:'<nom>', montant } — un achat payé cash.
+                    //   On les relit sans rien perdre plutôt que de les jeter.
+                    const sandboxEventNormalise = (ev) => {
+                        const e = Object.assign({}, ev || {});
+                        if (e.type === 'achat') {
+                            return Object.assign(e, {
+                                type: 'achat_locatif',
+                                nom: e.nom || e.cible || 'Nouvel actif',
+                                prixAchat: N(e.prixAchat, N(e.montant)),
+                                apport: N(e.apport, N(e.montant)),
+                                frais: N(e.frais), montantCredit: N(e.montantCredit),
+                                taux: N(e.taux), dureeMois: N(e.dureeMois),
+                                loyerMensuelNet: N(e.loyerMensuelNet),
+                            });
+                        }
+                        return e;
+                    };
+
+                    const sandboxEventLabel = (evBrut) => {
+                        const ev = sandboxEventNormalise(evBrut);
+                        if (!ev || !ev.type) return '';
+                        if (ev.type === 'achat_locatif') {
+                            const fin = N(ev.montantCredit) > 0
+                                ? ` (apport ${formatMAD(N(ev.apport) + N(ev.frais))}, crédit ${formatMAD(ev.montantCredit)})`
+                                : ` (${formatMAD(N(ev.apport) + N(ev.frais))} comptant)`;
+                            return `Achat « ${ev.nom || 'Nouvel actif'} »${fin}`;
+                        }
+                        if (ev.type === 'capex') {
+                            return `${ev.sensChoc === 'entree' ? 'Entrée' : 'Choc'} « ${ev.nom || 'Sans nom'} » ${formatMAD(N(ev.montant))}`;
                         }
                         const asset = masterAssets.value.find(a => a.id === ev.cible);
-                        const name = asset ? asset.name : '(actif inconnu)';
-                        if (ev.type === 'vente') return `Vente « ${name} »`;
-                        if (ev.type === 'remboursement') return `Remboursement anticipé « ${name} »`;
+                        const name = asset ? asset.name : (ev.nom || '(actif inconnu)');
+                        if (ev.type === 'vente') return `Vente « ${name} » net ${formatMAD(N(ev.montant))}`;
+                        if (ev.type === 'remboursement') return `Remboursement anticipé « ${name} » ${formatMAD(N(ev.montant))}`;
                         return name;
                     };
+
+                    const sandboxEventIcone = (ev) => ({
+                        achat_locatif: '🏠', achat: '🏠', capex: '🔧', vente: '💸', remboursement: '🏦',
+                    })[(ev || {}).type] || '•';
 
                     const addSandboxEvent = () => {
                         const f = sandboxForm.value;
                         if (!f.annee || !f.mois) { alert('Année et mois requis.'); return; }
-                        if (!f.montant || f.montant <= 0) { alert('Montant doit être > 0.'); return; }
-                        if (f.type !== 'achat' && !f.cible) { alert('Sélectionne un actif cible.'); return; }
-                        if (f.type === 'achat' && !String(f.cible || '').trim()) { alert('Donne un nom au nouvel actif.'); return; }
-                        sandboxEvents.value.push({
+                        const base = {
                             id: 'sb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                            annee: Number(f.annee),
-                            mois: Number(f.mois),
-                            type: f.type,
-                            cible: f.type === 'achat' ? String(f.cible).trim() : f.cible,
-                            montant: Number(f.montant) || 0,
-                        });
-                        sandboxForm.value = { annee: f.annee, mois: f.mois, type: f.type, cible: '', montant: 0 };
+                            annee: Number(f.annee), mois: Number(f.mois), type: f.type,
+                        };
+                        let evt = null;
+
+                        if (f.type === 'achat_locatif') {
+                            if (!String(f.nom || '').trim()) { alert('Donne un nom à l\'actif.'); return; }
+                            if (N(f.prixAchat) <= 0) { alert('Le prix d\'achat doit être > 0.'); return; }
+                            if (N(f.apport) < 0 || N(f.montantCredit) < 0) { alert('Apport et crédit ne peuvent pas être négatifs.'); return; }
+                            const ecart = N(f.prixAchat) - N(f.apport) - N(f.montantCredit);
+                            if (Math.abs(ecart) > 1 && !confirm(
+                                `Le plan de financement ne boucle pas : ${formatMAD(Math.abs(ecart))} ${ecart > 0 ? 'NON financés' : 'en trop'}.\n\n`
+                                + `Prix d'achat = ${formatMAD(N(f.prixAchat))}\n`
+                                + `Apport + crédit = ${formatMAD(N(f.apport) + N(f.montantCredit))}\n`
+                                + `(les frais d'acquisition sortent du cash en plus)\n\n`
+                                + `Ajouter quand même ? La projection signalera l'écart à chaque ligne.`)) return;
+                            evt = Object.assign(base, {
+                                nom: String(f.nom).trim(),
+                                prixAchat: N(f.prixAchat), apport: N(f.apport), frais: N(f.frais),
+                                montantCredit: N(f.montantCredit), taux: N(f.taux),
+                                dureeMois: Math.round(N(f.dureeMois)), loyerMensuelNet: N(f.loyerMensuelNet),
+                                montant: N(f.apport) + N(f.frais),   // ce qui sort vraiment du cash
+                            });
+                        } else if (f.type === 'capex') {
+                            if (!String(f.nom || '').trim()) { alert('Donne un nom au choc.'); return; }
+                            if (N(f.montant) <= 0) { alert('Le montant doit être > 0.'); return; }
+                            evt = Object.assign(base, { nom: String(f.nom).trim(), montant: N(f.montant), sensChoc: f.sensChoc || 'sortie' });
+                        } else {
+                            if (!f.cible) { alert('Sélectionne un actif cible.'); return; }
+                            if (N(f.montant) <= 0) { alert('Le montant doit être > 0.'); return; }
+                            evt = Object.assign(base, { cible: f.cible, montant: N(f.montant) });
+                        }
+
+                        sandboxEvents.value.push(evt);
+                        sandboxForm.value = _sandboxFormVide({ annee: f.annee, mois: f.mois, type: f.type });
                     };
 
                     const removeSandboxEvent = (id) => {
@@ -9779,142 +10032,332 @@
                     };
 
                     // ═══════════════════════════════════════════════════════════════
-                    // v33.00 — PROJECTION ANNUELLE DYNAMIQUE
-                    //   Pour chaque année :
-                    //     1. revenus       (surplus budgétaire + cash-flow net des actifs)
-                    //     2. amortissement (capital remboursé, dette et trésorerie)
-                    //     3. revalorisation des actifs
-                    //     4. inflation     (érosion du surplus)
-                    //     5. événements    (achat / vente / remboursement)
-                    //     6. patrimoine net = valeurActifs + courant − dette
+                    // v37.8 — MOTEUR DE PROJECTION, EN CASH-FLOW STRICT
+                    //
+                    //   LE BUG CORRIGÉ. L'ancien moteur faisait, chaque année :
+                    //       liquidité += surplusBudgétaire          (1)
+                    //       liquidité += cashflowNet de l'actif     (2)
+                    //   où surplusBudgétaire retranche déjà les mensualités de crédit
+                    //   (elles vivent dans chargesFixes, clés « credit* » — le code le
+                    //   disait lui-même) et où cashflowNet vaut REX − SERVICE DE DETTE
+                    //   − impôt. Le service de la dette sortait donc DEUX FOIS de la
+                    //   trésorerie. Le garde-fou « dejaCompte » ne protégeait que la
+                    //   troisième soustraction, jamais celle-ci. Sur un patrimoine à
+                    //   crédit, l'erreur se chiffre en centaines de milliers de DH sur
+                    //   l'horizon, et elle est cumulative : d'où des liquidités qui
+                    //   plongent dans le rouge sans qu'aucune dépense réelle n'existe.
+                    //
+                    //   LA RÈGLE, désormais unique et vérifiée ligne à ligne :
+                    //       Liquidité(N) = Liquidité(N−1)
+                    //                    + surplus budgétaire annuel
+                    //                    + exploitation nette des actifs
+                    //                    + chocs positifs  (ventes, entrées)
+                    //                    − chocs négatifs  (apports, frais, capex,
+                    //                                       remboursements anticipés)
+                    //   L'amortissement du capital NE TOUCHE PAS la liquidité : la
+                    //   mensualité en est déjà sortie une fois, par un seul canal. Un
+                    //   achat ne déduit que l'apport et les frais — jamais le prix du
+                    //   bien, jamais la dette. Ce sont des écritures de bilan.
+                    //
+                    //   Fonction PURE : aucune ref Vue, aucune fermeture sur l'état de
+                    //   l'application. Tout entre par les paramètres, y compris les
+                    //   trois fonctions financières. C'est ce qui la rend rejouable
+                    //   hors navigateur — voir test_projection.mjs.
                     // ═══════════════════════════════════════════════════════════════
-                    const sandboxProjection = computed(() => {
-                        calculationTick.value;
-                        const base = _sandboxBaseState();
-                        let courant = base.courant;
-                        let dette = base.dette;
-                        let valeurActifs = base.valeurActifs;
-                        const rows = [];
-                        const horizon = Math.max(1, Math.min(20, Number(sandboxHorizon.value) || 1));
-                        const inflation = sandboxInflationOn.value ? N((parametres.value || {}).hypotheseInflation) / 100 : 0;
-                        // Sandbox assets travaille en mémoire (schéma v19 garanti)
-                        const sbAssets = migrateAssetsV19(JSON.parse(JSON.stringify(base.assets)));
-                        // Surplus : dérivé du budget réel, ou saisie manuelle
-                        let surplusAnnuel = sandboxSurplusAuto.value
-                            ? surplusBudgetaireAnnuel(sandboxStartYear)
-                            : (Number(sandboxSurplusMensuel.value) || 0) * 12;
+                    const projeterPatrimoine = (p) => {
+                        const num = (v, d = 0) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+                        const anneeDepart = num(p.anneeDepart, new Date().getFullYear());
+                        const horizon = Math.max(1, Math.min(20, num(p.horizon, 7)));
+                        const inflation = num(p.inflation);
+                        const revaloOn = p.revaloOn !== false;
+                        const mensualitesDansBudget = p.mensualitesDansBudget !== false;
+                        const revenusDansBudget = p.revenusActifsDansBudget === true;
+                        const eco = p.economieActif || (() => ({ rex: 0, impot: 0, cashflowNet: 0, serviceDette: 0, interetsOuMarge: 0 }));
+                        const amo = p.amortissement || (() => ({ capitalRembourse: 0, interetsOuMarge: 0 }));
+                        const mens = p.mensualitePour || (() => 0);
 
+                        const actifs = JSON.parse(JSON.stringify(p.actifs || []));
+                        const evenements = (p.evenements || []).map(e => Object.assign({}, e));
+                        const valeurDe = (a) => num(a.valeur_actuelle) || num(a.prix_acquisition) || num(a.value);
+                        const totalValeur = () => actifs.reduce((s, a) => s + valeurDe(a), 0);
+
+                        let liquidite = num(p.liquiditeInitiale);
+                        let dette = actifs.reduce((s, a) => s + num(a.montant_credit), 0);
+                        let valeurActifs = totalValeur();
+                        let surplusAnnuel = num(p.surplusAnnuel);
+
+                        const rows = [];
                         for (let i = 0; i <= horizon; i++) {
-                            const annee = sandboxStartYear + i;
-                            let fluxSurplus = 0, fluxActifs = 0, capitalAmorti = 0,
-                                interetsAnnee = 0, serviceDette = 0, revalo = 0;
+                            const annee = anneeDepart + i;
+                            const liquiditeOuverture = liquidite;
+                            let fluxSurplus = 0, fluxActifs = 0, capitalAmorti = 0, revalo = 0,
+                                interets = 0, serviceDette = 0, mensualitesHorsBudget = 0,
+                                chocsPositifs = 0, chocsNegatifs = 0, creditNouveau = 0;
+                            const alertes = [];
 
                             if (i > 0) {
-                                // ── 1. REVENUS ────────────────────────────────────────
+                                // ── 1. SURPLUS BUDGÉTAIRE ─────────────────────────────
                                 fluxSurplus = surplusAnnuel;
-                                courant += fluxSurplus;
+                                liquidite += fluxSurplus;
 
-                                sbAssets.forEach(a => {
-                                    if (!a.isProductive) return;
-                                    const eco = assetEconomics(a, i - 1);
-                                    if (!sandboxRevenusActifsDansBudget.value) {
-                                        // cash-flow net = REX − service dette − impôt : le service
-                                        // de la dette est déjà dedans, on ne le resoustrait pas.
-                                        fluxActifs += eco.cashflowNet;
+                                // ── 2. EXPLOITATION DES ACTIFS ────────────────────────
+                                //   UN SEUL canal porte le service de la dette. Lequel,
+                                //   c'est la ligne ci-dessous qui le tranche — et elle
+                                //   le tranche une fois pour toutes.
+                                actifs.forEach(a => {
+                                    // Une acquisition simulée en année k a un crédit
+                                    // vieux de (i − k) ans, pas de i ans.
+                                    const idxCredit = a._sandboxNouveau
+                                        ? Math.max(0, (i - 1) - num(a._anneeIndexAchat))
+                                        : (i - 1);
+                                    const porteurDeLoyer = a.isProductive || a._sandboxNouveau;
+                                    if (porteurDeLoyer) {
+                                        const e = eco(a, idxCredit);
+                                        let contribution;
+                                        if (a._sandboxNouveau) {
+                                            // Acquisition simulée : elle n'est dans AUCUN budget
+                                            // réel, donc elle porte son loyer ET sa mensualité.
+                                            contribution = num(e.cashflowNet);
+                                        } else if (revenusDansBudget) {
+                                            contribution = 0;                       // tout est déjà au budget
+                                        } else if (mensualitesDansBudget) {
+                                            contribution = num(e.rex) - num(e.impot); // exploitation SEULE
+                                        } else {
+                                            contribution = num(e.cashflowNet);        // exploitation − dette − impôt
+                                        }
+                                        fluxActifs += contribution;
+                                        interets += num(e.interetsOuMarge);
+                                        serviceDette += num(e.serviceDette);
+                                    } else if (num(a.montant_credit) > 0 && !mensualitesDansBudget) {
+                                        // Actif non productif à crédit (résidence, foncier) :
+                                        // aucun autre canal ne sort sa mensualité.
+                                        const sortie = (num(a.mensualite) + num(a.assurance_mensuelle)) * 12;
+                                        mensualitesHorsBudget += sortie;
+                                        serviceDette += sortie;
                                     }
-                                    interetsAnnee += eco.interetsOuMarge;
-                                    serviceDette += eco.serviceDette;
                                 });
-                                courant += fluxActifs;
+                                liquidite += fluxActifs - mensualitesHorsBudget;
 
-                                // ── 2. AMORTISSEMENT DES CRÉDITS ──────────────────────
-                                sbAssets.forEach(a => {
-                                    if (N(a.montant_credit) <= 0) return;
-                                    const amo = amortissementAnnuel(a, i - 1);
-                                    const paye = Math.min(N(a.montant_credit), amo.capitalRembourse);
-                                    a.montant_credit = Math.max(0, N(a.montant_credit) - paye);
+                                // ── 3. AMORTISSEMENT — ÉCRITURE DE BILAN, PAS DE CAISSE ──
+                                //   Le capital remboursé réduit la dette. Il ne sort PAS
+                                //   de la trésorerie ici : il est déjà parti avec la
+                                //   mensualité, par le canal choisi à l'étape 2.
+                                actifs.forEach(a => {
+                                    if (num(a.montant_credit) <= 0) return;
+                                    const idxCredit = a._sandboxNouveau
+                                        ? Math.max(0, (i - 1) - num(a._anneeIndexAchat))
+                                        : (i - 1);
+                                    const r = amo(a, idxCredit);
+                                    const paye = Math.min(num(a.montant_credit), num(r.capitalRembourse));
+                                    a.montant_credit = Math.max(0, num(a.montant_credit) - paye);
                                     dette -= paye;
                                     capitalAmorti += paye;
-                                    // La mensualité ne sort de la trésorerie que si elle n'est
-                                    // pas déjà comptée ailleurs (budget, ou cash-flow de l'actif).
-                                    const dejaCompte = sandboxMensualitesDansBudget.value
-                                        || (a.isProductive && !sandboxRevenusActifsDansBudget.value);
-                                    if (!dejaCompte) courant -= (N(a.mensualite) + N(a.assurance_mensuelle)) * 12;
                                 });
 
-                                // ── 3. REVALORISATION ─────────────────────────────────
-                                if (sandboxRevaloOn.value) {
-                                    sbAssets.forEach(a => {
-                                        const av = N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value);
-                                        const ap = av * (1 + N(a.taux_revalorisation) / 100);
+                                // ── 4. REVALORISATION DES ACTIFS ──────────────────────
+                                if (revaloOn) {
+                                    actifs.forEach(a => {
+                                        const av = valeurDe(a);
+                                        const ap = av * (1 + num(a.taux_revalorisation) / 100);
                                         revalo += (ap - av);
                                         a.valeur_actuelle = ap;
                                     });
                                 }
-                                valeurActifs = sbAssets.reduce((s, a) => s + (N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value)), 0);
+                                valeurActifs = totalValeur();
 
-                                // ── 4. INFLATION ──────────────────────────────────────
-                                //   Érosion du pouvoir d'achat. Sur un surplus positif c'est
-                                //   bien s×(1−infl) ; sur un DÉFICIT, l'inflation le creuse au
-                                //   lieu de le réduire — d'où le raisonnement en valeur absolue.
+                                // ── 5. INFLATION — érosion du surplus ─────────────────
+                                //   Sur un surplus positif c'est s×(1−infl) ; sur un
+                                //   DÉFICIT, l'inflation le creuse au lieu de le réduire.
                                 surplusAnnuel = surplusAnnuel - Math.abs(surplusAnnuel) * inflation;
                             }
 
-                            // ── 5. ÉVÉNEMENTS de l'année (logique conservée) ──────────
-                            const yearEvents = sandboxEvents.value.filter(e => Number(e.annee) === annee);
-                            for (const ev of yearEvents) {
-                                const m = Number(ev.montant) || 0;
-                                if (ev.type === 'achat') {
-                                    courant -= m;
-                                    valeurActifs += m;
-                                    sbAssets.push({ id: 'sb_new_' + ev.id, name: ev.cible, isProductive: false, value: m, valeur_actuelle: m, montant_credit: 0, apport_personnel: m });
+                            // ── 6. ÉVÉNEMENTS DE L'ANNÉE ──────────────────────────────
+                            const yearEvents = evenements.filter(e => Number(e.annee) === annee);
+                            for (const brut of yearEvents) {
+                                const ev = p.normaliser ? p.normaliser(brut) : brut;
+                                const m = num(ev.montant);
+
+                                if (ev.type === 'achat_locatif') {
+                                    const prix = num(ev.prixAchat);
+                                    const apport = num(ev.apport);
+                                    const frais = num(ev.frais);
+                                    const credit = num(ev.montantCredit);
+                                    const ecart = prix - apport - credit;
+                                    if (Math.abs(ecart) > 1) {
+                                        alertes.push(`« ${ev.nom || 'achat'} » : plan de financement incomplet — ${Math.round(Math.abs(ecart))} DH ${ecart > 0 ? 'non financés' : 'en trop'}.`);
+                                    }
+                                    // CASH : l'apport et les frais, rien d'autre.
+                                    chocsNegatifs += apport + frais;
+                                    liquidite -= (apport + frais);
+                                    // BILAN : la dette monte, l'actif entre à son prix.
+                                    dette += credit;
+                                    creditNouveau += credit;
+                                    actifs.push({
+                                        id: 'sb_new_' + ev.id, name: ev.nom || 'Nouvel actif',
+                                        _sandboxNouveau: true, _anneeIndexAchat: i,
+                                        isProductive: num(ev.loyerMensuelNet) > 0,
+                                        is_included_in_net_worth: true,
+                                        value: prix, valeur_actuelle: prix, prix_acquisition: prix,
+                                        frais_acquisition: frais, apport_personnel: apport,
+                                        montant_credit: credit, capital_initial: credit,
+                                        taux_credit: num(ev.taux), duree_mois: num(ev.dureeMois),
+                                        type_credit: 'classique',
+                                        mensualite: mens(credit, num(ev.taux), num(ev.dureeMois)),
+                                        assurance_mensuelle: 0,
+                                        // Le loyer saisi est NET : on neutralise les abattements
+                                        // de charges du moteur pour ne pas le rogner deux fois.
+                                        mode_exploitation: num(ev.loyerMensuelNet) > 0 ? 'longue_duree' : 'aucun',
+                                        loyer_mensuel: num(ev.loyerMensuelNet),
+                                        maintenance_pct: 0, frais_plateforme_pct: 0, frais_cohost_pct: 0,
+                                        syndic: 0, internet: 0, electricite_eau: 0, consommables: 0, assurance_pno: 0,
+                                        regime_fiscal: 'exonere', taux_revalorisation: num(p.revaloDefautPct, 3),
+                                    });
+
+                                } else if (ev.type === 'capex') {
+                                    if (ev.sensChoc === 'entree') { chocsPositifs += m; liquidite += m; }
+                                    else { chocsNegatifs += m; liquidite -= m; }
+
                                 } else if (ev.type === 'vente') {
-                                    const idx = sbAssets.findIndex(a => a.id === ev.cible);
+                                    const idx = actifs.findIndex(a => a.id === ev.cible);
                                     if (idx >= 0) {
-                                        const a = sbAssets[idx];
-                                        const vente = m || (Number(a.valeur_actuelle || a.value) || 0);
-                                        const creditAApurer = Number(a.montant_credit) || 0;
-                                        valeurActifs -= (Number(a.valeur_actuelle || a.value) || 0);
-                                        dette -= creditAApurer;
-                                        courant += (vente - creditAApurer);
-                                        sbAssets.splice(idx, 1);
-                                    }
-                                } else if (ev.type === 'remboursement') {
-                                    const idx = sbAssets.findIndex(a => a.id === ev.cible);
-                                    if (idx >= 0) {
-                                        const a = sbAssets[idx];
-                                        const rest = Number(a.montant_credit) || 0;
-                                        const paid = Math.min(rest, m);
-                                        a.montant_credit = rest - paid;
-                                        courant -= paid;
-                                        dette -= paid;
+                                        const a = actifs[idx];
+                                        const net = m || valeurDe(a);
+                                        const crd = num(a.montant_credit);
+                                        // Net vendeur encaissé, capital restant dû soldé.
+                                        chocsPositifs += net;
+                                        chocsNegatifs += crd;
+                                        liquidite += (net - crd);
+                                        dette -= crd;
+                                        actifs.splice(idx, 1);
+                                        if (net < crd) alertes.push(`Vente « ${a.name} » : le net vendeur ne couvre pas le capital restant dû (${Math.round(crd - net)} DH à sortir).`);
                                     } else {
-                                        courant -= m;
-                                        dette -= m;
+                                        alertes.push('Vente ignorée : actif introuvable dans le périmètre projeté.');
                                     }
+
+                                } else if (ev.type === 'remboursement') {
+                                    const idx = actifs.findIndex(a => a.id === ev.cible);
+                                    const rest = idx >= 0 ? num(actifs[idx].montant_credit) : m;
+                                    const paye = Math.min(rest, m);
+                                    if (idx >= 0) actifs[idx].montant_credit = rest - paye;
+                                    chocsNegatifs += paye;
+                                    liquidite -= paye;
+                                    dette -= paye;
+                                    if (paye < m) alertes.push(`Remboursement plafonné au capital restant dû (${Math.round(paye)} DH au lieu de ${Math.round(m)} DH).`);
                                 }
                             }
-                            // Recalage après événements (achats/ventes modifient sbAssets)
-                            if (yearEvents.length) {
-                                valeurActifs = sbAssets.reduce((s, a) => s + (N(a.valeur_actuelle) || N(a.prix_acquisition) || N(a.value)), 0);
-                            }
+                            if (yearEvents.length) valeurActifs = totalValeur();
+
+                            // ── 7. CONTRÔLE DE COHÉRENCE ──────────────────────────────
+                            //   On recompose la variation de liquidité à partir de ses
+                            //   composantes déclarées. Tout écart signifie qu'un flux
+                            //   est passé sans être nommé — exactement ce qui se
+                            //   produisait avant la v37.8. La ligne le dit.
+                            const attendu = fluxSurplus + fluxActifs - mensualitesHorsBudget
+                                          + chocsPositifs - chocsNegatifs;
+                            const ecartControle = Math.round((liquidite - liquiditeOuverture - attendu) * 100) / 100;
+
                             rows.push({
-                                annee,
-                                courant: Math.round(courant),
+                                annee, depart: i === 0,
+                                liquidite: Math.round(liquidite),
+                                courant: Math.round(liquidite),           // alias historique
                                 dette: Math.round(Math.max(0, dette)),
                                 valeurActifs: Math.round(valeurActifs),
-                                net: Math.round(courant + valeurActifs - Math.max(0, dette)),
-                                // v33.00 : décomposition du mouvement de l'année
+                                net: Math.round(liquidite + valeurActifs - Math.max(0, dette)),
                                 fluxSurplus: Math.round(fluxSurplus),
-                                fluxActifs: Math.round(fluxActifs),
+                                fluxActifs: Math.round(fluxActifs - mensualitesHorsBudget),
                                 capitalAmorti: Math.round(capitalAmorti),
-                                interets: Math.round(interetsAnnee),
+                                interets: Math.round(interets),
                                 serviceDette: Math.round(serviceDette),
                                 revalo: Math.round(revalo),
+                                chocsPositifs: Math.round(chocsPositifs),
+                                chocsNegatifs: Math.round(chocsNegatifs),
+                                creditNouveau: Math.round(creditNouveau),
+                                ecartControle, alertes,
                                 events: yearEvents,
                             });
                         }
                         return rows;
+                    };
+
+                    //   L'adaptateur Vue : il ne fait QUE rassembler les entrées. Toute
+                    //   la logique financière est au-dessus, dans la fonction pure.
+                    const sandboxProjection = computed(() => {
+                        calculationTick.value;
+                        const base = _sandboxBaseState();
+                        return projeterPatrimoine({
+                            anneeDepart: sandboxStartYear,
+                            horizon: sandboxHorizon.value,
+                            liquiditeInitiale: base.courant,
+                            actifs: migrateAssetsV19(JSON.parse(JSON.stringify(base.assets))),
+                            surplusAnnuel: sandboxSurplusAuto.value
+                                ? surplusBudgetaireAnnuel(sandboxStartYear)
+                                : (Number(sandboxSurplusMensuel.value) || 0) * 12,
+                            inflation: sandboxInflationOn.value ? N((parametres.value || {}).hypotheseInflation) / 100 : 0,
+                            revaloOn: sandboxRevaloOn.value,
+                            mensualitesDansBudget: sandboxMensualitesDansBudget.value,
+                            revenusActifsDansBudget: sandboxRevenusActifsDansBudget.value,
+                            evenements: sandboxEvents.value,
+                            normaliser: sandboxEventNormalise,
+                            economieActif: assetEconomics,
+                            amortissement: amortissementAnnuel,
+                            mensualitePour: mensualiteClassique,
+                        });
+                    });
+
+                    const sandboxAlertes = computed(() => {
+                        const out = [];
+                        sandboxProjection.value.forEach(r => {
+                            r.alertes.forEach(a => out.push({ annee: r.annee, texte: a }));
+                            if (Math.abs(r.ecartControle) > 1) {
+                                out.push({ annee: r.annee, texte: `Contrôle de cohérence : ${r.ecartControle} DH de variation de liquidité non expliquée par les flux déclarés.` });
+                            }
+                        });
+                        return out;
+                    });
+
+                    // v37.8 — Liquidités (barres) vs Patrimoine net (courbe).
+                    //   Deux axes : le patrimoine se compte en millions, la trésorerie
+                    //   en milliers. Sur une échelle commune, les barres disparaîtraient.
+                    const sandboxChartConfig = computed(() => {
+                        const rows = sandboxProjection.value;
+                        return {
+                            type: 'bar',
+                            data: {
+                                labels: rows.map(r => String(r.annee)),
+                                datasets: [
+                                    {
+                                        type: 'bar', label: 'Liquidités', yAxisID: 'y',
+                                        data: rows.map(r => r.liquidite), order: 2,
+                                        backgroundColor: rows.map(r => r.liquidite >= 0 ? 'rgba(37,99,235,0.55)' : 'rgba(225,29,72,0.65)'),
+                                        borderColor: rows.map(r => r.liquidite >= 0 ? 'rgb(37,99,235)' : 'rgb(225,29,72)'),
+                                        borderWidth: 1, borderRadius: 4,
+                                    },
+                                    {
+                                        type: 'line', label: 'Patrimoine net', yAxisID: 'y1',
+                                        data: rows.map(r => r.net), order: 1,
+                                        borderColor: 'rgb(5,150,105)', backgroundColor: 'rgba(5,150,105,0.12)',
+                                        borderWidth: 3, tension: 0.3, pointRadius: 3, fill: true,
+                                    },
+                                ],
+                            },
+                            options: {
+                                responsive: true, maintainAspectRatio: false,
+                                interaction: { mode: 'index', intersect: false },
+                                plugins: {
+                                    legend: { labels: { font: { size: 10, weight: 'bold' }, usePointStyle: true } },
+                                    tooltip: { callbacks: { label: (c) => `${c.dataset.label} : ${formatMAD(c.parsed.y)}` } },
+                                },
+                                scales: {
+                                    y:  { position: 'left',  title: { display: true, text: 'Liquidités', font: { size: 9, weight: 'bold' } },
+                                          ticks: { font: { size: 9 }, callback: (v) => Math.round(v / 1000) + 'k' },
+                                          grid: { color: 'rgba(0,0,0,0.05)' } },
+                                    y1: { position: 'right', title: { display: true, text: 'Patrimoine net', font: { size: 9, weight: 'bold' } },
+                                          ticks: { font: { size: 9 }, callback: (v) => Math.round(v / 1000000) + 'M' },
+                                          grid: { drawOnChartArea: false } },
+                                    x:  { ticks: { font: { size: 9, weight: 'bold' } }, grid: { display: false } },
+                                },
+                            },
+                        };
                     });
 
                     const applySandbox = () => {
@@ -9948,26 +10391,42 @@
                         }
 
                         // 2) Injecter les événements dans le vrai state (ordre chronologique)
-                        const sorted = [...sandboxEvents.value].sort((a, b) => (a.annee - b.annee) || (a.mois - b.mois));
+                        const sorted = [...sandboxEvents.value].sort((a, b) => (a.annee - b.annee) || (a.mois - b.mois))
+                                                                  .map(sandboxEventNormalise);
                         const courantCompte = comptes.value.find(c => c.type === 'courant' || c.type === 'liquide');
                         for (const ev of sorted) {
                             const montant = Number(ev.montant) || 0;
-                            if (ev.type === 'achat') {
-                                masterAssets.value = [...masterAssets.value, {
+                            if (ev.type === 'achat_locatif') {
+                                // v37.8 : l'actif entre au bilan avec SON financement.
+                                //   Le cash ne bouge que de l'apport et des frais — le
+                                //   prix du bien et la dette sont des écritures de bilan.
+                                const prix = N(ev.prixAchat), apport = N(ev.apport), frais = N(ev.frais);
+                                const credit = N(ev.montantCredit), loyer = N(ev.loyerMensuelNet);
+                                masterAssets.value = [...masterAssets.value, migrateAssetsV19([{
                                     id: 'ma_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
-                                    name: String(ev.cible || 'Nouvel actif').trim(),
+                                    name: String(ev.nom || 'Nouvel actif').trim(),
                                     type: 'Résidentiel',
-                                    isProductive: false,
-                                    value: montant,
-                                    valeur_actuelle: montant,
-                                    revenue: 0,
-                                    taux_credit: 0, annees_total: 0, annees_restantes: 0,
-                                    val_pessimiste: 0, val_optimiste: 0,
-                                    quotePart: '100%',
-                                    apport_personnel: montant,
-                                    montant_credit: 0,
-                                }];
-                                if (courantCompte) courantCompte.solde = (Number(courantCompte.solde) || 0) - montant;
+                                    isProductive: loyer > 0,
+                                    value: prix, valeur_actuelle: prix, prix_acquisition: prix,
+                                    frais_acquisition: frais, apport_personnel: apport,
+                                    montant_credit: credit, capital_initial: credit,
+                                    taux_credit: N(ev.taux), duree_mois: Math.round(N(ev.dureeMois)),
+                                    type_credit: 'classique',
+                                    mensualite: mensualiteClassique(credit, N(ev.taux), N(ev.dureeMois)),
+                                    date_debut_credit: `${ev.annee}-${String(ev.mois).padStart(2, '0')}`,
+                                    mode_exploitation: loyer > 0 ? 'longue_duree' : 'aucun',
+                                    loyer_mensuel: loyer,
+                                    maintenance_pct: 0, frais_plateforme_pct: 0, frais_cohost_pct: 0,
+                                    regime_fiscal: 'exonere',
+                                    revenue: loyer * 12,
+                                    annees_total: Math.round(N(ev.dureeMois) / 12), annees_restantes: Math.round(N(ev.dureeMois) / 12),
+                                    val_pessimiste: 0, val_optimiste: 0, quotePart: '100%',
+                                }])[0]];
+                                if (courantCompte) courantCompte.solde = (Number(courantCompte.solde) || 0) - (apport + frais);
+                            } else if (ev.type === 'capex') {
+                                // Choc de trésorerie pur : ni actif, ni dette.
+                                const signe = ev.sensChoc === 'entree' ? 1 : -1;
+                                if (courantCompte) courantCompte.solde = (Number(courantCompte.solde) || 0) + signe * montant;
                             } else if (ev.type === 'vente') {
                                 const asset = masterAssets.value.find(a => a.id === ev.cible);
                                 if (asset) {
@@ -15675,6 +16134,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         surplusBudgetaireAnnuel,
                         sandboxSurplusAuto, sandboxInflationOn, sandboxRevaloOn,
                         sandboxMensualitesDansBudget, sandboxRevenusActifsDansBudget,
+                        // v37.8 — refonte du simulateur
+                        SANDBOX_TYPES, sandboxDetailFlux, sandboxEventIcone, sandboxAlertes,
+                        sandboxChartConfig, sandboxEcartFinancement, sandboxMensualiteEstimee,
                         comptes, parametres, comptesProjetes,
                         moisCibleProjection, anneeCibleProjectionComptes,
                         patrimoineLiquide, patrimoineNet, patrimoineSavingsInvest,

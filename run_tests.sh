@@ -40,5 +40,6 @@ suite "Tri du bruit (Supervision IA)"                           php test_cfo_eng
 suite "Lecture des réponses du CFO"                             node test_cfo_engine_parity/test_reponse_cfo.mjs
 suite "Conversion des dates cibles"                             php test_cfo_engine_parity/test_dates.php
 suite "Retour d'écriture (écran ↔ serveur)"                     node test_cfo_engine_parity/test_rafraichissement.mjs
+suite "Projection patrimoniale (identité de caisse)"            node test_cfo_engine_parity/test_projection.mjs
 
 echo "✅ Toutes les suites passent."
