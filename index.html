@@ -33,6 +33,46 @@
         .cfo-html code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
         .cfo-html table { border-collapse: collapse; margin: 0.5rem 0; }
         .cfo-html th, .cfo-html td { border: 1px solid #e5e7eb; padding: 3px 8px; font-size: 0.85em; }
+        /* ═══ v37.11 — TYPOGRAPHIE DES MESSAGES DU CFO ═══════════════════════
+           Classe DISTINCTE de .cfo-html, qui sert aussi à la bulle Merlin (texte
+           clair sur fond sombre) et à l'intelligence marché. Y toucher aurait
+           dégradé ces deux-là pour améliorer le chat. */
+        .cfo-msg { font-size: 1rem; line-height: 1.75; }
+        @media (min-width: 768px) { .cfo-msg { font-size: 1.0625rem; line-height: 1.8; } }
+        .cfo-msg > *:first-child { margin-top: 0; }
+        .cfo-msg > *:last-child { margin-bottom: 0; }
+        .cfo-msg p { margin: 0 0 1rem; }
+        .cfo-msg ul, .cfo-msg ol { padding-left: 1.6rem; margin: 0.9rem 0; }
+        .cfo-msg li { margin: 0.4rem 0; padding-left: 0.15rem; }
+        .cfo-msg li::marker { color: #a855f7; font-weight: 700; }
+        .cfo-msg li > ul, .cfo-msg li > ol { margin: 0.35rem 0; }
+        .cfo-msg h1, .cfo-msg h2, .cfo-msg h3, .cfo-msg h4 {
+            margin: 1.5rem 0 0.6rem; font-weight: 800; line-height: 1.3; color: #111827; }
+        .cfo-msg h1 { font-size: 1.3em; } .cfo-msg h2 { font-size: 1.18em; }
+        .cfo-msg h3 { font-size: 1.06em; } .cfo-msg h4 { font-size: 1em; }
+        .cfo-msg hr { margin: 1.4rem 0; border: 0; border-top: 1px solid #e5e7eb; }
+        .cfo-msg blockquote { margin: 1rem 0; padding: 0.15rem 0 0.15rem 0.95rem;
+            border-left: 3px solid #d8b4fe; color: #4b5563; }
+        .cfo-msg a { color: #7c3aed; text-decoration: underline; text-underline-offset: 2px; }
+        .cfo-msg code { background: #f3f4f6; padding: 2px 6px; border-radius: 5px;
+            font-size: 0.88em; border: 1px solid #e5e7eb; }
+        .cfo-msg pre { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px;
+            padding: 0.9rem; overflow-x: auto; margin: 1rem 0; }
+        .cfo-msg pre code { background: none; border: 0; padding: 0; }
+        /* Un tableau large ne doit pas élargir la colonne : il défile seul. */
+        .cfo-msg table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse;
+            margin: 1rem 0; font-size: 0.92em; }
+        .cfo-msg th, .cfo-msg td { border: 1px solid #e5e7eb; padding: 7px 11px; text-align: left; }
+        .cfo-msg th { background: #f9fafb; font-weight: 700; white-space: nowrap; }
+        .cfo-msg br + br { display: block; content: ""; margin-top: 0.5rem; }
+
+        /* Zone de saisie : la hauteur est pilotée en JS (auto-resize), la barre
+           de défilement n'apparaît qu'une fois le plafond atteint. */
+        .cfo-prompt { resize: none; overflow-y: hidden; max-height: 40vh; }
+        .cfo-prompt::-webkit-scrollbar { width: 6px; }
+        .cfo-prompt::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+        /* Le fil de conversation garde son propre défilement — jamais la page. */
+        .cfo-fil { overscroll-behavior: contain; scrollbar-gutter: stable; }
         /* === v13.22 Collapsible Cards === */
         .cfo-collapsible-body { }
         .cfo-card-collapsed > .cfo-collapsible-body { display: none !important; }
@@ -114,6 +154,166 @@
                        : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-fuchsia-500/40 shadow-slate-900/50']">
             🧠
         </button>
+
+        <!-- ═══════════════════════════════════════════════════════════════════
+             v37.11 — LA MODALE DU CFO VIT ICI, AU PREMIER NIVEAU.
+             Elle était imbriquée dans le conteneur `v-if="!isMobile"` : sur
+             téléphone, l'arbre entier était absent, donc la modale n'existait
+             pas — et le bouton 🧠 du FAB mobile ouvrait le vide. Mesuré :
+             showCfoModal passait bien à true, et #cfo-widget-modal restait
+             introuvable dans le DOM. Le Teleport ne changeait rien : il déplace
+             un élément rendu, il ne le rend pas à la place d'un v-if faux.
+             ═══════════════════════════════════════════════════════════════════ -->
+                <!-- v34.12 : fond assombri — estompe le dashboard pendant l'échange, ferme au clic -->
+                <Teleport to="body">
+                <div v-show="showCfoModal" @click="showCfoModal = false" class="fixed inset-0 z-[9985] bg-black/60 backdrop-blur-sm"></div>
+                <!-- v34.12 CFO-Modal-Cockpit — cockpit d'analyse par défaut (90vw/1200px × 85vh/900px,
+                     centrée), plein écran strict (100vw/100vh) via l'icône ⛶. -->
+                <div id="cfo-widget-modal" v-show="showCfoModal"
+                     class="fixed bg-white shadow-2xl border border-fuchsia-200/60 flex flex-col"
+                     :class="(cfoMaximized || isMobile) ? 'z-[10000] rounded-none' : 'z-[9990] rounded-2xl'"
+                     :style="(cfoMaximized || isMobile)
+                         ? 'overflow:hidden;top:0;left:0;right:auto;bottom:auto;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;'
+                         : 'resize:both;overflow:hidden;min-width:320px;min-height:380px;max-width:95vw;max-height:92vh;width:min(1200px,90vw);height:min(900px,85vh);top:0;left:0;right:0;bottom:0;margin:auto;'">
+                    <!-- ── Barre de titre (drag-to-move) ── -->
+                    <div class="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white shrink-0 cursor-move select-none"
+                         :class="isMobile ? 'cursor-default' : ''"
+                         @mousedown="isMobile ? null : startDragCfoWidget($event)">
+                        <div class="flex items-center gap-2">
+                            <span class="font-black text-sm pointer-events-none whitespace-nowrap">🧠 CFO &amp; Audit</span>
+                            <span v-if="!isMobile" class="text-[8px] bg-white/10 px-1.5 py-0.5 rounded-full font-mono text-white/60 pointer-events-none">{{ cfoSessionId.slice(0,13) }}…</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button @mousedown.stop @click.stop="brieferCFO" title="Briefer le CFO" class="text-[9px] text-fuchsia-100 hover:text-white font-bold uppercase tracking-widest hover:bg-white/10 px-2 py-1 rounded transition-colors whitespace-nowrap">⚡<span v-if="!isMobile"> Briefer</span></button>
+                            <button @mousedown.stop @click.stop="resetCFOSession" title="Nouvelle conversation" class="text-[9px] text-fuchsia-100 hover:text-white font-bold uppercase tracking-widest hover:bg-white/10 px-2 py-1 rounded transition-colors whitespace-nowrap">🔄<span v-if="!isMobile"> Reset</span></button>
+                            <button v-if="!isMobile" @mousedown.stop @click.stop="cfoMaximized = !cfoMaximized" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/20 text-white font-black text-base transition-colors" :title="cfoMaximized ? 'Réduire' : 'Agrandir'">{{ cfoMaximized ? '🗗' : '⛶' }}</button>
+                            <button @mousedown.stop @click.stop="showCfoModal = false" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/20 text-white font-black text-base transition-colors" title="Fermer">✕</button>
+                        </div>
+                    </div>
+                    <!-- ── Contenu flex-col v27.0 : single-column, chat flex-1, resize fluide ── -->
+                    <div class="flex-1 min-h-0 w-full flex flex-col overflow-hidden">
+
+                        <div v-if="!cfoWebhookUrl" class="m-4 bg-orange-50 border-2 border-orange-300 p-5 rounded-2xl shrink-0">
+                            <p class="text-xs font-black uppercase tracking-widest text-orange-800 mb-2">⚠️ Configuration requise</p>
+                            <p class="text-xs text-orange-700 mb-3 leading-relaxed">Collez ici l'URL du Webhook n8n (path <code class="bg-white px-1 rounded font-mono">finance-cfo-web</code>) :</p>
+                            <input v-model="cfoWebhookInput" @keyup.enter="saveCFOWebhook" type="url" placeholder="https://n8n.votre-vps.com/webhook/finance-cfo-web" class="w-full p-3 border-2 border-orange-300 rounded-lg font-mono text-xs bg-white outline-none focus:border-orange-500 mb-3" />
+                            <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest hover:bg-orange-700">Enregistrer l'URL</button>
+                        </div>
+
+                        <!-- ═══ v37.11 : LE FIL ═══════════════════════════════════
+                             Défilement propre au fil, colonne centrée bornée à
+                             max-w-3xl : au-delà, l'œil perd la ligne suivante. -->
+                        <div v-if="cfoWebhookUrl" ref="cfoChatContainer"
+                             class="cfo-fil flex-1 min-h-0 overflow-y-auto bg-slate-50">
+                            <div v-if="cfoMessages.length === 0" class="max-w-3xl mx-auto px-5 py-16 text-center">
+                                <p class="text-5xl mb-4">🧠</p>
+                                <p class="text-slate-700 font-black text-base mb-2">Votre directeur financier est prêt</p>
+                                <p class="text-slate-500 text-sm leading-relaxed max-w-md mx-auto">Posez une question, ou cliquez sur <b>⚡ Briefer</b> pour un audit immédiat de votre situation.</p>
+                            </div>
+
+                            <div v-else class="max-w-3xl mx-auto px-4 md:px-6 py-6 space-y-7">
+                                <template v-for="(msg, idx) in cfoMessages" :key="idx">
+                                    <!-- Vous : bulle compacte, à droite, fond très pâle -->
+                                    <div v-if="msg.role === 'user'" class="flex justify-end">
+                                        <div class="max-w-[85%] rounded-3xl rounded-br-lg bg-violet-100 text-slate-800 px-5 py-3.5">
+                                            <p class="text-base leading-relaxed whitespace-pre-wrap">{{ msg.content }}</p>
+                                            <p v-if="msg.time" class="text-[10px] font-mono text-violet-400 mt-1.5 text-right">{{ msg.time }}</p>
+                                        </div>
+                                    </div>
+                                    <!-- Le CFO : pleine largeur de la colonne, sans bulle -->
+                                    <div v-else class="flex gap-3 md:gap-4">
+                                        <div class="shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-sm shadow-sm select-none">🧠</div>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="cfo-html cfo-msg text-slate-800" v-html="msg.content"></div>
+                                            <p v-if="msg.time" class="text-[10px] font-mono text-slate-400 mt-2">{{ msg.time }}</p>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <div v-if="cfoLoading" class="flex gap-3 md:gap-4">
+                                    <div class="shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-sm shadow-sm select-none">🧠</div>
+                                    <div class="flex items-center gap-2 pt-2">
+                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse"></span>
+                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.2s"></span>
+                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.4s"></span>
+                                        <span class="text-sm text-slate-500 font-bold ml-1">Le CFO analyse…</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ═══ v37.11 : SUGGESTIONS — au-dessus de la barre, pas en dessous ═══ -->
+                        <div v-if="cfoWebhookUrl && cfoMessages.length === 0" class="shrink-0 bg-slate-50 border-t border-slate-100">
+                            <div class="max-w-3xl mx-auto px-4 md:px-6 pt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <button @click="cfoInput = 'Fais un diagnostic complet de ma situation financière'; envoyerCFO()" class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-left hover:border-fuchsia-400 hover:shadow-sm transition-all">
+                                    <p class="text-[11px] font-black uppercase tracking-widest text-fuchsia-700 mb-0.5">📊 Diagnostic</p>
+                                    <p class="text-xs text-slate-500">Bilan global</p>
+                                </button>
+                                <button @click="cfoInput = 'Comment puis-je augmenter mon épargne de 2000 DH/mois ?'; envoyerCFO()" class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-left hover:border-fuchsia-400 hover:shadow-sm transition-all">
+                                    <p class="text-[11px] font-black uppercase tracking-widest text-fuchsia-700 mb-0.5">💰 Épargne</p>
+                                    <p class="text-xs text-slate-500">+2000 DH/mois</p>
+                                </button>
+                                <button @click="cfoInput = 'Analyse mes charges fixes et propose 3 pistes d\'optimisation'; envoyerCFO()" class="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-left hover:border-fuchsia-400 hover:shadow-sm transition-all">
+                                    <p class="text-[11px] font-black uppercase tracking-widest text-fuchsia-700 mb-0.5">🔒 Optimiser</p>
+                                    <p class="text-xs text-slate-500">Réduire les charges</p>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- ═══ v37.11 : LA BARRE DE PROMPT ════════════════════════
+                             Collée en bas, quelle que soit la longueur du fil. Le
+                             bouton d'envoi entre DANS la barre ; les deux boutons à
+                             gauche réservent leur place, désactivés tant qu'ils ne
+                             font rien — un bouton mort qui a l'air vivant est pire
+                             qu'un bouton absent. -->
+                        <div v-if="cfoWebhookUrl" class="shrink-0 bg-slate-50 border-t border-slate-100 px-4 md:px-6 pt-3 pb-3">
+                            <div class="max-w-3xl mx-auto">
+                                <div :class="['bg-white border border-slate-300 rounded-3xl shadow-sm px-3 py-2 focus-within:border-fuchsia-400 focus-within:ring-2 focus-within:ring-fuchsia-100 transition-all',
+                                              isMobile ? 'flex flex-col gap-1' : 'flex items-end gap-2']">
+                                    <div v-if="!isMobile" class="flex items-center gap-0.5 shrink-0 pb-1.5">
+                                        <button disabled title="Pièce jointe — bientôt" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 cursor-not-allowed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+                                        <button disabled title="Dictée vocale — bientôt" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 cursor-not-allowed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 19v3"/></svg></button>
+                                    </div>
+                                    <textarea v-model="cfoInput" data-cfo-prompt rows="1"
+                                              @input="grandirChampCFO" @keydown="toucheCFO"
+                                              :disabled="cfoLoading"
+                                              :placeholder="isMobile ? 'Votre question au CFO…' : 'Posez votre question au CFO…  (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)'"
+                                              :class="['cfo-prompt bg-transparent border-0 outline-none text-base leading-relaxed text-slate-800 placeholder:text-slate-400 disabled:opacity-60',
+                                                       isMobile ? 'w-full px-1 pt-1.5 pb-0.5' : 'flex-1 min-w-0 py-2.5']"></textarea>
+                                    <div :class="isMobile ? 'flex items-center justify-between' : 'contents'">
+                                        <div v-if="isMobile" class="flex items-center gap-0.5">
+                                            <button disabled title="Pièce jointe — bientôt" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 cursor-not-allowed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+                                            <button disabled title="Dictée vocale — bientôt" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 cursor-not-allowed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 19v3"/></svg></button>
+                                        </div>
+                                        <button @click="envoyerCFO" data-cfo-send :disabled="cfoLoading || !cfoInput.trim()"
+                                                :title="cfoLoading ? 'Analyse en cours…' : 'Envoyer'"
+                                                :class="['shrink-0 rounded-full flex items-center justify-center transition-all',
+                                                         isMobile ? 'w-11 h-11' : 'w-10 h-10 mb-1',
+                                                         (cfoLoading || !cfoInput.trim())
+                                                           ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                           : 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white shadow hover:scale-105']">
+                                            <svg v-if="!cfoLoading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                                            <span v-else class="w-3 h-3 rounded-full bg-slate-400 animate-pulse"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <details class="shrink-0 bg-white border-t border-slate-100">
+                            <summary class="max-w-3xl mx-auto px-5 py-2 cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 select-none">🔐 Ce que le CFO peut et ne peut pas faire</summary>
+                            <div class="max-w-3xl mx-auto px-5 pb-3 text-xs text-slate-600 leading-relaxed">
+                                <ul class="space-y-1 list-disc pl-4">
+                                    <li>Le CFO ne modifie jamais vos données sans votre accord explicite par <b>OUI</b>.</li>
+                                    <li>Chaque simulation est affichée <b>Avant / Après</b> pour validation.</li>
+                                    <li>La mémoire conversationnelle est conservée côté VPS (PostgreSQL).</li>
+                                </ul>
+                            </div>
+                        </details>
+
+                    </div><!-- /flex-col-content -->
+                </div><!-- /cfo-widget-modal -->
+                </Teleport>
 
         <transition name="fade">
             <div v-if="isMobile && merlinActive && !merlinBubble.open" class="fixed bottom-36 right-4 z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[240px] backdrop-blur">
@@ -1875,100 +2075,6 @@
                     </div>
                 </div>
 
-                <!-- v34.12 : fond assombri — estompe le dashboard pendant l'échange, ferme au clic -->
-                <Teleport to="body">
-                <div v-show="showCfoModal" @click="showCfoModal = false" class="fixed inset-0 z-[9985] bg-black/60 backdrop-blur-sm"></div>
-                <!-- v34.12 CFO-Modal-Cockpit — cockpit d'analyse par défaut (90vw/1200px × 85vh/900px,
-                     centrée), plein écran strict (100vw/100vh) via l'icône ⛶. -->
-                <div id="cfo-widget-modal" v-show="showCfoModal"
-                     class="fixed bg-white shadow-2xl border border-fuchsia-200/60 flex flex-col"
-                     :class="cfoMaximized ? 'z-[10000] rounded-none' : 'z-[9990] rounded-2xl'"
-                     :style="cfoMaximized
-                         ? 'overflow:hidden;top:0;left:0;right:auto;bottom:auto;width:100vw;height:100vh;max-width:none;max-height:none;margin:0;'
-                         : 'resize:both;overflow:hidden;min-width:320px;min-height:380px;max-width:95vw;max-height:92vh;width:min(1200px,90vw);height:min(900px,85vh);top:0;left:0;right:0;bottom:0;margin:auto;'">
-                    <!-- ── Barre de titre (drag-to-move) ── -->
-                    <div class="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white shrink-0 cursor-move select-none"
-                         @mousedown="startDragCfoWidget">
-                        <div class="flex items-center gap-2">
-                            <span class="font-black text-sm pointer-events-none">🧠 CFO &amp; Audit</span>
-                            <span class="text-[8px] bg-white/10 px-1.5 py-0.5 rounded-full font-mono text-white/60 pointer-events-none">{{ cfoSessionId.slice(0,13) }}…</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button @mousedown.stop @click.stop="brieferCFO" class="text-[9px] text-fuchsia-100 hover:text-white font-bold uppercase tracking-widest hover:bg-white/10 px-2 py-0.5 rounded transition-colors">⚡ Briefer</button>
-                            <button @mousedown.stop @click.stop="resetCFOSession" class="text-[9px] text-fuchsia-100 hover:text-white font-bold uppercase tracking-widest hover:bg-white/10 px-2 py-0.5 rounded transition-colors">🔄 Reset</button>
-                            <button @mousedown.stop @click.stop="cfoMaximized = !cfoMaximized" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/20 text-white font-black text-base transition-colors" :title="cfoMaximized ? 'Réduire' : 'Agrandir'">{{ cfoMaximized ? '🗗' : '⛶' }}</button>
-                            <button @mousedown.stop @click.stop="showCfoModal = false" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/20 text-white font-black text-base transition-colors" title="Fermer">✕</button>
-                        </div>
-                    </div>
-                    <!-- ── Contenu flex-col v27.0 : single-column, chat flex-1, resize fluide ── -->
-                    <div class="flex-1 min-h-0 w-full flex flex-col overflow-hidden">
-
-                        <div v-if="!cfoWebhookUrl" class="m-4 bg-orange-50 border-2 border-orange-300 p-5 rounded-2xl shrink-0">
-                            <p class="text-xs font-black uppercase tracking-widest text-orange-800 mb-2">⚠️ Configuration requise</p>
-                            <p class="text-xs text-orange-700 mb-3 leading-relaxed">Collez ici l'URL du Webhook n8n (path <code class="bg-white px-1 rounded font-mono">finance-cfo-web</code>) :</p>
-                            <input v-model="cfoWebhookInput" @keyup.enter="saveCFOWebhook" type="url" placeholder="https://n8n.votre-vps.com/webhook/finance-cfo-web" class="w-full p-3 border-2 border-orange-300 rounded-lg font-mono text-xs bg-white outline-none focus:border-orange-500 mb-3" />
-                            <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest hover:bg-orange-700">Enregistrer l'URL</button>
-                        </div>
-
-                        <div v-if="cfoWebhookUrl" class="flex-1 min-h-0 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 mx-3 mt-3 rounded-2xl shadow-2xl border border-slate-700 p-4" ref="cfoChatContainer">
-                            <div v-if="cfoMessages.length === 0" class="text-center py-16">
-                                <p class="text-5xl mb-4">🤖</p>
-                                <p class="text-slate-300 font-bold text-sm uppercase tracking-widest mb-2">CFO prêt</p>
-                                <p class="text-slate-500 text-xs font-medium max-w-md mx-auto leading-relaxed">Exemple : <i>« Je veux épargner 2000 DH de plus par mois, comment faire ? »</i> ou cliquez sur <b>⚡ Briefer</b> pour un audit immédiat.</p>
-                            </div>
-                            <div v-else class="space-y-4">
-                                <div v-for="(msg, idx) in cfoMessages" :key="idx" :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
-                                    <div :class="[msg.role === 'user' ? 'max-w-[80%]' : 'max-w-[92%]', 'p-4 rounded-2xl shadow-lg', msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border border-slate-200']">
-                                        <p v-if="msg.role === 'user'" class="text-sm font-medium whitespace-pre-wrap">{{ msg.content }}</p>
-                                        <div v-else class="text-sm cfo-html" v-html="msg.content"></div>
-                                        <p :class="['text-[9px] mt-2 font-mono uppercase tracking-widest', msg.role === 'user' ? 'text-blue-200' : 'text-gray-400']">{{ msg.time }}</p>
-                                    </div>
-                                </div>
-                                <div v-if="cfoLoading" class="flex justify-start">
-                                    <div class="bg-white text-gray-800 p-4 rounded-2xl shadow-lg border border-slate-200">
-                                        <div class="flex items-center gap-2">
-                                            <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse"></span>
-                                            <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" style="animation-delay: 0.2s"></span>
-                                            <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" style="animation-delay: 0.4s"></span>
-                                            <span class="text-xs text-gray-500 font-bold ml-2">Le CFO analyse…</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-if="cfoWebhookUrl" class="shrink-0 flex gap-2 p-3">
-                            <input v-model="cfoInput" @keyup.enter="envoyerCFO" :disabled="cfoLoading" type="text" placeholder="Posez votre question au CFO…" class="flex-1 p-3 border-2 border-gray-200 rounded-xl outline-none focus:border-fuchsia-500 text-sm disabled:bg-gray-100 bg-white shadow" />
-                            <button @click="envoyerCFO" :disabled="cfoLoading || !cfoInput.trim()" class="px-5 py-3 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white font-black rounded-xl uppercase text-[10px] tracking-widest shadow hover:scale-105 transition-all disabled:opacity-50 disabled:scale-100 shrink-0">Envoyer</button>
-                        </div>
-
-                        <div v-if="cfoWebhookUrl && cfoMessages.length === 0" class="shrink-0 grid grid-cols-3 gap-2 px-3 pb-2">
-                            <button @click="cfoInput = 'Fais un diagnostic complet de ma situation financière'; envoyerCFO()" class="p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors shadow-sm">
-                                <p class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700 mb-1">📊 Diagnostic</p>
-                                <p class="text-[9px] text-gray-600">Bilan global</p>
-                            </button>
-                            <button @click="cfoInput = 'Comment puis-je augmenter mon épargne de 2000 DH/mois ?'; envoyerCFO()" class="p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors shadow-sm">
-                                <p class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700 mb-1">💰 Épargne</p>
-                                <p class="text-[9px] text-gray-600">+2000 DH/mois</p>
-                            </button>
-                            <button @click="cfoInput = 'Analyse mes charges fixes et propose 3 pistes d\'optimisation'; envoyerCFO()" class="p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-fuchsia-400 transition-colors shadow-sm">
-                                <p class="text-[10px] font-black uppercase tracking-widest text-fuchsia-700 mb-1">🔒 Optimiser</p>
-                                <p class="text-[9px] text-gray-600">Réduire les charges</p>
-                            </button>
-                        </div>
-
-                        <div class="shrink-0 bg-slate-50 mx-3 mb-3 p-3 rounded-xl border border-slate-200 text-[10px] text-gray-600 font-medium leading-relaxed">
-                            <p class="font-black uppercase text-slate-700 mb-1 tracking-widest text-[9px]">🔐 Sécurité</p>
-                            <ul class="space-y-0.5 list-disc pl-4">
-                                <li>Le CFO ne modifie jamais vos données sans votre accord explicite par <b>OUI</b>.</li>
-                                <li>Chaque simulation est affichée <b>Avant / Après</b> pour validation.</li>
-                                <li>La mémoire conversationnelle est conservée côté VPS (PostgreSQL).</li>
-                            </ul>
-                        </div>
-
-                    </div><!-- /flex-col-content -->
-                </div><!-- /cfo-widget-modal -->
-                </Teleport>
 
                 <!-- ═══════════════════════════════════════════════════════════ -->
                 <!-- ONGLET PARAMÈTRES v15                                       -->
@@ -3896,33 +4002,62 @@
                         <button @click="saveCFOWebhook" class="w-full py-3 bg-orange-600 text-white font-black rounded-lg uppercase text-[10px] tracking-widest">Enregistrer</button>
                     </div>
 
-                    <!-- Chat zone -->
-                    <div v-if="cfoWebhookUrl" class="bg-slate-900 p-4 rounded-2xl min-h-[320px] max-h-[420px] overflow-y-auto mb-3">
-                        <div v-if="cfoMessages.length === 0" class="text-center py-12">
-                            <p class="text-4xl mb-2">🤖</p>
-                            <p class="text-slate-300 text-xs font-bold">CFO prêt. Posez votre question.</p>
+                    <!-- ═══ v37.11 : fil mobile — même grammaire que la modale ═══
+                         NOTE : ce bloc est sous un `v-if="false"` plus haut (ligne ~3880),
+                         donc DÉSACTIVÉ. Sur téléphone, le CFO s'ouvre par le bouton 🧠
+                         flottant, qui affiche la modale. Le fil ci-dessous est tenu à jour
+                         pour rester cohérent si la section venait à être réactivée ; il
+                         n'est rendu par personne aujourd'hui. -->
+                    <div v-if="cfoWebhookUrl" ref="cfoChatContainerMobile"
+                         class="cfo-fil bg-slate-50 rounded-2xl border border-slate-200 min-h-[340px] max-h-[62vh] overflow-y-auto mb-3">
+                        <div v-if="cfoMessages.length === 0" class="px-5 py-14 text-center">
+                            <p class="text-4xl mb-3">🧠</p>
+                            <p class="text-slate-700 font-black text-sm mb-1">Votre directeur financier est prêt</p>
+                            <p class="text-slate-500 text-xs leading-relaxed">Posez votre question ci-dessous.</p>
                         </div>
-                        <div v-else class="space-y-3">
-                            <div v-for="(msg, idx) in cfoMessages" :key="idx" :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
-                                <div :class="['max-w-[85%] p-3 rounded-2xl text-xs', msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800']">
-                                    <p v-if="msg.role === 'user'" class="whitespace-pre-wrap">{{ msg.content }}</p>
-                                    <div v-else class="cfo-html" v-html="msg.content"></div>
+                        <div v-else class="px-3 py-4 space-y-6">
+                            <template v-for="(msg, idx) in cfoMessages" :key="idx">
+                                <div v-if="msg.role === 'user'" class="flex justify-end">
+                                    <div class="max-w-[88%] rounded-3xl rounded-br-lg bg-violet-100 text-slate-800 px-4 py-3">
+                                        <p class="text-base leading-relaxed whitespace-pre-wrap">{{ msg.content }}</p>
+                                    </div>
                                 </div>
-                            </div>
-                            <div v-if="cfoLoading" class="flex justify-start">
-                                <div class="bg-white p-3 rounded-2xl">
-                                    <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse"></span>
-                                    <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse mx-1" style="animation-delay: 0.2s"></span>
-                                    <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" style="animation-delay: 0.4s"></span>
+                                <div v-else class="flex gap-2.5">
+                                    <div class="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-xs shadow-sm select-none">🧠</div>
+                                    <div class="cfo-html cfo-msg text-slate-800 min-w-0 flex-1">
+                                        <div v-html="msg.content"></div>
+                                    </div>
                                 </div>
+                            </template>
+                            <div v-if="cfoLoading" class="flex gap-2.5 items-center">
+                                <div class="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-xs">🧠</div>
+                                <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse"></span>
+                                <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.2s"></span>
+                                <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.4s"></span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Input mobile -->
-                    <div v-if="cfoWebhookUrl" class="flex gap-2 mb-6">
-                        <input v-model="cfoInput" @keyup.enter="envoyerCFO" :disabled="cfoLoading" type="text" placeholder="Votre question…" class="flex-1 p-3 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-fuchsia-500" />
-                        <button @click="envoyerCFO" :disabled="cfoLoading || !cfoInput.trim()" class="px-4 bg-gradient-to-r from-fuchsia-600 to-purple-700 text-white font-black rounded-xl text-xs uppercase tracking-widest disabled:opacity-50">➤</button>
+                    <!-- ═══ v37.11 : barre de prompt mobile — confortable au pouce ═══ -->
+                    <div v-if="cfoWebhookUrl" class="mb-6">
+                        <div class="flex items-end gap-1.5 bg-white border border-slate-300 rounded-3xl shadow-sm px-2.5 py-2 focus-within:border-fuchsia-400 focus-within:ring-2 focus-within:ring-fuchsia-100 transition-all">
+                            <div class="flex items-center shrink-0 pb-1">
+                                <button disabled title="Pièce jointe — bientôt" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 cursor-not-allowed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+                                <button disabled title="Dictée vocale — bientôt" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 cursor-not-allowed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 19v3"/></svg></button>
+                            </div>
+                            <textarea v-model="cfoInput" data-cfo-prompt rows="1"
+                                      @input="grandirChampCFO" @keydown="toucheCFO"
+                                      :disabled="cfoLoading" placeholder="Votre question au CFO…"
+                                      class="cfo-prompt flex-1 min-w-0 bg-transparent border-0 outline-none text-base leading-relaxed text-slate-800 placeholder:text-slate-400 py-2.5 disabled:opacity-60"></textarea>
+                            <button @click="envoyerCFO" data-cfo-send :disabled="cfoLoading || !cfoInput.trim()" title="Envoyer"
+                                    :class="['shrink-0 w-11 h-11 mb-0.5 rounded-full flex items-center justify-center transition-all',
+                                             (cfoLoading || !cfoInput.trim())
+                                               ? 'bg-slate-200 text-slate-400'
+                                               : 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white shadow']">
+                                <svg v-if="!cfoLoading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                                <span v-else class="w-3 h-3 rounded-full bg-slate-400 animate-pulse"></span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Audit gauges below -->
@@ -6917,8 +7052,20 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.10 Oubli-Effectif";
+                    const CURRENT_VERSION = "37.11 Chat-Lisible";
                     const CHANGELOG = [
+        { version: "37.11 Chat-Lisible", date: "2026-09-28", changes: [
+            "TROUVÉ EN CHEMIN, ET C'EST LE PLUS GRAVE — sur téléphone, la modale du CFO n'existait pas. Elle était imbriquée dans le conteneur « v-if=\"!isMobile\" » : l'arbre entier était absent, donc le bouton 🧠 flottant ouvrait le vide. Mesuré : showCfoModal passait bien à true, et #cfo-widget-modal restait introuvable dans le DOM. Le Teleport n'y changeait rien — il déplace un élément rendu, il ne le rend pas à la place d'un v-if faux. La modale vit désormais au premier niveau et s'ouvre sur les deux formats.",
+            "TYPOGRAPHIE — corps à 16 px sur téléphone et 17 px sur desktop (contre 14 px partout), interligne à 1,8, paragraphes espacés d'une ligne pleine, listes indentées avec des puces colorées, titres hiérarchisés, tableaux qui défilent seuls au lieu d'élargir la colonne. Tout cela dans une classe DISTINCTE (.cfo-msg) : la classe historique .cfo-html sert aussi à la bulle Merlin (texte clair sur fond sombre) et à l'intelligence marché, et y toucher aurait dégradé ces deux-là pour améliorer le chat.",
+            "STRUCTURE — fini le texte collé aux bords. Colonne de lecture centrée et bornée (max-w-3xl, mesurée à 768 px sur un écran de 1400). Vos messages : bulle compacte à droite, violet très pâle, coins arrondis. Les réponses du CFO : pleine largeur de la colonne, sans bulle, avec un avatar 🧠 à gauche — la distinction se fait par la forme, pas par une couleur de fond qui fatigue sur un texte long.",
+            "BARRE DE PROMPT — le champ devient un textarea qui grandit avec le texte puis plafonne à huit lignes et défile, au lieu d'une ligne unique où une question de trois lignes devenait illisible pendant la frappe. Le bouton « ENVOYER » quitte l'extérieur pour entrer DANS la barre, en icône. À gauche, les emplacements trombone et micro sont posés — en SVG et non en emoji, parce qu'un emoji ignore la couleur et reste vif même désactivé : ils avaient l'air actifs alors qu'ils ne font encore rien.",
+            "AU POUCE — sur téléphone la modale occupe l'écran entier (100dvh, pour que le clavier ne recouvre pas la barre), la barre passe sur deux rangs (le texte prend toute la largeur, les actions se rangent dessous) et le bouton d'envoi fait 44 px, le minimum confortable. À 412 px, trois éléments sur une même ligne laissaient au champ une colonne de six mots. La barre de titre a été compactée : l'identifiant de session et les libellés la faisaient passer sur deux lignes.",
+            "CLAVIER — Entrée envoie, Maj+Entrée passe à la ligne. Sur téléphone c'est l'inverse : Entrée passe à la ligne et l'envoi se fait au bouton, parce qu'au pouce Maj+Entrée n'existe pas.",
+            "DÉFILEMENT — le fil défile seul, la barre de saisie reste collée en bas quelle que soit la longueur de la conversation. Vérifié en injectant 40 messages : le fil déborde, la barre reste dans le cadre.",
+            "VÉRIFIÉ SUR UN RENDU RÉEL — le CDN Tailwind étant injoignable depuis mon environnement, la feuille du projet est désormais RECONSTRUITE localement pour les tests (tailwindcss v3, même source). Les largeurs, les débordements et les tailles de cible tactile sont donc mesurés, plus supposés. Nouvelle suite test_chat_ui.mjs, 30 contrôles sur les deux formats, 15 suites au total.",
+            "TROIS FOIS, MES PROPRES TESTS ONT MENTI — un sélecteur positionnel qui mesurait le bouton « micro » au lieu du bouton d'envoi (et validait donc « envoi désactivé » sur le mauvais élément), et deux assertions qui comptaient TOUS les messages alors que la réponse de l'agent arrive de façon asynchrone : le contrôle « Maj+Entrée n'envoie pas » échouait une fois sur trois. Un repère stable (data-cfo-send) et un comptage limité aux messages de l'utilisateur ont réglé les deux. Cinq exécutions consécutives au vert.",
+            "NOTE — le bloc « CFO & Audit » inline de la page mobile est sous un v-if=\"false\" depuis plusieurs versions : c'est du code mort, que personne ne rend. Il a été mis au même standard pour rester cohérent s'il était réactivé, et l'annotation le dit sur place. Sur téléphone, le CFO passe par le bouton 🧠 et la modale."
+        ] },
         { version: "37.10 Oubli-Effectif", date: "2026-09-28", changes: [
             "LE BOUTON « OUBLIER » NE POUVAIT PAS FONCTIONNER, ET LA CAUSE EST NETTE — le verrou de suppression n'acceptait qu'un identifiant ENTIER. Or le nœud PGVector de LangChain crée finance_vectors avec « id uuid PRIMARY KEY DEFAULT gen_random_uuid() » : chaque règle porte un UUID, et vos propres écrans l'affichaient (Règle #FE0505E9-BA36-4640-A0C4-8F076114FE92). Le serveur répondait donc invariablement ID_INVALIDE et la règle restait en base. Reproduit sur un PostgreSQL 16 à clés UUID : suppression refusée, ligne toujours présente.",
             "CORRIGÉ ET RE-VÉRIFIÉ SUR LA MÊME BASE — entier ET uuid sont désormais reconnus, en liste blanche stricte, et le type RÉEL de la colonne est lu dans le catalogue pour choisir la comparaison (PostgreSQL ne compare pas un uuid à du texte sans transtypage explicite). Après correction : suppression acceptée, ligne effacée, liste qui ne la renvoie plus, archive qui conserve le vrai UUID. Une table à clés entières continue de fonctionner à l'identique, et une forme incompatible est refusée en le NOMMANT plutôt qu'en laissant remonter une erreur SQL.",
@@ -8236,6 +8383,7 @@
                     const cfoWebhookUrl = ref(localStorage.getItem('cfo_webhook_url') || '');
                     const cfoWebhookInput = ref('');
                     const cfoChatContainer = ref(null);
+                    const cfoChatContainerMobile = ref(null);   // v37.11 : le fil de la vue mobile
 
                     const saveCFOWebhook = () => {
                         const url = (cfoWebhookInput.value || '').trim();
@@ -8257,11 +8405,43 @@
                         try { localStorage.setItem(_cfoHistoryKey(), JSON.stringify(msgs.slice(-12))); } catch (_) {}
                     }, { deep: true });
 
+                    //   Deux fils coexistent (modale et vue mobile) : on fait
+                    //   descendre celui qui est réellement rendu, sans savoir lequel.
                     const scrollCFOToBottom = () => {
                         setTimeout(() => {
-                            const el = cfoChatContainer.value;
-                            if (el && el.scrollTo) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                            [cfoChatContainer.value, cfoChatContainerMobile.value].forEach(el => {
+                                if (el && el.scrollTo) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                            });
                         }, 50);
+                    };
+
+                    /* ═══ v37.11 — LA BARRE DE PROMPT ════════════════════════════
+                       Un <input> ne montre qu'une ligne : une question de trois
+                       lignes devenait illisible pendant la frappe. Le <textarea>
+                       grandit avec le texte, jusqu'à un plafond, puis défile. */
+                    const _ajusterHauteur = (el) => {
+                        if (!el) return;
+                        el.style.height = 'auto';
+                        const ligne = parseFloat(getComputedStyle(el).lineHeight) || 24;
+                        // 8 lignes : au-delà, la barre mangerait la conversation.
+                        const plafond = Math.round(ligne * 8);
+                        const voulu = el.scrollHeight;
+                        el.style.height = Math.min(voulu, plafond) + 'px';
+                        el.style.overflowY = voulu > plafond ? 'auto' : 'hidden';
+                    };
+                    const grandirChampCFO = (e) => _ajusterHauteur(e && e.target);
+                    //   Après envoi, le champ est vidé : sa hauteur doit suivre.
+                    //   Les deux instances portent le même marqueur, on les traite
+                    //   ensemble plutôt que de tenir deux refs de plus.
+                    const _replierChampsCFO = () => {
+                        document.querySelectorAll('textarea[data-cfo-prompt]').forEach(_ajusterHauteur);
+                    };
+                    //   Entrée envoie sur desktop. Sur mobile elle passe à la ligne :
+                    //   au pouce, Maj+Entrée n'existe pas, et l'envoi a son bouton.
+                    const toucheCFO = (e) => {
+                        if (e.key !== 'Enter' || e.shiftKey || e.isComposing || isMobile.value) return;
+                        e.preventDefault();
+                        envoyerCFO();
                     };
 
                     // ═══ v19.00 : CFO OMNISCIENT — Snapshot visuel et financier en direct ═══
@@ -8594,6 +8774,7 @@
                         const q = (cfoInput.value || '').trim();
                         if (!q) return;
                         cfoInput.value = '';
+                        nextTick(_replierChampsCFO);   // v37.11 : le champ revient à une ligne
                         consulterCFO(q);
                     };
 
@@ -16789,6 +16970,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         auditFinancier, transfererAuditAuCFO, copierPromptIA, promptIACopied,
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
                         cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, showCfoModal, cfoMaximized, startDragCfoWidget, brieferCFO, consulterCFO, envoyerCFO, saveCFOWebhook, resetCFOSession,
+                        // v37.11 — barre de prompt
+                        cfoChatContainerMobile, grandirChampCFO, toucheCFO,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, getDueRevenu, isItemPaid, toggleItemPaid,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
