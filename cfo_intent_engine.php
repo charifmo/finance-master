@@ -2115,12 +2115,14 @@ function cfo_deep_clone($o) { return json_decode(json_encode($o)); }
 
 /** Remet à zéro les marqueurs de paiement d'une année clonée. */
 function cfo_reset_paye($cloned, int $anneeCible): void {
-    foreach (ovals(oget($cloned,'chargesFixes', onew())) as $f) { oset($f,'paye',false); oset($f,'montantPaye',0); }
+    // v37.12 : l'execution vit dans trackerRealise, par cycle. Une annee clonee
+    //   repart vierge — sinon elle heriterait des pointages de l'annee source.
+    foreach (ovals(oget($cloned,'chargesFixes', onew())) as $f) { oset($f,'paye',false); oset($f,'montantPaye',0); oset($f,'trackerRealise', onew()); }
     foreach (ovals(oget($cloned,'chargesVariables', onew())) as $c) {
-        if (is_array(oget($c,'details'))) foreach (oget($c,'details') as $d) { oset($d,'paye',false); oset($d,'montantPaye',0); }
+        if (is_array(oget($c,'details'))) foreach (oget($c,'details') as $d) { oset($d,'paye',false); oset($d,'montantPaye',0); oset($d,'trackerRealise', onew()); }
     }
     foreach ((oget($cloned,'depensesIrregulieres') ?: []) as $d) {
-        oset($d,'paye',false); oset($d,'montantPaye',0); oset($d,'annee',$anneeCible); oset($d,'id',cfo_uid());
+        oset($d,'paye',false); oset($d,'montantPaye',0); oset($d,'trackerRealise', onew()); oset($d,'annee',$anneeCible); oset($d,'id',cfo_uid());
     }
 }
 

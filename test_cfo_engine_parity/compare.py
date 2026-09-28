@@ -80,6 +80,16 @@ VALEURS_PHP_ASSUMEES = {
 }
 _RE_EPARGNE_NOM = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\.epargne\[\d+\]\.nom$')
 
+# v37.12 — L'EXÉCUTION QUITTE L'ÉTAT ANNUEL POUR UN SUIVI PAR CYCLE.
+# `paye`/`montantPaye` vivaient à plat sur la charge, donc sur l'ANNÉE : cocher
+# une charge en octobre la laissait cochée jusqu'en décembre. L'état part dans
+# `trackerRealise` = { "AAAA-MM": {...} }, et le clonage d'une année repart
+# d'un suivi VIERGE — sinon l'année 2027 naîtrait avec les pointages de 2026.
+# Le JS de référence, figé avant ce chantier, ne connaît pas cette clé : sa
+# présence sur les lignes clonées est la CORRECTION, pas une régression. Les
+# valeurs métier, elles, restent comparées à l'identique.
+_RE_TRACKER = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\..*\.trackerRealise$')
+
 def diff(a, b, p=""):
     out = []
     if isinstance(a, dict) and isinstance(b, dict):
@@ -91,6 +101,8 @@ def diff(a, b, p=""):
             if chemin in VALEURS_PHP_ASSUMEES: continue
             # v37.0 : `nom` désormais conservé sur les lignes d'épargne (voir ci-dessus).
             if k not in a and _RE_EPARGNE_NOM.match(chemin): continue
+            # v37.12 : suivi d'exécution par cycle, vierge sur une année clonée.
+            if k not in a and _RE_TRACKER.match(chemin): continue
             if k not in a: out.append("%s.%s: absent JS" % (p, k))
             elif k not in b: out.append("%s.%s: absent PHP" % (p, k))
             else: out += diff(a[k], b[k], "%s.%s" % (p, k))

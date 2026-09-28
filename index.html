@@ -73,6 +73,14 @@
         .cfo-prompt::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
         /* Le fil de conversation garde son propre défilement — jamais la page. */
         .cfo-fil { overscroll-behavior: contain; scrollbar-gutter: stable; }
+
+        /* v37.12 — une tâche pointée quitte la liste « À traiter » en glissant,
+           pour que l'œil voie qu'elle est partie au lieu de la chercher. */
+        .tache-enter-active, .tache-leave-active { transition: all 0.28s ease; }
+        .tache-enter-from { opacity: 0; transform: translateX(-10px); }
+        .tache-leave-to { opacity: 0; transform: translateX(28px); }
+        .tache-leave-active { position: absolute; width: calc(100% - 2rem); }
+        .tache-move { transition: transform 0.28s ease; }
         /* === v13.22 Collapsible Cards === */
         .cfo-collapsible-body { }
         .cfo-card-collapsed > .cfo-collapsible-body { display: none !important; }
@@ -4483,7 +4491,7 @@
                                                         <span :class="['text-sm font-bold flex-1', isItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle)) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ f.label }}</span>
                                                     </label>
                                                     <div class="flex items-center gap-2">
-                                                        <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="flex-1 bg-slate-900 text-orange-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value)" placeholder="0" class="flex-1 bg-slate-900 text-orange-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
                                                         <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(getDueFixe(f, soldesInitiaux.anneeActuelle)).replace(' DH', '') }} DH</span>
                                                     </div>
                                                 </div>
@@ -4499,7 +4507,7 @@
                                                         <span :class="['text-sm font-bold flex-1', isItemPaid(f, f.montant) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ f.nom }}</span>
                                                     </label>
                                                     <div class="flex items-center gap-2">
-                                                        <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="flex-1 bg-slate-900 text-blue-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value)" placeholder="0" class="flex-1 bg-slate-900 text-blue-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
                                                         <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(f.montant).replace(' DH', '') }} DH</span>
                                                     </div>
                                                 </div>
@@ -4515,7 +4523,7 @@
                                                         <span :class="['text-sm font-bold flex-1', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ dep.nom }}</span>
                                                     </label>
                                                     <div class="flex items-center gap-2">
-                                                        <input type="number" v-model.number="dep.montantPaye" @input="handleDataChange" placeholder="0" class="flex-1 bg-slate-900 text-red-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <input type="number" :value="montantPayeCycle(dep)" @input="setMontantPayeCycle(dep, $event.target.value)" placeholder="0" class="flex-1 bg-slate-900 text-red-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
                                                         <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(dep.montant).replace(' DH', '') }} DH</span>
                                                     </div>
                                                 </div>
@@ -5643,17 +5651,105 @@
                                 </div>
                             </div>
 
+                            <!-- ═══ v37.12 : la checklist devient une liste de tâches ═══
+                                 Trié par jourPrevu (ramené au rang dans le cycle : sur un
+                                 cycle 27→26, le j.1 vient APRÈS le j.27), et on ne montre
+                                 par défaut que ce qui reste à faire. -->
                             <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg">
-                                <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-750">
-                                    <div class="flex items-center gap-3">
-                                        <span class="text-blue-400 text-lg">📋</span>
-                                        <span class="text-sm font-black uppercase tracking-widest text-white">Checklist — {{ pilotageCycleLabel }}</span>
+                                <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-750 gap-3 flex-wrap">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <span class="text-blue-400 text-lg shrink-0">📋</span>
+                                        <span class="text-sm font-black uppercase tracking-widest text-white truncate">À traiter — {{ pilotageCycleLabel }}</span>
                                     </div>
-                                    <span :class="['text-[10px] px-3 py-1 rounded-lg font-black border', elementsDuMoisPayes === elementsDuMoisTotal && elementsDuMoisTotal > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
-                                        {{ elementsDuMoisPayes }} / {{ elementsDuMoisTotal }} payés
-                                    </span>
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="text-[10px] px-2.5 py-1 rounded-lg font-black border bg-slate-900 border-slate-600 text-rose-300">
+                                            {{ formatMAD(resteATraiterPilotage) }} restants
+                                        </span>
+                                        <span :class="['text-[10px] px-2.5 py-1 rounded-lg font-black border', tachesATraiter.length === 0 && tachesPilotage.length > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
+                                            {{ tachesTerminees.length }} / {{ tachesPilotage.length }} faits
+                                        </span>
+                                    </div>
                                 </div>
-                                <div class="p-4 space-y-4">
+
+                                <div class="p-4 space-y-5">
+                                    <!-- Inbox Zero : plus rien à faire -->
+                                    <div v-if="tachesATraiter.length === 0" class="text-center py-10">
+                                        <p class="text-4xl mb-3">✅</p>
+                                        <p class="text-sm font-black text-green-400 uppercase tracking-widest">Tout est traité</p>
+                                        <p class="text-[11px] text-slate-400 font-bold mt-1">
+                                            {{ tachesPilotage.length }} élément(s) pointé(s) sur {{ pilotageCycleLabel }}.
+                                            Le prochain cycle repartira à zéro.
+                                        </p>
+                                    </div>
+
+                                    <!-- ⚠️ En retard / ⏳ Cette semaine / 📅 Plus tard -->
+                                    <div v-for="paquet in tachesGroupees" :key="paquet.cle">
+                                        <p :class="['text-[9px] font-black uppercase tracking-widest mb-2 pb-1 border-b flex items-center justify-between gap-2',
+                                                    paquet.teinte === 'rose' ? 'text-rose-400 border-rose-900/50'
+                                                    : (paquet.teinte === 'amber' ? 'text-amber-400 border-amber-900/50' : 'text-slate-400 border-slate-700')]">
+                                            <span>{{ paquet.titre }}</span>
+                                            <span class="font-mono">{{ paquet.taches.length }}</span>
+                                        </p>
+                                        <transition-group tag="div" name="tache" class="space-y-1.5">
+                                            <div v-for="t in paquet.taches" :key="t.cle"
+                                                 :class="['flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border transition-all',
+                                                          t.teinte === 'orange' ? 'border-slate-700 hover:border-orange-500'
+                                                          : (t.teinte === 'blue' ? 'border-slate-700 hover:border-blue-500'
+                                                          : (t.teinte === 'purple' ? 'border-slate-700 hover:border-purple-500' : 'border-slate-700 hover:border-rose-500'))]">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                                    <input type="checkbox" :checked="false"
+                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
+                                                           class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer shrink-0"/>
+                                                    <span class="shrink-0">{{ t.icone }}</span>
+                                                    <span class="text-sm font-bold text-slate-200 truncate">{{ t.libelle }}</span>
+                                                    <span v-if="t.jourPrevu" class="text-[9px] text-slate-500 font-bold shrink-0">j.{{ t.jourPrevu }}</span>
+                                                    <span class="text-[9px] text-slate-600 font-bold uppercase tracking-widest hidden md:inline shrink-0">{{ t.groupe }}</span>
+                                                </label>
+                                                <div class="flex items-center gap-2 ml-3 shrink-0">
+                                                    <input type="number" :value="montantPayeCycle(t.ref, cyclePilotage)"
+                                                           @input="setMontantPayeCycle(t.ref, $event.target.value, cyclePilotage)"
+                                                           placeholder="0" title="Avance déjà versée"
+                                                           class="w-20 bg-slate-950 text-slate-200 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
+                                                    <span class="text-[10px] font-black text-slate-400 w-16 text-right">/ {{ formatMAD(t.due).replace(' DH', '') }}</span>
+                                                </div>
+                                            </div>
+                                        </transition-group>
+                                    </div>
+
+                                    <!-- ✅ Terminé — replié par défaut -->
+                                    <div v-if="tachesTerminees.length" class="rounded-xl border border-slate-700 bg-slate-900/60 overflow-hidden">
+                                        <button @click="pilotageTermineOuvert = !pilotageTermineOuvert"
+                                                class="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/60 transition-colors">
+                                            <span class="text-[10px] font-black uppercase tracking-widest text-green-400">✅ Terminé ({{ tachesTerminees.length }})</span>
+                                            <span class="flex items-center gap-2 shrink-0">
+                                                <span class="text-[10px] font-black text-green-500/70">{{ formatMAD(totalTraitePilotage) }}</span>
+                                                <span class="text-slate-500 text-xs">{{ pilotageTermineOuvert ? '▲' : '▼' }}</span>
+                                            </span>
+                                        </button>
+                                        <div v-show="pilotageTermineOuvert" class="px-3 pb-3 space-y-1.5 border-t border-slate-800 pt-3">
+                                            <div v-for="t in tachesTerminees" :key="'ok_' + t.cle"
+                                                 class="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                                    <input type="checkbox" :checked="true"
+                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
+                                                           class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-green-500 cursor-pointer shrink-0"/>
+                                                    <span class="text-xs font-bold text-slate-500 line-through truncate">{{ t.libelle }}</span>
+                                                    <span v-if="t.quand" class="text-[9px] text-slate-600 font-bold shrink-0">le {{ t.quand }}</span>
+                                                </label>
+                                                <span class="text-xs font-black text-green-500/80 ml-3 shrink-0">{{ formatMAD(t.regle || t.due) }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Vue par catégorie, conservée sous un repli : elle reste
+                                 la référence quand on cherche une ligne précise. -->
+                            <details class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg">
+                                <summary class="px-5 py-3 cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-200 select-none">
+                                    🗂️ Vue détaillée par catégorie
+                                </summary>
+                                <div class="p-4 space-y-4 border-t border-slate-700">
                                     <div v-if="donneesAnnuelles[moisBudgetaire.an] && Object.keys(donneesAnnuelles[moisBudgetaire.an]?.chargesFixes || {}).length > 0">
                                         <p class="text-[9px] text-orange-400 font-black uppercase tracking-widest mb-2 border-b border-orange-900/50 pb-1 mt-2">🏢 Charges Fixes</p>
                                         <div class="space-y-1.5">
@@ -5666,7 +5762,7 @@
                                                  <span v-if="f.jourPrevu && !isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ f.jourPrevu }}</span>
                                                 </label>
                                                 <div class="flex items-center gap-2 ml-4">
-                                                    <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-orange-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-orange-400 transition-colors"/>
+                                                    <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-orange-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-orange-400 transition-colors"/>
                                                     <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, getDueFixe(f, moisBudgetaire.an)) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(getDueFixe(f, moisBudgetaire.an)).replace(' DH', '') }}</span>
                                                     <span class="text-[9px] text-slate-500 font-bold">DH</span>
                                                 </div>
@@ -5686,7 +5782,7 @@
                                                     <span :class="['text-sm font-bold transition-all', isItemPaid(f, f.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-blue-300']">{{ f.nom }}</span>
                                                 </label>
                                                 <div class="flex items-center gap-2 ml-4">
-                                                    <input type="number" v-model.number="f.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-blue-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
+                                                    <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-blue-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
                                                     <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, f.montant) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(f.montant).replace(' DH', '') }}</span>
                                                     <span class="text-[9px] text-slate-500 font-bold">DH</span>
                                                 </div>
@@ -5726,7 +5822,7 @@
                                                     <span :class="['text-sm font-bold transition-all', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-red-300']">{{ dep.nom }}</span>
                                                 </label>
                                                 <div class="flex items-center gap-2 ml-4">
-                                                    <input type="number" v-model.number="dep.montantPaye" @input="handleDataChange" placeholder="0" class="w-20 bg-slate-950 text-red-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-red-400 transition-colors"/>
+                                                    <input type="number" :value="montantPayeCycle(dep)" @input="setMontantPayeCycle(dep, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-red-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-red-400 transition-colors"/>
                                                     <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(dep, dep.montant) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(dep.montant).replace(' DH', '') }}</span>
                                                     <span class="text-[9px] text-slate-500 font-bold">DH</span>
                                                 </div>
@@ -5734,7 +5830,7 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </details>
                         </div>
                     </div>
 
@@ -7052,8 +7148,19 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.11 Chat-Lisible";
+                    const CURRENT_VERSION = "37.12 Cycle-Realise";
                     const CHANGELOG = [
+        { version: "37.12 Cycle-Realise", date: "2026-09-28", changes: [
+            "LE BUG, CONFIRMÉ — « paye » et « montantPaye » vivaient à plat sur la charge, et la charge vit dans donneesAnnuelles[ANNÉE], pas par mois. Cocher « Syndic payé » en octobre le laissait coché en novembre, en décembre, et jusqu'au 31 décembre. Le suivi mensuel ne repartait jamais de zéro. Votre diagnostic était exact.",
+            "L'EXÉCUTION QUITTE L'ÉTAT ANNUEL — jourPrevu ne bouge pas : c'est la théorie, et elle fonctionne. L'exécution part dans trackerRealise = { « 2026-10 » : { paye, montantPaye, dateReelle }, « 2026-11 » : … }. Une entrée absente vaut « à faire » : le basculement de cycle remet donc tout à traiter sans qu'aucun code ne « réinitialise » quoi que ce soit — il n'y a simplement rien à cette clé.",
+            "TROIS FONCTIONS ONT SUFFI — isItemPaid, getPaidAmount et toggleItemPaid étaient le seul passage vers l'état payé : journal du Relevé, Reste à payer, trésorerie disponible, compteurs, payload de l'IA. Les recâbler a rendu cyclique tout ce qui en dépend, sans toucher aux 39 points d'appel et sans risquer d'en oublier un. Le journal, lui, lit désormais l'état DU CYCLE QU'IL CONSTRUIT : la question ne se posait pas tant que l'état était annuel.",
+            "MIGRATION SANS PERTE, ET SANS DRAPEAU — un « paye » à plat ne peut décrire que le cycle où vous l'avez coché, le seul visible dans l'écran Réalisé : il y est rangé, puis le champ plat est supprimé. Rien à migrer la fois suivante, le champ n'existe plus. Les dépenses PONCTUELLES, elles, portent leur propre mois : leur pointage y reste attaché et ne se réinitialise pas — ce serait absurde pour une dépense qui n'arrive qu'une fois.",
+            "LA CHECKLIST DEVIENT UNE LISTE DE TÂCHES — dix-huit lignes rangées par catégorie ne disent pas quoi faire aujourd'hui. Section « À TRAITER » : uniquement ce qui reste, trié par échéance, en trois paquets — ⚠️ En retard, ⏳ Cette semaine, 📅 Plus tard. Section « ✅ TERMINÉ » repliée, avec la date de règlement de chaque ligne. Pointer une tâche la fait glisser de l'une à l'autre. La vue par catégorie est conservée sous un repli : elle reste la référence pour retrouver une ligne précise.",
+            "LE RANG DANS LE CYCLE, PAS LE JOUR DU MOIS — un cycle va du 27 au 26 : le j.1 vient APRÈS le j.27. Comparer bêtement deux numéros de jour classerait le j.1 « en retard » alors qu'il est encore à venir. Chaque échéance est ramenée à son rang depuis la paie (0 à 30), et c'est ce rang qui trie et qui range. Un contrôle dédié le vérifie : remplacer le rang par le jour brut fait tomber la suite.",
+            "LE RESTE À PAYER NE COMPTE QUE CE QUI RESTE — l'en-tête somme les restes de la section « À traiter », pas les montants dus : une avance partielle déjà versée n'est pas redemandée. Chaque clic sur une case le fait baisser du montant exact, vérifié dans le navigateur.",
+            "VÉRIFICATION — 16 suites vertes, dont une nouvelle (test_cycle_realise.mjs) qui charge l'application dans un vrai navigateur : migration, étanchéité entre cycles, avance partielle, dépense ponctuelle épinglée à son mois, reste à payer réactif, découpage par urgence et bascule d'une section à l'autre. Sabotages vérifiés : partager l'état entre cycles, ou ne plus filtrer « À traiter », font tomber la suite.",
+            "AU PASSAGE — le clonage d'une année repart d'un suivi VIERGE, côté application ET côté moteur PHP : sans cela, 2027 serait née avec les pointages de 2026. La parité JS/PHP déclare cette divergence, comme les précédentes : le JS de référence, figé avant ce chantier, ne connaît pas la clé."
+        ] },
         { version: "37.11 Chat-Lisible", date: "2026-09-28", changes: [
             "TROUVÉ EN CHEMIN, ET C'EST LE PLUS GRAVE — sur téléphone, la modale du CFO n'existait pas. Elle était imbriquée dans le conteneur « v-if=\"!isMobile\" » : l'arbre entier était absent, donc le bouton 🧠 flottant ouvrait le vide. Mesuré : showCfoModal passait bien à true, et #cfo-widget-modal restait introuvable dans le DOM. Le Teleport n'y changeait rien — il déplace un élément rendu, il ne le rend pas à la place d'un v-if faux. La modale vit désormais au premier niveau et s'ouvre sur les deux formats.",
             "TYPOGRAPHIE — corps à 16 px sur téléphone et 17 px sur desktop (contre 14 px partout), interligne à 1,8, paragraphes espacés d'une ligne pleine, listes indentées avec des puces colorées, titres hiérarchisés, tableaux qui défilent seuls au lieu d'élargir la colonne. Tout cela dans une classe DISTINCTE (.cfo-msg) : la classe historique .cfo-html sert aussi à la bulle Merlin (texte clair sur fond sombre) et à l'intelligence marché, et y toucher aurait dégradé ces deux-là pour améliorer le chat.",
@@ -8572,7 +8679,8 @@
                                     const ponctuels = {};
                                     irrs.forEach(d => {
                                         if (!d || Number(d.mois) !== m) return;
-                                        if (a === _curA && m === _curM && d.paye) return; // déjà dans le solde d'aujourd'hui
+                                        // v37.12 : l'état payé passe par l'accesseur cyclique, plus par un champ plat.
+                                        if (a === _curA && m === _curM && isItemPaid(d, Number(d.montant || 0), _cleCycle(m, a))) return; // déjà dans le solde d'aujourd'hui
                                         const mt = Number(d.montant) || 0;
                                         if (!mt) return;
                                         const key = _cleCompte(d.sourceCompte || 'courant', _cleCourant);
@@ -11201,13 +11309,13 @@
                                 const sourceYear = y - 1;
                                 if (!donneesAnnuelles.value[sourceYear]) continue;
                                 const cloned = JSON.parse(JSON.stringify(donneesAnnuelles.value[sourceYear]));
-                                if (cloned.chargesFixes) Object.values(cloned.chargesFixes).forEach(f => { f.paye = false; f.montantPaye = 0; });
+                                if (cloned.chargesFixes) Object.values(cloned.chargesFixes).forEach(_viderTracker);
                                 if (cloned.chargesVariables) Object.values(cloned.chargesVariables).forEach(c => {
-                                    if (c.details) c.details.forEach(d => { d.paye = false; d.montantPaye = 0; });
+                                    if (c.details) c.details.forEach(_viderTracker);
                                 });
                                 if (Array.isArray(cloned.depensesIrregulieres)) {
                                     cloned.depensesIrregulieres.forEach(d => {
-                                        d.paye = false; d.montantPaye = 0;
+                                        _viderTracker(d);
                                         d.annee = y;
                                         d.id = Date.now() + Math.random();
                                     });
@@ -11469,12 +11577,12 @@
                         if(confirm(`Créer l'année prévisionnelle ${newYear} en copiant tous les paramètres et chocs de l'année ${maxYear} ?`)) {
                             const clonedData = JSON.parse(JSON.stringify(donneesAnnuelles.value[maxYear]));
                             
-                            Object.values(clonedData.chargesFixes).forEach(f => { f.paye = false; f.montantPaye = 0; });
+                            Object.values(clonedData.chargesFixes).forEach(_viderTracker);
                             Object.values(clonedData.chargesVariables).forEach(c => {
-                                if (c.details) c.details.forEach(d => { d.paye = false; d.montantPaye = 0; });
+                                if (c.details) c.details.forEach(_viderTracker);
                             });
                             clonedData.depensesIrregulieres.forEach(d => {
-                                d.paye = false; d.montantPaye = 0;
+                                _viderTracker(d);
                                 d.annee = newYear; 
                                 d.id = Date.now() + Math.random();
                             });
@@ -12296,6 +12404,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             // v22.00 P1 : migration référentiel catégories (idempotente, post-hydratation)
                             migrateCategoriesV22();
                             migrateStudioContratV354(); // v35.4 : paramètres contractuels du Studio
+                            migrateTrackerV3712();      // v37.12 : pointages rattachés à leur cycle
                             forceUpdateCalculations();
                             // v17.8 : reset du flag après que Vue a flushed ses watchers asynchrones
                             setTimeout(() => {
@@ -12845,7 +12954,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     const deplacerDepense = (dep) => {
-                        dep.paye = false; dep.montantPaye = 0;
+                        _viderTracker(dep);
                         if (!moisOuverts.value.includes(dep.mois)) moisOuverts.value.push(dep.mois);
                         handleDataChange();
                         addLog(`Choc déplacé vers ${nomDuMois(dep.mois)}.`, "success");
@@ -12874,34 +12983,164 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return due;
                     };
 
-                    const isItemPaid = (item, dueAmount) => {
-                        if (item.paye && !item.montantPaye) return true;
-                        // Si c'est une injection de cash (montant négatif), on se fie strictement à la case à cocher
-                        if (dueAmount < 0) return item.paye === true;
-                        return Number(item.montantPaye || 0) >= dueAmount;
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.12 — SUIVI D'EXÉCUTION PAR CYCLE
+
+                       LE BUG. `paye` et `montantPaye` vivaient à plat sur la charge,
+                       et la charge vit dans donneesAnnuelles[ANNÉE] — pas par mois.
+                       Cocher « Crédit Immo payé » en octobre le laissait coché en
+                       novembre, en décembre, et jusqu'au 31 décembre. Le suivi
+                       mensuel ne se réinitialisait jamais.
+
+                       LA CORRECTION. `jourPrevu` ne bouge pas : c'est la THÉORIE, et
+                       elle marche. L'EXÉCUTION part dans un dictionnaire par cycle :
+
+                           trackerRealise: {
+                             "2026-10": { paye: true, montantPaye: 8340, dateReelle: "2026-10-02" },
+                             "2026-11": { paye: false, montantPaye: 0 }
+                           }
+
+                       Une entrée absente = tâche vierge. Le basculement de cycle
+                       remet donc tout à faire, sans qu'aucun code ne « réinitialise »
+                       quoi que ce soit — il n'y a simplement rien à cette clé.
+
+                       POURQUOI TROIS FONCTIONS SUFFISENT. isItemPaid, getPaidAmount et
+                       toggleItemPaid sont le seul passage vers l'état payé : journal du
+                       Relevé, KPI « Reste à payer », trésorerie disponible, compteurs
+                       de checklist, payload de l'IA. Les recâbler ici suffit à rendre
+                       CYCLIQUE tout ce qui en dépend, sans toucher aux 39 points
+                       d'appel — et sans risquer d'en oublier un.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _cleCycle = (m, a) => String(a) + '-' + String(m).padStart(2, '0');
+                    const _aujourdhuiISO = () => {
+                        const d = new Date();
+                        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+                             + '-' + String(d.getDate()).padStart(2, '0');
                     };
 
-                    const toggleItemPaid = (item, dueAmount) => {
-                        // v25.40 Strict-Immutability : cocher/décocher ne change QUE l'état de l'item.
-                        // Le solde réel des comptes n'est JAMAIS muté ici — seule la saisie manuelle
-                        // (formulaire de mise à jour des soldes) modifie compte.solde. Le moteur de
-                        // projection ignore simplement l'élément coché pour le futur.
-                        const wasAlreadyPaid = isItemPaid(item, dueAmount);
-                        if (wasAlreadyPaid) {
-                            item.paye = false;
-                            item.montantPaye = 0;
-                        } else {
-                            item.paye = true;
-                            item.montantPaye = dueAmount;
-                        }
+                    //  Le cycle de paie en cours : 27 sept → 26 oct est le cycle d'octobre.
+                    const cycleRealiseActif = computed(() => _cleCycle(moisBudgetaire.value.mois, moisBudgetaire.value.an));
+                    //  Le cycle AFFICHÉ dans le Pilotage, rétro-navigation comprise.
+                    const cyclePilotage = computed(() => _cleCycle(pilotageViewedMois.value, pilotageViewedAn.value));
+
+                    /*  Une dépense ponctuelle porte SON mois (mois + annee) : son
+                        exécution n'a de sens que là, jamais dans un autre cycle. Les
+                        lignes récurrentes, elles, suivent le cycle demandé. */
+                    const _cycleDe = (item, cleDemandee) => {
+                        const m = Number((item || {}).mois), a = Number((item || {}).annee);
+                        if (Number.isFinite(m) && m >= 1 && m <= 12 && Number.isFinite(a) && a > 1900) return _cleCycle(m, a);
+                        return cleDemandee || cycleRealiseActif.value;
+                    };
+
+                    const _etatCycle = (item, cle) => {
+                        const t = (item || {}).trackerRealise;
+                        if (!t || typeof t !== 'object') return null;
+                        return t[_cycleDe(item, cle)] || null;
+                    };
+                    const _poserEtatCycle = (item, cle, etat) => {
+                        if (!item) return;
+                        if (!item.trackerRealise || typeof item.trackerRealise !== 'object') item.trackerRealise = {};
+                        item.trackerRealise[_cycleDe(item, cle)] = etat;
+                    };
+
+                    //  Sémantique STRICTEMENT identique à celle d'avant — seul le
+                    //  périmètre change : l'état lu est celui du cycle, plus celui
+                    //  de l'année entière.
+                    const isItemPaid = (item, dueAmount, cle) => {
+                        const e = _etatCycle(item, cle);
+                        if (!e) return false;
+                        if (e.paye && !e.montantPaye) return true;
+                        // Injection de cash (montant négatif) : on se fie à la case, pas au montant.
+                        if (dueAmount < 0) return e.paye === true;
+                        return Number(e.montantPaye || 0) >= dueAmount;
+                    };
+
+                    const getPaidAmount = (item, dueAmount, cle) => {
+                        const e = _etatCycle(item, cle);
+                        if (!e) return 0;
+                        if (e.paye && !e.montantPaye) return dueAmount;
+                        if (e.montantPaye !== undefined && e.montantPaye !== null) return Number(e.montantPaye);
+                        return e.paye ? dueAmount : 0;
+                    };
+
+                    const toggleItemPaid = (item, dueAmount, cle) => {
+                        // v25.40 Strict-Immutability : cocher/décocher ne change QUE l'état
+                        // de l'item. Le solde réel des comptes n'est JAMAIS muté ici.
+                        const dejaPaye = isItemPaid(item, dueAmount, cle);
+                        _poserEtatCycle(item, cle, dejaPaye
+                            ? { paye: false, montantPaye: 0 }
+                            : { paye: true, montantPaye: dueAmount, dateReelle: _aujourdhuiISO() });
                         handleDataChange();
                     };
 
-                    const getPaidAmount = (item, dueAmount) => {
-                        if (item.paye && !item.montantPaye) return dueAmount;
-                        if (item.montantPaye !== undefined && item.montantPaye !== null) return Number(item.montantPaye);
-                        return item.paye ? dueAmount : 0;
+                    //  Saisie d'un montant partiel. `paye` n'est pas touché : c'était
+                    //  déjà le cas avant, et isItemPaid tranche par comparaison au dû.
+                    const montantPayeCycle = (item, cle) => {
+                        const e = _etatCycle(item, cle);
+                        return e ? Number(e.montantPaye || 0) : 0;
                     };
+                    const setMontantPayeCycle = (item, valeur, cle) => {
+                        const e = _etatCycle(item, cle) || { paye: false };
+                        const v = Number(valeur) || 0;
+                        _poserEtatCycle(item, cle, Object.assign({}, e, {
+                            montantPaye: v,
+                            dateReelle: v > 0 ? (e.dateReelle || _aujourdhuiISO()) : e.dateReelle,
+                        }));
+                        handleDataChange();
+                    };
+
+                    //  Date de règlement effective, quand elle existe.
+                    const dateReelleCycle = (item, cle) => {
+                        const e = _etatCycle(item, cle);
+                        return (e && e.dateReelle) || '';
+                    };
+
+                    /*  MIGRATION — sans flag, parce qu'elle s'éteint d'elle-même.
+                        Un `paye` à plat ne peut décrire que le cycle où l'utilisateur
+                        l'a coché : le cycle en cours, seul visible dans l'écran
+                        Réalisé. On l'y range, puis on supprime le champ plat. Rien à
+                        migrer la fois suivante : le champ n'existe plus.
+                        Les dépenses ponctuelles portent leur propre mois — _cycleDe
+                        les range au bon endroit sans qu'on ait à le dire. */
+                    const migrateTrackerV3712 = () => {
+                        let deplaces = 0;
+                        const reprendre = (item) => {
+                            if (!item || typeof item !== 'object') return;
+                            const avaitPlat = ('paye' in item) || ('montantPaye' in item);
+                            if (!avaitPlat) return;
+                            const dejaSuivi = item.trackerRealise && typeof item.trackerRealise === 'object'
+                                           && Object.keys(item.trackerRealise).length > 0;
+                            const etait = !!item.paye || Number(item.montantPaye || 0) > 0;
+                            if (!dejaSuivi && etait) {
+                                _poserEtatCycle(item, null, {
+                                    paye: !!item.paye,
+                                    montantPaye: Number(item.montantPaye || 0),
+                                    dateReelle: item.dateReelle || '',
+                                });
+                                deplaces++;
+                            }
+                            delete item.paye;
+                            delete item.montantPaye;
+                        };
+                        Object.values(donneesAnnuelles.value || {}).forEach(annee => {
+                            if (!annee || typeof annee !== 'object') return;
+                            Object.values(annee.revenus || {}).forEach(reprendre);
+                            Object.values(annee.chargesFixes || {}).forEach(reprendre);
+                            Object.values(annee.chargesVariables || {}).forEach(cv => {
+                                reprendre(cv);
+                                (cv && Array.isArray(cv.details) ? cv.details : []).forEach(reprendre);
+                            });
+                            (Array.isArray(annee.epargne) ? annee.epargne : []).forEach(reprendre);
+                            const irr = Array.isArray(annee.depensesIrregulieres)
+                                      ? annee.depensesIrregulieres : Object.values(annee.depensesIrregulieres || {});
+                            irr.forEach(reprendre);
+                        });
+                        if (deplaces > 0) addLog('🔁 ' + deplaces + ' pointage(s) rattaché(s) au cycle ' + cycleRealiseActif.value + ' — le suivi repart à zéro à chaque nouveau cycle.', 'success');
+                    };
+
+                    //  Repartir d'une année vierge : on efface l'exécution, pas la théorie.
+                    const _viderTracker = (item) => { if (item && typeof item === 'object') item.trackerRealise = {}; };
+
 
                     const elementsDuMoisPayes = computed(() => {
                         calculationTick.value; let count = 0;
@@ -12965,6 +13204,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const an = moisBudgetaire.value.an;
                         const mois = moisBudgetaire.value.mois;
                         const dAnnee = donneesAnnuelles.value[an];
+                        const _cyc = _cleCycle(mois, an);   // v37.12 : cycle explicite
                         const jdp = Number((soldesInitiaux.value || {}).jourDePaie) || 27;
                         const soldeInit = soldeInitialCycleActuel.value;
                         const treso = tresoActuelleCourante.value;
@@ -12976,8 +13216,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         Object.values(dAnnee.revenus || {}).forEach(r => {
                             const due = Number(r.base || 0);
                             if (!due) return;
-                            const paid = isItemPaid(r, due);
-                            const amt = paid ? (getPaidAmount(r, due) || due) : due;
+                            const paid = isItemPaid(r, due, _cyc);
+                            const amt = paid ? (getPaidAmount(r, due, _cyc) || due) : due;
                             (paid ? paidItems : unpaidItems).push({
                                 libelle: r.label || 'Revenu',
                                 montant: amt, type: 'credit',
@@ -13016,8 +13256,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             Object.values(dAnnee.chargesFixes || {}).forEach(f => {
                                 const due = Number(f.valeur || 0);
                                 if (!due) return;
-                                const paid = isItemPaid(f, due);
-                                const amt = paid ? (getPaidAmount(f, due) || due) : due;
+                                const paid = isItemPaid(f, due, _cyc);
+                                const amt = paid ? (getPaidAmount(f, due, _cyc) || due) : due;
                                 (paid ? paidItems : unpaidItems).push({
                                     libelle: f.label || 'Charge fixe',
                                     montant: amt, type: 'debit',
@@ -13050,7 +13290,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     cv.details.forEach(d => {
                                         const due = Number(d.montant || 0);
                                         if (!due) return;
-                                        if (isItemPaid(d, due)) _paidAmt += getPaidAmount(d, due) || due;
+                                        if (isItemPaid(d, due, _cyc)) _paidAmt += getPaidAmount(d, due, _cyc) || due;
                                         else _unpaidAmt += due;
                                     });
                                     if (_paidAmt > 0) paidItems.push({ libelle: cv.label || 'Variable', montant: _paidAmt, type: 'debit', jourPrevu: 15, etat: 'realise', sourceCompte: _cvSrc });
@@ -13058,8 +13298,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 } else {
                                     const due = Number(cv.valeur || 0);
                                     if (!due) return;
-                                    const paid = isItemPaid(cv, due);
-                                    const amt = paid ? (getPaidAmount(cv, due) || due) : due;
+                                    const paid = isItemPaid(cv, due, _cyc);
+                                    const amt = paid ? (getPaidAmount(cv, due, _cyc) || due) : due;
                                     (paid ? paidItems : unpaidItems).push({ libelle: cv.label || 'Variable', montant: amt, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu', sourceCompte: _cvSrc });
                                 }
                             });
@@ -13069,8 +13309,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         getDepensesCycle(mois, an).forEach(dep => {
                             const due = Number(dep.montant || 0);
                             if (!due) return;
-                            const paid = isItemPaid(dep, due);
-                            const amt = paid ? (getPaidAmount(dep, due) || due) : due;
+                            const paid = isItemPaid(dep, due, _cyc);
+                            const amt = paid ? (getPaidAmount(dep, due, _cyc) || due) : due;
                             (paid ? paidItems : unpaidItems).push({
                                 libelle: dep.nom || dep.label || 'Dépense',
                                 montant: amt, type: 'debit',
@@ -13161,6 +13401,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         //   isCurrentCycle=true : force la lecture des getters Mode Réalisé (indépendant du mode)
                         const _mkLegs = (m, a, mode, isCurrentCycle = false) => {
                             const dA = donneesAnnuelles.value[a] || {};
+                            // v37.12 : l'état payé est lu POUR CE CYCLE. Jusqu'ici la
+                            //   question ne se posait pas — l'état était annuel.
+                            const _cyc = _cleCycle(m, a);
                             // v25.97 Strict-Radar : UN LEG PAR FLUX individuel — aucune agrégation, aucun reduce de fusion
                             const out = [];
                             // montant effectif d'un item simple (revenu / charge fixe) — paye:true EXCLU (déjà dans le solde réel)
@@ -13168,8 +13411,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const v = _effVal(item, baseVal, m);
                                 if (v <= 0) return 0; // bouclier : flux inactif ce mois-là → exclu
                                 if (mode === 'full') return Math.round(v * 100) / 100;
-                                if (isItemPaid(item, v)) return 0; // déjà pointé → totalement ignoré (radar forward-only)
-                                const r = v - (getPaidAmount(item, v) || 0);
+                                if (isItemPaid(item, v, _cyc)) return 0; // déjà pointé → totalement ignoré (radar forward-only)
+                                const r = v - (getPaidAmount(item, v, _cyc) || 0);
                                 return r > 0 ? Math.round(r * 100) / 100 : 0;
                             };
                             // montant mensuel d'une catégorie de charge variable (conversion hebdo → mensuel ×4.3)
@@ -13180,8 +13423,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (monthly <= 0) return 0;
                                 if (mode === 'full') return monthly;
                                 let paid = 0;
-                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, Number(d.montant || 0)) || 0; });
-                                else paid = getPaidAmount(cv, effValeur) || 0;
+                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, Number(d.montant || 0), _cyc) || 0; });
+                                else paid = getPaidAmount(cv, effValeur, _cyc) || 0;
                                 const rem = monthly - paid;
                                 return rem > 0 ? Math.round(rem * 100) / 100 : 0;
                             };
@@ -13191,8 +13434,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 // v25.98 Inflows-Radar-Fix : mode 'realized-in' = UNIQUEMENT les revenus déjà encaissés (paye:true), dégroupés
                                 if (mode === 'realized-in') {
                                     const v = _effVal(r, r.base, m);
-                                    if (v <= 0 || !isItemPaid(r, v)) return; // non encaissé → ignoré (radar asymétrique)
-                                    const paid = Math.round((getPaidAmount(r, v) || v) * 100) / 100;
+                                    if (v <= 0 || !isItemPaid(r, v, _cyc)) return; // non encaissé → ignoré (radar asymétrique)
+                                    const paid = Math.round((getPaidAmount(r, v, _cyc) || v) * 100) / 100;
                                     if (paid > 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💰 ' + (r.label || r.nom || 'Revenu'), montant: paid, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), internal: false });
                                     return;
                                 }
@@ -13249,7 +13492,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const due = Math.abs(rawDue);
                                 let amt;
                                 if (mode === 'full') amt = due;
-                                else { if (isItemPaid(dep, due)) amt = 0; else { const r = due - (getPaidAmount(dep, due) || 0); amt = r > 0 ? r : 0; } }
+                                else { if (isItemPaid(dep, due, _cyc)) amt = 0; else { const r = due - (getPaidAmount(dep, due, _cyc) || 0); amt = r > 0 ? r : 0; } }
                                 amt = Math.round(amt * 100) / 100;
                                 if (amt > 0) out.push({ account: _normKey(dep.sourceCompte), libelle: (isCreance ? '💚 ' : '⚠️ ') + (dep.nom || dep.label || (isCreance ? 'Créance' : 'Dépense')), montant: amt, type: isCreance ? 'credit' : 'debit', jourPrevu: Number(dep.jourPrevu || 20), internal: false });
                             });
@@ -13258,7 +13501,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const epArr = Array.isArray(dA.epargne) ? dA.epargne : Object.values(dA.epargne || {});
                             epArr.forEach(e => {
                                 const v = _effVal(e, e.valeur, m); if (v <= 0) return;
-                                if (mode !== 'full' && isItemPaid(e, v)) return; // transfert déjà réalisé → censuré 100% (jamais affiché)
+                                if (mode !== 'full' && isItemPaid(e, v, _cyc)) return; // transfert déjà réalisé → censuré 100% (jamais affiché)
                                 const amt = Math.round(v * 100) / 100;
                                 const lbl = e.nom || e.label || 'Épargne';
                                 const _jr = Number(e.jourPrevu || jdp);
@@ -14632,6 +14875,92 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             return !c.jourPrevu || Number(c.jourPrevu) < jdp;
                         });
                     });
+
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.12 — LA CHECKLIST DEVIENT UNE LISTE DE TÂCHES
+
+                       Dix-huit lignes rangées par catégorie ne disent pas quoi faire
+                       aujourd'hui. On les aplatit en tâches, triées par `jourPrevu` —
+                       la donnée existe déjà et le Pilotage Théorique s'en sert bien —
+                       et on ne montre par défaut que ce qui reste à faire.
+
+                       LE RANG DANS LE CYCLE, pas le jour du mois. Un cycle va du 27
+                       au 26 : le j.1 vient APRÈS le j.27. Comparer bêtement deux
+                       numéros de jour classerait le j.1 « en retard » alors qu'il est
+                       encore à venir. On ramène donc chaque jour à son rang depuis la
+                       paie (0 à 30), et c'est ce rang qu'on compare.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _rangDansCycle = (jour) => {
+                        const jdp = jourDePaie.value;
+                        const j = Number(jour);
+                        if (!Number.isFinite(j) || j < 1 || j > 31) return 99;   // sans date → en queue
+                        return j >= jdp ? j - jdp : j - jdp + 31;
+                    };
+                    //  Où en est-on du cycle affiché ? Sur un cycle passé, tout est
+                    //  derrière nous : la question du retard ne se pose plus.
+                    const _rangAujourdhui = computed(() => {
+                        if (isCyclePasse.value) return 99;
+                        return _rangDansCycle(new Date().getDate());
+                    });
+
+                    const tachesPilotage = computed(() => {
+                        calculationTick.value;
+                        const an = isCyclePasse.value ? pilotageViewedAn.value : moisBudgetaire.value.an;
+                        const cyc = cyclePilotage.value;
+                        const out = [];
+                        const pousser = (ref, libelle, due, groupe, icone, teinte, jourPrevu) => {
+                            const d = Number(due) || 0;
+                            if (d <= 0) return;              // suspendu ce mois → hors checklist
+                            out.push({
+                                cle: groupe + ':' + (ref.id != null ? ref.id : libelle),
+                                ref, libelle: libelle || '(sans nom)', due: d, groupe, icone, teinte,
+                                jourPrevu: Number(jourPrevu) || null,
+                                rang: _rangDansCycle(jourPrevu),
+                                paye: isItemPaid(ref, d, cyc),
+                                regle: getPaidAmount(ref, d, cyc) || 0,
+                                quand: dateReelleCycle(ref, cyc),
+                            });
+                        };
+                        chargesFixesBudgetairesTriees.value.forEach(f =>
+                            pousser(f, f.label, getDueFixe(f, an), 'Charge fixe', '🏢', 'orange', f.jourPrevu));
+                        chargesVarMensuellePilotage.value.forEach(cat =>
+                            (cat.details || []).forEach(d =>
+                                pousser(d, d.nom, Number(d.montant || 0), cat.label, '🧾', 'blue', d.jourPrevu || cat.jourPrevu)));
+                        epargneBudgetairePilotage.value.forEach(ep =>
+                            pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an), 'Épargne', '🎯', 'purple', ep.jourPrevu));
+                        getDepensesCycle(pilotageViewedMois.value, pilotageViewedAn.value).forEach(dep =>
+                            pousser(dep, dep.nom, Number(dep.montant || 0), 'Flux exceptionnel', '⚠️', 'rose', dep.jourPrevu));
+                        return out.sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle));
+                    });
+
+                    const tachesATraiter = computed(() => tachesPilotage.value.filter(t => !t.paye));
+                    const tachesTerminees = computed(() => tachesPilotage.value.filter(t => t.paye));
+
+                    //  Trois paquets, dans l'ordre où on les traite.
+                    const tachesGroupees = computed(() => {
+                        const r = _rangAujourdhui.value;
+                        const paquets = [
+                            { cle: 'retard',  titre: '⚠️ En retard',     teinte: 'rose',  taches: [] },
+                            { cle: 'semaine', titre: '⏳ Cette semaine',  teinte: 'amber', taches: [] },
+                            { cle: 'apres',   titre: '📅 Plus tard',      teinte: 'slate', taches: [] },
+                        ];
+                        tachesATraiter.value.forEach(t => {
+                            if (t.rang < r) paquets[0].taches.push(t);
+                            else if (t.rang <= r + 7) paquets[1].taches.push(t);
+                            else paquets[2].taches.push(t);
+                        });
+                        return paquets.filter(p => p.taches.length);
+                    });
+
+                    //  Ce que la section « À TRAITER » représente encore en argent.
+                    //  Somme des RESTES, pas des montants dus : une avance partielle
+                    //  déjà versée ne doit pas être redemandée.
+                    const resteATraiterPilotage = computed(() =>
+                        Math.round(tachesATraiter.value.reduce((s, t) => s + Math.max(0, t.due - t.regle), 0)));
+                    const totalTraitePilotage = computed(() =>
+                        Math.round(tachesTerminees.value.reduce((s, t) => s + (t.regle || t.due), 0)));
+
+                    const pilotageTermineOuvert = ref(false);
 
                     // ═══════════════════════════════════════════════════════════
                     // v22.90 Double-Pilotage — VUE THÉORIQUE (mode prévisionnel)
@@ -16973,7 +17302,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.11 — barre de prompt
                         cfoChatContainerMobile, grandirChampCFO, toucheCFO,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
-                        getDueFixe, getDueRevenu, isItemPaid, toggleItemPaid,
+                        getDueFixe, getDueRevenu, isItemPaid, toggleItemPaid, getPaidAmount,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
                         anneesProjectionOptions,
                         wealthGoals, masterAssets, roiAssets, stressAssets,
@@ -17030,6 +17359,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         detailsComptesFinal, soldesProjetesJournal, getCompteLabel, getCompteIcone, getNomCompte,
                         getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
                         canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
+                        // v37.12 — suivi d'exécution par cycle
+                        cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, dateReelleCycle,
+                        tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
+                        resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup

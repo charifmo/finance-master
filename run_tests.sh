@@ -53,5 +53,6 @@ suite "Objectifs adossés & clés de compte (PHP)"                php test_cfo_e
 suite "Un seul atterrissage (bandeau = Relevé = IA = projection)" node test_cfo_engine_parity/test_une_seule_verite.mjs
 suite "Simulateur dans le navigateur (UI + Chart.js)"           node test_cfo_engine_parity/test_sandbox_ui.mjs
 suite "Chat CFO dans le navigateur (ergonomie)"                 node test_cfo_engine_parity/test_chat_ui.mjs
+suite "Pilotage Réalisé (suivi par cycle)"                      node test_cfo_engine_parity/test_cycle_realise.mjs
 
 echo "✅ Toutes les suites passent."
