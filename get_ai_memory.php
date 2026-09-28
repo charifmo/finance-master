@@ -27,6 +27,8 @@
  *  à l'écran et coûteux à transporter.
  * ============================================================================
  */
+require_once __DIR__ . '/cfo_rag_ids.php';   // v37.10 : reconnaissance des identifiants
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -128,7 +130,8 @@ if (!$pdo) {
         une suppression à votre insu (CSRF). On exige un en-tête que seul du
         JavaScript peut poser (donc soumis au contrôle CORS) et une origine
         identique à l'hôte.
-     3. IDENTIFIANT ENTIER — requête préparée, jamais de concaténation.
+     3. IDENTIFIANT RECONNU — entier OU uuid, selon ce que porte vraiment la
+        colonne. Requête préparée, jamais de concaténation.
 
    ET UN FILET : la ligne supprimée est archivée en JSONL avant l'exécution.
    « Oublier définitivement » se dit à l'utilisateur, pas à la base — une
@@ -167,14 +170,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
     }
 
-    // Verrou 3 — identifiant entier strictement positif
-    $id = $corps['id'] ?? null;
-    if (!is_int($id) && !(is_string($id) && ctype_digit($id))) {
-        sortie(['status'=>'error','error'=>'ID_INVALIDE',
-                'message'=>"Identifiant attendu : un entier. Reçu : " . json_encode($id)], 400);
+    /* Verrou 3 — IDENTIFIANT RECONNU
+       ─────────────────────────────────────────────────────────────────────
+       v37.10 — CE VERROU REFUSAIT TOUTES LES SUPPRESSIONS. Il n'acceptait
+       qu'un entier. Or le nœud PGVector de LangChain crée finance_vectors
+       avec « id uuid PRIMARY KEY DEFAULT gen_random_uuid() » : chaque règle
+       porte un UUID. Le bouton « Oublier » renvoyait donc invariablement
+       ID_INVALIDE, et la règle restait en base — exactement le symptôme
+       rapporté. Reproduit sur un PostgreSQL 16 réel à clés UUID.
+
+       On accepte désormais les deux formes, toujours en liste blanche :
+       un entier strictement positif, ou un UUID canonique. Rien d'autre ne
+       passe, et la valeur reste un paramètre lié — jamais concaténée. */
+    $verdict = cfo_valider_id_vecteur($corps['id'] ?? null);
+    if (!$verdict['ok']) {
+        sortie(['status'=>'error','error'=>'ID_INVALIDE','message'=>$verdict['message']], 400);
     }
-    $id = (int)$id;
-    if ($id <= 0) sortie(['status'=>'error','error'=>'ID_INVALIDE','message'=>'Identifiant doit être positif.'], 400);
+    $formeId = $verdict['forme'];
+    $id = $verdict['valeur'];
 
     try {
         $dispo = colonnes($pdo, 'finance_vectors');
@@ -183,11 +196,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $cTxt = col($dispo, ['text', 'content', 'document', 'page_content', 'texte']);
         $cMet = col($dispo, ['metadata', 'meta', 'metadatas']);
 
+        /* Le type RÉEL de la colonne décide de la comparaison. PostgreSQL ne
+           compare pas un uuid à un texte tout seul (« operator does not exist:
+           uuid = text ») : il faut un transtypage explicite. On le lit dans le
+           catalogue plutôt que de le deviner, et on refuse l'incohérence au
+           lieu de produire une erreur SQL illisible. */
+        $typeId = typeColonne($pdo, 'finance_vectors', 'id');
+        $souci = cfo_id_incompatible($typeId, $formeId);
+        if ($souci !== null) {
+            sortie(['status'=>'error','error'=>'ID_INCOMPATIBLE','message'=>$souci], 400);
+        }
+        $cible = cfo_clause_id($typeId);
+
         // Relire la ligne AVANT de la détruire — pour l'archiver et pour
         // pouvoir dire à l'utilisateur ce qui a réellement disparu.
         $selArch = array_filter(['id', $cTxt, $cMet]);
         $sl = $pdo->prepare('SELECT ' . implode(', ', array_map(fn($c) => '"' . $c . '"', $selArch))
-                          . ' FROM finance_vectors WHERE id = :id');
+                          . ' FROM finance_vectors WHERE ' . $cible);
         $sl->execute([':id' => $id]);
         $ligne = $sl->fetch(PDO::FETCH_ASSOC);
         if (!$ligne) {
@@ -200,7 +225,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $entree = json_encode([
             'supprime_le'  => date('c'),
             'par'          => $utilisateurAmont,
-            'id'           => (int)$ligne['id'],
+            // v37.10 : surtout pas (int) — un UUID y devenait 0, donc une
+            //   archive inexploitable pour retrouver ce qui a été effacé.
+            'id'           => $ligne['id'],
             'texte'        => $cTxt ? (string)$ligne[$cTxt] : null,
             'metadata'     => $cMet ? decodeJson($ligne[$cMet] ?? null) : null,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -211,7 +238,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     'supprime'=>false], 500);
         }
 
-        $sd = $pdo->prepare('DELETE FROM finance_vectors WHERE id = :id');
+        $sd = $pdo->prepare('DELETE FROM finance_vectors WHERE ' . $cible);
         $sd->execute([':id' => $id]);
 
         $extrait = $cTxt ? (string)$ligne[$cTxt] : '';
@@ -230,6 +257,13 @@ function colonnes(PDO $pdo, string $table): array {
     $st = $pdo->prepare("SELECT column_name FROM information_schema.columns WHERE table_name = :t");
     $st->execute([':t' => $table]);
     return array_map(fn($r) => $r['column_name'], $st->fetchAll(PDO::FETCH_ASSOC));
+}
+/** Type SQL déclaré d'une colonne ('uuid', 'integer', 'bigint'…), '' si inconnue. */
+function typeColonne(PDO $pdo, string $table, string $colonne): string {
+    $st = $pdo->prepare("SELECT data_type FROM information_schema.columns
+                          WHERE table_name = :t AND column_name = :c");
+    $st->execute([':t' => $table, ':c' => $colonne]);
+    return (string)($st->fetchColumn() ?: '');
 }
 /** Première colonne existante parmi les candidates, sinon null. */
 function col(array $dispo, array $cands): ?string {

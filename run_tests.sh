@@ -33,7 +33,7 @@ suite() {
 }
 
 echo "▸ Syntaxe PHP"
-for f in cfo_intent_engine.php cfo_integrity.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php; do
+for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php; do
     [ -f "$f" ] && php -l "$f" > /dev/null && echo "  ✅ $f"
 done
 
@@ -44,6 +44,7 @@ suite "Discipline de résolution (comptes / objectifs / actifs)" php test_cfo_en
 suite "Cohérence des schémas d'objectif"                        php test_cfo_engine_parity/test_schema_goals.php
 suite "Intégrité des données écrites"                           php test_cfo_engine_parity/test_integrite.php
 suite "Tri du bruit (Supervision IA)"                           php test_cfo_engine_parity/test_supervision.php
+suite "Suppression d'une règle RAG (identifiants)"              php test_cfo_engine_parity/test_suppression_rag.php
 suite "Lecture des réponses du CFO"                             node test_cfo_engine_parity/test_reponse_cfo.mjs
 suite "Conversion des dates cibles"                             php test_cfo_engine_parity/test_dates.php
 suite "Retour d'écriture (écran ↔ serveur)"                     node test_cfo_engine_parity/test_rafraichissement.mjs

@@ -3021,9 +3021,21 @@
                         <p v-if="!aiMemoryRag.length && !aiMemoryChargement" class="text-center text-gray-400 text-sm py-8 italic">Aucune règle mémorisée.</p>
                         <div v-for="r in aiMemoryRag" :key="'rag_'+r.id" class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:border-indigo-200 transition-colors">
                             <div class="flex items-start justify-between gap-4 mb-2">
-                                <span class="text-[10px] font-black uppercase tracking-widest text-indigo-500">Règle #{{ r.id }}</span>
+                                <div class="flex items-center gap-2 flex-wrap min-w-0">
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-indigo-500">Règle #{{ r.id }}</span>
+                                    <!-- v37.10 : une même information peut occuper plusieurs lignes.
+                                         En effacer une ne l'efface pas — autant le dire ici. -->
+                                    <span v-if="aiMemoryCopies[r.id]" class="text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                                        {{ aiMemoryCopies[r.id].length }} copies du même texte
+                                    </span>
+                                </div>
                                 <div class="flex items-center gap-3 shrink-0">
                                     <span class="text-[10px] text-gray-400 font-bold">{{ r.longueur }} car.</span>
+                                    <button v-if="aiMemoryCopies[r.id]" @click="oublierToutesLesCopies(r)" :disabled="aiSuppressionEnCours === r.id"
+                                            class="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-wait transition-colors"
+                                            title="Oublier toutes les lignes qui portent ce texte">
+                                        Oublier les {{ aiMemoryCopies[r.id].length }} copies
+                                    </button>
                                     <button @click="oublierRegle(r)" :disabled="aiSuppressionEnCours === r.id"
                                             class="text-red-400 hover:text-red-600 disabled:text-gray-300 disabled:cursor-wait text-lg leading-none transition-colors"
                                             title="Oublier cette règle définitivement">
@@ -6905,8 +6917,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.9 Reparation-Et-Verdict";
+                    const CURRENT_VERSION = "37.10 Oubli-Effectif";
                     const CHANGELOG = [
+        { version: "37.10 Oubli-Effectif", date: "2026-09-28", changes: [
+            "LE BOUTON « OUBLIER » NE POUVAIT PAS FONCTIONNER, ET LA CAUSE EST NETTE — le verrou de suppression n'acceptait qu'un identifiant ENTIER. Or le nœud PGVector de LangChain crée finance_vectors avec « id uuid PRIMARY KEY DEFAULT gen_random_uuid() » : chaque règle porte un UUID, et vos propres écrans l'affichaient (Règle #FE0505E9-BA36-4640-A0C4-8F076114FE92). Le serveur répondait donc invariablement ID_INVALIDE et la règle restait en base. Reproduit sur un PostgreSQL 16 à clés UUID : suppression refusée, ligne toujours présente.",
+            "CORRIGÉ ET RE-VÉRIFIÉ SUR LA MÊME BASE — entier ET uuid sont désormais reconnus, en liste blanche stricte, et le type RÉEL de la colonne est lu dans le catalogue pour choisir la comparaison (PostgreSQL ne compare pas un uuid à du texte sans transtypage explicite). Après correction : suppression acceptée, ligne effacée, liste qui ne la renvoie plus, archive qui conserve le vrai UUID. Une table à clés entières continue de fonctionner à l'identique, et une forme incompatible est refusée en le NOMMANT plutôt qu'en laissant remonter une erreur SQL.",
+            "L'ARCHIVE ÉTAIT ELLE AUSSI CASSÉE — elle écrivait (int)\$ligne['id'], ce qui transformait un UUID en 0. Le filet de récupération aurait été inexploitable au moment précis où il aurait servi.",
+            "LES VERROUS N'ONT PAS BOUGÉ, ET C'EST MESURÉ — authentification en amont, en-tête anti-CSRF, origine identique, valeur toujours liée et jamais concaténée. Rejoués après la correction : injection SQL derrière un UUID valide refusée, UUID sans tirets refusé, entier sur colonne uuid refusé, requête sans en-tête refusée, origine étrangère refusée. 27 contrôles supplémentaires dans une suite dédiée.",
+            "SECONDE CAUSE, INDÉPENDANTE : UNE MÊME INFORMATION PEUT OCCUPER PLUSIEURS LIGNES. L'ingestion redécoupe et réindexe ; effacer l'une laissait les autres, sans que rien ne le dise. L'interface compte désormais les copies d'un même texte, les signale par un badge, et propose « Oublier les N copies » pour toutes les retirer d'un coup — chacune archivée séparément, un échec en cours de route étant rapporté au lieu d'être avalé.",
+            "ET CE QUI N'EST PAS UN BUG, MAIS QU'IL FALLAIT DIRE — l'agent relit les 8 derniers échanges de la conversation en cours (table chat_history). Une règle effacée du RAG peut donc encore être citée DANS cette conversation. C'est désormais indiqué après chaque suppression réussie, avec le geste qui règle la question : ouvrir une nouvelle conversation."
+        ] },
         { version: "37.9 Reparation-Et-Verdict", date: "2026-09-25", changes: [
             "LA CAUSE DU COMPTE COURANT À −600 000 DH. Jusqu'à la v37.8, « Appliquer ce scénario » exécutait littéralement : courantCompte.solde = solde − montant, où « montant » était le PRIX COMPLET du bien. Un achat simulé à 600 000 DH débitait donc 600 000 DH de vos VRAIES données, et créait un actif payé comptant (apport = prix, crédit = 0). Ce n'était pas une projection fausse : c'était une écriture dans le fichier. De là le patrimoine liquide à −554 300 DH et l'atterrissage négatif fin 2026, sans qu'aucune dépense réelle n'ait eu lieu.",
             "RÉPARATION INTÉGRÉE — le simulateur retrouve ces applications et les défait, exactement à l'envers : l'actif est retiré, le montant est recrédité sur le compte courant. La signature est l'identifiant : « Appliquer ce scénario » est le seul à produire ma_<horodatage>_<suffixe> ; un actif saisi à la main s'appelle ma_<horodatage> sans suffixe. Vérifié : un actif saisi à la main posé à côté n'est pas confondu. La date d'application est affichée (elle est dans l'identifiant), et rien n'est fait sans confirmation. Si l'actif a déjà été supprimé mais que le débit est resté, un second bloc permet de recréditer le montant à la main.",
@@ -8660,6 +8680,62 @@
                     // v37.2 — Oublier une règle mémorisée.
                     //   La confirmation RAPPELLE le texte visé : « voulez-vous
                     //   supprimer ? » sans dire quoi invite à cliquer oui par réflexe.
+                    // v37.10 : deux règles portant le même texte sont la MÊME
+                    //   information. On les regroupe pour pouvoir le dire, et pour
+                    //   pouvoir les effacer ensemble.
+                    const _cleTexte = (t) => String(t == null ? '' : t)
+                        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                        .toLowerCase().replace(/\s+/g, ' ').trim();
+
+                    const aiMemoryCopies = computed(() => {
+                        const parTexte = new Map();
+                        (aiMemoryRag.value || []).forEach(r => {
+                            const k = _cleTexte(r.texte);
+                            if (!k) return;
+                            if (!parTexte.has(k)) parTexte.set(k, []);
+                            parTexte.get(k).push(r.id);
+                        });
+                        const out = {};
+                        (aiMemoryRag.value || []).forEach(r => {
+                            const ids = parTexte.get(_cleTexte(r.texte)) || [];
+                            if (ids.length > 1) out[r.id] = ids;
+                        });
+                        return out;
+                    });
+
+                    //   Un seul chemin de suppression, appelé une fois ou n fois.
+                    //   Renvoie le nombre de lignes réellement effacées.
+                    const _supprimerVecteur = async (id) => {
+                        const res = await fetch(AI_MEMORY_PATH, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                // Exigé par le serveur : un en-tête personnalisé force le
+                                // contrôle CORS, ce qu'un formulaire tiers ne peut pas faire.
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: JSON.stringify({ action: 'delete_vector', id }),
+                        });
+                        const txt = await res.text();
+                        let d; try { d = JSON.parse(txt); } catch (e) { d = null; }
+                        if (!d || d.status !== 'ok') {
+                            const cause = (d && d.error === 'PROTECTION_ABSENTE')
+                                ? "La suppression est bloquée tant que /finance/ n'est pas protégé par Caddy (basic_auth). "
+                                  + 'La lecture continue de fonctionner. Voir CADDY_SECURITE.md.'
+                                : ((d && d.message) || txt.slice(0, 200));
+                            throw new Error(cause);
+                        }
+                        return d;
+                    };
+
+                    //   Ce que l'agent peut encore savoir APRÈS une suppression
+                    //   réussie. Le taire ferait passer une réponse normale pour
+                    //   un échec de la suppression.
+                    const _NOTE_HISTORIQUE = "La règle est retirée de la base de connaissance. "
+                        + "Si l'agent la cite encore dans la conversation en cours, c'est qu'elle figure aussi "
+                        + "dans l'historique des 8 derniers échanges de cette session : ouvrez une nouvelle "
+                        + "conversation pour repartir sans elle.";
+
                     const oublierRegle = async (regle) => {
                         if (!regle || !regle.id) return;
                         const extrait = String(regle.texte || '').slice(0, 140) + (String(regle.texte || '').length > 140 ? '…' : '');
@@ -8669,35 +8745,56 @@
                         if (!ok) return;
                         aiSuppressionEnCours.value = regle.id;
                         try {
-                            const res = await fetch(AI_MEMORY_PATH, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    // Exigé par le serveur : un en-tête personnalisé force le
-                                    // contrôle CORS, ce qu'un formulaire tiers ne peut pas faire.
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                },
-                                body: JSON.stringify({ action: 'delete_vector', id: regle.id }),
-                            });
-                            const txt = await res.text();
-                            let d; try { d = JSON.parse(txt); } catch (e) { d = null; }
-                            if (!d || d.status !== 'ok') {
-                                // L'échec le plus probable a une cause précise et une solution :
-                                // on la donne, plutôt que d'afficher un code d'erreur.
-                                const cause = (d && d.error === 'PROTECTION_ABSENTE')
-                                    ? "La suppression est bloquée tant que /finance/ n'est pas protégé par Caddy (basic_auth). "
-                                      + 'La lecture continue de fonctionner. Voir CADDY_SECURITE.md.'
-                                    : ((d && d.message) || txt.slice(0, 200));
-                                throw new Error(cause);
-                            }
+                            const d = await _supprimerVecteur(regle.id);
                             // Retrait immédiat de la liste, sans attendre le rechargement :
                             // l'écran doit refléter l'action au moment où elle est faite.
                             aiMemoryRag.value = aiMemoryRag.value.filter(x => x.id !== regle.id);
                             addLog('🗑️ Règle #' + regle.id + ' oubliée (archivée dans ' + (d.archive || 'l\'archive') + ').', 'success');
                             await chargerAiMemory();
+                            // v37.10 : une copie oubliée n'est pas l'information oubliée.
+                            //   On relit la liste et on compte ce qui porte encore ce texte.
+                            const cle = _cleTexte(regle.texte);
+                            const restantes = (aiMemoryRag.value || []).filter(x => _cleTexte(x.texte) === cle);
+                            if (restantes.length) {
+                                aiMemoryErreur.value = { code: 'COPIES_RESTANTES',
+                                    message: restantes.length + ' autre(s) entrée(s) portent exactement le même texte : '
+                                           + "l'information est toujours dans la base. Utilisez « Oublier les "
+                                           + (restantes.length + 1) + ' copies » pour toutes les retirer.' };
+                            } else {
+                                addLog('ℹ️ ' + _NOTE_HISTORIQUE, 'info');
+                            }
                         } catch (e) {
                             aiMemoryErreur.value = { code: 'SUPPRESSION_REFUSEE', message: (e && e.message) || String(e) };
                             addLog('🗑️ Suppression refusée : ' + aiMemoryErreur.value.message, 'error');
+                        } finally {
+                            aiSuppressionEnCours.value = null;
+                        }
+                    };
+
+                    //   Toutes les lignes qui portent le même texte, d'un coup.
+                    //   On les supprime une par une : le serveur garde ainsi une
+                    //   entrée d'archive par ligne, et un échec en cours de route
+                    //   n'annule pas ce qui a déjà été retiré — il est rapporté.
+                    const oublierToutesLesCopies = async (regle) => {
+                        const ids = (aiMemoryCopies.value || {})[regle.id] || [regle.id];
+                        const extrait = String(regle.texte || '').slice(0, 140);
+                        if (!confirm('Oublier les ' + ids.length + ' copies de cette règle ?\n\n« ' + extrait + ' »\n\n'
+                                   + "Chacune est archivée côté serveur avant d'être retirée.")) return;
+                        aiSuppressionEnCours.value = regle.id;
+                        let ok = 0; const echecs = [];
+                        try {
+                            for (const id of ids) {
+                                try { await _supprimerVecteur(id); ok++; }
+                                catch (e) { echecs.push(id + ' : ' + ((e && e.message) || e)); }
+                            }
+                            await chargerAiMemory();
+                            if (echecs.length) {
+                                aiMemoryErreur.value = { code: 'SUPPRESSION_PARTIELLE',
+                                    message: ok + ' copie(s) retirée(s), ' + echecs.length + ' en échec — ' + echecs[0] };
+                                addLog('🗑️ Suppression partielle : ' + ok + '/' + ids.length, 'warn');
+                            } else {
+                                addLog('🗑️ ' + ok + ' copie(s) de la règle oubliée(s). ' + _NOTE_HISTORIQUE, 'success');
+                            }
                         } finally {
                             aiSuppressionEnCours.value = null;
                         }
@@ -16620,6 +16717,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         aiMemoryErreur, aiMemoryAvertissement, aiMemoryFiltre, chargerAiMemory,
                         aiMemoryChatParSession, aiMetaPlate, aiDateCourte,
                         aiMemoryToutVoir, aiMemorySeuil, aiMemoryEcartes, aiSuppressionEnCours, oublierRegle,
+                        // v37.10 — copies d'une même règle
+                        aiMemoryCopies, oublierToutesLesCopies,
                         surplusMensuelBase, surplusParMois, surplusStats, showSurplusTooltip,
                         surplusMoisMoyennes, surplusMoyenneHorsMoisCourant, bilan, soldeFinal, epargneTotaleFinal, patrimoineProjeteGlobal, detailsEpargneFinal, epargneNonLieeFinal, getEpargneLabel, getCompteProjection, statsFluxAnnee, formatMAD, exporterDonnees, exporterPDF, triggerImport, importerDonnees, dropdownFacturesOpen, deplacerDepense, budgetConsoRestant, tresoActuelleMois, tresoEntrees, prorataSemainesRestantes, resteAPayerFixes, resteAPayerFactures, resteAPayerVariables, resteAPayerIrregulier, resteAPayerIncompressible, resteAPayerDetailParCompte, resteAPayerCourant, resteAPayerTotalGlobal, tresoActuelleCourante, jourDePaie, moisBudgetaire, cycleLabel, joursRestantsAvantPaie, joursDepuisDernierePaie, progressCyclePaie, dernierePaieLabel, prochainePaieLabel, cashDispoPourConso, budgetSemaineReel,
                         // v22.90 Double-Pilotage
