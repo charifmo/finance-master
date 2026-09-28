@@ -5460,6 +5460,132 @@
 
                     <div v-if="anneeAffichage === moisBudgetaire.an" class="space-y-6">
 
+                        <!-- Bannière Mode Régularisation -->
+                        <div v-if="isPilotageRetro" class="flex items-center gap-3 bg-amber-900/20 border border-amber-500/40 rounded-xl px-4 py-3">
+                            <span class="text-base shrink-0">⚠️</span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-amber-300 font-black text-[10px] uppercase tracking-widest">Mode Régularisation</p>
+                                <p class="text-amber-200/60 text-[9px] mt-0.5">Vous modifiez un cycle passé. Les changements impacteront les soldes suivants.</p>
+                            </div>
+                            <button @click="pilotageViewedCycle = null" class="text-[9px] font-black text-amber-400 bg-amber-900/40 px-2 py-1 rounded-lg hover:bg-amber-800/50 transition-all whitespace-nowrap shrink-0">Cycle actuel</button>
+                        </div>
+
+                        <!-- ═══════════════════════════════════════════════════════════════
+                             v37.13 — CE QU'ON FAIT AUJOURD'HUI PASSE DEVANT.
+                             Les listes statiques occupaient le haut de l'écran et repoussaient
+                             la file de travail sous la ligne de flottaison : on lisait d'abord
+                             ce qu'on ne touche pas. Ordre inversé — à traiter, puis les
+                             tableaux de bord, puis les références, repliées.
+                             ═══════════════════════════════════════════════════════════════ -->
+                        <div class="space-y-4">
+                            <!-- ═══ v37.12 : la checklist devient une liste de tâches ═══
+                                 Trié par jourPrevu (ramené au rang dans le cycle : sur un
+                                 cycle 27→26, le j.1 vient APRÈS le j.27), et on ne montre
+                                 par défaut que ce qui reste à faire. -->
+                            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg">
+                                <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-750 gap-3 flex-wrap">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <span class="text-blue-400 text-lg shrink-0">📋</span>
+                                        <span class="text-sm font-black uppercase tracking-widest text-white truncate">À traiter — {{ pilotageCycleLabel }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="text-[10px] px-2.5 py-1 rounded-lg font-black border bg-slate-900 border-slate-600 text-rose-300">
+                                            {{ formatMAD(resteATraiterPilotage) }} restants
+                                        </span>
+                                        <span :class="['text-[10px] px-2.5 py-1 rounded-lg font-black border', tachesATraiter.length === 0 && tachesPilotage.length > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
+                                            {{ tachesTerminees.length }} / {{ tachesPilotage.length }} faits
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="p-4 space-y-5">
+                                    <!-- v37.13 : dire pourquoi certaines lignes ne sont pas datées,
+                                         au lieu de laisser penser que le tri les ignore. -->
+                                    <p v-if="tachesSansDate" class="text-[10px] font-bold text-slate-400 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 leading-snug">
+                                        📅 {{ tachesSansDate }} ligne(s) sans jour de prélèvement : elles ferment la liste, faute de savoir où les placer.
+                                        Renseignez « Jour prévu » dans le Budget Structurel pour qu'elles rejoignent le bon paquet.
+                                        <span class="text-slate-500">(le champ est masqué sur une charge découpée en parts)</span>
+                                    </p>
+
+                                    <!-- Inbox Zero : plus rien à faire -->
+                                    <div v-if="tachesATraiter.length === 0" class="text-center py-10">
+                                        <p class="text-4xl mb-3">✅</p>
+                                        <p class="text-sm font-black text-green-400 uppercase tracking-widest">Tout est traité</p>
+                                        <p class="text-[11px] text-slate-400 font-bold mt-1">
+                                            {{ tachesPilotage.length }} élément(s) pointé(s) sur {{ pilotageCycleLabel }}.
+                                            Le prochain cycle repartira à zéro.
+                                        </p>
+                                    </div>
+
+                                    <!-- ⚠️ En retard / ⏳ Cette semaine / 📅 Plus tard -->
+                                    <div v-for="paquet in tachesGroupees" :key="paquet.cle">
+                                        <p :class="['text-[9px] font-black uppercase tracking-widest mb-2 pb-1 border-b flex items-center justify-between gap-2',
+                                                    paquet.teinte === 'rose' ? 'text-rose-400 border-rose-900/50'
+                                                    : (paquet.teinte === 'amber' ? 'text-amber-400 border-amber-900/50' : 'text-slate-400 border-slate-700')]">
+                                            <span>{{ paquet.titre }}</span>
+                                            <span class="font-mono">{{ paquet.taches.length }}</span>
+                                        </p>
+                                        <transition-group tag="div" name="tache" class="space-y-1.5">
+                                            <div v-for="t in paquet.taches" :key="t.cle"
+                                                 :class="['flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border transition-all',
+                                                          t.teinte === 'orange' ? 'border-slate-700 hover:border-orange-500'
+                                                          : (t.teinte === 'blue' ? 'border-slate-700 hover:border-blue-500'
+                                                          : (t.teinte === 'purple' ? 'border-slate-700 hover:border-purple-500' : 'border-slate-700 hover:border-rose-500'))]">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                                    <input type="checkbox" :checked="false"
+                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
+                                                           class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer shrink-0"/>
+                                                    <span class="shrink-0">{{ t.icone }}</span>
+                                                    <span class="text-sm font-bold text-slate-200 truncate">{{ t.libelle }}</span>
+                                                    <span v-if="t.jourPrevu"
+                                                          :class="['text-[9px] font-black px-1.5 py-0.5 rounded-full border shrink-0',
+                                                                   t.retard ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                                                   : (t.proche ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                                                                   : 'bg-slate-700/40 text-slate-400 border-slate-600/50')]">📅 j.{{ t.jourPrevu }}</span>
+                                                    <span v-else class="text-[9px] font-black px-1.5 py-0.5 rounded-full border border-dashed border-slate-600 text-slate-500 shrink-0"
+                                                          title="Aucune date de prélèvement sur cette ligne — renseignez « jour prévu » dans le Budget Structurel pour la classer dans le bon paquet">📅 sans date</span>
+                                                    <span class="text-[9px] text-slate-600 font-bold uppercase tracking-widest hidden md:inline shrink-0">{{ t.groupe }}</span>
+                                                </label>
+                                                <div class="flex items-center gap-2 ml-3 shrink-0">
+                                                    <input type="number" :value="montantPayeCycle(t.ref, cyclePilotage)"
+                                                           @input="setMontantPayeCycle(t.ref, $event.target.value, cyclePilotage)"
+                                                           placeholder="0" title="Avance déjà versée"
+                                                           class="w-20 bg-slate-950 text-slate-200 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
+                                                    <span class="text-[10px] font-black text-slate-400 w-16 text-right">/ {{ formatMAD(t.due).replace(' DH', '') }}</span>
+                                                </div>
+                                            </div>
+                                        </transition-group>
+                                    </div>
+
+                                    <!-- ✅ Terminé — replié par défaut -->
+                                    <div v-if="tachesTerminees.length" class="rounded-xl border border-slate-700 bg-slate-900/60 overflow-hidden">
+                                        <button @click="pilotageTermineOuvert = !pilotageTermineOuvert"
+                                                class="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/60 transition-colors">
+                                            <span class="text-[10px] font-black uppercase tracking-widest text-green-400">✅ Terminé ({{ tachesTerminees.length }})</span>
+                                            <span class="flex items-center gap-2 shrink-0">
+                                                <span class="text-[10px] font-black text-green-500/70">{{ formatMAD(totalTraitePilotage) }}</span>
+                                                <span class="text-slate-500 text-xs">{{ pilotageTermineOuvert ? '▲' : '▼' }}</span>
+                                            </span>
+                                        </button>
+                                        <div v-show="pilotageTermineOuvert" class="px-3 pb-3 space-y-1.5 border-t border-slate-800 pt-3">
+                                            <div v-for="t in tachesTerminees" :key="'ok_' + t.cle"
+                                                 class="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                                    <input type="checkbox" :checked="true"
+                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
+                                                           class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-green-500 cursor-pointer shrink-0"/>
+                                                    <span class="text-xs font-bold text-slate-500 line-through truncate">{{ t.libelle }}</span>
+                                                    <span v-if="t.quand" class="text-[9px] text-slate-600 font-bold shrink-0">le {{ t.quand }}</span>
+                                                </label>
+                                                <span class="text-xs font-black text-green-500/80 ml-3 shrink-0">{{ formatMAD(t.regle || t.due) }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
                         <!-- ═══ v32.00 Realized-T0 : conso déjà engagée sur le cycle ═══ -->
                         <div v-if="!isCyclePasse && consoCategoriesT0.length" :class="['rounded-2xl border overflow-hidden text-left shadow-lg bg-slate-800', consoT0Renseigne ? 'border-violet-600/60' : 'border-amber-600/50']">
                             <div :class="['flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-700', consoT0Renseigne ? 'bg-violet-900/20' : 'bg-amber-900/20']">
@@ -5602,27 +5728,20 @@
                             <span class="text-base">📑</span>
                             <span>Ouvrir le Journal / Relevé</span>
                         </button>
-                        <!-- Bannière Mode Régularisation -->
-                        <div v-if="isPilotageRetro" class="flex items-center gap-3 bg-amber-900/20 border border-amber-500/40 rounded-xl px-4 py-3">
-                            <span class="text-base shrink-0">⚠️</span>
-                            <div class="flex-1 min-w-0">
-                                <p class="text-amber-300 font-black text-[10px] uppercase tracking-widest">Mode Régularisation</p>
-                                <p class="text-amber-200/60 text-[9px] mt-0.5">Vous modifiez un cycle passé. Les changements impacteront les soldes suivants.</p>
-                            </div>
-                            <button @click="pilotageViewedCycle = null" class="text-[9px] font-black text-amber-400 bg-amber-900/40 px-2 py-1 rounded-lg hover:bg-amber-800/50 transition-all whitespace-nowrap shrink-0">Cycle actuel</button>
-                        </div>
-
-                        <!-- Checklist Revenus + Dépenses — v22.30 -->
+                        <!-- ═══ v37.13 : références, en bas et repliées ═══════════════ -->
                         <div class="space-y-4">
-                            <!-- 🟢 Entrées d'Argent — checklist par source de revenu -->
-                            <div class="bg-slate-800 rounded-2xl border border-green-800/50 overflow-hidden text-left shadow-lg">
-                                <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-green-900/20">
+                            <!-- 🟢 Entrées d'Argent — v37.13 : repliée par défaut, en bas de page.
+                                 On la pointe une fois par cycle, le jour de la paie ; elle n'a
+                                 pas à occuper l'écran les vingt-neuf autres jours. -->
+                            <details class="bg-slate-800 rounded-2xl border border-green-800/50 overflow-hidden text-left shadow-lg">
+                                <summary class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-green-900/20 cursor-pointer select-none hover:bg-green-900/30 transition-colors">
                                     <div class="flex items-center gap-3">
                                         <span class="text-green-400 text-lg">🟢</span>
                                         <span class="text-sm font-black uppercase tracking-widest text-white">Entrées d'Argent</span>
+                                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">{{ revenusRestantsPilotage }} à pointer</span>
                                     </div>
                                     <span class="text-sm font-black text-green-400">{{ formatMAD(tresoEntrees) }}</span>
-                                </div>
+                                </summary>
                                 <div class="p-4 space-y-2">
                                     <div v-for="(rev, key) in revenusBudgetairesTries" :key="'rev_' + key"
                                          :class="['flex items-center justify-between p-3 rounded-xl group border transition-all', getDueRevenu(rev, moisBudgetaire.an) <= 0 ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-slate-900/90 border-slate-700 hover:border-green-500']">
@@ -5649,99 +5768,7 @@
                                     </div>
                                     <div v-if="!donneesAnnuelles[moisBudgetaire.an] || !Object.keys(donneesAnnuelles[moisBudgetaire.an]?.revenus || {}).length" class="text-center py-4 text-slate-500 text-sm">Aucune entrée configurée</div>
                                 </div>
-                            </div>
-
-                            <!-- ═══ v37.12 : la checklist devient une liste de tâches ═══
-                                 Trié par jourPrevu (ramené au rang dans le cycle : sur un
-                                 cycle 27→26, le j.1 vient APRÈS le j.27), et on ne montre
-                                 par défaut que ce qui reste à faire. -->
-                            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg">
-                                <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-750 gap-3 flex-wrap">
-                                    <div class="flex items-center gap-3 min-w-0">
-                                        <span class="text-blue-400 text-lg shrink-0">📋</span>
-                                        <span class="text-sm font-black uppercase tracking-widest text-white truncate">À traiter — {{ pilotageCycleLabel }}</span>
-                                    </div>
-                                    <div class="flex items-center gap-2 shrink-0">
-                                        <span class="text-[10px] px-2.5 py-1 rounded-lg font-black border bg-slate-900 border-slate-600 text-rose-300">
-                                            {{ formatMAD(resteATraiterPilotage) }} restants
-                                        </span>
-                                        <span :class="['text-[10px] px-2.5 py-1 rounded-lg font-black border', tachesATraiter.length === 0 && tachesPilotage.length > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
-                                            {{ tachesTerminees.length }} / {{ tachesPilotage.length }} faits
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div class="p-4 space-y-5">
-                                    <!-- Inbox Zero : plus rien à faire -->
-                                    <div v-if="tachesATraiter.length === 0" class="text-center py-10">
-                                        <p class="text-4xl mb-3">✅</p>
-                                        <p class="text-sm font-black text-green-400 uppercase tracking-widest">Tout est traité</p>
-                                        <p class="text-[11px] text-slate-400 font-bold mt-1">
-                                            {{ tachesPilotage.length }} élément(s) pointé(s) sur {{ pilotageCycleLabel }}.
-                                            Le prochain cycle repartira à zéro.
-                                        </p>
-                                    </div>
-
-                                    <!-- ⚠️ En retard / ⏳ Cette semaine / 📅 Plus tard -->
-                                    <div v-for="paquet in tachesGroupees" :key="paquet.cle">
-                                        <p :class="['text-[9px] font-black uppercase tracking-widest mb-2 pb-1 border-b flex items-center justify-between gap-2',
-                                                    paquet.teinte === 'rose' ? 'text-rose-400 border-rose-900/50'
-                                                    : (paquet.teinte === 'amber' ? 'text-amber-400 border-amber-900/50' : 'text-slate-400 border-slate-700')]">
-                                            <span>{{ paquet.titre }}</span>
-                                            <span class="font-mono">{{ paquet.taches.length }}</span>
-                                        </p>
-                                        <transition-group tag="div" name="tache" class="space-y-1.5">
-                                            <div v-for="t in paquet.taches" :key="t.cle"
-                                                 :class="['flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border transition-all',
-                                                          t.teinte === 'orange' ? 'border-slate-700 hover:border-orange-500'
-                                                          : (t.teinte === 'blue' ? 'border-slate-700 hover:border-blue-500'
-                                                          : (t.teinte === 'purple' ? 'border-slate-700 hover:border-purple-500' : 'border-slate-700 hover:border-rose-500'))]">
-                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
-                                                    <input type="checkbox" :checked="false"
-                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
-                                                           class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer shrink-0"/>
-                                                    <span class="shrink-0">{{ t.icone }}</span>
-                                                    <span class="text-sm font-bold text-slate-200 truncate">{{ t.libelle }}</span>
-                                                    <span v-if="t.jourPrevu" class="text-[9px] text-slate-500 font-bold shrink-0">j.{{ t.jourPrevu }}</span>
-                                                    <span class="text-[9px] text-slate-600 font-bold uppercase tracking-widest hidden md:inline shrink-0">{{ t.groupe }}</span>
-                                                </label>
-                                                <div class="flex items-center gap-2 ml-3 shrink-0">
-                                                    <input type="number" :value="montantPayeCycle(t.ref, cyclePilotage)"
-                                                           @input="setMontantPayeCycle(t.ref, $event.target.value, cyclePilotage)"
-                                                           placeholder="0" title="Avance déjà versée"
-                                                           class="w-20 bg-slate-950 text-slate-200 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
-                                                    <span class="text-[10px] font-black text-slate-400 w-16 text-right">/ {{ formatMAD(t.due).replace(' DH', '') }}</span>
-                                                </div>
-                                            </div>
-                                        </transition-group>
-                                    </div>
-
-                                    <!-- ✅ Terminé — replié par défaut -->
-                                    <div v-if="tachesTerminees.length" class="rounded-xl border border-slate-700 bg-slate-900/60 overflow-hidden">
-                                        <button @click="pilotageTermineOuvert = !pilotageTermineOuvert"
-                                                class="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/60 transition-colors">
-                                            <span class="text-[10px] font-black uppercase tracking-widest text-green-400">✅ Terminé ({{ tachesTerminees.length }})</span>
-                                            <span class="flex items-center gap-2 shrink-0">
-                                                <span class="text-[10px] font-black text-green-500/70">{{ formatMAD(totalTraitePilotage) }}</span>
-                                                <span class="text-slate-500 text-xs">{{ pilotageTermineOuvert ? '▲' : '▼' }}</span>
-                                            </span>
-                                        </button>
-                                        <div v-show="pilotageTermineOuvert" class="px-3 pb-3 space-y-1.5 border-t border-slate-800 pt-3">
-                                            <div v-for="t in tachesTerminees" :key="'ok_' + t.cle"
-                                                 class="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
-                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
-                                                    <input type="checkbox" :checked="true"
-                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
-                                                           class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-green-500 cursor-pointer shrink-0"/>
-                                                    <span class="text-xs font-bold text-slate-500 line-through truncate">{{ t.libelle }}</span>
-                                                    <span v-if="t.quand" class="text-[9px] text-slate-600 font-bold shrink-0">le {{ t.quand }}</span>
-                                                </label>
-                                                <span class="text-xs font-black text-green-500/80 ml-3 shrink-0">{{ formatMAD(t.regle || t.due) }}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            </details>
 
                             <!-- Vue par catégorie, conservée sous un repli : elle reste
                                  la référence quand on cherche une ligne précise. -->
@@ -7148,8 +7175,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.12 Cycle-Realise";
+                    const CURRENT_VERSION = "37.13 Inbox-Zero";
                     const CHANGELOG = [
+        { version: "37.13 Inbox-Zero", date: "2026-09-28", changes: [
+            "CE QU'ON FAIT AUJOURD'HUI PASSE DEVANT — « À TRAITER » et « TERMINÉ » remontent juste sous le résumé du cycle. Les listes de référence descendent tout en bas et s'ouvrent fermées : « Entrées d'Argent » (qu'on pointe une fois par cycle, le jour de la paie, et qui n'a pas à occuper l'écran les vingt-neuf autres jours) et « Vue détaillée par catégorie ». Le bandeau « Mode Régularisation » reste au-dessus de tout : c'est un avertissement, pas une liste.",
+            "LES DATES, TOUJOURS VISIBLES — chaque ligne porte un badge 📅 j.N, teinté comme son paquet : rose si l'échéance est passée, ambre si elle tombe dans les sept jours, neutre au-delà. La liste et le badge racontent ainsi la même chose.",
+            "ET QUAND IL N'Y A PAS DE DATE, ON LE DIT — vérifié dans le code : la checklist lit exactement le même champ que le Budget Structurel et que le Pilotage Théorique (item.jourPrevu). Il n'existe pas de seconde source. Si « Syndic » ou « École » n'affichaient aucun jour, c'est que la ligne n'en porte pas. Un badge « 📅 sans date » le dit maintenant en toutes lettres, et un bandeau compte ces lignes et indique où renseigner le champ — y compris le cas qui le rend invisible : sur une charge découpée en parts, le champ « Jour prévu » est masqué par le formulaire.",
+            "TRI CHRONOLOGIQUE STRICT — les lignes sont classées par rang dans le cycle, jamais par numéro de jour. Sur un cycle 27→26, le j.30 vient AVANT le j.1 : c'est ce que montre l'écran. Les lignes sans date ferment la liste, faute de savoir où les placer.",
+            "VÉRIFIÉ SUR LE RENDU, PAS SUR LE SOURCE — les positions verticales réelles sont mesurées dans un vrai navigateur : « À traiter » précède les deux listes de référence, et les deux sont fermées à l'ouverture. 16 suites vertes. Sabotages vérifiés : ouvrir « Entrées d'Argent » par défaut fait tomber la suite, retirer le repère du badge de date aussi.",
+            "UNE DE MES ASSERTIONS NE TESTAIT RIEN — le contrôle sur la cohérence des badges se terminait par « || true », donc il passait quoi qu'il arrive. Remplacé par deux contrôles réels : les deux teintes s'excluent, et chacune correspond au rang dans le cycle."
+        ] },
         { version: "37.12 Cycle-Realise", date: "2026-09-28", changes: [
             "LE BUG, CONFIRMÉ — « paye » et « montantPaye » vivaient à plat sur la charge, et la charge vit dans donneesAnnuelles[ANNÉE], pas par mois. Cocher « Syndic payé » en octobre le laissait coché en novembre, en décembre, et jusqu'au 31 décembre. Le suivi mensuel ne repartait jamais de zéro. Votre diagnostic était exact.",
             "L'EXÉCUTION QUITTE L'ÉTAT ANNUEL — jourPrevu ne bouge pas : c'est la théorie, et elle fonctionne. L'exécution part dans trackerRealise = { « 2026-10 » : { paye, montantPaye, dateReelle }, « 2026-11 » : … }. Une entrée absente vaut « à faire » : le basculement de cycle remet donc tout à traiter sans qu'aucun code ne « réinitialise » quoi que ce soit — il n'y a simplement rien à cette clé.",
@@ -14916,6 +14951,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 ref, libelle: libelle || '(sans nom)', due: d, groupe, icone, teinte,
                                 jourPrevu: Number(jourPrevu) || null,
                                 rang: _rangDansCycle(jourPrevu),
+                                //  v37.13 : la teinte du badge de date se décide ici,
+                                //  pour que la liste et le badge racontent la même chose.
+                                retard: _rangDansCycle(jourPrevu) < _rangAujourdhui.value,
+                                proche: _rangDansCycle(jourPrevu) >= _rangAujourdhui.value
+                                        && _rangDansCycle(jourPrevu) <= _rangAujourdhui.value + 7,
                                 paye: isItemPaid(ref, d, cyc),
                                 regle: getPaidAmount(ref, d, cyc) || 0,
                                 quand: dateReelleCycle(ref, cyc),
@@ -14961,6 +15001,26 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         Math.round(tachesTerminees.value.reduce((s, t) => s + (t.regle || t.due), 0)));
 
                     const pilotageTermineOuvert = ref(false);
+
+                    /*  Combien de lignes n'ont AUCUNE date de prélèvement. Elles
+                        existent : le champ « jour prévu » du Budget Structurel est
+                        facultatif, et il est même masqué sur une charge découpée en
+                        parts. Sans date, impossible de les classer par urgence — on
+                        les met en fin de liste et on le dit, plutôt que de laisser
+                        croire que le tri ignore les dates. */
+                    const tachesSansDate = computed(() => tachesATraiter.value.filter(t => !t.jourPrevu).length);
+
+                    //  Le repli « Entrées d'Argent » annonce ce qu'il cache.
+                    const revenusRestantsPilotage = computed(() => {
+                        calculationTick.value;
+                        const an = moisBudgetaire.value.an;
+                        const cyc = cyclePilotage.value;
+                        return Object.values((donneesAnnuelles.value[an] || {}).revenus || {})
+                            .filter(r => {
+                                const due = getDueRevenu(r, an);
+                                return due > 0 && !isItemPaid(r, due, cyc);
+                            }).length;
+                    });
 
                     // ═══════════════════════════════════════════════════════════
                     // v22.90 Double-Pilotage — VUE THÉORIQUE (mode prévisionnel)
@@ -17362,7 +17422,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.12 — suivi d'exécution par cycle
                         cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, dateReelleCycle,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
-                        resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert,
+                        resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
+                        tachesSansDate,
+                        // Exposé pour les tests : le rang du jour dans le cycle, seul
+                        // arbitre du classement retard / cette semaine / plus tard.
+                        _rangAujourdhuiTest: _rangAujourdhui,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup

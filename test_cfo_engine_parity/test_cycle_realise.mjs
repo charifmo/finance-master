@@ -283,6 +283,76 @@ try {
           Math.abs((bascule.avant.reste - bascule.apres.reste) - bascule.reste) <= 1, JSON.stringify(bascule));
     }
 
+    /* ── 9. v37.13 — LA HIÉRARCHIE DE L'ÉCRAN ───────────────────────────
+           « À traiter » doit précéder les listes de référence, et celles-ci
+           être fermées à l'ouverture. Mesuré sur la position réelle dans la
+           page, pas sur l'ordre du source. ─────────────────────────────── */
+    const layout = await S(async () => {
+        const st = document.querySelector('#app').__vue_app__._instance.setupState;
+        st.appMode = 'reel';
+        await new Promise(r => setTimeout(r, 500));
+        st.activeTab = 'pilotage';
+        await new Promise(r => setTimeout(r, 600));
+        const y = (pred) => {
+            const n = [...document.querySelectorAll('span, summary')].find(e => pred(e.textContent || ''));
+            return n ? Math.round(n.getBoundingClientRect().top + window.scrollY) : null;
+        };
+        const sumEntrees = [...document.querySelectorAll('summary')].find(e => /Entrées d'Argent/.test(e.textContent || ''));
+        const sumVue = [...document.querySelectorAll('summary')].find(e => /Vue détaillée par catégorie/.test(e.textContent || ''));
+        return {
+            yATraiter: y(t => /À traiter —/.test(t)),
+            yEntrees: sumEntrees ? Math.round(sumEntrees.getBoundingClientRect().top + window.scrollY) : null,
+            yVue: sumVue ? Math.round(sumVue.getBoundingClientRect().top + window.scrollY) : null,
+            entreesFermee: sumEntrees ? !sumEntrees.parentElement.open : null,
+            vueFermee: sumVue ? !sumVue.parentElement.open : null,
+            sansDate: st.tachesSansDate,
+            // Compté DANS la section « À traiter » : ailleurs, d'autres badges
+            //   commencent aussi par 📅 et masquaient l'absence de celui-ci.
+            badgesDate: (() => {
+                const titre = [...document.querySelectorAll('span')].find(e => /À traiter —/.test(e.textContent || ''));
+                const section = titre && titre.closest('div.rounded-2xl');
+                if (!section) return 0;
+                return [...section.querySelectorAll('span')]
+                    .filter(e => /^📅\s*(j\.\d+|sans date)$/.test((e.textContent || '').trim())).length;
+            })(),
+            nbTachesRendues: (() => {
+                const titre = [...document.querySelectorAll('span')].find(e => /À traiter —/.test(e.textContent || ''));
+                const section = titre && titre.closest('div.rounded-2xl');
+                return section ? section.querySelectorAll('input[type=number]').length : 0;
+            })(),
+        };
+    });
+    v('« À traiter » passe devant les listes de référence',
+      layout.yATraiter !== null && layout.yEntrees !== null && layout.yATraiter < layout.yEntrees,
+      JSON.stringify(layout));
+    v('  → et devant la vue par catégorie',
+      layout.yVue !== null && layout.yATraiter < layout.yVue, JSON.stringify(layout));
+    v('  → « Entrées d\'Argent » est repliée à l\'ouverture', layout.entreesFermee === true, JSON.stringify(layout));
+    v('  → « Vue par catégorie » aussi', layout.vueFermee === true, JSON.stringify(layout));
+    v('chaque tâche porte un badge de date, daté ou « sans date »',
+      layout.nbTachesRendues > 0 && layout.badgesDate === layout.nbTachesRendues,
+      JSON.stringify({ badges: layout.badgesDate, taches: layout.nbTachesRendues }));
+
+    const dates = await S(() => {
+        const st = document.querySelector('#app').__vue_app__._instance.setupState;
+        const t = st.tachesATraiter;
+        return {
+            toutesOntUnRang: t.every(x => Number.isFinite(x.rang)),
+            sansDateEnFin: t.filter(x => !x.jourPrevu).every((x, _, arr) =>
+                t.indexOf(x) >= t.length - arr.length),
+            triStrict: t.every((x, i) => i === 0 || t[i - 1].rang <= x.rang),
+            // Les deux teintes s'excluent, et chacune doit correspondre au rang.
+            exclusives: t.every(x => !(x.retard && x.proche)),
+            teintesJustes: t.every(x => x.retard === (x.rang < st._rangAujourdhuiTest)
+                                     && x.proche === (x.rang >= st._rangAujourdhuiTest
+                                                   && x.rang <= st._rangAujourdhuiTest + 7)),
+        };
+    });
+    v('tri strictement chronologique dans « À traiter »', dates.triStrict === true, JSON.stringify(dates));
+    v('  → les lignes sans date ferment la liste', dates.sansDateEnFin === true, JSON.stringify(dates));
+    v('  → un badge n\'est jamais à la fois « en retard » et « proche »', dates.exclusives === true, JSON.stringify(dates));
+    v('  → et la teinte du badge suit le rang dans le cycle', dates.teintesJustes === true, JSON.stringify(dates));
+
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
     await page.close();
 } finally {
