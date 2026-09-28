@@ -7175,8 +7175,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.14 Mois-Budgetaire";
+                    const CURRENT_VERSION = "37.15 Releve-Cycle";
                     const CHANGELOG = [
+        { version: "37.15 Releve-Cycle", date: "2026-09-28", changes: [
+            "LE DÉSORDRE ANNONCÉ N'EXISTAIT PAS, ET IL FALLAIT LE DIRE AVANT DE TOUCHER AU CODE — mesuré sur le cas exact du ticket (paie le 27, cycle « 27 sep → 26 oct ») : le salaire du j.27 est DÉJÀ la première ligne du Relevé, pas la dernière. Le tri du journal ramenait depuis longtemps chaque jour à son rang depuis la paie, si bien que le j.1 se range bien APRÈS le j.27. Cette version verrouille ce comportement par un contrôle automatique pour qu'il ne se reperde pas, mais elle ne le corrige pas : il n'y avait rien à corriger.",
+            "CE QUI ÉTAIT VRAIMENT CASSÉ, ET C'EST PIRE QU'UN PROBLÈME D'ORDRE — les créances déclarées (Assurances) étaient rangées sur leur mois CIVIL. Une créance datée du 28 septembre, avec une paie le 27, atterrissait donc sur le cycle de SEPTEMBRE : un cycle déjà refermé, que le Relevé n'affiche plus. Mesuré : la ligne n'apparaissait dans AUCUN des cycles visibles. Elle ne s'affichait pas au mauvais endroit — elle disparaissait, et son montant manquait à l'atterrissage.",
+            "LA RÈGLE, MAINTENANT LA MÊME PARTOUT — une date tombée le jour de paie ou après appartient au cycle qui s'ouvre ce jour-là, donc au mois budgétaire SUIVANT. C'est exactement ce que getDepensesCycle appliquait déjà aux dépenses irrégulières ; les créances suivent enfin la même règle, via un unique cycleBudgetaireDe(jour, mois, an).",
+            "TROIS COPIES D'UNE MÊME FORMULE, IL N'EN RESTE QU'UNE — le rang d'un jour dans le cycle était recalculé à trois endroits (_pSort du Pilotage, _cSort du Relevé, _rangDansCycle de la checklist), avec deux écritures différentes. Les trois délèguent désormais à rangDansCycle, posé à côté de jourDePaie. Un contrôle automatique refuse qu'une quatrième copie réapparaisse.",
+            "LE BILAN RESTE SUR L'AXE CALENDAIRE, ET C'EST VOULU — sa projection est mensuelle au sens civil (janvier à décembre), pas cyclique. Une créance encaissée le 28 septembre arrive bien en septembre dans le patrimoine. Les deux écrans peuvent donc différer d'un mois sur la ligne de bascule : ce n'est pas une divergence, ce sont deux axes de temps distincts, et les totaux de fin d'année restent identiques.",
+            "PREUVE DE NON-RÉGRESSION — la nouvelle suite bâtit son jeu de données autour de la date du jour (paie posée à hier, pour que le cycle enjambe deux mois civils) et vérifie dans un vrai navigateur que le cycle s'ouvre sur un flux du jour de paie, qu'il se ferme sur un petit numéro de jour, que la créance du jour tombe dans le cycle en cours et dans aucun autre, et qu'elle pèse au dirham près sur l'atterrissage. Rejouée sur le code d'avant, elle tombe six fois.",
+        ] },
         { version: "37.14 Mois-Budgetaire", date: "2026-09-28", changes: [
             "D'ABORD CE QUI ÉTAIT DÉJÀ JUSTE, PARCE QUE ÇA CHANGE LE DIAGNOSTIC — mesuré avant de toucher au code, sur le cas exact du ticket (revenu « Appartement » avec exception M9, cycle 27 sep → 26 oct) : moisBudgetaire vaut bien 10, getDueRevenu rend 4 000 DH et non 0, et la charge apparaît au montant plein dans la checklist. Le Pilotage RÉALISÉ n'a jamais appliqué l'exception M9 au cycle d'octobre. Le Relevé non plus : son évaluateur reçoit le mois du cycle qu'il construit. La notion de mois budgétaire existait déjà et fonctionnait — sur ces deux surfaces.",
             "CE QUI ÉTAIT FAUX, ET QUI EXPLIQUE CE QUE VOUS VOYIEZ — le Pilotage THÉORIQUE n'appliquait les exceptions qu'aux CHARGES FIXES. Les revenus, les charges variables et l'épargne passaient en valeur brute, sans jamais regarder leurs règles. Un revenu suspendu s'affichait donc plein dans un écran et à zéro dans l'autre : deux vérités pour la même donnée.",
@@ -13404,7 +13412,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
 
                         // v25.80 Master-Cycle-Sync : tri cyclique
-                        const _pSort = (j) => (j || 0) >= jdp ? (j || 0) - jdp : (j || 0) + (32 - jdp);
+                        const _pSort = (j) => rangDansCycle(j);   // v37.15 : une seule formule
                         paidItems.sort((a, b) => _pSort(a.jourPrevu) - _pSort(b.jourPrevu));
                         unpaidItems.sort((a, b) => _pSort(a.jourPrevu) - _pSort(b.jourPrevu));
 
@@ -13596,10 +13604,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             (_si.assurances_tracker || []).forEach(c => {
                                 if (!c.remboursement) return; // seules les créances "Déclaré" cochées
                                 // Routage cycle : dateRemboursement si définie, sinon cycle courant (secours)
+                                //  v37.15 : la date de remboursement est CALENDAIRE, le
+                                //  cycle est BUDGÉTAIRE. Une créance du 28 septembre avec
+                                //  une paie le 27 appartient au cycle « 27 sep → 26 oct »,
+                                //  soit le mois budgétaire d'octobre — pas à septembre.
                                 let _cycleM = curM, _cycleA = curA, _jourPrevu = jdp;
                                 if (c.dateRemboursement) {
                                     const _dr = new Date(c.dateRemboursement);
-                                    _cycleM = _dr.getMonth() + 1; _cycleA = _dr.getFullYear(); _jourPrevu = _dr.getDate();
+                                    _jourPrevu = _dr.getDate();
+                                    const _cyb = cycleBudgetaireDe(_jourPrevu, _dr.getMonth() + 1, _dr.getFullYear());
+                                    _cycleM = _cyb.mois; _cycleA = _cyb.an;
                                 }
                                 if (_cycleM !== m || _cycleA !== a) return; // filtre cycle exact
                                 const amt = Math.round(Number(c.montantRembourse || c.montant || 0) * 100) / 100;
@@ -13648,7 +13662,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                         // ── Cycles actifs (multi-sélection ou cycle courant) ──
                         const _mNL = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-                        const _cSort = (j) => (j || 0) >= jdp ? (j || 0) - jdp : (j || 0) + (32 - jdp);
+                        const _cSort = (j) => rangDansCycle(j);   // v37.15 : une seule formule
                         const _rawCycles = Array.isArray(_cyclesArg) ? _cyclesArg : [];
                         const _activeCycles = _rawCycles.length > 0
                             ? _rawCycles.map(k => { const p = k.split('-').map(Number); return { m: p[0], a: p[1] }; })
@@ -14237,6 +14251,39 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const soldeBancaireReel = ref(0);   // saisie rapprochement bancaire
 
                     const jourDePaie = computed(() => Number(soldesInitiaux.value.jourDePaie) || 27);
+
+                    /* ═══ v37.15 — LE CYCLE, PAS LE CALENDRIER ═══════════════════════
+                       Un cycle de paie va du j.jdp au j.jdp-1 du mois suivant. Deux
+                       questions reviennent partout dans l'application :
+
+                         « À quelle place de ce cycle tombe ce jour ? »  → rangDansCycle
+                         « Quel cycle contient cette date ? »            → cycleBudgetaireDe
+
+                       Elles avaient jusqu'ici trois réponses, écrites à trois endroits.
+                       Elles n'en ont plus qu'une.
+                       ─────────────────────────────────────────────────────────────── */
+                    //  Le rang, pas le numéro du jour. Sur un cycle 27→26, le j.1 vient
+                    //  APRÈS le j.27 : comparer bêtement 1 et 27 classerait le j.1 « en
+                    //  retard » alors qu'il est encore à venir.
+                    const rangDansCycle = (jour) => {
+                        const jdp = jourDePaie.value;
+                        const j = Number(jour);
+                        if (!Number.isFinite(j) || j < 1 || j > 31) return 99;   // sans date → en queue
+                        return j >= jdp ? j - jdp : j - jdp + 31;
+                    };
+                    //  Le 28 septembre, avec une paie le 27, n'appartient pas au budget
+                    //  de septembre : il tombe dans le cycle « 27 sep → 26 oct », donc
+                    //  dans le mois budgétaire d'OCTOBRE. C'est la règle que
+                    //  getDepensesCycle applique déjà aux dépenses irrégulières ; elle
+                    //  vaut maintenant pour tout ce qui porte une date.
+                    const cycleBudgetaireDe = (jour, mois, an) => {
+                        const jdp = jourDePaie.value;
+                        const j = Number(jour), m = Number(mois), a = Number(an);
+                        if (!Number.isFinite(j) || !Number.isFinite(m) || !Number.isFinite(a)) return { mois: m, an: a };
+                        if (jdp <= 1) return { mois: m, an: a };   // paie le 1er → cycle = mois calendaire
+                        if (j < jdp) return { mois: m, an: a };
+                        return m === 12 ? { mois: 1, an: a + 1 } : { mois: m + 1, an: a };
+                    };
 
                     const _cyclePaieInfo = computed(() => {
                         const today = new Date();
@@ -14965,12 +15012,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                        encore à venir. On ramène donc chaque jour à son rang depuis la
                        paie (0 à 30), et c'est ce rang qu'on compare.
                        ═══════════════════════════════════════════════════════════════ */
-                    const _rangDansCycle = (jour) => {
-                        const jdp = jourDePaie.value;
-                        const j = Number(jour);
-                        if (!Number.isFinite(j) || j < 1 || j > 31) return 99;   // sans date → en queue
-                        return j >= jdp ? j - jdp : j - jdp + 31;
-                    };
+                    const _rangDansCycle = rangDansCycle;   // v37.15 : la formule vit désormais près de jourDePaie
                     //  Où en est-on du cycle affiché ? Sur un cycle passé, tout est
                     //  derrière nous : la question du retard ne se pose plus.
                     const _rangAujourdhui = computed(() => {
@@ -17480,6 +17522,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         tachesSansDate, valeurEffective,
+                        // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.
                         _rangAujourdhuiTest: _rangAujourdhui,
