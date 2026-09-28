@@ -7175,8 +7175,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.13 Inbox-Zero";
+                    const CURRENT_VERSION = "37.14 Mois-Budgetaire";
                     const CHANGELOG = [
+        { version: "37.14 Mois-Budgetaire", date: "2026-09-28", changes: [
+            "D'ABORD CE QUI ÉTAIT DÉJÀ JUSTE, PARCE QUE ÇA CHANGE LE DIAGNOSTIC — mesuré avant de toucher au code, sur le cas exact du ticket (revenu « Appartement » avec exception M9, cycle 27 sep → 26 oct) : moisBudgetaire vaut bien 10, getDueRevenu rend 4 000 DH et non 0, et la charge apparaît au montant plein dans la checklist. Le Pilotage RÉALISÉ n'a jamais appliqué l'exception M9 au cycle d'octobre. Le Relevé non plus : son évaluateur reçoit le mois du cycle qu'il construit. La notion de mois budgétaire existait déjà et fonctionnait — sur ces deux surfaces.",
+            "CE QUI ÉTAIT FAUX, ET QUI EXPLIQUE CE QUE VOUS VOYIEZ — le Pilotage THÉORIQUE n'appliquait les exceptions qu'aux CHARGES FIXES. Les revenus, les charges variables et l'épargne passaient en valeur brute, sans jamais regarder leurs règles. Un revenu suspendu s'affichait donc plein dans un écran et à zéro dans l'autre : deux vérités pour la même donnée.",
+            "LA FAUTE LA PLUS COÛTEUSE — surplusBudgetaireAnnuel, le surplus qui alimente TOUT le simulateur, faisait « valeur × 12 » sans jamais lire les exceptions. Un revenu suspendu trois mois était compté douze, et l'écart repartait dans chaque ligne de projection. Il se compte désormais mois budgétaire par mois budgétaire, chacun évalué avec ses propres règles. Vérifié : retirer une exception d'un mois fait bouger le surplus annuel d'exactement un mois de ce flux — auparavant, de zéro.",
+            "TROISIÈME TROU — la checklist prenait le montant brut du détail d'une charge variable en ignorant l'exception portée par sa CATÉGORIE. Or c'est là qu'elle se règle : le formulaire ne propose pas de règle sur une ligne de détail. Suspendre « Factures » laissait donc « élect » à traiter.",
+            "UN SEUL ÉVALUATEUR, PARTOUT — valeurEffective(item, base, moisBudgétaire) tranche désormais pour les deux getters centraux, le Pilotage Théorique, la checklist du Réalisé, le journal du Relevé, les flux mensuels et le surplus annuel. Le mois qu'on lui passe est TOUJOURS un mois budgétaire, jamais un mois civil. En rétro-navigation, c'est le mois du cycle CONSULTÉ, pas celui du cycle en cours.",
+            "PREUVE DE NON-RÉGRESSION — la nouvelle suite construit son jeu de données autour de la date du jour (jour de paie posé à hier, pour que mois civil de début ≠ mois budgétaire) et pose, pour chaque famille de flux, une paire : l'une suspendue sur le mois civil, l'autre sur le mois budgétaire. La première doit rester due, la seconde tomber à zéro. Rejouée contre la v37.13, elle échoue sur 6 contrôles ; sur la v37.14, elle passe. 17 suites vertes."
+        ] },
         { version: "37.13 Inbox-Zero", date: "2026-09-28", changes: [
             "CE QU'ON FAIT AUJOURD'HUI PASSE DEVANT — « À TRAITER » et « TERMINÉ » remontent juste sous le résumé du cycle. Les listes de référence descendent tout en bas et s'ouvrent fermées : « Entrées d'Argent » (qu'on pointe une fois par cycle, le jour de la paie, et qui n'a pas à occuper l'écran les vingt-neuf autres jours) et « Vue détaillée par catégorie ». Le bandeau « Mode Régularisation » reste au-dessus de tout : c'est un avertissement, pas une liste.",
             "LES DATES, TOUJOURS VISIBLES — chaque ligne porte un badge 📅 j.N, teinté comme son paquet : rose si l'échéance est passée, ambre si elle tombe dans les sept jours, neutre au-delà. La liste et le badge racontent ainsi la même chose.",
@@ -10143,13 +10151,23 @@
 
                     // ── SURPLUS BUDGÉTAIRE ANNUEL dérivé du budget réel ────────────────
                     //   revenus − chargesFixes − chargesVariables − irrégulier net
+                    /*  v37.14 — LE SURPLUS SE COMPTE MOIS PAR MOIS.
+                        Il faisait « valeur × 12 » sans regarder les exceptions : un
+                        revenu suspendu trois mois était compté douze, et l'erreur
+                        partait ensuite dans chaque ligne du simulateur. On somme les
+                        douze mois BUDGÉTAIRES, chacun évalué avec ses propres règles. */
                     const surplusBudgetaireAnnuel = (annee) => {
                         const dAll = donneesAnnuelles.value || {};
                         const d = dAll[annee] || dAll[Object.keys(dAll).map(Number).sort((x, y) => y - x)[0]] || {};
-                        const revenus = Object.values(d.revenus || {}).reduce((s, r) => s + N(r.base) * 12, 0);
-                        const fixes = Object.values(d.chargesFixes || {}).reduce((s, f) => s + N(f.valeur) * 12, 0);
-                        const variables = Object.values(d.chargesVariables || {})
-                            .reduce((s, c) => s + (c.periode === 'semaine' ? N(c.valeur) * 4.3 : N(c.valeur)) * 12, 0);
+                        let revenus = 0, fixes = 0, variables = 0;
+                        for (let m = 1; m <= 12; m++) {
+                            Object.values(d.revenus || {}).forEach(r => { revenus += valeurEffective(r, r.base, m); });
+                            Object.values(d.chargesFixes || {}).forEach(f => { fixes += valeurEffective(f, f.valeur, m); });
+                            Object.values(d.chargesVariables || {}).forEach(c => {
+                                const v = valeurEffective(c, c.valeur, m);
+                                variables += (c.periode === 'semaine' ? v * 4.3 : v);
+                            });
+                        }
                         const irr = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : Object.values(d.depensesIrregulieres || {}))
                             .reduce((s, x) => s + N(x.montant), 0);
                         return Math.round((revenus - fixes - variables - irr) * 100) / 100;
@@ -12996,27 +13014,57 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
 
                     // --- LOGIQUE PAIEMENTS PARTIELS ---
-                    const getDueFixe = (item, aNum) => {
-                        let due = Number(item.valeur || 0);
-                        // v25.80 Master-Cycle-Sync : évaluation par rapport au mois du CYCLE, pas le mois civil
-                        const mNum = Number(moisBudgetaire?.value?.mois || (soldesInitiaux.value || {}).moisActuel || 4);
-                        (item.exceptions || []).forEach(e => {
-                            if (mNum >= e.moisDebut && mNum <= e.moisFin) due = Number(e.nouvelleValeur || 0);
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.14 — UN SEUL ÉVALUATEUR D'EXCEPTIONS, UN SEUL MOIS DE RÉFÉRENCE
+
+                       LA RÈGLE MÉTIER. Une paie touchée le 27 septembre finance
+                       octobre : le cycle « 27 sep → 26 oct » est le budget du MOIS 10.
+                       Une exception réglée sur M9 ne doit donc pas s'y appliquer.
+
+                       CE QUI ÉTAIT DÉJÀ JUSTE — mesuré avant de toucher quoi que ce
+                       soit : getDueFixe et getDueRevenu lisaient déjà moisBudgetaire,
+                       et le Pilotage Réalisé rendait bien 4 000 DH (non suspendu) pour
+                       un revenu porteur d'une exception M9 sur le cycle d'octobre. Le
+                       Relevé aussi : son _effVal reçoit le mois du cycle qu'il
+                       construit. Ces deux-là n'avaient pas de correction à recevoir.
+
+                       CE QUI ÉTAIT FAUX, et que ce chantier corrige :
+                         1. Le Pilotage THÉORIQUE n'appliquait les exceptions QU'AUX
+                            charges fixes. Revenus, charges variables et épargne
+                            passaient en valeur brute : un revenu suspendu s'affichait
+                            plein. Deux écrans, deux vérités.
+                         2. surplusBudgetaireAnnuel — le surplus qui alimente TOUT le
+                            simulateur — faisait « valeur × 12 » sans jamais regarder
+                            les exceptions. Un revenu suspendu trois mois était compté
+                            douze. L'erreur se propageait à chaque ligne de projection.
+                         3. La checklist prenait le montant brut du détail d'une charge
+                            variable, en ignorant l'exception portée par sa CATÉGORIE —
+                            or c'est là qu'elle se règle dans le formulaire.
+
+                       Une seule fonction tranche désormais, partout. Le mois qu'on lui
+                       passe est TOUJOURS un mois budgétaire, jamais un mois civil.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const MOIS_BUDGETAIRE_COURANT = () =>
+                        Number(moisBudgetaire?.value?.mois || (soldesInitiaux.value || {}).moisActuel || 1);
+
+                    const valeurEffective = (item, base, moisBudget) => {
+                        let v = Number(base || 0);
+                        const m = Number(moisBudget != null ? moisBudget : MOIS_BUDGETAIRE_COURANT());
+                        ((item || {}).exceptions || []).forEach(e => {
+                            const md = Number(e.moisDebut || 0), mf = Number(e.moisFin || 0);
+                            if (md && mf && m >= md && m <= mf) v = Number(e.nouvelleValeur || 0);
                         });
-                        return due;
+                        return v;
                     };
 
+                    //  Le second paramètre reste l'ANNÉE pour ne pas casser les 40 points
+                    //  d'appel existants ; le mois budgétaire se passe en troisième.
+                    const getDueFixe = (item, aNum, moisBudget) =>
+                        valeurEffective(item, (item || {}).valeur, moisBudget);
+
                     // v25.50 : équivalent de getDueFixe pour les revenus (champ 'base')
-                    // applique les règles d'exception → un revenu suspendu vaut 0 ce mois-là
-                    const getDueRevenu = (item, aNum) => {
-                        let due = Number(item.base || 0);
-                        // v25.80 Master-Cycle-Sync : évaluation par rapport au mois du CYCLE, pas le mois civil
-                        const mNum = Number(moisBudgetaire?.value?.mois || (soldesInitiaux.value || {}).moisActuel || 4);
-                        (item.exceptions || []).forEach(e => {
-                            if (mNum >= e.moisDebut && mNum <= e.moisFin) due = Number(e.nouvelleValeur || 0);
-                        });
-                        return due;
-                    };
+                    const getDueRevenu = (item, aNum, moisBudget) =>
+                        valeurEffective(item, (item || {}).base, moisBudget);
 
                     /* ═══════════════════════════════════════════════════════════════
                        v37.12 — SUIVI D'EXÉCUTION PAR CYCLE
@@ -13421,14 +13469,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                         // ── Bouclier temporel : valeur effective d'un item pour un mois donné ──
                         // exceptions = [{ moisDebut, moisFin, nouvelleValeur }] → override la valeur sur la plage
-                        const _effVal = (item, baseVal, m) => {
-                            let v = Number(baseVal || 0);
-                            (item.exceptions || []).forEach(e => {
-                                const md = Number(e.moisDebut || 0), mf = Number(e.moisFin || 0);
-                                if (md && mf && m >= md && m <= mf) v = Number(e.nouvelleValeur || 0);
-                            });
-                            return v;
-                        };
+                        //  v37.14 : un seul évaluateur pour toute l'application. Le `m`
+                        //  reçu ici est le mois BUDGÉTAIRE du cycle construit.
+                        const _effVal = (item, baseVal, m) => valeurEffective(item, baseVal, m);
 
                         // ── Génère les "legs" d'un cycle (m, a) ──
                         //   mode 'remaining'    : cycle courant → uniquement le reste non payé (paye:false)
@@ -13914,11 +13957,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const _isCourant = (k) => _normKey(k) === courantKey;
                         const _fxSrc  = _normKey(_si.compteChargesFixes || 'courant');
                         const _varSrc = _normKey(_si.compteChargesVariables || 'courant');
-                        const _effVal = (item, baseVal) => {
-                            let v = Number(baseVal || 0);
-                            (item?.exceptions || []).forEach(e => { const md = Number(e.moisDebut||0), mf = Number(e.moisFin||0); if (md && mf && mNum >= md && mNum <= mf) v = Number(e.nouvelleValeur||0); });
-                            return v;
-                        };
+                        //  v37.14 : même évaluateur, mois budgétaire reçu en paramètre.
+                        const _effVal = (item, baseVal) => valeurEffective(item, baseVal, mNum);
                         const _amt = (item, baseVal) => {
                             const v = _effVal(item, baseVal); if (v <= 0) return 0;
                             if (mode === 'full') return Math.round(v * 100) / 100;
@@ -14941,6 +14981,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const tachesPilotage = computed(() => {
                         calculationTick.value;
                         const an = isCyclePasse.value ? pilotageViewedAn.value : moisBudgetaire.value.an;
+                        //  v37.14 : en rétro-navigation, les exceptions s'évaluent sur le
+                        //  mois budgétaire CONSULTÉ, pas sur celui du cycle en cours.
+                        const moisBud = isCyclePasse.value ? pilotageViewedMois.value : moisBudgetaire.value.mois;
                         const cyc = cyclePilotage.value;
                         const out = [];
                         const pousser = (ref, libelle, due, groupe, icone, teinte, jourPrevu) => {
@@ -14962,12 +15005,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                         };
                         chargesFixesBudgetairesTriees.value.forEach(f =>
-                            pousser(f, f.label, getDueFixe(f, an), 'Charge fixe', '🏢', 'orange', f.jourPrevu));
-                        chargesVarMensuellePilotage.value.forEach(cat =>
+                            pousser(f, f.label, getDueFixe(f, an, moisBud), 'Charge fixe', '🏢', 'orange', f.jourPrevu));
+                        //  v37.14 : l'exception d'une catégorie vaut pour ses détails.
+                        //  Ils n'ont pas de règle propre — le formulaire ne la propose
+                        //  que sur la catégorie.
+                        chargesVarMensuellePilotage.value.forEach(cat => {
+                            if (valeurEffective(cat, cat.valeur, moisBud) <= 0) return;
                             (cat.details || []).forEach(d =>
-                                pousser(d, d.nom, Number(d.montant || 0), cat.label, '🧾', 'blue', d.jourPrevu || cat.jourPrevu)));
+                                pousser(d, d.nom, Number(d.montant || 0), cat.label, '🧾', 'blue', d.jourPrevu || cat.jourPrevu));
+                        });
                         epargneBudgetairePilotage.value.forEach(ep =>
-                            pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an), 'Épargne', '🎯', 'purple', ep.jourPrevu));
+                            pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an, moisBud), 'Épargne', '🎯', 'purple', ep.jourPrevu));
                         getDepensesCycle(pilotageViewedMois.value, pilotageViewedAn.value).forEach(dep =>
                             pousser(dep, dep.nom, Number(dep.montant || 0), 'Flux exceptionnel', '⚠️', 'rose', dep.jourPrevu));
                         return out.sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle));
@@ -15519,32 +15567,40 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const dActuelle = donneesAnnuelles.value[an];
                         const out = { revenus: [], fixes: [], variables: [], epargne: [], chocs: [] };
                         if (!dActuelle) return out;
+                        /*  v37.14 — les exceptions s'appliquaient ICI aux seules charges
+                            fixes : revenus, variables et épargne passaient en valeur
+                            brute. Un revenu suspendu s'affichait plein dans le
+                            Théorique et à zéro dans le Réalisé. Même règle pour tous,
+                            et le mois de référence est le mois BUDGÉTAIRE du cycle. */
                         Object.values(dActuelle.revenus || {}).forEach(r => {
-                            const m = Number(r.base || 0);
+                            const m = valeurEffective(r, r.base, mois);
                             if (m > 0) out.revenus.push({ nom: r.label || r.nom || '?', montant: m, jourPrevu: r.jourPrevu || null });
                         });
                         Object.values(dActuelle.chargesFixes || {}).forEach(f => {
-                            const due = getDueFixe(f, an);
+                            const due = getDueFixe(f, an, mois);
                             if (due > 0) out.fixes.push({ nom: f.label || '?', montant: due, jourPrevu: f.jourPrevu || null });
                         });
                         Object.values(dActuelle.chargesVariables || {})
                             .filter(c => c?.periode === 'mois')
                             .forEach(cat => {
+                                //  L'exception se règle sur la CATÉGORIE : suspendue, elle
+                                //  suspend ses lignes de détail, qui n'ont pas de règle propre.
+                                const effCat = valeurEffective(cat, cat.valeur, mois);
+                                if (effCat <= 0) return;
                                 if (cat.details && cat.details.length) {
                                     cat.details.forEach(d => {
                                         const m = Number(d.montant || 0);
                                         if (m > 0) out.variables.push({ nom: d.nom || cat.label || '?', montant: m, jourPrevu: cat.jourPrevu || null });
                                     });
                                 } else {
-                                    const m = Number(cat.valeur || 0);
-                                    if (m > 0) out.variables.push({ nom: cat.label || '?', montant: m, jourPrevu: cat.jourPrevu || null });
+                                    out.variables.push({ nom: cat.label || '?', montant: effCat, jourPrevu: cat.jourPrevu || null });
                                 }
                             });
                         const epArr = Array.isArray(dActuelle.epargne)
                             ? dActuelle.epargne
                             : Object.values(dActuelle.epargne || {});
                         epArr.forEach(ep => {
-                            const m = Number(ep.valeur || 0);
+                            const m = valeurEffective(ep, ep.valeur, mois);
                             if (m > 0) out.epargne.push({ nom: ep.nom || ep.label || '?', montant: m, jourPrevu: ep.jourPrevu || null });
                         });
                         getDepensesMois(mois, an).forEach(dep => {
@@ -17423,7 +17479,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, dateReelleCycle,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
-                        tachesSansDate,
+                        tachesSansDate, valeurEffective,
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.
                         _rangAujourdhuiTest: _rangAujourdhui,

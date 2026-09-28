@@ -54,5 +54,6 @@ suite "Un seul atterrissage (bandeau = Relevé = IA = projection)" node test_cfo
 suite "Simulateur dans le navigateur (UI + Chart.js)"           node test_cfo_engine_parity/test_sandbox_ui.mjs
 suite "Chat CFO dans le navigateur (ergonomie)"                 node test_cfo_engine_parity/test_chat_ui.mjs
 suite "Pilotage Réalisé (suivi par cycle)"                      node test_cfo_engine_parity/test_cycle_realise.mjs
+suite "Mois budgétaire vs mois civil (exceptions)"              node test_cfo_engine_parity/test_mois_budgetaire.mjs
 
 echo "✅ Toutes les suites passent."
