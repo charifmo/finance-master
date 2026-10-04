@@ -4992,608 +4992,299 @@
             <div class="flex-1 md:overflow-y-auto custom-scroll p-3 md:p-6 pb-20 md:pb-8">
 
                 <!-- ═══ ONGLET PILOTAGE MENSUEL ═══ -->
-                <div v-if="activeTab === 'pilotage'" class="max-w-4xl mx-auto space-y-6">
-                    <!-- v22.40 — Header Pilotage Transparent -->
-                    <div class="border-b pb-5 mb-6">
-                        <div class="flex items-start justify-between mb-4">
-                            <div>
-                                <h2 class="text-2xl font-bold text-gray-800">🎯 Pilotage du Mois Courant</h2>
-                                <p class="text-sm text-gray-500 mt-0.5">Cycle <b>{{ cycleLabel }}</b></p>
+                <div v-if="activeTab === 'pilotage'" class="max-w-4xl mx-auto space-y-5" data-cockpit>
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         v37.16 — LE COCKPIT DU PILOTAGE
+                         Avant : une jauge, trois cartes, quatre cartes de comptes et
+                         huit infobulles au survol, dont deux pouvaient s'ouvrir l'une
+                         sur l'autre. Maintenant : une ligne d'en-tête, trois chiffres
+                         qui disent quoi faire, puis la file de travail. Le reste
+                         descend, replié.
+                         ═══════════════════════════════════════════════════════════════ -->
+
+                    <!-- En-tête : où l'on est, et la navigation entre cycles -->
+                    <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <div class="min-w-0">
+                            <h2 class="text-xl md:text-2xl font-black text-gray-800 leading-tight">🎯 Pilotage du cycle</h2>
+                            <p class="text-xs md:text-sm text-gray-500 mt-0.5 font-bold">
+                                {{ pilotageCycleLabel }}<template v-if="!isCyclePasse"> · J−{{ joursRestantsAvantPaie }} avant la paie du {{ prochainePaieLabel }}</template><template v-else> · cycle clos</template>
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <select :value="pilotageViewedCycle || ''" @change="pilotageViewedCycle = $event.target.value || null"
+                                    title="Changer de cycle" data-selecteur-cycle
+                                    class="bg-white text-gray-700 text-xs font-bold border border-gray-300 rounded-lg px-2 py-2 focus:outline-none focus:border-emerald-500 cursor-pointer max-w-[11rem]">
+                                <option value="">🗓️ Cycle actuel</option>
+                                <option v-for="cy in cyclesDisponibles" :key="cy.key" :value="cy.key">{{ cy.nom }}</option>
+                            </select>
+                            <button @click="cloturerCycle()" title="Sauvegarder l'état du cycle dans l'historique"
+                                    class="text-[10px] font-black px-2.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-600 hover:border-purple-500 hover:text-purple-700 transition-colors whitespace-nowrap">💾 Clôturer</button>
+                        </div>
+                    </div>
+
+                    <!-- Bannière Mode Régularisation -->
+                    <div v-if="isPilotageRetro" class="flex items-center gap-3 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3">
+                        <span class="text-base shrink-0">⚠️</span>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-amber-800 font-black text-[11px] uppercase tracking-widest">Mode Régularisation</p>
+                            <p class="text-amber-700 text-[11px] mt-0.5">Vous modifiez un cycle passé. Les changements impacteront les soldes suivants.</p>
+                        </div>
+                        <button @click="pilotageViewedCycle = null" class="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg hover:bg-amber-200 transition-colors whitespace-nowrap shrink-0">Cycle actuel</button>
+                    </div>
+
+                    <!-- ═══ LES TROIS CHIFFRES ═══════════════════════════════════════
+                         Aucun n'a de formule à lui : Urgence = les deux premiers
+                         paquets de la liste, Progression = réglé + reste des mêmes
+                         tâches, Atterrissage = le moteur du Relevé. -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3" data-cockpit-kpis>
+
+                        <!-- 🔥 URGENCE -->
+                        <button type="button" @click="allerAInbox()" data-kpi="urgence"
+                                :class="['text-left rounded-2xl p-4 border-2 shadow-sm transition-colors bg-slate-900',
+                                         kpiUrgence.montant > 0 ? 'border-amber-500 hover:border-amber-300' : 'border-emerald-600 hover:border-emerald-400']">
+                            <p :class="['text-[10px] font-black uppercase tracking-widest', kpiUrgence.montant > 0 ? 'text-amber-300' : 'text-emerald-300']">
+                                {{ isCyclePasse ? '🧾 À régulariser' : '🔥 Urgence · 7 jours' }}
+                            </p>
+                            <p class="text-3xl font-black tracking-tight text-white mt-1 tabular-nums" data-kpi-valeur>{{ formatMAD(kpiUrgence.montant) }}</p>
+                            <p class="text-xs font-bold text-slate-300 mt-1">
+                                <template v-if="isCyclePasse">{{ kpiUrgence.nb }} ligne{{ kpiUrgence.nb > 1 ? 's' : '' }} jamais pointée{{ kpiUrgence.nb > 1 ? 's' : '' }}</template>
+                                <template v-else-if="kpiUrgence.montant > 0">à décaisser d'ici le {{ kpiUrgence.jusquau }} · {{ kpiUrgence.nb }} ligne{{ kpiUrgence.nb > 1 ? 's' : '' }}</template>
+                                <template v-else>✅ Rien à décaisser d'ici le {{ kpiUrgence.jusquau }}</template>
+                            </p>
+                            <p v-if="!isCyclePasse && kpiUrgence.retard > 0" class="text-xs font-black text-rose-300 mt-1" data-kpi-retard>⚠️ dont {{ formatMAD(kpiUrgence.retard) }} en retard</p>
+                            <p v-if="!isCyclePasse && kpiUrgence.sansDate" class="text-[10px] font-bold text-slate-400 mt-1">+ {{ kpiUrgence.sansDate }} ligne{{ kpiUrgence.sansDate > 1 ? 's' : '' }} sans date, non comptée{{ kpiUrgence.sansDate > 1 ? 's' : '' }}</p>
+                        </button>
+
+                        <!-- 📈 PROGRESSION -->
+                        <div data-kpi="progression" class="rounded-2xl p-4 border-2 border-emerald-600 bg-slate-900 shadow-sm">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-300">📈 Progression du cycle</p>
+                            <p class="mt-1 text-white tabular-nums leading-tight">
+                                <span class="text-3xl font-black tracking-tight" data-kpi-valeur>{{ formatNombre(kpiProgression.regle) }}</span>
+                                <span class="text-sm font-black text-slate-300"> / {{ formatMAD(kpiProgression.total) }} réglés</span>
+                            </p>
+                            <div class="relative mt-3 h-4 rounded-full bg-slate-700" data-kpi-barre>
+                                <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" :style="{ width: Math.min(100, kpiProgression.pct) + '%' }"></div>
+                                <div v-if="!isCyclePasse" class="absolute -top-1 -bottom-1 w-1 -ml-0.5 bg-white rounded-full shadow"
+                                     :style="{ left: Math.min(100, kpiProgression.pctTemps) + '%' }"
+                                     :title="'Aujourd’hui : ' + kpiProgression.pctTemps + ' % du cycle écoulé'"></div>
                             </div>
-                            <div class="flex items-center gap-2 self-start mt-1 flex-wrap">
-                                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-100 px-2 py-1 rounded-lg border border-gray-200">Survol = détail</span>
-                                <!-- v23.10 Toggle Vue Temporelle (3 états) — masqué en cycle passé (v24.40) -->
-                                <div v-if="!isCyclePasse" class="flex items-center bg-slate-900 rounded-xl p-0.5 border border-slate-600 gap-0.5">
-                                    <button @click="vueTemporelle = 'at0'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'at0' ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/50' : 'text-slate-400 hover:text-violet-300']">⏱️ À T0</button>
-                                    <button @click="vueTemporelle = 'semaine'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'semaine' ? 'bg-amber-500 text-white shadow-lg shadow-amber-900/50' : 'text-slate-400 hover:text-amber-300']">📅 Cette sem.</button>
-                                    <button @click="vueTemporelle = 'cycle'" :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap', vueTemporelle === 'cycle' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : 'text-slate-400 hover:text-emerald-300']">🗓️ Fin cycle</button>
-                                </div>
-                                <!-- v23.20 : Clôture et archivage du cycle -->
-                                <button @click="cloturerCycle()"
-                                    class="text-[9px] font-black px-2 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:border-purple-500 hover:text-purple-300 transition-all whitespace-nowrap"
-                                    title="Sauvegarder l etat du cycle dans l historique">
-                                    💾 Clôturer
-                                </button>
+                            <p class="text-xs font-bold text-slate-300 mt-2">
+                                {{ kpiProgression.pct }} % réglé<template v-if="!isCyclePasse"> · <span class="text-white">▮</span> {{ kpiProgression.pctTemps }} % du cycle écoulé</template>
+                            </p>
+                            <div class="flex flex-wrap gap-1.5 mt-2">
+                                <span v-for="n in kpiProgression.natures" :key="'pn_' + n.cle"
+                                      :title="formatMAD(n.regle) + ' réglés sur ' + formatMAD(n.total)"
+                                      :class="['text-[10px] font-black px-1.5 py-0.5 rounded-md border',
+                                               n.teinte === 'orange' ? 'bg-orange-500/15 text-orange-300 border-orange-500/50'
+                                               : (n.teinte === 'blue' ? 'bg-sky-500/15 text-sky-300 border-sky-500/50'
+                                               : (n.teinte === 'purple' ? 'bg-violet-500/15 text-violet-300 border-violet-500/50'
+                                               : 'bg-rose-500/15 text-rose-300 border-rose-500/50'))]">{{ n.badge }} {{ n.pct }} %</span>
                             </div>
                         </div>
 
-                        <!-- ⏳ v22.50 Jauge Cycle de Paie -->
-                        <div class="mb-4 bg-slate-800/60 rounded-2xl border border-slate-700 p-4">
-                            <div class="flex items-center justify-between mb-2.5">
-                                <div class="text-left">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">📅 Dernière paie</p>
-                                    <p class="text-white text-xs font-black mt-0.5">{{ dernierePaieLabel }}</p>
-                                </div>
-                                <div class="text-center">
-                                    <p :class="['text-xl font-black', joursRestantsAvantPaie <= 3 ? 'text-red-400' : joursRestantsAvantPaie <= 7 ? 'text-amber-400' : 'text-emerald-400']">⏳ J−{{ joursRestantsAvantPaie }}</p>
-                                    <p class="text-slate-500 text-[9px] font-bold">{{ budgetSemaineReel !== null ? formatMAD(budgetSemaineReel) + ` / sem` : `` }}</p>
-                                </div>
-                                <div class="text-right">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Prochaine paie 📅</p>
-                                    <p class="text-white text-xs font-black mt-0.5">{{ prochainePaieLabel }}</p>
-                                </div>
-                            </div>
-                            <div class="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                                <div :style="{ width: progressCyclePaie + '%' }" :class="['h-full rounded-full transition-all duration-700', progressCyclePaie < 50 ? 'bg-emerald-500' : progressCyclePaie < 80 ? 'bg-amber-400' : 'bg-red-500']"></div>
-                            </div>
-                            <div class="flex justify-between text-[9px] text-slate-500 mt-1.5 font-bold">
-                                <span>{{ joursDepuisDernierePaie }}j écoulés</span>
-                                <span>{{ progressCyclePaie }}% du cycle</span>
-                                <span>{{ joursRestantsAvantPaie }}j restants</span>
-                            </div>
-                        </div>
-
-                        <!-- KPI Grid 3 colonnes v22.50 -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-
-                            <!-- KPI 1 : Trésorerie Courante (compte courant uniquement) -->
-                            <div class="relative group cursor-default">
-                                <div :class="['p-4 rounded-2xl border text-center transition-all', tresoActuelleCourante >= 0 ? 'bg-emerald-900/20 border-emerald-700 group-hover:border-emerald-500' : 'bg-red-900/20 border-red-700 group-hover:border-red-500']">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">💰 Tréso Courante</p>
-                                    <p :class="['text-2xl font-black tracking-tighter', tresoActuelleCourante >= 0 ? 'text-emerald-400' : 'text-red-400']">{{ formatMAD(tresoActuelleCourante) }}</p>
-                                    <p class="text-[9px] text-gray-500 mt-1">Compte courant uniquement</p>
-                                </div>
-                                <div class="absolute top-full left-0 right-0 mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                    <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                    <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
-                                        <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🏦 Solde Bancaire Réel</p>
-                                        <div class="space-y-1.5">
-                                            <template v-if="comptes.find(c => c.type === 'courant' || c.type === 'liquide')">
-                                                <div class="flex justify-between gap-3">
-                                                    <span class="text-slate-300">{{ comptes.find(c => c.type === 'courant' || c.type === 'liquide').icone || '💳' }} {{ comptes.find(c => c.type === 'courant' || c.type === 'liquide').label }}</span>
-                                                    <span class="font-black text-white">{{ formatMAD(Number(comptes.find(c => c.type === 'courant' || c.type === 'liquide').solde || 0)) }}</span>
-                                                </div>
-                                                <div :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', tresoActuelleCourante >= 0 ? 'text-emerald-300' : 'text-red-300']">
-                                                    <span>= Solde compte courant</span>
-                                                    <span>{{ formatMAD(tresoActuelleCourante) }}</span>
-                                                </div>
-                                            </template>
-                                            <template v-else>
-                                                <p class="text-slate-400 text-[10px]">Aucun compte de type "courant" ou "liquide" trouvé.<br/>Vérifiez le type de vos comptes dans Trésorerie.</p>
-                                                <div class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-amber-300">
-                                                    <span>Fallback soldesInitiaux.courant</span>
-                                                    <span>{{ formatMAD(tresoActuelleCourante) }}</span>
-                                                </div>
-                                            </template>
+                        <!-- 🚨 ATTERRISSAGE & ALERTE -->
+                        <div class="relative" data-bulle-cle="kpi-atterrissage"
+                             @pointerenter="survolBulle('kpi-atterrissage', $event)" @pointerleave="quitterBulle('kpi-atterrissage', $event)">
+                            <button type="button" data-kpi="atterrissage" @click="basculerBulle('kpi-atterrissage')"
+                                    :data-alerte="(!isCyclePasse && kpiAtterrissage.negatif) ? 'oui' : 'non'"
+                                    :class="['w-full h-full text-left rounded-2xl p-4 border-2 shadow-sm transition-colors',
+                                             isCyclePasse ? (soldeCloturePilotageRetro >= 0 ? 'bg-slate-900 border-indigo-500' : 'bg-red-600 border-red-700')
+                                             : (kpiAtterrissage.negatif ? 'bg-red-600 border-red-700 hover:bg-red-700' : 'bg-slate-900 border-emerald-600 hover:border-emerald-400')]">
+                                <template v-if="isCyclePasse">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-indigo-200">🏁 Solde de clôture</p>
+                                    <p class="text-3xl font-black tracking-tight text-white mt-1 tabular-nums" data-kpi-valeur>{{ formatMAD(soldeCloturePilotageRetro) }}</p>
+                                    <p class="text-xs font-bold text-slate-200 mt-1">Transféré au cycle suivant</p>
+                                </template>
+                                <template v-else-if="kpiAtterrissage.negatif">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-red-100">🚨 Atterrissage &amp; alerte</p>
+                                    <p class="text-sm font-black text-white mt-1" data-kpi-phrase>Découvert projeté le {{ kpiAtterrissage.dateFin }}&nbsp;:</p>
+                                    <p class="text-3xl font-black tracking-tight text-white tabular-nums" data-kpi-valeur>{{ formatMAD(kpiAtterrissage.vedette ? kpiAtterrissage.vedette.atterrissage : kpiAtterrissage.montant) }}</p>
+                                    <p class="text-xs font-bold text-red-100 mt-1">{{ kpiAtterrissage.vedette ? kpiAtterrissage.vedette.label : 'Compte courant' }} · fin de cycle</p>
+                                    <p v-for="c in kpiAtterrissage.alertes.filter(x => !kpiAtterrissage.vedette || x.key !== kpiAtterrissage.vedette.key)" :key="'al_' + c.key"
+                                       class="text-xs font-black text-white mt-1" data-kpi-autre-alerte>⚠️ {{ c.label }}&nbsp;: {{ formatMAD(c.atterrissage) }}</p>
+                                    <p v-if="kpiAtterrissage.montant >= 0 && kpiAtterrissage.courant" class="text-xs font-bold text-red-100 mt-1">
+                                        {{ kpiAtterrissage.courant.icon }} {{ kpiAtterrissage.courant.label }}&nbsp;: {{ formatMAD(kpiAtterrissage.montant) }}
+                                    </p>
+                                </template>
+                                <template v-else>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-300">🏁 Atterrissage</p>
+                                    <p class="text-3xl font-black tracking-tight text-white mt-1 tabular-nums" data-kpi-valeur>{{ formatMAD(kpiAtterrissage.montant) }}</p>
+                                    <p class="text-xs font-bold text-slate-300 mt-1">Compte courant · le {{ kpiAtterrissage.dateFin }}</p>
+                                </template>
+                                <p v-if="!isCyclePasse" :class="['text-[10px] font-black mt-2', kpiAtterrissage.negatif ? 'text-red-100' : 'text-slate-400']">ⓘ Détail par compte</p>
+                            </button>
+                            <!-- Bulle : la composition, tirée du Relevé — une seule bulle ouverte à la fois -->
+                            <div v-if="bulleOuverte === 'kpi-atterrissage' && !isCyclePasse" data-bulle
+                                 class="absolute top-full left-0 right-0 md:left-auto md:w-[24rem] pt-2 z-[200]">
+                                <div class="bg-slate-950 text-slate-200 border border-slate-600 rounded-xl shadow-2xl p-4 text-[11px] max-h-[70vh] overflow-y-auto">
+                                    <div v-for="c in [kpiAtterrissage.courant].concat(kpiAtterrissage.alertes).filter(Boolean)" :key="'bk_' + c.key" class="mb-3 last:mb-0">
+                                        <p class="font-black uppercase tracking-widest text-slate-300 text-[10px] mb-1.5">{{ c.icon }} {{ c.label }}</p>
+                                        <div class="space-y-1">
+                                            <div class="flex justify-between gap-3"><span class="text-slate-400">Solde aujourd'hui</span><span class="font-black text-white tabular-nums">{{ formatMAD(c.t0) }}</span></div>
+                                            <div class="flex justify-between gap-3"><span class="text-sky-300">+ Entrées du cycle</span><span class="font-black text-sky-200 tabular-nums">+ {{ formatMAD(c.entrees) }}</span></div>
+                                            <div class="flex justify-between gap-3"><span class="text-orange-300">− Sorties du cycle</span><span class="font-black text-orange-200 tabular-nums">− {{ formatMAD(c.sorties) }}</span></div>
+                                            <div :class="['flex justify-between gap-3 rounded-lg px-2.5 py-1.5 font-black mt-1', c.reel && c.atterrissage < 0 ? 'bg-red-900/70 text-red-100' : 'bg-emerald-900/60 text-emerald-200']">
+                                                <span>= {{ c.reel && c.atterrissage < 0 ? 'Découvert' : 'Atterrissage' }} le {{ kpiAtterrissage.dateFin }}</span>
+                                                <span class="tabular-nums">{{ formatMAD(c.atterrissage) }}</span>
+                                            </div>
+                                        </div>
+                                        <div v-if="c.lignes.length" class="mt-2 pt-2 border-t border-slate-800 space-y-0.5">
+                                            <div v-for="(l, li) in c.lignes.slice(0, 10)" :key="c.key + '_' + li" class="flex justify-between gap-2 text-[10px]">
+                                                <span class="text-slate-400 truncate min-w-0">{{ l.libelle }}<span v-if="l.jourPrevu" class="text-slate-600 font-bold ml-1">j.{{ l.jourPrevu }}</span></span>
+                                                <span :class="['font-bold shrink-0 tabular-nums', l.type === 'credit' ? 'text-sky-300' : 'text-slate-200']">{{ l.type === 'credit' ? '+' : '−' }} {{ formatMAD(l.montant) }}</span>
+                                            </div>
+                                            <p v-if="c.lignes.length > 10" class="text-[10px] text-slate-500 font-bold">+ {{ c.lignes.length - 10 }} autre{{ c.lignes.length - 10 > 1 ? 's' : '' }} ligne{{ c.lignes.length - 10 > 1 ? 's' : '' }}</p>
                                         </div>
                                     </div>
+                                    <button type="button" @click.stop="ouvrirReleve(); fermerBulle()"
+                                            class="mt-3 w-full text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border border-indigo-500/60 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-colors">📑 Toutes les lignes dans le Relevé</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="anneeAffichage === moisBudgetaire.an" class="space-y-5">
+
+                        <!-- ═══ À TRAITER : la file de travail, par urgence ═══════════════ -->
+                        <div id="pilotage-inbox" class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg scroll-mt-24">
+                            <div class="flex items-center justify-between px-4 md:px-5 py-3 border-b border-slate-700 gap-3 flex-wrap">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="text-blue-400 text-lg shrink-0">📋</span>
+                                    <span class="text-sm font-black uppercase tracking-widest text-white truncate">À traiter — {{ pilotageCycleLabel }}</span>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-[10px] px-2.5 py-1 rounded-lg font-black border bg-slate-900 border-slate-600 text-rose-300">
+                                        {{ formatMAD(resteATraiterPilotage) }} restants
+                                    </span>
+                                    <span :class="['text-[10px] px-2.5 py-1 rounded-lg font-black border', tachesATraiter.length === 0 && tachesPilotage.length > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
+                                        {{ tachesTerminees.length }} / {{ tachesPilotage.length }} faits
+                                    </span>
                                 </div>
                             </div>
 
-                            <!-- KPI 2 : Reste à Payer — Tous comptes (Finito en cycle passé v24.40) -->
-                            <div class="relative group cursor-default">
-                                <!-- Carte KPI2 Cycle Passé : Finito - Cycle Clos -->
-                                <div v-if="isCyclePasse" class="p-4 rounded-2xl border text-center transition-all bg-green-900/30 border-green-600 group-hover:border-green-400">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">🔴 Reste à Payer</p>
-                                    <p class="text-2xl font-black tracking-tighter text-emerald-300">{{ formatMAD(0) }}</p>
-                                    <p class="text-[9px] mt-1 font-bold text-emerald-400">🏁 Finito — Cycle Clos</p>
+                            <!-- ✅ Un clic : les charges FIXES dont la date est arrivée -->
+                            <div v-if="chargesFixesEchues.length" data-validation-rapide
+                                 class="px-4 md:px-5 py-3 border-b border-slate-700 bg-emerald-950/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xs font-black text-emerald-200">
+                                        {{ chargesFixesEchues.length }} charge{{ chargesFixesEchues.length > 1 ? 's' : '' }} fixe{{ chargesFixesEchues.length > 1 ? 's' : '' }} échue{{ chargesFixesEchues.length > 1 ? 's' : '' }} · {{ formatMAD(montantChargesFixesEchues) }}
+                                    </p>
+                                    <p class="text-[10px] font-bold text-slate-400 break-words">{{ chargesFixesEchues.map(t => t.libelle + ' (j.' + t.jourPrevu + ')').join(' · ') }}</p>
                                 </div>
-                                <!-- Carte KPI2 normale (cycle actuel) — v32.10 : COMPTE COURANT SEUL -->
-                                <div v-else :class="['p-4 rounded-2xl border text-center transition-all', resteAPayerCourantCycle > 0 ? 'bg-orange-900/20 border-orange-700 group-hover:border-orange-500' : 'bg-green-900/20 border-green-700 group-hover:border-green-500']">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">🔴 Reste à Payer</p>
-                                    <p :class="['text-2xl font-black tracking-tighter', resteAPayerCourantCycle > 0 ? 'text-orange-400' : 'text-green-400']">{{ formatMAD(resteAPayerCourantCycle) }}</p>
-                                    <p class="text-[9px] mt-1 font-bold" :class="resteAPayerCourantCycle === 0 ? 'text-emerald-400' : 'text-gray-500'">
-                                    <template v-if="resteAPayerCourantCycle === 0">✅ Compte courant à jour</template>
-                                    <template v-else>💳 Compte courant uniquement</template>
+                                <button type="button" @click="validerChargesEchues()" data-valider-echues
+                                        class="w-full sm:w-auto shrink-0 px-4 py-3 sm:py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black uppercase tracking-widest shadow-lg transition-colors">✅ Valider les charges échues</button>
+                            </div>
+                            <div v-if="derniereValidation && derniereValidation.cyc === cyclePilotage" data-validation-faite
+                                 class="px-4 md:px-5 py-2.5 border-b border-slate-700 bg-slate-900 flex items-center justify-between gap-3 flex-wrap">
+                                <p class="text-xs font-bold text-emerald-300 min-w-0">✅ {{ derniereValidation.n }} charge{{ derniereValidation.n > 1 ? 's' : '' }} validée{{ derniereValidation.n > 1 ? 's' : '' }} · {{ formatMAD(derniereValidation.montant) }}</p>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <button type="button" @click="annulerValidation()" data-annuler-validation
+                                            class="text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-slate-500 text-slate-200 hover:border-amber-400 hover:text-amber-300 transition-colors">↩ Annuler</button>
+                                    <button type="button" @click="derniereValidation = null" title="Masquer" class="text-slate-500 hover:text-slate-300 text-sm px-1">✕</button>
+                                </div>
+                            </div>
+
+                            <div class="p-3 md:p-4 space-y-5">
+                                <!-- v37.13 : dire pourquoi certaines lignes ne sont pas datées -->
+                                <p v-if="tachesSansDate" class="text-[10px] font-bold text-slate-400 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 leading-snug">
+                                    📅 {{ tachesSansDate }} ligne(s) sans jour de prélèvement : elles ferment la liste, faute de savoir où les placer.
+                                    Renseignez « Jour prévu » dans le Budget Structurel pour qu'elles rejoignent le bon paquet.
+                                    <span class="text-slate-500">(le champ est masqué sur une charge découpée en parts)</span>
                                 </p>
-                                </div>
-                                <div class="absolute top-full left-0 right-0 mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                    <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                    <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
-                                        <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px]">🔍 Détail — Compte Courant</p>
-                                        <div class="space-y-3">
-                                            <div v-if="!resteAPayerGroupeCourant" class="text-center text-emerald-400 py-1">✅ Compte courant à jour !</div>
-                                            <div v-for="grp in (resteAPayerGroupeCourant ? [resteAPayerGroupeCourant] : [])" :key="grp.key" class="space-y-1">
-                                                <!-- En-tête du compte -->
-                                                <div class="flex justify-between gap-3 font-black">
-                                                    <span class="text-orange-300">{{ grp.icon }} {{ grp.label }}</span>
-                                                    <span class="text-white">{{ formatMAD(grp.montant) }}</span>
-                                                </div>
-                                                <!-- Lignes nominatives -->
-                                                <div v-for="(ligne, li) in grp.lignes" :key="grp.key+'_'+li"
-                                                     class="flex justify-between gap-2 pl-3 text-[10px]">
-                                                    <span class="text-slate-400 truncate max-w-[150px]">
-                                                        <span v-if="ligne.type==='fix'">🏢</span>
-                                                        <span v-else-if="ligne.type==='factures'">🧾</span>
-                                                        <span v-else-if="ligne.type==='var'">🛒</span>
-                                                        <span v-else-if="ligne.type==='choc'">⚠️</span>
-                                                        <span v-else-if="ligne.type==='injection'">💵</span>
-                                                        <span v-else-if="ligne.type==='epargne'">💰</span>
-                                                        <span v-else>🔄</span>
-                                                        {{ ligne.nom }}
-                                                        <span v-if="isFluxCetteSemaine(ligne.jourPrevu)" class="text-[8px] font-black bg-amber-500/30 text-amber-200 border border-amber-500/30 px-1 py-px rounded-full ml-0.5">⏳</span>
-                                                        <span v-if="ligne.jourPrevu" class="text-[8px] text-slate-500 font-bold ml-0.5">j.{{ligne.jourPrevu}}</span>
-                                                    </span>
-                                                    <!-- v32.00 : flux négatif = injection de cash, affichée en vert -->
-                                                    <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']"><span v-if="ligne.estim" class="text-slate-500 font-normal" title="Estimation au prorata du temps — saisissez votre réalisé T0">≈ </span>{{ formatMAD(ligne.montant) }}</span>
-                                                </div>
-                                            </div>
-                                            <!-- v32.30 : bilan de couverture, symétrique des comptes annexes -->
-                                            <div class="border-t border-slate-700 pt-2 mt-2 space-y-1.5">
-                                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🏦 Couverture</p>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-emerald-400">Tréso courante</span>
-                                                    <span class="font-black text-white">{{ formatMAD(tresoActuelleCourante) }}</span>
-                                                </div>
-                                                <div v-if="revenusEnAttenteCourantCycle > 0" class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-sky-400">+ Revenus attendus du cycle</span>
-                                                    <span class="font-black text-sky-200">+ {{ formatMAD(revenusEnAttenteCourantCycle) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span :class="resteAPayerCourantCycle >= 0 ? 'text-orange-400' : 'text-emerald-400'">{{ resteAPayerCourantCycle >= 0 ? '− Engagements du cycle' : '+ Financement net du cycle' }}</span>
-                                                    <span :class="['font-black', resteAPayerCourantCycle >= 0 ? 'text-orange-200' : 'text-emerald-200']">{{ resteAPayerCourantCycle >= 0 ? '−' : '+' }} {{ formatMAD(Math.abs(resteAPayerCourantCycle)) }}</span>
-                                                </div>
-                                                <div :class="['flex justify-between gap-3 rounded-lg px-3 py-2 font-black text-[12px] mt-1', couvertureCourant >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/50 text-red-300']">
-                                                    <span>{{ couvertureCourant >= 0 ? '✅ Couvert' : '⚠️ Découvert projeté' }}</span>
-                                                    <span>{{ formatMAD(couvertureCourant) }}</span>
-                                                </div>
-                                                <!-- La conso est une prévision, pas une dette : on le dit quand c'est elle qui creuse l'écart -->
-                                                <p v-if="couvertureCourant < 0 && enveloppeConsoRestante > 0" class="text-[9px] text-slate-500 leading-snug">
-                                                    Dont {{ formatMAD(enveloppeConsoRestante) }} de conso variable
-                                                    <template v-if="!consoT0Renseigne"> <span class="text-amber-400">estimée</span></template> —
-                                                    c'est un budget prévisionnel, pas une facture. Réduisez-le et l'écart se résorbe.
-                                                </p>
-                                            </div>
-                                            <!-- v32.10 : rappel du hors-courant, sans le mélanger au total -->
-                                            <div v-if="resteAPayerAutresComptes.length" class="border-t border-slate-700 pt-1.5 mt-1.5 space-y-1">
-                                                <div class="flex justify-between gap-3 text-[10px]">
-                                                    <span class="text-slate-500">+ Autres comptes ({{ resteAPayerAutresComptes.length }})</span>
-                                                    <span :class="['font-bold', resteAPayerAutresTotal < 0 ? 'text-emerald-400' : 'text-slate-300']">{{ formatMAD(resteAPayerAutresTotal) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 font-black text-orange-300">
-                                                    <span>= Total tous comptes</span>
-                                                    <span>{{ formatMAD(resteAPayerTotalGlobal) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <!-- KPI 3 : Budget Conso courant (tréso courant − obligations courant) -->
-                            <div class="relative group cursor-default">
-                                <!-- ── Carte KPI3 Rétro : Solde de Clôture (v24.40 Freeze-Retro) ── -->
-                                <div v-if="isCyclePasse" :class="['p-4 rounded-2xl border text-center transition-all', soldeCloturePilotageRetro >= 0 ? 'bg-indigo-900/30 border-indigo-600' : 'bg-red-900/30 border-red-600']">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">🏁 Solde de Clôture</p>
-                                    <p :class="['text-2xl font-black tracking-tighter', soldeCloturePilotageRetro >= 0 ? 'text-indigo-300' : 'text-red-400']">{{ formatMAD(soldeCloturePilotageRetro) }}</p>
-                                    <p class="text-[9px] text-gray-400 mt-1 font-bold">Transféré au cycle suivant</p>
-                                </div>
-                                <!-- ── Carte KPI3 : contenu selon mode ── -->
-                                <div v-else :class="['p-4 rounded-2xl border text-center transition-all',
-                                    vueTemporelle === 'at0'
-                                        ? (margeT0 >= 0 ? 'bg-violet-900/30 border-violet-600 group-hover:border-violet-400' : 'bg-red-900/30 border-red-600 group-hover:border-red-400')
-                                        : (budgetConsoRestantReel >= 0 ? 'bg-emerald-900/30 border-emerald-600 group-hover:border-emerald-400' : 'bg-red-900/30 border-red-600 group-hover:border-red-400')]">
-                                    <!-- Titre dynamique -->
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-300 mb-1">
-                                        <template v-if="vueTemporelle === 'at0'">⏱️ Rythme Conso T0</template>
-                                        <template v-else>📊 Budget Conso Restant</template>
+                                <!-- Inbox Zero : plus rien à faire -->
+                                <div v-if="tachesATraiter.length === 0" class="text-center py-10">
+                                    <p class="text-4xl mb-3">✅</p>
+                                    <p class="text-sm font-black text-green-400 uppercase tracking-widest">Tout est traité</p>
+                                    <p class="text-[11px] text-slate-400 font-bold mt-1">
+                                        {{ tachesPilotage.length }} élément(s) pointé(s) sur {{ pilotageCycleLabel }}.
+                                        Le prochain cycle repartira à zéro.
                                     </p>
-                                    <!-- Valeur principale — v32.00 : min(enveloppe restante, cash dispo) -->
-                                    <p :class="['text-2xl font-black tracking-tighter',
-                                        vueTemporelle === 'at0'
-                                            ? (margeT0 >= 0 ? 'text-violet-300' : 'text-red-400')
-                                            : (budgetConsoRestantReel >= 0 ? 'text-emerald-300' : 'text-red-400')]">
-                                        <template v-if="vueTemporelle === 'at0'">{{ formatMAD(consoEngageeT0) }}</template>
-                                        <template v-else>{{ formatMAD(budgetConsoRestantReel) }}</template>
+                                </div>
+
+                                <!-- ⚠️ En retard / ⏳ Cette semaine / 📅 Reste du mois -->
+                                <div v-for="paquet in tachesGroupees" :key="paquet.cle" :data-paquet="paquet.cle">
+                                    <p :class="['text-[10px] font-black uppercase tracking-widest mb-2 pb-1 border-b flex items-center justify-between gap-2',
+                                                paquet.teinte === 'rose' ? 'text-rose-300 border-rose-900/60'
+                                                : (paquet.teinte === 'amber' ? 'text-amber-300 border-amber-900/60' : 'text-slate-300 border-slate-700')]">
+                                        <span data-paquet-titre>{{ paquet.titre }}</span>
+                                        <span class="font-mono normal-case tracking-normal">{{ paquet.taches.length }} · {{ formatMAD(paquet.total) }}</span>
                                     </p>
-                                    <!-- Sous-label -->
-                                    <p class="text-[9px] text-gray-400 mt-1 font-bold">
-                                        <template v-if="vueTemporelle === 'at0'">
-                                            <span :class="deriveConsoT0 <= 0 ? 'text-emerald-400' : 'text-red-400'">
-                                                {{ deriveConsoT0 <= 0 ? '✅ ' : '⚠️ +' }}{{ formatMAD(Math.abs(deriveConsoT0)) }} {{ deriveConsoT0 <= 0 ? 'sous le rythme' : 'de surconso' }}
-                                            </span>
-                                        </template>
-                                        <template v-else>
-                                            <template v-if="budgetSemaineReel !== null">Soit {{ formatMAD(budgetSemaineReel) }} / sem · J−{{ joursRestantsAvantPaie }}</template>
-                                            <template v-else>Survol = détail</template>
-                                        </template>
-                                    </p>
-                                    <!-- v32.00 : signale que le chiffre est une estimation temporelle -->
-                                    <p v-if="!consoT0Renseigne && vueTemporelle !== 'at0'" class="text-[8px] font-black text-amber-400 mt-1 uppercase tracking-widest">⚠️ Réalisé non saisi</p>
+                                    <transition-group tag="div" name="tache" class="space-y-1.5">
+                                        <div v-for="t in paquet.taches" :key="t.cle" data-tache
+                                             :class="['flex flex-wrap items-center gap-x-3 gap-y-2 p-3 bg-slate-900/90 rounded-xl border transition-colors',
+                                                      t.nature === 'fixe' ? 'border-slate-700 hover:border-orange-500'
+                                                      : (t.nature === 'variable' ? 'border-slate-700 hover:border-sky-500'
+                                                      : (t.nature === 'epargne' ? 'border-slate-700 hover:border-violet-500' : 'border-slate-700 hover:border-rose-500'))]">
+                                            <label class="flex items-center gap-2.5 cursor-pointer flex-1 min-w-[12rem]">
+                                                <input type="checkbox" :checked="false"
+                                                       @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
+                                                       class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer shrink-0"/>
+                                                <span data-badge-nature :data-nature="t.nature"
+                                                      :class="['text-[10px] font-black px-1.5 py-0.5 rounded-md border shrink-0 whitespace-nowrap',
+                                                               t.nature === 'fixe' ? 'bg-orange-500/15 text-orange-300 border-orange-500/50'
+                                                                   : (t.nature === 'variable' ? 'bg-sky-500/15 text-sky-300 border-sky-500/50'
+                                                                   : (t.nature === 'epargne' ? 'bg-violet-500/15 text-violet-300 border-violet-500/50'
+                                                                   : 'bg-rose-500/15 text-rose-300 border-rose-500/50'))]">{{ t.badge }}</span>
+                                                <span class="text-sm font-bold text-slate-100 min-w-0 break-words md:truncate" data-tache-nom>{{ t.libelle }}</span>
+                                                <span v-if="t.nature === 'variable'" class="text-[9px] text-slate-500 font-bold uppercase tracking-widest hidden md:inline shrink-0">{{ t.groupe }}</span>
+                                            </label>
+                                            <div class="flex items-center gap-2 ml-auto shrink-0">
+                                                <span v-if="t.jourPrevu"
+                                                      :class="['text-[10px] font-black px-1.5 py-0.5 rounded-full border shrink-0',
+                                                               t.retard ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                                               : (t.proche ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                                                               : 'bg-slate-700/40 text-slate-400 border-slate-600/50')]">📅 j.{{ t.jourPrevu }}</span>
+                                                <span v-else class="text-[10px] font-black px-1.5 py-0.5 rounded-full border border-dashed border-slate-600 text-slate-500 shrink-0"
+                                                      title="Aucune date de prélèvement sur cette ligne — renseignez « jour prévu » dans le Budget Structurel pour la classer dans le bon paquet">📅 sans date</span>
+                                                <input type="number" :value="montantPayeCycle(t.ref, cyclePilotage)"
+                                                       @input="setMontantPayeCycle(t.ref, $event.target.value, cyclePilotage)"
+                                                       placeholder="0" title="Avance déjà versée"
+                                                       class="w-20 bg-slate-950 text-slate-200 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
+                                                <span class="text-[10px] font-black text-slate-400 w-16 text-right tabular-nums">/ {{ formatNombre(t.due) }}</span>
+                                            </div>
+                                        </div>
+                                    </transition-group>
                                 </div>
-                                <!-- ── Tooltip — masqué en cycle passé (v24.40) ── -->
-                                <div v-if="!isCyclePasse" class="absolute top-full left-0 right-0 mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                    <!-- Tooltip T0 -->
-                                    <template v-if="vueTemporelle === 'at0'">
-                                        <div class="w-3 h-3 bg-violet-950 border-t border-l border-violet-500 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                        <div class="bg-violet-950 border border-violet-500 rounded-xl shadow-2xl p-3.5 text-left text-[11px] min-w-[240px]">
-                                            <p class="font-black uppercase tracking-widest text-violet-200 mb-2 text-[10px] border-b border-violet-800 pb-1.5">⏱️ DIAGNOSTIC T0 — J+{{ joursCycleEcoules }} / {{ joursCycleTotal }}</p>
-                                            <!-- v32.00 : réalisé vs rythme attendu -->
-                                            <div class="space-y-1.5 mb-2">
-                                                <p class="text-[9px] font-black text-violet-300 uppercase tracking-widest">🛒 Conso Variable</p>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-purple-300">Budget du cycle</span>
-                                                    <span class="font-black text-white">{{ formatMAD(budgetConsoCycle) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span :class="consoT0Renseigne ? 'text-orange-300' : 'text-amber-400'">
-                                                        − Déjà engagé <template v-if="!consoT0Renseigne">(non saisi)</template>
-                                                    </span>
-                                                    <span class="font-black text-orange-200">− {{ formatMAD(consoEngageeT0) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 border-t border-violet-800 pt-1 mt-1 font-black text-violet-200">
-                                                    <span>= Enveloppe restante</span>
-                                                    <span>{{ formatMAD(enveloppeConsoRestante) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 pl-2 text-[10px]">
-                                                    <span class="text-slate-400">Rythme attendu à J+{{ joursCycleEcoules }}</span>
-                                                    <span class="font-bold text-slate-300">{{ formatMAD(consoTheoriqueAJour) }}</span>
-                                                </div>
-                                            </div>
-                                            <!-- Cash dispo réel -->
-                                            <div class="space-y-1.5 mb-2 border-t border-violet-800 pt-2">
-                                                <p class="text-[9px] font-black text-violet-300 uppercase tracking-widest">💰 Cash Dispo Actuel</p>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-emerald-300">Tréso courante</span>
-                                                    <span class="font-black text-white">{{ formatMAD(tresoActuelleCourante) }}</span>
-                                                </div>
-                                                <div v-if="revenusEnAttenteCourant > 0" class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-sky-300">+ Revenus échus</span>
-                                                    <span class="font-black text-sky-200">+ {{ formatMAD(revenusEnAttenteCourant) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-orange-300">− Obligations (hors conso)</span>
-                                                    <span class="font-black text-orange-200">− {{ formatMAD(obligationsCourantHorsConso) }}</span>
-                                                </div>
-                                                <div v-if="provisionsFuturesT0 > 0" class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-amber-300">− Provisions futures</span>
-                                                    <span class="font-black text-amber-200">− {{ formatMAD(provisionsFuturesT0) }}</span>
-                                                </div>
-                                                <div :class="['flex justify-between gap-3 border-t border-violet-800 pt-1 mt-1 font-black', cashDispoPourConso >= 0 ? 'text-emerald-300' : 'text-red-400']">
-                                                    <span>= Dispo net</span>
-                                                    <span>{{ formatMAD(cashDispoPourConso) }}</span>
-                                                </div>
-                                            </div>
-                                            <!-- Résultat -->
-                                            <div :class="['flex justify-between gap-3 rounded-lg px-3 py-2 font-black text-[12px]', margeT0 >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/50 text-red-300']">
-                                                <span>{{ margeT0 >= 0 ? '✅ Cycle couvert' : '⚠️ Trou de tréso' }}</span>
-                                                <span>{{ margeT0 >= 0 ? '+' : '' }}{{ formatMAD(margeT0) }}</span>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <!-- Tooltip Semaine/Cycle (inchangé) -->
-                                    <template v-else>
-                                        <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                        <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px] min-w-[230px]">
-                                            <p class="font-black uppercase tracking-widest text-emerald-300 mb-2 text-[10px] border-b border-slate-700 pb-1.5">📊 DISPONIBLE RÉEL</p>
-                                            <!-- v32.00 : deux limites confrontées, la plus contraignante l'emporte -->
-                                            <div class="space-y-1.5 mb-3">
-                                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🅰️ Enveloppe budgétaire</p>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-purple-300">Budget conso du cycle</span>
-                                                    <span class="font-black text-white">{{ formatMAD(budgetConsoCycle) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span :class="consoT0Renseigne ? 'text-orange-400' : 'text-amber-400'">
-                                                        − Déjà engagé <template v-if="!consoT0Renseigne">(non saisi)</template>
-                                                    </span>
-                                                    <span class="font-black text-orange-200">− {{ formatMAD(consoEngageeT0) }}</span>
-                                                </div>
-                                                <div :class="['flex justify-between gap-3 font-black pl-2', contrainteConso === 'budget' ? 'text-emerald-300' : 'text-slate-400']">
-                                                    <span>= Reste au budget {{ contrainteConso === 'budget' ? '◀' : '' }}</span>
-                                                    <span>{{ formatMAD(enveloppeConsoRestante) }}</span>
-                                                </div>
-                                            </div>
-                                            <div class="space-y-1.5 mb-3 border-t border-slate-700 pt-2">
-                                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🅱️ Trésorerie</p>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-emerald-400">💰 Tréso instantanée</span>
-                                                    <span class="font-black text-white">{{ formatMAD(tresoActuelleCourante) }}</span>
-                                                </div>
-                                                <div v-if="revenusEnAttenteCourant > 0" class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-sky-400">📥 + Revenus en attente</span>
-                                                    <span class="font-black text-sky-200">+ {{ formatMAD(revenusEnAttenteCourant) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 pl-2">
-                                                    <span class="text-orange-400">➖ Obligations (hors conso)</span>
-                                                    <span class="font-black text-white">− {{ formatMAD(obligationsCourantHorsConso) }}</span>
-                                                </div>
-                                                <div :class="['flex justify-between gap-3 font-black pl-2', contrainteConso === 'cash' ? 'text-emerald-300' : 'text-slate-400']">
-                                                    <span>= Cash dispo {{ contrainteConso === 'cash' ? '◀' : '' }}</span>
-                                                    <span>{{ formatMAD(cashDispoPourConso) }}</span>
-                                                </div>
-                                            </div>
-                                            <div class="space-y-1.5 mb-3 border-t border-slate-700 pt-2">
-                                                <div :class="['flex justify-between gap-3 font-black text-[12px]', budgetConsoRestantReel >= 0 ? 'text-emerald-300' : 'text-red-300']">
-                                                    <span>= Budget Conso Restant</span>
-                                                    <span>{{ formatMAD(budgetConsoRestantReel) }}</span>
-                                                </div>
-                                                <p class="text-[9px] text-slate-500 font-bold">
-                                                    {{ contrainteConso === 'budget' ? '🅰️ Limité par votre budget conso' : '🅱️ Limité par la trésorerie disponible' }}
-                                                </p>
-                                                <div v-if="budgetSemaineReel !== null" class="flex justify-between gap-3 border-t border-slate-800 pt-1.5 mt-1.5">
-                                                    <span class="text-amber-400">🗓️ Budget / sem autorisé</span>
-                                                    <span class="font-black text-amber-300">{{ formatMAD(budgetSemaineReel) }}</span>
-                                                </div>
-                                            </div>
-                                            <div v-if="chargesVarHebdoDetail.length > 0" class="border-t border-slate-700 pt-2">
-                                                <div class="flex justify-between gap-3 mb-1.5">
-                                                    <p class="font-black uppercase tracking-widest text-purple-300 text-[10px]">🎯 BESOIN HEBDO THÉORIQUE</p>
-                                                    <span class="font-black text-purple-300">{{ formatMAD(besoinVariableHebdoTheorique) }}</span>
-                                                </div>
-                                                <div v-for="c in chargesVarHebdoDetail" :key="c.label" class="flex justify-between gap-3 pl-3 text-[10px]">
-                                                    <span class="text-slate-400">↳ {{ c.label }}</span>
-                                                    <span class="font-bold text-slate-200">{{ formatMAD(c.valeur) }}</span>
-                                                </div>
-                                                <div v-if="budgetSemaineReel !== null" class="mt-2 pt-1.5 border-t border-slate-800">
-                                                    <div :class="['flex justify-between gap-3 text-[10px] font-black', (budgetSemaineReel - besoinVariableHebdoTheorique) >= 0 ? 'text-emerald-400' : 'text-red-400']">
-                                                        <span>{{ (budgetSemaineReel - besoinVariableHebdoTheorique) >= 0 ? '✅ Marge hebdo' : '⚠️ Dépassement' }}</span>
-                                                        <span>{{ formatMAD(Math.abs(budgetSemaineReel - besoinVariableHebdoTheorique)) }}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </template>
-                                </div>
-                            </div>
 
-                        </div><!-- /KPI Grid v22.50 -->
-
-                        <!-- ═══ v32.10 Reste-Par-Compte : une carte par compte hors courant ═══ -->
-                        <div v-if="!isCyclePasse && comptesAnnexesDetail.length" class="mt-3">
-                            <div class="flex items-baseline justify-between gap-3 mb-2 px-1">
-                                <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">🏦 Autres comptes du cycle</p>
-                                <p class="text-[9px] font-bold text-slate-500">
-                                    Total tous comptes
-                                    <span :class="['font-black ml-1', resteAPayerTotalGlobal > 0 ? 'text-orange-400' : 'text-emerald-400']">{{ formatMAD(resteAPayerTotalGlobal) }}</span>
-                                </p>
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                <!-- v32.20 : carte compacte + bulle de détail (survol desktop / tap mobile) -->
-                                <!-- v32.50 : comptesAnnexesDetail — inclut les comptes qui ENCAISSENT
-                                     (fonds d'urgence…) et non plus seulement ceux qui décaissent. -->
-                                <div v-for="grp in comptesAnnexesDetail" :key="'rap_' + grp.key" class="relative group cursor-pointer"
-                                     @click="toggleCompteBulle(grp.key)">
-                                    <div :class="['p-3 rounded-2xl border transition-all', grp.montant < 0 ? 'bg-emerald-900/20 border-emerald-700/70 group-hover:border-emerald-500' : (grp.montant === 0 && grp.entrant > 0 ? 'bg-sky-900/20 border-sky-800/70 group-hover:border-sky-500' : 'bg-slate-800/60 border-slate-700 group-hover:border-violet-500')]">
-                                        <div class="flex items-start justify-between gap-2">
-                                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-300 truncate min-w-0">{{ grp.icon }} {{ grp.label }}</p>
-                                            <!-- Un compte qui n'encaisse que ça : on affiche l'entrée, pas un 0 muet -->
-                                            <p v-if="grp.montant === 0 && grp.entrant > 0" class="text-sm font-black tracking-tighter shrink-0 text-sky-300">+ {{ formatMAD(grp.entrant) }}</p>
-                                            <p v-else :class="['text-sm font-black tracking-tighter shrink-0', grp.montant < 0 ? 'text-emerald-400' : 'text-violet-300']">{{ formatMAD(grp.montant) }}</p>
-                                        </div>
-                                        <div class="flex items-center justify-between gap-2 mt-1.5">
-                                            <!-- Verdict de couverture -->
-                                            <p v-if="grp.montant === 0 && grp.entrant > 0" class="text-[8px] font-black text-sky-400/90 truncate">📥 À provisionner ce cycle</p>
-                                            <p v-else-if="grp.montant === 0" class="text-[8px] font-bold text-slate-500 truncate">💤 Aucun mouvement ce cycle</p>
-                                            <p v-else-if="grp.montant < 0" class="text-[8px] font-black text-emerald-400/90 truncate">✅ Financement excédentaire</p>
-                                            <p v-else-if="grp.couverture === null" class="text-[8px] font-bold text-slate-500 truncate">🔗 Aucun compte rattaché</p>
-                                            <p v-else-if="grp.couverture >= 0" class="text-[8px] font-black text-emerald-400/90 truncate">✅ Couvert — reste {{ formatMAD(grp.couverture) }}</p>
-                                            <p v-else class="text-[8px] font-black text-red-400 truncate">⚠️ Manque {{ formatMAD(Math.abs(grp.couverture)) }}</p>
-                                            <span class="text-[8px] font-black text-slate-500 shrink-0">{{ grp.lignes.length + grp.lignesEntrantes.length }} ligne{{ (grp.lignes.length + grp.lignesEntrantes.length) > 1 ? 's' : '' }} ⓘ</span>
-                                        </div>
-                                    </div>
-                                    <!-- ── Bulle de détail du compte ── -->
-                                    <div :class="['absolute top-full left-0 right-0 mt-1.5 z-50 transition-opacity duration-150',
-                                                  compteBulleOuverte === grp.key ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100']">
-                                        <div class="w-3 h-3 bg-slate-950 border-t border-l border-slate-600 rotate-45 mx-auto -mb-[7px] relative z-10"></div>
-                                        <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px]">
-                                            <p class="font-black uppercase tracking-widest text-slate-300 mb-2 text-[10px] border-b border-slate-700 pb-1.5">{{ grp.icon }} {{ grp.label }}</p>
-                                            <!-- v32.50 : ce que le compte ENCAISSE ce cycle -->
-                                            <div v-if="grp.lignesEntrantes.length" class="space-y-1 mb-2">
-                                                <p class="text-[9px] font-black text-sky-400 uppercase tracking-widest">📥 Entrées du cycle</p>
-                                                <div v-for="(le, lei) in grp.lignesEntrantes" :key="'rapin_' + grp.key + '_' + lei" class="flex justify-between gap-2 text-[10px] pl-2">
-                                                    <span class="text-slate-400 truncate min-w-0">💰 {{ le.nom }}</span>
-                                                    <span class="font-bold text-sky-300 shrink-0">+ {{ formatMAD(le.montant) }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black text-sky-300">
-                                                    <span>= À provisionner</span>
-                                                    <span>+ {{ formatMAD(grp.entrant) }}</span>
-                                                </div>
-                                            </div>
-                                            <!-- Lignes imputées -->
-                                            <div v-if="grp.lignes.length" class="space-y-1 mb-2">
-                                                <p class="text-[9px] font-black text-orange-400 uppercase tracking-widest">📤 Sorties du cycle</p>
-                                                <div v-for="(ligne, li) in grp.lignes" :key="'rapb_' + grp.key + '_' + li" class="flex justify-between gap-2 text-[10px]">
-                                                    <span class="text-slate-400 truncate min-w-0">
-                                                        <span v-if="ligne.type==='fix'">🏢</span>
-                                                        <span v-else-if="ligne.type==='factures'">🧾</span>
-                                                        <span v-else-if="ligne.type==='var'">🛒</span>
-                                                        <span v-else-if="ligne.type==='choc'">⚠️</span>
-                                                        <span v-else-if="ligne.type==='injection'">💵</span>
-                                                        <span v-else-if="ligne.type==='epargne'">💰</span>
-                                                        <span v-else>🔄</span>
-                                                        {{ ligne.nom }}
-                                                        <span v-if="ligne.jourPrevu" class="text-[8px] text-slate-600 font-bold ml-0.5">j.{{ ligne.jourPrevu }}</span>
-                                                    </span>
-                                                    <span :class="['font-bold shrink-0', ligne.montant < 0 ? 'text-emerald-400' : 'text-slate-200']"><span v-if="ligne.estim" class="text-slate-500 font-normal" title="Estimation au prorata du temps — saisissez votre réalisé T0">≈ </span>{{ formatMAD(ligne.montant) }}</span>
-                                                </div>
-                                                <div :class="['flex justify-between gap-3 border-t border-slate-700 pt-1.5 mt-1.5 font-black', grp.montant < 0 ? 'text-emerald-300' : 'text-violet-300']">
-                                                    <span>= Reste à payer</span>
-                                                    <span>{{ formatMAD(grp.montant) }}</span>
-                                                </div>
-                                            </div>
-                                            <!-- Couverture par le solde du compte -->
-                                            <div class="border-t border-slate-700 pt-2 space-y-1.5">
-                                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🏦 Couverture</p>
-                                                <template v-if="grp.couverture !== null">
-                                                    <div class="flex justify-between gap-3 pl-2">
-                                                        <span class="text-emerald-400">
-                                                            Solde du compte
-                                                            <span v-if="grp.soldeVia === 'lie'" class="text-[9px] text-slate-500">(via {{ grp.compteLie }})</span>
-                                                        </span>
-                                                        <span class="font-black text-white">{{ formatMAD(grp.solde) }}</span>
-                                                    </div>
-                                                    <!-- v32.20 : un montant négatif est un encaissement net, pas une charge
-                                                         — sinon la ligne affichait « − -4 760 DH ». -->
-                                                    <div class="flex justify-between gap-3 pl-2">
-                                                        <span :class="grp.montant >= 0 ? 'text-orange-400' : 'text-emerald-400'">{{ grp.montant >= 0 ? '− Engagements du cycle' : '+ Financement net du cycle' }}</span>
-                                                        <span :class="['font-black', grp.montant >= 0 ? 'text-orange-200' : 'text-emerald-200']">{{ grp.montant >= 0 ? '−' : '+' }} {{ formatMAD(Math.abs(grp.montant)) }}</span>
-                                                    </div>
-                                                    <div :class="['flex justify-between gap-3 rounded-lg px-3 py-2 font-black text-[12px] mt-1', grp.couverture >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/50 text-red-300']">
-                                                        <span>{{ grp.couverture >= 0 ? '✅ Couvert' : '⚠️ Découvert' }}</span>
-                                                        <span>{{ formatMAD(grp.couverture) }}</span>
-                                                    </div>
-                                                </template>
-                                                <template v-else>
-                                                    <p class="text-slate-400 text-[10px] pl-2">
-                                                        🔗 Cet objectif d'épargne n'est rattaché à aucun compte bancaire — impossible de vérifier s'il est provisionné.
-                                                        <span class="text-slate-500">Liez-le à un compte dans l'onglet Trésorerie pour activer ce contrôle.</span>
-                                                    </p>
-                                                </template>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div><!-- /header -->
-
-                    <div v-if="anneeAffichage === moisBudgetaire.an" class="space-y-6">
-
-                        <!-- Bannière Mode Régularisation -->
-                        <div v-if="isPilotageRetro" class="flex items-center gap-3 bg-amber-900/20 border border-amber-500/40 rounded-xl px-4 py-3">
-                            <span class="text-base shrink-0">⚠️</span>
-                            <div class="flex-1 min-w-0">
-                                <p class="text-amber-300 font-black text-[10px] uppercase tracking-widest">Mode Régularisation</p>
-                                <p class="text-amber-200/60 text-[9px] mt-0.5">Vous modifiez un cycle passé. Les changements impacteront les soldes suivants.</p>
-                            </div>
-                            <button @click="pilotageViewedCycle = null" class="text-[9px] font-black text-amber-400 bg-amber-900/40 px-2 py-1 rounded-lg hover:bg-amber-800/50 transition-all whitespace-nowrap shrink-0">Cycle actuel</button>
-                        </div>
-
-                        <!-- ═══════════════════════════════════════════════════════════════
-                             v37.13 — CE QU'ON FAIT AUJOURD'HUI PASSE DEVANT.
-                             Les listes statiques occupaient le haut de l'écran et repoussaient
-                             la file de travail sous la ligne de flottaison : on lisait d'abord
-                             ce qu'on ne touche pas. Ordre inversé — à traiter, puis les
-                             tableaux de bord, puis les références, repliées.
-                             ═══════════════════════════════════════════════════════════════ -->
-                        <div class="space-y-4">
-                            <!-- ═══ v37.12 : la checklist devient une liste de tâches ═══
-                                 Trié par jourPrevu (ramené au rang dans le cycle : sur un
-                                 cycle 27→26, le j.1 vient APRÈS le j.27), et on ne montre
-                                 par défaut que ce qui reste à faire. -->
-                            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg">
-                                <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-750 gap-3 flex-wrap">
-                                    <div class="flex items-center gap-3 min-w-0">
-                                        <span class="text-blue-400 text-lg shrink-0">📋</span>
-                                        <span class="text-sm font-black uppercase tracking-widest text-white truncate">À traiter — {{ pilotageCycleLabel }}</span>
-                                    </div>
-                                    <div class="flex items-center gap-2 shrink-0">
-                                        <span class="text-[10px] px-2.5 py-1 rounded-lg font-black border bg-slate-900 border-slate-600 text-rose-300">
-                                            {{ formatMAD(resteATraiterPilotage) }} restants
+                                <!-- ✅ Terminé — replié par défaut -->
+                                <div v-if="tachesTerminees.length" class="rounded-xl border border-slate-700 bg-slate-900/60 overflow-hidden">
+                                    <button @click="pilotageTermineOuvert = !pilotageTermineOuvert"
+                                            class="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/60 transition-colors">
+                                        <span class="text-[10px] font-black uppercase tracking-widest text-green-400">✅ Terminé ({{ tachesTerminees.length }})</span>
+                                        <span class="flex items-center gap-2 shrink-0">
+                                            <span class="text-[10px] font-black text-green-500/80">{{ formatMAD(totalTraitePilotage) }}</span>
+                                            <span class="text-slate-500 text-xs">{{ pilotageTermineOuvert ? '▲' : '▼' }}</span>
                                         </span>
-                                        <span :class="['text-[10px] px-2.5 py-1 rounded-lg font-black border', tachesATraiter.length === 0 && tachesPilotage.length > 0 ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-slate-900 border-slate-600 text-blue-300']">
-                                            {{ tachesTerminees.length }} / {{ tachesPilotage.length }} faits
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div class="p-4 space-y-5">
-                                    <!-- v37.13 : dire pourquoi certaines lignes ne sont pas datées,
-                                         au lieu de laisser penser que le tri les ignore. -->
-                                    <p v-if="tachesSansDate" class="text-[10px] font-bold text-slate-400 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 leading-snug">
-                                        📅 {{ tachesSansDate }} ligne(s) sans jour de prélèvement : elles ferment la liste, faute de savoir où les placer.
-                                        Renseignez « Jour prévu » dans le Budget Structurel pour qu'elles rejoignent le bon paquet.
-                                        <span class="text-slate-500">(le champ est masqué sur une charge découpée en parts)</span>
-                                    </p>
-
-                                    <!-- Inbox Zero : plus rien à faire -->
-                                    <div v-if="tachesATraiter.length === 0" class="text-center py-10">
-                                        <p class="text-4xl mb-3">✅</p>
-                                        <p class="text-sm font-black text-green-400 uppercase tracking-widest">Tout est traité</p>
-                                        <p class="text-[11px] text-slate-400 font-bold mt-1">
-                                            {{ tachesPilotage.length }} élément(s) pointé(s) sur {{ pilotageCycleLabel }}.
-                                            Le prochain cycle repartira à zéro.
-                                        </p>
-                                    </div>
-
-                                    <!-- ⚠️ En retard / ⏳ Cette semaine / 📅 Plus tard -->
-                                    <div v-for="paquet in tachesGroupees" :key="paquet.cle">
-                                        <p :class="['text-[9px] font-black uppercase tracking-widest mb-2 pb-1 border-b flex items-center justify-between gap-2',
-                                                    paquet.teinte === 'rose' ? 'text-rose-400 border-rose-900/50'
-                                                    : (paquet.teinte === 'amber' ? 'text-amber-400 border-amber-900/50' : 'text-slate-400 border-slate-700')]">
-                                            <span>{{ paquet.titre }}</span>
-                                            <span class="font-mono">{{ paquet.taches.length }}</span>
-                                        </p>
-                                        <transition-group tag="div" name="tache" class="space-y-1.5">
-                                            <div v-for="t in paquet.taches" :key="t.cle"
-                                                 :class="['flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border transition-all',
-                                                          t.teinte === 'orange' ? 'border-slate-700 hover:border-orange-500'
-                                                          : (t.teinte === 'blue' ? 'border-slate-700 hover:border-blue-500'
-                                                          : (t.teinte === 'purple' ? 'border-slate-700 hover:border-purple-500' : 'border-slate-700 hover:border-rose-500'))]">
-                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
-                                                    <input type="checkbox" :checked="false"
-                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
-                                                           class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer shrink-0"/>
-                                                    <span class="shrink-0">{{ t.icone }}</span>
-                                                    <span class="text-sm font-bold text-slate-200 truncate">{{ t.libelle }}</span>
-                                                    <span v-if="t.jourPrevu"
-                                                          :class="['text-[9px] font-black px-1.5 py-0.5 rounded-full border shrink-0',
-                                                                   t.retard ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                                                                   : (t.proche ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-                                                                   : 'bg-slate-700/40 text-slate-400 border-slate-600/50')]">📅 j.{{ t.jourPrevu }}</span>
-                                                    <span v-else class="text-[9px] font-black px-1.5 py-0.5 rounded-full border border-dashed border-slate-600 text-slate-500 shrink-0"
-                                                          title="Aucune date de prélèvement sur cette ligne — renseignez « jour prévu » dans le Budget Structurel pour la classer dans le bon paquet">📅 sans date</span>
-                                                    <span class="text-[9px] text-slate-600 font-bold uppercase tracking-widest hidden md:inline shrink-0">{{ t.groupe }}</span>
-                                                </label>
-                                                <div class="flex items-center gap-2 ml-3 shrink-0">
-                                                    <input type="number" :value="montantPayeCycle(t.ref, cyclePilotage)"
-                                                           @input="setMontantPayeCycle(t.ref, $event.target.value, cyclePilotage)"
-                                                           placeholder="0" title="Avance déjà versée"
-                                                           class="w-20 bg-slate-950 text-slate-200 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
-                                                    <span class="text-[10px] font-black text-slate-400 w-16 text-right">/ {{ formatMAD(t.due).replace(' DH', '') }}</span>
-                                                </div>
-                                            </div>
-                                        </transition-group>
-                                    </div>
-
-                                    <!-- ✅ Terminé — replié par défaut -->
-                                    <div v-if="tachesTerminees.length" class="rounded-xl border border-slate-700 bg-slate-900/60 overflow-hidden">
-                                        <button @click="pilotageTermineOuvert = !pilotageTermineOuvert"
-                                                class="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/60 transition-colors">
-                                            <span class="text-[10px] font-black uppercase tracking-widest text-green-400">✅ Terminé ({{ tachesTerminees.length }})</span>
-                                            <span class="flex items-center gap-2 shrink-0">
-                                                <span class="text-[10px] font-black text-green-500/70">{{ formatMAD(totalTraitePilotage) }}</span>
-                                                <span class="text-slate-500 text-xs">{{ pilotageTermineOuvert ? '▲' : '▼' }}</span>
-                                            </span>
-                                        </button>
-                                        <div v-show="pilotageTermineOuvert" class="px-3 pb-3 space-y-1.5 border-t border-slate-800 pt-3">
-                                            <div v-for="t in tachesTerminees" :key="'ok_' + t.cle"
-                                                 class="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
-                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
-                                                    <input type="checkbox" :checked="true"
-                                                           @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
-                                                           class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-green-500 cursor-pointer shrink-0"/>
-                                                    <span class="text-xs font-bold text-slate-500 line-through truncate">{{ t.libelle }}</span>
-                                                    <span v-if="t.quand" class="text-[9px] text-slate-600 font-bold shrink-0">le {{ t.quand }}</span>
-                                                </label>
-                                                <span class="text-xs font-black text-green-500/80 ml-3 shrink-0">{{ formatMAD(t.regle || t.due) }}</span>
-                                            </div>
+                                    </button>
+                                    <div v-show="pilotageTermineOuvert" class="px-3 pb-3 space-y-1.5 border-t border-slate-800 pt-3">
+                                        <div v-for="t in tachesTerminees" :key="'ok_' + t.cle"
+                                             class="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
+                                            <label class="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
+                                                <input type="checkbox" :checked="true"
+                                                       @change="toggleItemPaid(t.ref, t.due, cyclePilotage)"
+                                                       class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-green-500 cursor-pointer shrink-0"/>
+                                                <span class="text-[9px] font-black text-slate-500 shrink-0 whitespace-nowrap">{{ t.badge }}</span>
+                                                <span class="text-xs font-bold text-slate-500 line-through truncate">{{ t.libelle }}</span>
+                                                <span v-if="t.quand" class="text-[9px] text-slate-600 font-bold shrink-0">le {{ t.quand }}</span>
+                                            </label>
+                                            <span class="text-xs font-black text-green-500/80 ml-3 shrink-0">{{ formatMAD(t.regle || t.due) }}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-
                         </div>
 
-                        <!-- ═══ v32.00 Realized-T0 : conso déjà engagée sur le cycle ═══ -->
-                        <div v-if="!isCyclePasse && consoCategoriesT0.length" :class="['rounded-2xl border overflow-hidden text-left shadow-lg bg-slate-800', consoT0Renseigne ? 'border-violet-600/60' : 'border-amber-600/50']">
-                            <div :class="['flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-700', consoT0Renseigne ? 'bg-violet-900/20' : 'bg-amber-900/20']">
+                        <!-- ═══ v32.00 Realized-T0 : conso déjà engagée sur le cycle ═══
+                             v37.16 : le « Budget conso restant » de l'ancien en-tête vit
+                             désormais ici, avec sa bulle de détail. -->
+                        <div v-if="!isCyclePasse && consoCategoriesT0.length" :class="['rounded-2xl border text-left shadow-lg bg-slate-800', consoT0Renseigne ? 'border-violet-600/60' : 'border-amber-600/50']">
+                            <div :class="['flex items-center justify-between gap-3 px-4 md:px-5 py-3 border-b border-slate-700 rounded-t-2xl flex-wrap', consoT0Renseigne ? 'bg-violet-900/20' : 'bg-amber-900/20']">
                                 <div class="flex items-center gap-3 min-w-0">
                                     <span class="text-lg shrink-0">📊</span>
                                     <div class="min-w-0">
                                         <p class="text-sm font-black uppercase tracking-widest text-white">Réalisé à T0 — conso engagée</p>
-                                        <p :class="['text-[9px] font-bold mt-0.5', consoT0Renseigne ? 'text-violet-300' : 'text-amber-300']">
+                                        <p :class="['text-[10px] font-bold mt-0.5', consoT0Renseigne ? 'text-violet-300' : 'text-amber-300']">
                                             <template v-if="consoT0Renseigne">✅ Le reste du cycle est piloté par votre réel</template>
                                             <template v-else>⚠️ Non saisi — le reste est estimé au prorata du temps</template>
                                         </p>
@@ -5602,21 +5293,68 @@
                                 <div class="flex items-center gap-1.5 shrink-0">
                                     <button @click="remplirConsoT0DepuisReel()"
                                             title="Agréger les transactions réelles saisies depuis le début du cycle"
-                                            class="text-[9px] font-black px-2.5 py-1.5 rounded-lg border border-violet-500/60 text-violet-300 hover:bg-violet-600 hover:text-white transition-all whitespace-nowrap">⚡ Depuis le réel</button>
+                                            class="text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-violet-500/60 text-violet-300 hover:bg-violet-600 hover:text-white transition-all whitespace-nowrap">⚡ Depuis le réel</button>
                                     <button v-if="consoT0Renseigne" @click="resetConsoT0()"
                                             title="Effacer la saisie de ce cycle"
-                                            class="text-[9px] font-black px-2 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:border-red-500 hover:text-red-300 transition-all">↩</button>
+                                            class="text-[10px] font-black px-2 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:border-red-500 hover:text-red-300 transition-all">↩</button>
+                                </div>
+                            </div>
+                            <!-- Budget conso restant + bulle « Disponible réel » -->
+                            <div class="relative px-4 md:px-5 py-3 border-b border-slate-700" data-bulle-cle="conso-detail"
+                                 @pointerenter="survolBulle('conso-detail', $event)" @pointerleave="quitterBulle('conso-detail', $event)">
+                                <button type="button" @click="basculerBulle('conso-detail')" class="w-full flex items-center justify-between gap-3 text-left flex-wrap">
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-300">🛒 Budget conso restant</span>
+                                    <span class="flex items-baseline gap-2">
+                                        <span :class="['text-lg font-black tabular-nums', budgetConsoRestantReel >= 0 ? 'text-emerald-300' : 'text-red-400']">{{ formatMAD(budgetConsoRestantReel) }}</span>
+                                        <span v-if="budgetSemaineReel !== null" class="text-[10px] font-bold text-slate-400">soit {{ formatMAD(budgetSemaineReel) }} / sem</span>
+                                        <span class="text-[10px] font-black text-slate-500">ⓘ</span>
+                                    </span>
+                                </button>
+                                <div v-if="bulleOuverte === 'conso-detail'" data-bulle class="absolute top-full right-0 left-0 md:left-auto md:w-[22rem] md:right-5 pt-2 z-[200]">
+                                    <div class="bg-slate-950 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-left text-[11px] text-slate-200 max-h-[70vh] overflow-y-auto">
+                                        <p class="font-black uppercase tracking-widest text-emerald-300 mb-2 text-[10px] border-b border-slate-700 pb-1.5">📊 Disponible réel</p>
+                                        <div class="space-y-1.5 mb-3">
+                                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🅰️ Enveloppe budgétaire</p>
+                                            <div class="flex justify-between gap-3 pl-2"><span class="text-purple-300">Budget conso du cycle</span><span class="font-black text-white">{{ formatMAD(budgetConsoCycle) }}</span></div>
+                                            <div class="flex justify-between gap-3 pl-2">
+                                                <span :class="consoT0Renseigne ? 'text-orange-400' : 'text-amber-400'">− Déjà engagé <template v-if="!consoT0Renseigne">(non saisi)</template></span>
+                                                <span class="font-black text-orange-200">− {{ formatMAD(consoEngageeT0) }}</span>
+                                            </div>
+                                            <div :class="['flex justify-between gap-3 font-black pl-2', contrainteConso === 'budget' ? 'text-emerald-300' : 'text-slate-400']">
+                                                <span>= Reste au budget {{ contrainteConso === 'budget' ? '◀' : '' }}</span><span>{{ formatMAD(enveloppeConsoRestante) }}</span>
+                                            </div>
+                                        </div>
+                                        <div class="space-y-1.5 mb-3 border-t border-slate-700 pt-2">
+                                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">🅱️ Trésorerie</p>
+                                            <div class="flex justify-between gap-3 pl-2"><span class="text-emerald-400">💰 Tréso instantanée</span><span class="font-black text-white">{{ formatMAD(tresoActuelleCourante) }}</span></div>
+                                            <div v-if="revenusEnAttenteCourant > 0" class="flex justify-between gap-3 pl-2"><span class="text-sky-400">📥 + Revenus en attente</span><span class="font-black text-sky-200">+ {{ formatMAD(revenusEnAttenteCourant) }}</span></div>
+                                            <div class="flex justify-between gap-3 pl-2"><span class="text-orange-400">➖ Obligations (hors conso)</span><span class="font-black text-white">− {{ formatMAD(obligationsCourantHorsConso) }}</span></div>
+                                            <div :class="['flex justify-between gap-3 font-black pl-2', contrainteConso === 'cash' ? 'text-emerald-300' : 'text-slate-400']">
+                                                <span>= Cash dispo {{ contrainteConso === 'cash' ? '◀' : '' }}</span><span>{{ formatMAD(cashDispoPourConso) }}</span>
+                                            </div>
+                                        </div>
+                                        <div class="space-y-1.5 border-t border-slate-700 pt-2">
+                                            <div :class="['flex justify-between gap-3 font-black text-[12px]', budgetConsoRestantReel >= 0 ? 'text-emerald-300' : 'text-red-300']">
+                                                <span>= Budget Conso Restant</span><span>{{ formatMAD(budgetConsoRestantReel) }}</span>
+                                            </div>
+                                            <p class="text-[9px] text-slate-500 font-bold">{{ contrainteConso === 'budget' ? '🅰️ Limité par votre budget conso' : '🅱️ Limité par la trésorerie disponible' }}</p>
+                                            <div v-if="chargesVarHebdoDetail.length > 0" class="border-t border-slate-800 pt-1.5 mt-1.5">
+                                                <div class="flex justify-between gap-3 mb-1"><span class="font-black uppercase tracking-widest text-purple-300 text-[10px]">🎯 Besoin hebdo théorique</span><span class="font-black text-purple-300">{{ formatMAD(besoinVariableHebdoTheorique) }}</span></div>
+                                                <div v-for="c in chargesVarHebdoDetail" :key="'hb_' + c.label" class="flex justify-between gap-3 pl-3 text-[10px]"><span class="text-slate-400">↳ {{ c.label }}</span><span class="font-bold text-slate-200">{{ formatMAD(c.valeur) }}</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <!-- v34.06 : Mode Voyage — sélecteur de dates -->
-                            <div :class="['px-5 py-3 border-b border-slate-700 flex items-center justify-between gap-3 flex-wrap', modeVoyageActif ? 'bg-sky-900/30' : 'bg-slate-900/40']">
+                            <div :class="['px-4 md:px-5 py-3 border-b border-slate-700 flex items-center justify-between gap-3 flex-wrap', modeVoyageActif ? 'bg-sky-900/30' : 'bg-slate-900/40']">
                                 <div class="flex items-center gap-3 flex-wrap">
                                     <span class="text-lg">✈️</span>
                                     <div>
                                         <label class="text-[11px] font-black uppercase tracking-widest text-sky-200">Voyage · absence</label>
-                                        <p class="text-[9px] font-bold text-slate-400">Chaque cycle ne déduit que les jours qui tombent chez lui</p>
+                                        <p class="text-[10px] font-bold text-slate-400">Chaque cycle ne déduit que les jours qui tombent chez lui</p>
                                     </div>
-                                    <div class="flex items-center gap-1.5">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
                                         <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Du</span>
                                         <input type="date" :value="soldesInitiaux.voyageDebut || ''"
                                                @change="setVoyage('voyageDebut', $event.target.value)"
@@ -5645,9 +5383,9 @@
                                     Aucun jour de ce voyage ne tombe sur le cycle affiché ({{ cycleLabel }}).
                                 </p>
                             </div>
-                            <div class="p-4 space-y-2">
+                            <div class="p-3 md:p-4 space-y-2">
                                 <div v-for="c in consoCategoriesT0" :key="'ct0_' + c.key"
-                                     class="flex items-center justify-between gap-3 p-3 bg-slate-900/90 rounded-xl border border-slate-700 hover:border-violet-500 transition-all">
+                                     class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-3 bg-slate-900/90 rounded-xl border border-slate-700 hover:border-violet-500 transition-all">
                                     <div class="min-w-0 flex-1">
                                         <p class="text-sm font-bold text-slate-200 truncate flex items-center gap-2">
                                             <span class="truncate">{{ c.label }}</span>
@@ -5672,17 +5410,17 @@
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="flex items-center gap-2 shrink-0">
+                                    <div class="flex items-center gap-2 shrink-0 ml-auto">
                                         <input type="number" min="0" :value="c.engage"
                                                @input="setConsoT0(c.key, $event.target.value)"
                                                placeholder="0"
                                                class="w-24 bg-slate-950 text-violet-300 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-violet-400 transition-colors"/>
-                                        <span class="text-[10px] font-black text-slate-400 w-14 text-right">/ {{ formatMAD(c.budget).replace(' DH', '') }}</span>
+                                        <span class="text-[10px] font-black text-slate-400 w-14 text-right tabular-nums">/ {{ formatNombre(c.budget) }}</span>
                                         <span :class="['text-[10px] font-black w-16 text-right', c.reste > 0 ? 'text-emerald-400' : 'text-red-400']">{{ formatMAD(c.reste) }}</span>
                                     </div>
                                 </div>
                                 <!-- Totaux -->
-                                <div class="flex items-center justify-between gap-3 pt-3 mt-1 border-t border-slate-700 px-3">
+                                <div class="flex items-center justify-between gap-3 pt-3 mt-1 border-t border-slate-700 px-3 flex-wrap">
                                     <div class="min-w-0">
                                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-300">Total engagé · J+{{ joursCycleEcoules }} / {{ joursCycleTotal }}</p>
                                         <p :class="['text-[9px] font-bold mt-0.5', deriveConsoT0 <= 0 ? 'text-emerald-400' : 'text-red-400']">
@@ -5699,54 +5437,87 @@
                             </div>
                         </div>
 
+                        <!-- ═══ v37.16 : les comptes, repliés — chiffres du Relevé, bulle au survol/tap ═══ -->
+                        <details v-if="!isCyclePasse && atterrissageCycle.comptes.length" data-comptes-cycle class="bg-slate-800 rounded-2xl border border-slate-700 text-left shadow-lg">
+                            <summary class="flex items-center justify-between gap-3 px-4 md:px-5 py-3 cursor-pointer select-none hover:bg-slate-700/40 rounded-2xl transition-colors">
+                                <span class="text-[11px] font-black uppercase tracking-widest text-slate-200">🏦 Comptes du cycle — fin le {{ kpiAtterrissage.dateFin }}</span>
+                                <span v-if="kpiAtterrissage.negatif" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-600 text-white shrink-0">
+                                    ⚠️ {{ kpiAtterrissage.alertes.length + (kpiAtterrissage.montant < 0 ? 1 : 0) }} à découvert
+                                </span>
+                            </summary>
+                            <div class="p-3 md:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-700">
+                                <div v-for="c in atterrissageCycle.comptes" :key="'cc_' + c.key" class="relative"
+                                     :data-bulle-cle="'compte:' + c.key"
+                                     @pointerenter="survolBulle('compte:' + c.key, $event)" @pointerleave="quitterBulle('compte:' + c.key, $event)">
+                                    <button type="button" @click="basculerBulle('compte:' + c.key)" :data-compte="c.key"
+                                            :class="['w-full text-left p-3 rounded-xl border-2 transition-colors bg-slate-900',
+                                                     c.reel && c.atterrissage < 0 ? 'border-red-600 hover:border-red-400' : 'border-slate-700 hover:border-emerald-500']">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <p class="text-xs font-black text-slate-100 truncate min-w-0">{{ c.icon }} {{ c.label }}</p>
+                                            <p :class="['text-sm font-black tabular-nums shrink-0', c.reel && c.atterrissage < 0 ? 'text-red-400' : 'text-white']">{{ formatMAD(c.atterrissage) }}</p>
+                                        </div>
+                                        <p class="text-[10px] font-bold text-slate-400 mt-1">aujourd'hui {{ formatMAD(c.t0) }} · {{ c.lignes.length }} ligne{{ c.lignes.length > 1 ? 's' : '' }} ⓘ</p>
+                                        <p v-if="c.reel && c.atterrissage < 0" class="text-[10px] font-black text-red-400 mt-0.5">⚠️ Découvert projeté le {{ kpiAtterrissage.dateFin }}</p>
+                                        <p v-else-if="!c.reel" class="text-[10px] font-bold text-violet-300 mt-0.5">💎 Poche d'épargne alimentée ce cycle</p>
+                                    </button>
+                                    <div v-if="bulleOuverte === 'compte:' + c.key" data-bulle class="absolute top-full left-0 right-0 pt-2 z-[200]">
+                                        <div class="bg-slate-950 text-slate-200 border border-slate-600 rounded-xl shadow-2xl p-4 text-[11px] max-h-[70vh] overflow-y-auto">
+                                            <p class="font-black uppercase tracking-widest text-slate-300 text-[10px] mb-1.5">{{ c.icon }} {{ c.label }}</p>
+                                        <div class="space-y-1">
+                                            <div class="flex justify-between gap-3"><span class="text-slate-400">Solde aujourd'hui</span><span class="font-black text-white tabular-nums">{{ formatMAD(c.t0) }}</span></div>
+                                            <div class="flex justify-between gap-3"><span class="text-sky-300">+ Entrées du cycle</span><span class="font-black text-sky-200 tabular-nums">+ {{ formatMAD(c.entrees) }}</span></div>
+                                            <div class="flex justify-between gap-3"><span class="text-orange-300">− Sorties du cycle</span><span class="font-black text-orange-200 tabular-nums">− {{ formatMAD(c.sorties) }}</span></div>
+                                            <div :class="['flex justify-between gap-3 rounded-lg px-2.5 py-1.5 font-black mt-1', c.reel && c.atterrissage < 0 ? 'bg-red-900/70 text-red-100' : 'bg-emerald-900/60 text-emerald-200']">
+                                                <span>= {{ c.reel && c.atterrissage < 0 ? 'Découvert' : 'Atterrissage' }} le {{ kpiAtterrissage.dateFin }}</span>
+                                                <span class="tabular-nums">{{ formatMAD(c.atterrissage) }}</span>
+                                            </div>
+                                        </div>
+                                        <div v-if="c.lignes.length" class="mt-2 pt-2 border-t border-slate-800 space-y-0.5">
+                                            <div v-for="(l, li) in c.lignes.slice(0, 10)" :key="c.key + '_' + li" class="flex justify-between gap-2 text-[10px]">
+                                                <span class="text-slate-400 truncate min-w-0">{{ l.libelle }}<span v-if="l.jourPrevu" class="text-slate-600 font-bold ml-1">j.{{ l.jourPrevu }}</span></span>
+                                                <span :class="['font-bold shrink-0 tabular-nums', l.type === 'credit' ? 'text-sky-300' : 'text-slate-200']">{{ l.type === 'credit' ? '+' : '−' }} {{ formatMAD(l.montant) }}</span>
+                                            </div>
+                                            <p v-if="c.lignes.length > 10" class="text-[10px] text-slate-500 font-bold">+ {{ c.lignes.length - 10 }} autre{{ c.lignes.length - 10 > 1 ? 's' : '' }} ligne{{ c.lignes.length - 10 > 1 ? 's' : '' }}</p>
+                                        </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
+
                         <!-- v22.60 : Sélecteur réduit — jourDePaie seul -->
-                        <div class="flex items-center gap-3 bg-slate-800/60 rounded-2xl border border-slate-700 px-5 py-4">
+                        <div class="flex items-center gap-3 bg-slate-800 rounded-2xl border border-slate-700 px-4 md:px-5 py-3 flex-wrap">
                             <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">📅 Paie le</span>
                             <input type="number" min="1" max="31" v-model.number="soldesInitiaux.jourDePaie" @input="handleDataChange" class="w-16 bg-slate-900 text-blue-300 font-black text-lg p-2 rounded-xl border border-blue-700 text-center outline-none focus:border-blue-400"/>
                             <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">de chaque mois</span>
-                            <div class="ml-auto text-right">
-                                <p class="text-[10px] font-black uppercase tracking-widest text-emerald-400">⏳ J−{{ joursRestantsAvantPaie }} avant la prochaine paie</p>
-                                <p class="text-[9px] text-slate-500 mt-0.5 font-bold">Cycle : {{ cycleLabel }}</p>
-                                <p class="text-[9px] text-blue-400 mt-0.5 font-black">🏦 Base cycle : {{ formatMAD(soldeInitialCycleActuel) }}</p>
-                                <p class="text-[9px] mt-0.5 font-black" :class="journalHybride.soldeAtterrissage >= 0 ? 'text-emerald-400' : 'text-red-400'">🏁 Atterrissage : {{ formatMAD(journalHybride.soldeAtterrissage) }}</p>
-                            </div>
+                            <p class="ml-auto text-[10px] text-blue-300 font-black">🏦 Base cycle : {{ formatMAD(soldeInitialCycleActuel) }}</p>
                         </div>
 
-                        <!-- v23.40 : Sélecteur de cycle compact -->
-                        <div class="flex items-center gap-3 bg-slate-900/40 rounded-xl px-4 py-2.5 border border-slate-700/60">
-                            <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 shrink-0">📅 Cycle</span>
-                            <select :value="pilotageViewedCycle || ''"
-                                @change="pilotageViewedCycle = $event.target.value || null"
-                                class="flex-1 bg-slate-800 text-slate-200 text-xs font-bold border border-slate-600 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer">
-                                <option value="">🗓️ Cycle actuel</option>
-                                <option v-for="cy in cyclesDisponibles" :key="cy.key" :value="cy.key">{{ cy.nom }}</option>
-                            </select>
-                            <span v-if="isPilotageRetro" class="text-[9px] font-bold text-amber-400 shrink-0">⚠️ Rétro</span>
-                        </div>
                         <!-- v25.90 Multi-Ledger-Core : accès rapide au Journal / Relevé depuis le Pilotage -->
                         <button @click="ouvrirReleve()" class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-900/30 border border-indigo-400/40">
                             <span class="text-base">📑</span>
                             <span>Ouvrir le Journal / Relevé</span>
                         </button>
-                        <!-- ═══ v37.13 : références, en bas et repliées ═══════════════ -->
+
+                        <!-- ═══ v37.13 : références, en bas et repliées ═══════════════
+                             v37.16 : lues ET écrites sur le cycle AFFICHÉ (cyclePilotage).
+                             Elles cochaient le cycle EN COURS même en régularisation :
+                             pointer « Appartement » sur septembre l'enregistrait comme
+                             encaissé… en octobre (mesuré sur la v37.15). -->
                         <div class="space-y-4">
-                            <!-- 🟢 Entrées d'Argent — v37.13 : repliée par défaut, en bas de page.
-                                 On la pointe une fois par cycle, le jour de la paie ; elle n'a
-                                 pas à occuper l'écran les vingt-neuf autres jours. -->
                             <details class="bg-slate-800 rounded-2xl border border-green-800/50 overflow-hidden text-left shadow-lg">
-                                <summary class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-green-900/20 cursor-pointer select-none hover:bg-green-900/30 transition-colors">
-                                    <div class="flex items-center gap-3">
+                                <summary class="flex items-center justify-between px-4 md:px-5 py-3 border-b border-slate-700 bg-green-900/20 cursor-pointer select-none hover:bg-green-900/30 transition-colors gap-3">
+                                    <div class="flex items-center gap-3 min-w-0">
                                         <span class="text-green-400 text-lg">🟢</span>
                                         <span class="text-sm font-black uppercase tracking-widest text-white">Entrées d'Argent</span>
-                                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">{{ revenusRestantsPilotage }} à pointer</span>
+                                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">{{ revenusRestantsPilotage }} à pointer</span>
                                     </div>
-                                    <span class="text-sm font-black text-green-400">{{ formatMAD(tresoEntrees) }}</span>
+                                    <span class="text-sm font-black text-green-400 shrink-0">{{ formatMAD(tresoEntrees) }}</span>
                                 </summary>
-                                <div class="p-4 space-y-2">
+                                <div class="p-3 md:p-4 space-y-2">
                                     <div v-for="(rev, key) in revenusBudgetairesTries" :key="'rev_' + key"
-                                         :class="['flex items-center justify-between p-3 rounded-xl group border transition-all', getDueRevenu(rev, moisBudgetaire.an) <= 0 ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-slate-900/90 border-slate-700 hover:border-green-500']">
-                                        <!-- v25.70 Pilotage-Align : revenu suspendu ce mois → affiché à 0, non cochable -->
-                                        <template v-if="getDueRevenu(rev, moisBudgetaire.an) <= 0">
+                                         :class="['flex items-center justify-between p-3 rounded-xl group border transition-all', getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois) <= 0 ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-slate-900/90 border-slate-700 hover:border-green-500']">
+                                        <template v-if="getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois) <= 0">
                                             <div class="flex items-center gap-3 flex-1">
                                                 <span class="text-sm font-bold text-slate-400">{{ rev.label }}</span>
                                                 <span class="text-[9px] font-black bg-slate-700/40 text-slate-400 border border-slate-600/60 px-1.5 py-0.5 rounded-full">⏸️ Suspendu ce mois</span>
@@ -5754,16 +5525,16 @@
                                             <span class="text-sm font-black ml-4 text-slate-600">{{ formatMAD(0) }}</span>
                                         </template>
                                         <template v-else>
-                                            <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                            <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
                                                 <input type="checkbox"
-                                                       :checked="isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an))"
-                                                       @change="toggleItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)); handleDataChange()"
-                                                       class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer"/>
-                                                <span :class="['text-sm font-bold transition-all', isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-green-300']">{{ rev.label }}</span>
-                                                 <span v-if="isFluxCetteSemaine(rev.jourPrevu) && !isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an))" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full ml-1">⏳ Cette sem.</span>
-                                                 <span v-if="rev.jourPrevu && !isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ rev.jourPrevu }}</span>
+                                                       :checked="isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage)"
+                                                       @change="toggleItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage)"
+                                                       class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-green-500 focus:ring-green-500 cursor-pointer shrink-0"/>
+                                                <span :class="['text-sm font-bold transition-all truncate', isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-green-300']">{{ rev.label }}</span>
+                                                <span v-if="isFluxCetteSemaine(rev.jourPrevu) && !isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full shrink-0">⏳ Cette sem.</span>
+                                                <span v-if="rev.jourPrevu && !isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="text-[9px] text-slate-500 font-bold shrink-0">j.{{ rev.jourPrevu }}</span>
                                             </label>
-                                            <span :class="['text-sm font-black ml-4', isItemPaid(rev, getDueRevenu(rev, moisBudgetaire.an)) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(getDueRevenu(rev, moisBudgetaire.an)) }}</span>
+                                            <span :class="['text-sm font-black ml-4 shrink-0', isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois)) }}</span>
                                         </template>
                                     </div>
                                     <div v-if="!donneesAnnuelles[moisBudgetaire.an] || !Object.keys(donneesAnnuelles[moisBudgetaire.an]?.revenus || {}).length" class="text-center py-4 text-slate-500 text-sm">Aucune entrée configurée</div>
@@ -5773,56 +5544,51 @@
                             <!-- Vue par catégorie, conservée sous un repli : elle reste
                                  la référence quand on cherche une ligne précise. -->
                             <details class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg">
-                                <summary class="px-5 py-3 cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-200 select-none">
+                                <summary class="px-4 md:px-5 py-3 cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-white select-none">
                                     🗂️ Vue détaillée par catégorie
                                 </summary>
-                                <div class="p-4 space-y-4 border-t border-slate-700">
-                                    <div v-if="donneesAnnuelles[moisBudgetaire.an] && Object.keys(donneesAnnuelles[moisBudgetaire.an]?.chargesFixes || {}).length > 0">
+                                <div class="p-3 md:p-4 space-y-4 border-t border-slate-700">
+                                    <div v-if="chargesFixesBudgetairesTriees.length > 0">
                                         <p class="text-[9px] text-orange-400 font-black uppercase tracking-widest mb-2 border-b border-orange-900/50 pb-1 mt-2">🏢 Charges Fixes</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="(f, key) in chargesFixesBudgetairesTriees" :key="key" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-orange-500 transition-all">
-                                                <label class="flex items-center gap-3 cursor-pointer flex-1">
-                                                    <input type="checkbox" :checked="isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" @change="toggleItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer"/>
-                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(f, getDueFixe(f, moisBudgetaire.an)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-orange-300']">{{ f.label }}</span>
-                                                 <span v-if="getDueFixe(f, moisBudgetaire.an) <= 0" class="text-[9px] font-black bg-slate-700/40 text-slate-400 border border-slate-600/60 px-1.5 py-0.5 rounded-full ml-1">⏸️ Suspendu ce mois</span>
-                                                 <span v-if="isFluxCetteSemaine(f.jourPrevu) && !isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full ml-1">⏳ Cette sem.</span>
-                                                 <span v-if="f.jourPrevu && !isItemPaid(f, getDueFixe(f, moisBudgetaire.an))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ f.jourPrevu }}</span>
+                                            <div v-for="(f, key) in chargesFixesBudgetairesTriees" :key="'vf_' + key" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-orange-500 transition-all gap-3">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0 flex-wrap">
+                                                    <input type="checkbox" :checked="isItemPaid(f, getDueFixe(f, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" @change="toggleItemPaid(f, getDueFixe(f, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer shrink-0"/>
+                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(f, getDueFixe(f, pilotageViewedAn, pilotageViewedMois), cyclePilotage) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-orange-300']">{{ f.label }}</span>
+                                                    <span v-if="getDueFixe(f, pilotageViewedAn, pilotageViewedMois) <= 0" class="text-[9px] font-black bg-slate-700/40 text-slate-400 border border-slate-600/60 px-1.5 py-0.5 rounded-full">⏸️ Suspendu ce mois</span>
+                                                    <span v-if="f.jourPrevu && !isItemPaid(f, getDueFixe(f, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="text-[9px] text-slate-500 font-bold">j.{{ f.jourPrevu }}</span>
                                                 </label>
-                                                <div class="flex items-center gap-2 ml-4">
-                                                    <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-orange-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-orange-400 transition-colors"/>
-                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, getDueFixe(f, moisBudgetaire.an)) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(getDueFixe(f, moisBudgetaire.an)).replace(' DH', '') }}</span>
-                                                    <span class="text-[9px] text-slate-500 font-bold">DH</span>
+                                                <div class="flex items-center gap-2 shrink-0">
+                                                    <input type="number" :value="montantPayeCycle(f, cyclePilotage)" @input="setMontantPayeCycle(f, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-orange-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-orange-400 transition-colors"/>
+                                                    <span class="text-[10px] font-black text-slate-400 w-16 text-right tabular-nums">/ {{ formatMAD(getDueFixe(f, pilotageViewedAn, pilotageViewedMois)) }}</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-for="cat in chargesVarMensuellePilotage" :key="cat.label">
-                                        <p class="text-[9px] text-blue-400 font-black uppercase tracking-widest mb-2 border-b border-blue-900/50 pb-1 mt-2 flex items-center gap-2">
-                                            <span>🧾 {{ cat.label }}</span>
-                                            <span v-if="isFluxCetteSemaine(cat.jourPrevu)" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full">⏳ Cette sem.</span>
+                                    <div v-for="cat in chargesVarMensuellePilotage" :key="'vc_' + cat.label">
+                                        <p class="text-[9px] text-sky-400 font-black uppercase tracking-widest mb-2 border-b border-sky-900/50 pb-1 mt-2 flex items-center gap-2">
+                                            <span>🛒 {{ cat.label }}</span>
                                             <span v-if="cat.jourPrevu" class="text-[9px] text-slate-500 font-bold ml-auto">📅 j.{{ cat.jourPrevu }}</span>
                                         </p>
                                         <div class="space-y-1.5">
-                                            <div v-for="f in cat.details" :key="f.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-blue-500 transition-all">
-                                                <label class="flex items-center gap-3 cursor-pointer flex-1">
-                                                    <input type="checkbox" :checked="isItemPaid(f, f.montant)" @change="toggleItemPaid(f, f.montant)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 cursor-pointer"/>
-                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(f, f.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-blue-300']">{{ f.nom }}</span>
+                                            <div v-for="f in cat.details" :key="'vd_' + f.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-sky-500 transition-all gap-3">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                                    <input type="checkbox" :checked="isItemPaid(f, f.montant, cyclePilotage)" @change="toggleItemPaid(f, f.montant, cyclePilotage)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500 cursor-pointer shrink-0"/>
+                                                    <span :class="['text-sm font-bold transition-all truncate', isItemPaid(f, f.montant, cyclePilotage) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-sky-300']">{{ f.nom }}</span>
                                                 </label>
-                                                <div class="flex items-center gap-2 ml-4">
-                                                    <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-blue-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-blue-400 transition-colors"/>
-                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(f, f.montant) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(f.montant).replace(' DH', '') }}</span>
-                                                    <span class="text-[9px] text-slate-500 font-bold">DH</span>
+                                                <div class="flex items-center gap-2 shrink-0">
+                                                    <input type="number" :value="montantPayeCycle(f, cyclePilotage)" @input="setMontantPayeCycle(f, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-sky-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-sky-400 transition-colors"/>
+                                                    <span class="text-[10px] font-black text-slate-400 w-16 text-right tabular-nums">/ {{ formatMAD(f.montant) }}</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                     <div v-if="epargneBudgetairePilotage.length > 0">
-                                        <p class="text-[9px] text-purple-400 font-black uppercase tracking-widest mb-2 border-b border-purple-900/50 pb-1 mt-2">🎯 Épargne &amp; Virements</p>
+                                        <p class="text-[9px] text-violet-400 font-black uppercase tracking-widest mb-2 border-b border-violet-900/50 pb-1 mt-2">💎 Épargne &amp; Virements</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="ep in epargneBudgetairePilotage" :key="'ep'+ep.id"
-                                                 :class="['flex items-center justify-between p-3 rounded-xl group border transition-all', getDueFixe(ep, moisBudgetaire.an) <= 0 ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-slate-900/90 border-slate-700 hover:border-purple-500']">
-                                                <!-- v25.70 Pilotage-Align : épargne pointable ; suspendue → 0 + badge -->
-                                                <template v-if="getDueFixe(ep, moisBudgetaire.an) <= 0">
+                                            <div v-for="ep in epargneBudgetairePilotage" :key="'ve_' + ep.id"
+                                                 :class="['flex items-center justify-between p-3 rounded-xl group border transition-all gap-3', getDueFixe(ep, pilotageViewedAn, pilotageViewedMois) <= 0 ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-slate-900/90 border-slate-700 hover:border-violet-500']">
+                                                <template v-if="getDueFixe(ep, pilotageViewedAn, pilotageViewedMois) <= 0">
                                                     <div class="flex items-center gap-3 flex-1">
                                                         <span class="text-sm font-bold text-slate-400">{{ ep.nom || ep.label || 'Épargne' }}</span>
                                                         <span class="text-[9px] font-black bg-slate-700/40 text-slate-400 border border-slate-600/60 px-1.5 py-0.5 rounded-full">⏸️ Suspendu ce mois</span>
@@ -5830,28 +5596,27 @@
                                                     <span class="text-sm font-black ml-4 text-slate-600">{{ formatMAD(0) }}</span>
                                                 </template>
                                                 <template v-else>
-                                                    <label class="flex items-center gap-3 cursor-pointer flex-1">
-                                                        <input type="checkbox" :checked="isItemPaid(ep, getDueFixe(ep, moisBudgetaire.an))" @change="toggleItemPaid(ep, getDueFixe(ep, moisBudgetaire.an)); handleDataChange()" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-purple-500 focus:ring-purple-500 cursor-pointer"/>
-                                                        <span :class="['text-sm font-bold transition-all', isItemPaid(ep, getDueFixe(ep, moisBudgetaire.an)) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-purple-300']">{{ ep.nom || ep.label || 'Épargne' }}</span>
-                                                        <span v-if="ep.jourPrevu && !isItemPaid(ep, getDueFixe(ep, moisBudgetaire.an))" class="text-[9px] text-slate-500 font-bold ml-1">j.{{ ep.jourPrevu }}</span>
+                                                    <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                                        <input type="checkbox" :checked="isItemPaid(ep, getDueFixe(ep, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" @change="toggleItemPaid(ep, getDueFixe(ep, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500 cursor-pointer shrink-0"/>
+                                                        <span :class="['text-sm font-bold transition-all truncate', isItemPaid(ep, getDueFixe(ep, pilotageViewedAn, pilotageViewedMois), cyclePilotage) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-violet-300']">{{ ep.nom || ep.label || 'Épargne' }}</span>
+                                                        <span v-if="ep.jourPrevu && !isItemPaid(ep, getDueFixe(ep, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="text-[9px] text-slate-500 font-bold shrink-0">j.{{ ep.jourPrevu }}</span>
                                                     </label>
-                                                    <span :class="['text-sm font-black ml-4', isItemPaid(ep, getDueFixe(ep, moisBudgetaire.an)) ? 'text-purple-400' : 'text-slate-400']">{{ formatMAD(getDueFixe(ep, moisBudgetaire.an)) }}</span>
+                                                    <span :class="['text-sm font-black ml-4 shrink-0', isItemPaid(ep, getDueFixe(ep, pilotageViewedAn, pilotageViewedMois), cyclePilotage) ? 'text-violet-400' : 'text-slate-400']">{{ formatMAD(getDueFixe(ep, pilotageViewedAn, pilotageViewedMois)) }}</span>
                                                 </template>
                                             </div>
                                         </div>
                                     </div>
                                     <div v-if="getDepensesCycle(pilotageViewedMois, pilotageViewedAn).length > 0">
-                                        <p class="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 border-b border-red-900/50 pb-1 mt-2">⚠️ Flux Exceptionnels — {{ pilotageCycleLabel }}</p>
+                                        <p class="text-[9px] text-rose-400 font-black uppercase tracking-widest mb-2 border-b border-rose-900/50 pb-1 mt-2">⚠️ Flux Exceptionnels — {{ pilotageCycleLabel }}</p>
                                         <div class="space-y-1.5">
-                                            <div v-for="dep in getDepensesCycle(pilotageViewedMois, pilotageViewedAn)" :key="'dep'+dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-red-500 transition-all">
-                                                <label class="flex items-center gap-3 cursor-pointer flex-1">
-                                                    <input type="checkbox" :checked="isItemPaid(dep, dep.montant)" @change="toggleItemPaid(dep, dep.montant)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500 cursor-pointer"/>
-                                                    <span :class="['text-sm font-bold transition-all', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-red-300']">{{ dep.nom }}</span>
+                                            <div v-for="dep in getDepensesCycle(pilotageViewedMois, pilotageViewedAn)" :key="'vx_' + dep.id" class="flex items-center justify-between p-3 bg-slate-900/90 rounded-xl group border border-slate-700 hover:border-rose-500 transition-all gap-3">
+                                                <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                                    <input type="checkbox" :checked="isItemPaid(dep, dep.montant, cyclePilotage)" @change="toggleItemPaid(dep, dep.montant, cyclePilotage)" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-rose-500 focus:ring-rose-500 cursor-pointer shrink-0"/>
+                                                    <span :class="['text-sm font-bold transition-all truncate', isItemPaid(dep, dep.montant, cyclePilotage) ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-rose-300']">{{ dep.nom }}</span>
                                                 </label>
-                                                <div class="flex items-center gap-2 ml-4">
-                                                    <input type="number" :value="montantPayeCycle(dep)" @input="setMontantPayeCycle(dep, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-red-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-red-400 transition-colors"/>
-                                                    <span :class="['text-[10px] font-black transition-colors w-14 text-right', isItemPaid(dep, dep.montant) ? 'text-slate-600' : 'text-slate-400']">/ {{ formatMAD(dep.montant).replace(' DH', '') }}</span>
-                                                    <span class="text-[9px] text-slate-500 font-bold">DH</span>
+                                                <div class="flex items-center gap-2 shrink-0">
+                                                    <input type="number" :value="montantPayeCycle(dep, cyclePilotage)" @input="setMontantPayeCycle(dep, $event.target.value, cyclePilotage)" placeholder="0" class="w-20 bg-slate-950 text-rose-400 border border-slate-600 rounded p-1.5 text-right text-xs font-bold outline-none focus:border-rose-400 transition-colors"/>
+                                                    <span class="text-[10px] font-black text-slate-400 w-20 text-right tabular-nums">/ {{ formatMAD(dep.montant) }}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -7175,8 +6940,18 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart },
                 setup() {
-                    const CURRENT_VERSION = "37.15 Releve-Cycle";
+                    const CURRENT_VERSION = "37.16 Cockpit-Pilotage";
                     const CHANGELOG = [
+        { version: "37.16 Cockpit-Pilotage", date: "2026-10-04", changes: [
+            "POURQUOI LES BULLES SE CHEVAUCHAIENT — mesuré image par image sur votre vidéo, puis reproduit sur le code d'avant. La bulle de « Budget conso restant » laissait passer la souris (pointer-events-none) jusqu'à la carte du dessous, qui ouvrait la sienne ; pendant le fondu de 150 ms, DEUX bulles étaient visibles l'une sur l'autre, et une fois le fondu fini, celle qui restait n'était plus celle qu'on lisait. Un z-index plus haut n'y aurait rien changé : les deux bulles l'auraient eu. La règle est désormais : une seule bulle ouverte à la fois, opaque, en absolute z-[200] shadow-2xl sur un parent relative, et qui capte la souris — on peut descendre dedans pour la lire sans réveiller la carte du dessous. Au survol sur ordinateur, au tap sur téléphone ; un clic l'épingle, Échap ou un clic ailleurs la ferme.",
+            "TROIS CHIFFRES EN TÊTE, AUCUN AVEC SA PROPRE FORMULE — 🔥 Urgence = ce qu'il reste à décaisser d'ici 7 jours, retard compris et chiffré à part : c'est exactement la somme des paquets « En retard » et « Cette semaine » de la liste, qu'on peut donc vérifier à l'œil. 📈 Progression = réglé / total du cycle (payé + avances versées), barre épaisse avec un repère « aujourd'hui » pour comparer l'argent au temps, et le détail par nature (Fixe, Variable, Épargne, Exceptionnel) pour qu'un gros flux exceptionnel n'écrase pas la lecture des charges courantes. 🚨 Atterrissage = le solde de fin de cycle, lu dans le moteur du Relevé compte par compte ; en cas de découvert, la carte passe au rouge vif et dit « Découvert projeté le 26 octobre : − X DH », y compris quand c'est un AUTRE compte que le courant qui plonge.",
+            "UN SEUL ATTERRISSAGE À L'ÉCRAN — l'ancien onglet en affichait trois : la couverture de la bulle « Reste à payer », le Relevé, et un « 🏁 Atterrissage » en bas de page tiré d'un vieux calcul qui mélangeait tous les comptes (−20 929 DH contre −6 098 DH sur le même jeu de données). Ce dernier disparaît ; la carte est contrôlée égale au Relevé, au dirham.",
+            "À TRAITER, CATÉGORISÉ — trois paquets « ⚠️ En retard », « ⏳ Cette semaine », « 📅 Reste du mois », chacun avec son nombre de lignes et son montant ; chaque ligne porte avant son nom un badge [🏢 Fixe] [🛒 Variable] [💎 Épargne] [⚠️ Exceptionnel]. Sur téléphone, le nom passe sur deux lignes au lieu d'être tronqué.",
+            "VALIDATION EN UN CLIC, ET POURQUOI « ÉCHUES » — le bouton coche d'un coup les charges FIXES dont la date est arrivée (retard + aujourd'hui), avance partielle complétée au dû. Il ne coche pas celles de vendredi : marquer payée une charge pas encore prélevée gonflerait l'atterrissage de son montant. D'où son nom, « Valider les charges échues », plutôt que « de la semaine ». Un bandeau confirme et propose ↩ Annuler, qui rend l'état exact d'avant, avance comprise.",
+            "TROUVÉ EN CHEMIN, ET CORRIGÉ — en régularisation d'un cycle passé, « Entrées d'argent » et la vue par catégorie cochaient le cycle EN COURS : pointer « Appartement » sur septembre l'enregistrait comme encaissé en octobre. Lecture et écriture se font désormais sur le cycle affiché. Et les montants « / 600 DH » perdent enfin leur « DH » : le code le retirait avec une espace ordinaire alors que le format utilise une espace insécable.",
+            "RIEN DE PERDU — le budget conso restant (et sa bulle « Disponible réel ») vit dans le bloc « Réalisé à T0 » ; les comptes du cycle sont dans un repli « 🏦 Comptes du cycle », avec pour chacun le solde d'aujourd'hui, les entrées, les sorties et l'atterrissage, ligne à ligne comme dans le Relevé ; le sélecteur de cycle et « Clôturer » remontent dans l'en-tête. Le bascule « À T0 / Cette sem. / Fin cycle » disparaît : les trois cartes couvrent désormais ces trois horizons à la fois.",
+            "PREUVE — nouvelle suite navigateur (55 contrôles), jeu de données bâti autour de la date du jour, montants choisis pour que chaque total se lise à la main : Urgence 3 350 = 1 900 + 1 450, réglé 1 800 / 8 500, courant −450 = Relevé. Elle mesure aussi la bulle réelle (z-index 200, fond opaque, au-dessus de la file), le glissement d'une carte vers celle du dessous (jamais deux bulles), et l'écran d'un S24+ (aucun débordement, tap pour ouvrir et fermer). Rejouée sur le code d'avant : elle échoue.",
+        ] },
         { version: "37.15 Releve-Cycle", date: "2026-09-28", changes: [
             "LE DÉSORDRE ANNONCÉ N'EXISTAIT PAS, ET IL FALLAIT LE DIRE AVANT DE TOUCHER AU CODE — mesuré sur le cas exact du ticket (paie le 27, cycle « 27 sep → 26 oct ») : le salaire du j.27 est DÉJÀ la première ligne du Relevé, pas la dernière. Le tri du journal ramenait depuis longtemps chaque jour à son rang depuis la paie, si bien que le j.1 se range bien APRÈS le j.27. Cette version verrouille ce comportement par un contrôle automatique pour qu'il ne se reperde pas, mais elle ne le corrige pas : il n'y avait rien à corriger.",
             "CE QUI ÉTAIT VRAIMENT CASSÉ, ET C'EST PIRE QU'UN PROBLÈME D'ORDRE — les créances déclarées (Assurances) étaient rangées sur leur mois CIVIL. Une créance datée du 28 septembre, avec une paie le 27, atterrissait donc sur le cycle de SEPTEMBRE : un cycle déjà refermé, que le Relevé n'affiche plus. Mesuré : la ligne n'apparaissait dans AUCUN des cycles visibles. Elle ne s'affichait pas au mauvais endroit — elle disparaissait, et son montant manquait à l'atterrissage.",
@@ -13739,7 +13514,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                         // Atterrissage : somme des comptes sélectionnés (single/multi) ou patrimoine total (Global)
                         const _soldeAtterr = _rFiltres.length === 0 ? _sumSoldes() : _rFiltres.reduce((s, k) => s + (Number(soldes[k]) || 0), 0);
-                        return { entries, soldeAtterrissage: _soldeAtterr, soldesFinaux: soldes };
+                        return { entries, soldeAtterrissage: _soldeAtterr, soldesFinaux: soldes, courantKey };
                     };
 
                     // v32.70 : le popup Relevé n'est plus qu'une projection du moteur sur son état réactif
@@ -15013,6 +14788,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                        paie (0 à 30), et c'est ce rang qu'on compare.
                        ═══════════════════════════════════════════════════════════════ */
                     const _rangDansCycle = rangDansCycle;   // v37.15 : la formule vit désormais près de jourDePaie
+                    //  v37.16 : « cette semaine » = aujourd'hui + 7 jours de rang. Une
+                    //  constante, pour que le badge, le paquet et la carte Urgence
+                    //  ne puissent pas diverger.
+                    const HORIZON_URGENCE = 7;
+                    //  Une table, partagée par la liste, la progression par nature et
+                    //  le bouton de validation.
+                    const NATURES_TACHE = {
+                        fixe:         { badge: '🏢 Fixe',         teinte: 'orange' },
+                        variable:     { badge: '🛒 Variable',     teinte: 'blue' },
+                        epargne:      { badge: '💎 Épargne',      teinte: 'purple' },
+                        exceptionnel: { badge: '⚠️ Exceptionnel', teinte: 'rose' },
+                    };
                     //  Où en est-on du cycle affiché ? Sur un cycle passé, tout est
                     //  derrière nous : la question du retard ne se pose plus.
                     const _rangAujourdhui = computed(() => {
@@ -15028,38 +14815,40 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const moisBud = isCyclePasse.value ? pilotageViewedMois.value : moisBudgetaire.value.mois;
                         const cyc = cyclePilotage.value;
                         const out = [];
-                        const pousser = (ref, libelle, due, groupe, icone, teinte, jourPrevu) => {
+                        const pousser = (ref, libelle, due, groupe, icone, teinte, jourPrevu, nature) => {
                             const d = Number(due) || 0;
                             if (d <= 0) return;              // suspendu ce mois → hors checklist
                             out.push({
                                 cle: groupe + ':' + (ref.id != null ? ref.id : libelle),
                                 ref, libelle: libelle || '(sans nom)', due: d, groupe, icone, teinte,
+                                //  v37.16 : la nature décide du badge [🏢 Fixe] [🛒 Variable]…
+                                nature, badge: (NATURES_TACHE[nature] || NATURES_TACHE.exceptionnel).badge,
                                 jourPrevu: Number(jourPrevu) || null,
                                 rang: _rangDansCycle(jourPrevu),
                                 //  v37.13 : la teinte du badge de date se décide ici,
                                 //  pour que la liste et le badge racontent la même chose.
                                 retard: _rangDansCycle(jourPrevu) < _rangAujourdhui.value,
                                 proche: _rangDansCycle(jourPrevu) >= _rangAujourdhui.value
-                                        && _rangDansCycle(jourPrevu) <= _rangAujourdhui.value + 7,
+                                        && _rangDansCycle(jourPrevu) <= _rangAujourdhui.value + HORIZON_URGENCE,
                                 paye: isItemPaid(ref, d, cyc),
                                 regle: getPaidAmount(ref, d, cyc) || 0,
                                 quand: dateReelleCycle(ref, cyc),
                             });
                         };
                         chargesFixesBudgetairesTriees.value.forEach(f =>
-                            pousser(f, f.label, getDueFixe(f, an, moisBud), 'Charge fixe', '🏢', 'orange', f.jourPrevu));
+                            pousser(f, f.label, getDueFixe(f, an, moisBud), 'Charge fixe', '🏢', 'orange', f.jourPrevu, 'fixe'));
                         //  v37.14 : l'exception d'une catégorie vaut pour ses détails.
                         //  Ils n'ont pas de règle propre — le formulaire ne la propose
                         //  que sur la catégorie.
                         chargesVarMensuellePilotage.value.forEach(cat => {
                             if (valeurEffective(cat, cat.valeur, moisBud) <= 0) return;
                             (cat.details || []).forEach(d =>
-                                pousser(d, d.nom, Number(d.montant || 0), cat.label, '🧾', 'blue', d.jourPrevu || cat.jourPrevu));
+                                pousser(d, d.nom, Number(d.montant || 0), cat.label, '🛒', 'blue', d.jourPrevu || cat.jourPrevu, 'variable'));
                         });
                         epargneBudgetairePilotage.value.forEach(ep =>
-                            pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an, moisBud), 'Épargne', '🎯', 'purple', ep.jourPrevu));
+                            pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an, moisBud), 'Épargne', '💎', 'purple', ep.jourPrevu, 'epargne'));
                         getDepensesCycle(pilotageViewedMois.value, pilotageViewedAn.value).forEach(dep =>
-                            pousser(dep, dep.nom, Number(dep.montant || 0), 'Flux exceptionnel', '⚠️', 'rose', dep.jourPrevu));
+                            pousser(dep, dep.nom, Number(dep.montant || 0), 'Flux exceptionnel', '⚠️', 'rose', dep.jourPrevu, 'exceptionnel'));
                         return out.sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle));
                     });
 
@@ -15067,18 +14856,21 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const tachesTerminees = computed(() => tachesPilotage.value.filter(t => t.paye));
 
                     //  Trois paquets, dans l'ordre où on les traite.
+                    //  v37.16 : chaque paquet porte son total — la carte « Urgence »
+                    //  n'est rien d'autre que la somme des deux premiers.
                     const tachesGroupees = computed(() => {
                         const r = _rangAujourdhui.value;
                         const paquets = [
-                            { cle: 'retard',  titre: '⚠️ En retard',     teinte: 'rose',  taches: [] },
-                            { cle: 'semaine', titre: '⏳ Cette semaine',  teinte: 'amber', taches: [] },
-                            { cle: 'apres',   titre: '📅 Plus tard',      teinte: 'slate', taches: [] },
+                            { cle: 'retard',  titre: '⚠️ En retard',     teinte: 'rose',  taches: [], total: 0 },
+                            { cle: 'semaine', titre: '⏳ Cette semaine',  teinte: 'amber', taches: [], total: 0 },
+                            { cle: 'apres',   titre: '📅 Reste du mois',  teinte: 'slate', taches: [], total: 0 },
                         ];
                         tachesATraiter.value.forEach(t => {
-                            if (t.rang < r) paquets[0].taches.push(t);
-                            else if (t.rang <= r + 7) paquets[1].taches.push(t);
-                            else paquets[2].taches.push(t);
+                            const p = t.rang < r ? paquets[0] : (t.rang <= r + HORIZON_URGENCE ? paquets[1] : paquets[2]);
+                            p.taches.push(t);
+                            p.total += Math.max(0, t.due - t.regle);
                         });
+                        paquets.forEach(p => { p.total = Math.round(p.total); });
                         return paquets.filter(p => p.taches.length);
                     });
 
@@ -15099,6 +14891,224 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         les met en fin de liste et on le dit, plutôt que de laisser
                         croire que le tri ignore les dates. */
                     const tachesSansDate = computed(() => tachesATraiter.value.filter(t => !t.jourPrevu).length);
+
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.16 — LE COCKPIT : TROIS CHIFFRES QUI DISENT QUOI FAIRE
+
+                       Aucun des trois n'a de formule à lui. Chacun lit une source que
+                       l'écran affiche déjà ailleurs, pour qu'on puisse le vérifier
+                       d'un coup d'œil :
+                         🔥 Urgence      = paquets « En retard » + « Cette semaine »
+                         📈 Progression  = réglé + reste = total, mêmes tâches
+                         🚨 Atterrissage = le moteur du Relevé, compte par compte
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _MOIS_LONGS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+                    //  Un montant SANS « DH ». Le gabarit faisait .replace(' DH', '') avec
+                    //  une espace ordinaire, alors que formatMAD pose une espace
+                    //  insécable : le « DH » n'était jamais retiré.
+                    const formatNombre = (v) => new Intl.NumberFormat('fr-FR').format(Math.round(Number(v) || 0));
+                    const _dateLongue = (d) => d.getDate() + ' ' + _MOIS_LONGS[d.getMonth()];
+
+                    //  Dernier jour du cycle en cours : la veille de la prochaine paie.
+                    //  Même construction que le libellé « 27 Sep → 26 Oct ».
+                    const finCycleDate = computed(() => {
+                        const info = _cyclePaieInfo.value;
+                        return new Date(info.prochainAn, info.prochainMois - 1, jourDePaie.value - 1);
+                    });
+
+                    const kpiUrgence = computed(() => {
+                        const pq = (cle) => tachesGroupees.value.find(p => p.cle === cle) || { total: 0, taches: [] };
+                        const retard = pq('retard'), semaine = pq('semaine');
+                        const jusquau = new Date();
+                        jusquau.setDate(jusquau.getDate() + HORIZON_URGENCE);
+                        return {
+                            montant: retard.total + semaine.total,
+                            retard: retard.total,
+                            nb: retard.taches.length + semaine.taches.length,
+                            nbRetard: retard.taches.length,
+                            jusquau: _dateLongue(jusquau),
+                            //  Les lignes sans date ne peuvent pas être classées : on
+                            //  le dit sur la carte au lieu de les compter en silence.
+                            sansDate: tachesSansDate.value,
+                        };
+                    });
+
+                    const kpiProgression = computed(() => {
+                        let regle = 0, reste = 0;
+                        const parNature = {};
+                        tachesPilotage.value.forEach(t => {
+                            //  Une ligne pointée vaut ce qui a été réglé (ou son dû) ;
+                            //  une ligne ouverte vaut son avance déjà versée.
+                            const r = t.paye ? (t.regle || t.due) : Math.min(t.regle || 0, t.due);
+                            const x = t.paye ? 0 : Math.max(0, t.due - (t.regle || 0));
+                            regle += r; reste += x;
+                            const n = parNature[t.nature] || (parNature[t.nature] = { regle: 0, reste: 0 });
+                            n.regle += r; n.reste += x;
+                        });
+                        regle = Math.round(regle); reste = Math.round(reste);
+                        const total = regle + reste;   // affiché « réglé / total » : la somme tombe juste
+                        const natures = Object.keys(NATURES_TACHE)
+                            .filter(k => parNature[k])
+                            .map(k => {
+                                const r = Math.round(parNature[k].regle), x = Math.round(parNature[k].reste);
+                                return { cle: k, badge: NATURES_TACHE[k].badge, teinte: NATURES_TACHE[k].teinte,
+                                         regle: r, total: r + x, pct: (r + x) > 0 ? Math.round(r / (r + x) * 100) : 100 };
+                            });
+                        return {
+                            regle, reste, total,
+                            pct: total > 0 ? Math.round(regle / total * 100) : 100,
+                            pctTemps: progressCyclePaie.value,
+                            natures,
+                        };
+                    });
+
+                    //  L'atterrissage de CHAQUE compte, tiré du moteur du Relevé sur le
+                    //  cycle en cours. C'est le chiffre que le Relevé affiche, ligne à
+                    //  ligne : le cockpit n'en calcule pas un second.
+                    const atterrissageCycle = computed(() => {
+                        calculationTick.value;
+                        let j;
+                        try { j = _buildJournalReleve([], []); } catch (e) { j = null; }
+                        if (!j) return { courantKey: 'courant', courant: 0, comptes: [], alertes: [] };
+                        const fin = j.soldesFinaux || {};
+                        const ck = j.courantKey || 'courant';
+                        const parCompte = {};
+                        (j.entries || []).forEach(e => {
+                            const k = e.compteKey;
+                            if (!k) return;
+                            const c = parCompte[k] || (parCompte[k] = { t0: null, lignes: [] });
+                            if (e.type === 'initial') c.t0 = Number(e.montant) || 0;
+                            else if (e.type === 'credit' || e.type === 'debit')
+                                c.lignes.push({ libelle: e.libelle, montant: Number(e.montant) || 0, type: e.type, jourPrevu: e.jourPrevu });
+                        });
+                        const comptes = Object.keys(fin).map(k => {
+                            const info = _infoCompteKey(k);
+                            const pc = parCompte[k] || { t0: null, lignes: [] };
+                            const entrees = pc.lignes.filter(l => l.type === 'credit').reduce((s, l) => s + l.montant, 0);
+                            const sorties = pc.lignes.filter(l => l.type === 'debit').reduce((s, l) => s + l.montant, 0);
+                            const atterrissage = Math.round(Number(fin[k]) || 0);
+                            //  Le solde d'aujourd'hui se déduit de l'atterrissage : la
+                            //  ligne T0 n'est émise que pour un compte actif.
+                            const t0 = pc.t0 !== null ? Math.round(pc.t0) : Math.round(atterrissage - entrees + sorties);
+                            return {
+                                key: k, icon: info.icon, label: info.label,
+                                courant: k === ck,
+                                reel: k === ck || k.startsWith('cpt_'),   // une poche d'épargne virtuelle n'est jamais à découvert
+                                t0, entrees: Math.round(entrees), sorties: Math.round(sorties), atterrissage,
+                                lignes: pc.lignes,
+                            };
+                        }).filter(c => c.courant || c.lignes.length || c.t0 !== 0);
+                        comptes.sort((a, b) => (b.courant - a.courant)
+                            || ((a.reel && a.atterrissage < 0) === (b.reel && b.atterrissage < 0) ? 0 : (a.reel && a.atterrissage < 0 ? -1 : 1))
+                            || (b.lignes.length - a.lignes.length));
+                        return {
+                            courantKey: ck,
+                            courant: Math.round(Number(fin[ck]) || 0),
+                            comptes,
+                            alertes: comptes.filter(c => !c.courant && c.reel && c.atterrissage < 0),
+                        };
+                    });
+
+                    const kpiAtterrissage = computed(() => {
+                        const a = atterrissageCycle.value;
+                        const pire = a.alertes.slice().sort((x, y) => x.atterrissage - y.atterrissage)[0] || null;
+                        return {
+                            montant: a.courant,
+                            courant: a.comptes.find(c => c.courant) || null,
+                            alertes: a.alertes,
+                            //  Le chiffre en vedette : le courant s'il plonge, sinon le
+                            //  pire des autres comptes — un découvert ailleurs reste un
+                            //  découvert.
+                            vedette: a.courant < 0 ? (a.comptes.find(c => c.courant) || null) : pire,
+                            negatif: a.courant < 0 || a.alertes.length > 0,
+                            dateFin: _dateLongue(finCycleDate.value),
+                        };
+                    });
+
+                    //  ✅ UN CLIC : les charges FIXES dont la date est arrivée.
+                    //  Pas celles de vendredi : cocher une charge pas encore prélevée
+                    //  gonflerait l'atterrissage de son montant.
+                    const chargesFixesEchues = computed(() => {
+                        const r = _rangAujourdhui.value;
+                        return tachesATraiter.value.filter(t => t.nature === 'fixe' && t.jourPrevu && t.rang <= r);
+                    });
+                    const montantChargesFixesEchues = computed(() =>
+                        Math.round(chargesFixesEchues.value.reduce((s, t) => s + Math.max(0, t.due - (t.regle || 0)), 0)));
+                    const derniereValidation = ref(null);
+                    const validerChargesEchues = () => {
+                        const liste = chargesFixesEchues.value.slice();
+                        if (!liste.length) return 0;
+                        const cyc = cyclePilotage.value;
+                        const jour = _aujourdhuiISO();
+                        const avant = liste.map(t => {
+                            const e = _etatCycle(t.ref, cyc);
+                            return { ref: t.ref, due: t.due, etat: e ? Object.assign({}, e) : null };
+                        });
+                        liste.forEach(t => _poserEtatCycle(t.ref, cyc, { paye: true, montantPaye: t.due, dateReelle: jour }));
+                        derniereValidation.value = {
+                            cyc, jour, avant, n: liste.length,
+                            montant: Math.round(liste.reduce((s, t) => s + Math.max(0, t.due - (t.regle || 0)), 0)),
+                            libelles: liste.map(t => t.libelle),
+                        };
+                        handleDataChange();
+                        return liste.length;
+                    };
+                    //  Annuler rend EXACTEMENT l'état d'avant — avance partielle
+                    //  comprise — et seulement sur les lignes que personne n'a
+                    //  retouchées depuis.
+                    const annulerValidation = () => {
+                        const v = derniereValidation.value;
+                        if (!v) return 0;
+                        let n = 0;
+                        v.avant.forEach(({ ref, due, etat }) => {
+                            const now = _etatCycle(ref, v.cyc);
+                            const intact = now && now.paye === true && Number(now.montantPaye) === Number(due) && now.dateReelle === v.jour;
+                            if (!intact) return;
+                            if (etat) _poserEtatCycle(ref, v.cyc, etat);
+                            else if (ref && ref.trackerRealise) delete ref.trackerRealise[_cycleDe(ref, v.cyc)];
+                            n++;
+                        });
+                        derniereValidation.value = null;
+                        handleDataChange();
+                        return n;
+                    };
+
+                    //  ── LES BULLES : une seule ouverte, et elle capte le pointeur ──
+                    //  Mesuré sur la vidéo du 04/10 : la bulle de « Budget conso »
+                    //  laissait passer la souris (pointer-events-none) jusqu'à la
+                    //  carte du dessous, qui ouvrait la sienne ; avec le fondu, les
+                    //  deux restaient affichées l'une sur l'autre. Un z-index plus
+                    //  haut n'y change rien : les deux bulles l'auraient. Il faut
+                    //  qu'il n'y en ait qu'une.
+                    const bulleOuverte = ref(null);
+                    const bulleEpinglee = ref(false);
+                    const _souris = (e) => !e || !e.pointerType || e.pointerType === 'mouse';
+                    const survolBulle = (cle, e) => {
+                        if (!_souris(e)) return;                                   // au doigt : le tap décide
+                        if (bulleEpinglee.value && bulleOuverte.value !== cle) return;
+                        bulleOuverte.value = cle;
+                    };
+                    const quitterBulle = (cle, e) => {
+                        if (!_souris(e)) return;
+                        if (!bulleEpinglee.value && bulleOuverte.value === cle) bulleOuverte.value = null;
+                    };
+                    const basculerBulle = (cle) => {
+                        if (bulleOuverte.value === cle && bulleEpinglee.value) { bulleOuverte.value = null; bulleEpinglee.value = false; }
+                        else { bulleOuverte.value = cle; bulleEpinglee.value = true; }
+                    };
+                    const fermerBulle = () => { bulleOuverte.value = null; bulleEpinglee.value = false; };
+                    document.addEventListener('click', (e) => {
+                        if (!bulleOuverte.value) return;
+                        const t = e.target;
+                        if (t && t.closest && t.closest('[data-bulle-cle]')) return;   // la carte gère son propre clic
+                        fermerBulle();
+                    });
+                    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bulleOuverte.value) fermerBulle(); });
+
+                    const allerAInbox = () => {
+                        const el = document.getElementById('pilotage-inbox');
+                        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    };
 
                     //  Le repli « Entrées d'Argent » annonce ce qu'il cache.
                     const revenusRestantsPilotage = computed(() => {
@@ -17526,6 +17536,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.
                         _rangAujourdhuiTest: _rangAujourdhui,
+                        // v37.16 : cockpit du Pilotage
+                        HORIZON_URGENCE, NATURES_TACHE, finCycleDate, kpiUrgence, kpiProgression, formatNombre,
+                        atterrissageCycle, kpiAtterrissage, chargesFixesEchues, montantChargesFixesEchues,
+                        derniereValidation, validerChargesEchues, annulerValidation,
+                        bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup
