@@ -313,6 +313,24 @@ try {
       k.echues.length === ATTENDU.nbEchues && k.montantEchues === ATTENDU.echues
       && ['FIXE EN RETARD', 'FIXE AVANCE PARTIELLE', 'FIXE DU JOUR'].every(n => k.echues.includes(n)),
       JSON.stringify([k.echues, k.montantEchues]));
+    /* v37.17 — le variable se SAISIT, le fixe se COCHE (ou se valide en un clic) */
+    const saisies = await page.evaluate(() => [...document.querySelectorAll('#pilotage-inbox [data-tache]')]
+        .map(r => [r.dataset.natureLigne, (r.querySelector('input[type=number]') || {}).dataset?.saisie,
+                   !!r.querySelector('[data-chip-echue]'), r.querySelector('[data-tache-nom]').textContent.trim()]));
+    v('saisie invitante (variable, exceptionnel), discrète (fixe, épargne)',
+      saisies.length === 9 && saisies.every(([n, sa]) => (n === 'variable' || n === 'exceptionnel') ? sa === 'invitante' : sa === 'discrete'),
+      JSON.stringify(saisies));
+    v('  → la pastille « ⚡ échue » marque exactement les fixes du bouton',
+      JSON.stringify(saisies.filter(x => x[2]).map(x => x[3]).sort()) === JSON.stringify(['FIXE AVANCE PARTIELLE', 'FIXE DU JOUR', 'FIXE EN RETARD']),
+      JSON.stringify(saisies.filter(x => x[2])));
+    await page.hover('[data-valider-echues]');
+    await page.waitForTimeout(150);
+    const allumees = await page.evaluate(() => [...document.querySelectorAll('#pilotage-inbox [data-tache]')]
+        .filter(r => r.className.includes('ring-emerald-400')).map(r => r.querySelector('[data-tache-nom]').textContent.trim()).sort());
+    await page.mouse.move(5, 5);
+    v('  → survoler le bouton allume les lignes qu\'il va cocher, et elles seules',
+      JSON.stringify(allumees) === JSON.stringify(['FIXE AVANCE PARTIELLE', 'FIXE DU JOUR', 'FIXE EN RETARD']), JSON.stringify(allumees));
+
     const etat = (page) => page.evaluate(({ ST, CYCLE }) => {
         const st = eval(ST);
         const d = st.donneesAnnuelles[Number(CYCLE.slice(0, 4))];
