@@ -753,11 +753,33 @@
                                       @aller="appMode = 'reel'; activeTab = 'pilotage'"
                                       @revenir="pilotageViewedCycle = null"></meteo-financiere>
 
+                    <!-- v37.18 : FOCUS BANCAIRE — un clic, et l'écran ne parle plus que de ce compte -->
+                    <div v-if="comptesFocus.length > 1" data-focus-bar data-focus-ou="previsionnel" class="space-y-2">
+                        <div class="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 shrink-0">🎯 Focus</span>
+                            <button type="button" data-focus="tous" @click="focusCompte = null"
+                                    :class="['shrink-0 rounded-full px-3 py-1.5 text-[11px] font-black border transition-colors', !focusCompte ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500']">Tous les comptes</button>
+                            <button v-for="c in comptesFocus" :key="'fo_' + c.key" type="button" :data-focus="c.key"
+                                    @click="focusCompte = (focusCompte === c.key ? null : c.key)"
+                                    :class="['shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black border transition-colors', focusCompte === c.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500']">
+                                <span :class="['w-2 h-2 rounded-full', c.couleur]"></span>{{ c.court }}
+                                <span v-if="radarComptes.besoins.some(b => b.key === c.key)" class="text-rose-500" title="Virement à prévoir">●</span>
+                            </button>
+                        </div>
+                        <div v-if="focusCompte" data-focus-banner class="flex items-center justify-between gap-3 rounded-2xl bg-slate-900 text-white px-4 py-2.5">
+                            <p class="text-xs font-bold min-w-0">🎯 Vous ne voyez que ce qui touche <b>{{ infoCompte(focusCompte).label }}</b>. La météo, elle, reste globale.</p>
+                            <button type="button" @click="focusCompte = null" class="shrink-0 rounded-lg bg-white text-slate-900 px-2.5 py-1 text-[11px] font-black">✕ Tout afficher</button>
+                        </div>
+                    </div>
+
+                    <radar-comptes :radar="radarComptes" :format-mad="formatMAD" :focus="focusCompte"
+                                   @focus="(k) => focusCompte = (focusCompte === k ? null : k)"></radar-comptes>
+
                     <!-- 🫁 La jauge de respiration -->
                     <section data-respiration :data-niveau="respirationBudgetaire.niveau" class="rounded-3xl bg-white/80 backdrop-blur-xl ring-1 ring-slate-900/5 shadow-[0_10px_40px_-14px_rgba(15,23,42,0.22)] p-5 md:p-6">
                         <div class="flex items-start justify-between gap-4 flex-wrap">
                             <div class="min-w-0">
-                                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">🫁 Respiration budgétaire</p>
+                                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">🫁 Respiration budgétaire<template v-if="focusCompte"> · {{ infoCompte(focusCompte).label }} seul</template></p>
                                 <p class="mt-1 flex items-baseline gap-2 flex-wrap">
                                     <span data-respiration-pct
                                           :class="['text-4xl md:text-5xl font-black tracking-tight tabular-nums',
@@ -823,11 +845,13 @@
                             <p v-if="!respirationBudgetaire.lignes.revenus.length" class="text-xs text-slate-400 italic">Aucun revenu défini</p>
                             <ul class="space-y-2.5">
                                 <li v-for="(l, i) in respirationBudgetaire.lignes.revenus.concat(respirationBudgetaire.lignes.injections)" :key="'tr_' + i">
-                                    <div class="flex items-center justify-between gap-2 text-xs">
-                                        <span class="font-bold text-slate-700 truncate min-w-0">{{ l.nom }}</span>
-                                        <span class="flex items-center gap-1.5 shrink-0">
+                                    <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+                                        <span class="font-bold text-slate-700 truncate min-w-[9rem] flex-1">{{ l.nom }}</span>
+                                        <span class="ml-auto flex items-center gap-1.5 shrink-0">
                                             <span v-if="isFluxCetteSemaine(l.jourPrevu)" class="text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded-full">⏳ Cette semaine</span>
                                             <span v-if="l.jourPrevu" class="text-[10px] text-slate-400 font-bold">📅 j.{{ l.jourPrevu }}</span>
+                                            <chip-compte :m="mecaniqueCompte(l.compte)" :regle="regleDeRoutage(l.nature, l.ref)" :cle="'routeTR:' + i" :ouverte="bulleOuverte === 'routeTR:' + i" :format-mad="formatMAD" sens="credit"
+                                                             @survol="survolBulle('routeTR:' + i, $event)" @quitter="quitterBulle('routeTR:' + i, $event)" @basculer="basculerBulle('routeTR:' + i)"></chip-compte>
                                             <span class="font-black text-emerald-700 tabular-nums">{{ formatMAD(l.montant) }}</span>
                                         </span>
                                     </div>
@@ -845,11 +869,13 @@
                             <p v-if="s.cle === 'conso'" class="-mt-1.5 mb-3 text-[11px] font-bold text-teal-700">≈ {{ formatMAD(respirationBudgetaire.consoParSemaine) }} par semaine · budget hebdo × 4,3</p>
                             <ul class="space-y-2.5">
                                 <li v-for="(l, i) in s.lignes" :key="'tl_' + s.cle + i">
-                                    <div class="flex items-center justify-between gap-2 text-xs">
-                                        <span class="font-bold text-slate-700 truncate min-w-0">{{ l.nom }}</span>
-                                        <span class="flex items-center gap-1.5 shrink-0">
+                                    <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+                                        <span class="font-bold text-slate-700 truncate min-w-[9rem] flex-1">{{ l.nom }}</span>
+                                        <span class="ml-auto flex items-center gap-1.5 shrink-0">
                                             <span v-if="isFluxCetteSemaine(l.jourPrevu)" class="text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded-full">⏳ Cette semaine</span>
                                             <span v-if="l.jourPrevu" class="text-[10px] text-slate-400 font-bold">📅 j.{{ l.jourPrevu }}</span>
+                                            <chip-compte :m="mecaniqueCompte(l.compte)" :regle="regleDeRoutage(l.nature, l.ref)" :cle="'routeT:' + s.cle + i" :ouverte="bulleOuverte === 'routeT:' + s.cle + i" :format-mad="formatMAD" sens="debit"
+                                                             @survol="survolBulle('routeT:' + s.cle + i, $event)" @quitter="quitterBulle('routeT:' + s.cle + i, $event)" @basculer="basculerBulle('routeT:' + s.cle + i)"></chip-compte>
                                             <span class="font-black text-slate-900 tabular-nums">{{ formatMAD(l.montant) }}</span>
                                         </span>
                                     </div>
@@ -4994,6 +5020,25 @@
                                       @aller="appMode = 'previsionnel'; activeTab = 'pilotageTheo'"
                                       @revenir="pilotageViewedCycle = null"></meteo-financiere>
 
+                    <!-- v37.18 : FOCUS BANCAIRE — un clic, et l'écran ne parle plus que de ce compte -->
+                    <div v-if="comptesFocus.length > 1" data-focus-bar data-focus-ou="realise" class="space-y-2">
+                        <div class="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 shrink-0">🎯 Focus</span>
+                            <button type="button" data-focus="tous" @click="focusCompte = null"
+                                    :class="['shrink-0 rounded-full px-3 py-1.5 text-[11px] font-black border transition-colors', !focusCompte ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500']">Tous les comptes</button>
+                            <button v-for="c in comptesFocus" :key="'fo_' + c.key" type="button" :data-focus="c.key"
+                                    @click="focusCompte = (focusCompte === c.key ? null : c.key)"
+                                    :class="['shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black border transition-colors', focusCompte === c.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500']">
+                                <span :class="['w-2 h-2 rounded-full', c.couleur]"></span>{{ c.court }}
+                                <span v-if="radarComptes.besoins.some(b => b.key === c.key)" class="text-rose-500" title="Virement à prévoir">●</span>
+                            </button>
+                        </div>
+                        <div v-if="focusCompte" data-focus-banner class="flex items-center justify-between gap-3 rounded-2xl bg-slate-900 text-white px-4 py-2.5">
+                            <p class="text-xs font-bold min-w-0">🎯 Vous ne voyez que ce qui touche <b>{{ infoCompte(focusCompte).label }}</b>. La météo, elle, reste globale.</p>
+                            <button type="button" @click="focusCompte = null" class="shrink-0 rounded-lg bg-white text-slate-900 px-2.5 py-1 text-[11px] font-black">✕ Tout afficher</button>
+                        </div>
+                    </div>
+
                     <!-- Bannière Mode Régularisation -->
                     <div v-if="isPilotageRetro" class="flex items-center gap-3 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3">
                         <span class="text-base shrink-0">⚠️</span>
@@ -5118,11 +5163,11 @@
                     <div v-if="anneeAffichage === moisBudgetaire.an" class="space-y-5">
 
                         <!-- ═══ À TRAITER : la file de travail, par urgence ═══════════════ -->
-                        <div id="pilotage-inbox" class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg scroll-mt-24">
+                        <div id="pilotage-inbox" class="bg-slate-800 rounded-2xl border border-slate-700 text-left shadow-lg scroll-mt-24">
                             <div class="flex items-center justify-between px-4 md:px-5 py-3 border-b border-slate-700 gap-3 flex-wrap">
                                 <div class="flex items-center gap-3 min-w-0">
                                     <span class="text-blue-400 text-lg shrink-0">📋</span>
-                                    <span class="text-sm font-black uppercase tracking-widest text-white truncate">À traiter — {{ pilotageCycleLabel }}</span>
+                                    <span class="text-sm font-black uppercase tracking-widest text-white truncate">À traiter — {{ pilotageCycleLabel }}<template v-if="focusCompte"> · 🎯 {{ infoCompte(focusCompte).court }}</template></span>
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0">
                                     <span class="text-[10px] px-2.5 py-1 rounded-lg font-black border bg-slate-900 border-slate-600 text-rose-300">
@@ -5214,7 +5259,9 @@
                                                 <span v-if="estEchue(t)" data-chip-echue title="Comprise dans « Valider les charges échues »"
                                                       class="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 whitespace-nowrap shrink-0">⚡ échue</span>
                                             </label>
-                                            <div class="flex items-center gap-2 ml-auto shrink-0">
+                                            <div class="flex flex-wrap items-center justify-end gap-2 ml-auto">
+                                                <chip-compte :m="mecaniqueCompte(t.compte)" :regle="regleDeRoutage(t.nature, t.ref)" :cle="'route:' + t.cle" :ouverte="bulleOuverte === 'route:' + t.cle" :format-mad="formatMAD" sombre sens="debit"
+                                                             @survol="survolBulle('route:' + t.cle, $event)" @quitter="quitterBulle('route:' + t.cle, $event)" @basculer="basculerBulle('route:' + t.cle)"></chip-compte>
                                                 <span v-if="t.jourPrevu"
                                                       :class="['text-[10px] font-black px-1.5 py-0.5 rounded-full border shrink-0',
                                                                t.retard ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
@@ -5273,6 +5320,11 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- v37.18 : la sécurité des comptes jusqu'en décembre — compacte : seuls
+                             les comptes à approvisionner, le reste à la demande -->
+                        <radar-comptes v-if="!isCyclePasse" :radar="radarComptes" :format-mad="formatMAD" :focus="focusCompte" compact
+                                       @focus="(k) => focusCompte = (focusCompte === k ? null : k)"></radar-comptes>
 
                         <!-- ═══ v32.00 Realized-T0 : conso déjà engagée sur le cycle ═══
                              v37.16 : le « Budget conso restant » de l'ancien en-tête vit
@@ -5514,7 +5566,7 @@
                                     <span class="text-sm font-black text-green-400 shrink-0">{{ formatMAD(tresoEntrees) }}</span>
                                 </summary>
                                 <div class="p-3 md:p-4 space-y-2">
-                                    <div v-for="(rev, key) in revenusBudgetairesTries" :key="'rev_' + key"
+                                    <div v-for="(rev, key) in revenusBudgetairesTries" :key="'rev_' + key" v-show="!focusCompte || compteDeFlux('revenu', rev) === focusCompte"
                                          :class="['flex items-center justify-between p-3 rounded-xl group border transition-all', getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois) <= 0 ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-slate-900/90 border-slate-700 hover:border-green-500']">
                                         <template v-if="getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois) <= 0">
                                             <div class="flex items-center gap-3 flex-1">
@@ -5533,7 +5585,9 @@
                                                 <span v-if="isFluxCetteSemaine(rev.jourPrevu) && !isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-full shrink-0">⏳ Cette sem.</span>
                                                 <span v-if="rev.jourPrevu && !isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage)" class="text-[9px] text-slate-500 font-bold shrink-0">j.{{ rev.jourPrevu }}</span>
                                             </label>
-                                            <span :class="['text-sm font-black ml-4 shrink-0', isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois)) }}</span>
+                                            <chip-compte :m="mecaniqueCompte(compteDeFlux('revenu', rev))" :regle="regleDeRoutage('revenu', rev)" :cle="'routeR:' + key" :ouverte="bulleOuverte === 'routeR:' + key" :format-mad="formatMAD" sombre sens="credit"
+                                                             @survol="survolBulle('routeR:' + key, $event)" @quitter="quitterBulle('routeR:' + key, $event)" @basculer="basculerBulle('routeR:' + key)"></chip-compte>
+                                            <span :class="['text-sm font-black ml-3 shrink-0', isItemPaid(rev, getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois), cyclePilotage) ? 'text-green-400' : 'text-slate-400']">{{ formatMAD(getDueRevenu(rev, pilotageViewedAn, pilotageViewedMois)) }}</span>
                                         </template>
                                     </div>
                                     <div v-if="!donneesAnnuelles[moisBudgetaire.an] || !Object.keys(donneesAnnuelles[moisBudgetaire.an]?.revenus || {}).length" class="text-center py-4 text-slate-500 text-sm">Aucune entrée configurée</div>
@@ -5544,7 +5598,7 @@
                                  la référence quand on cherche une ligne précise. -->
                             <details class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden text-left shadow-lg">
                                 <summary class="px-4 md:px-5 py-3 cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-white select-none">
-                                    🗂️ Vue détaillée par catégorie
+                                    🗂️ Vue détaillée par catégorie<template v-if="focusCompte"> · tous comptes</template>
                                 </summary>
                                 <div class="p-3 md:p-4 space-y-4 border-t border-slate-700">
                                     <div v-if="chargesFixesBudgetairesTriees.length > 0">
@@ -6921,6 +6975,132 @@
         /* ═══ v37.17 — MÉTÉO FINANCIÈRE ═══════════════════════════════════════
            Un composant, trois emplacements. Il n'affiche que ce que lui passe
            le computed meteoFinanciere : aucune logique d'argent ici. */
+        /* ═══ v37.18 — PASTILLE DE COMPTE ═══════════════════════════════════
+           Discrète au repos (un point de couleur, un nom court) ; au survol ou
+           au tap, la bulle raconte la mécanique bancaire de la ligne. Elle
+           utilise la bulle UNIQUE du cockpit (une seule ouverte à la fois). */
+        const ChipCompte = {
+            props: { m: { type: Object, required: true }, regle: { type: String, default: '' }, cle: { type: String, required: true },
+                     ouverte: { type: Boolean, default: false }, formatMad: { type: Function, required: true },
+                     sombre: { type: Boolean, default: false }, sens: { type: String, default: 'debit' } },
+            emits: ['survol', 'quitter', 'basculer'],
+            data() { return { place: {} }; },
+            methods: {
+                //  Une pastille près du bord gauche ouvrait sa bulle hors de l'écran
+                //  (mesuré sur S24+) : on la recale dans la fenêtre avant de l'ouvrir.
+                placer() {
+                    const r = this.$el.getBoundingClientRect();
+                    const W = Math.min(288, window.innerWidth - 16);
+                    const gauche = Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8);
+                    this.place = { left: (gauche - r.left) + 'px', width: W + 'px' };
+                },
+                survol(e) { this.placer(); this.$emit('survol', e); },
+                basculer() { this.placer(); this.$emit('basculer'); },
+            },
+            template: `
+<span class="relative inline-flex align-middle" :data-bulle-cle="cle" @pointerenter="survol($event)" @pointerleave="$emit('quitter', $event)">
+    <button type="button" data-route :data-compte-route="m.key" @click.stop.prevent="basculer()"
+            :title="(sens === 'credit' ? 'Arrive sur ' : 'Prélevé sur ') + m.label"
+            :class="['inline-flex items-center gap-1 max-w-[8.5rem] rounded-full border px-1.5 py-0.5 text-[10px] font-bold transition-colors',
+                     sombre ? 'border-slate-600/70 text-slate-300 hover:border-slate-400 hover:text-white bg-slate-900/60' : 'border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-800 bg-white/70']">
+        <span :class="['w-2 h-2 rounded-full shrink-0', m.couleur]"></span>
+        <span class="truncate">{{ m.court }}</span>
+    </button>
+    <span v-if="ouverte" data-bulle class="absolute top-full pt-2 z-[200] text-left" :style="place">
+        <span class="block bg-slate-950 text-slate-200 border border-slate-600 rounded-xl shadow-2xl p-3.5 text-[11px] leading-snug">
+            <span class="flex items-center gap-2 font-black text-white text-xs">
+                <span :class="['w-2.5 h-2.5 rounded-full shrink-0', m.couleur]"></span>
+                {{ sens === 'credit' ? 'Arrive sur' : 'Prélevé sur' }} {{ m.label }}
+            </span>
+            <span v-if="regle" class="block mt-1 text-slate-400">{{ regle }}</span>
+            <span v-if="m.radar" class="block mt-2.5 pt-2 border-t border-slate-800 space-y-1">
+                <span class="flex justify-between gap-3"><span class="text-slate-400">Solde aujourd'hui</span><span class="font-black text-white tabular-nums">{{ formatMad(m.radar.t0) }}</span></span>
+                <span v-if="m.finCycle !== null" class="flex justify-between gap-3"><span class="text-slate-400">Fin du cycle</span><span :class="['font-black tabular-nums', m.finCycle < 0 ? 'text-rose-300' : 'text-white']">{{ formatMad(m.finCycle) }}</span></span>
+                <span class="flex justify-between gap-3"><span class="text-slate-400">Point bas d'ici le {{ m.horizon }}</span><span :class="['font-black tabular-nums', m.radar.pointBas < 0 ? 'text-rose-300' : 'text-emerald-300']">{{ formatMad(m.radar.pointBas) }}</span></span>
+                <span :class="['block mt-1.5 rounded-lg px-2.5 py-1.5 font-black', m.radar.aVirer > 0 ? 'bg-rose-900/60 text-rose-100' : 'bg-emerald-900/50 text-emerald-200']">
+                    <template v-if="m.radar.aVirer > 0">🔁 Virer {{ formatMad(m.radar.aVirer) }} avant le {{ m.radar.avantLe }}<template v-if="m.radar.donneur"> (depuis {{ m.radar.donneur.court }})</template></template>
+                    <template v-else>✅ Tranquille jusqu'au {{ m.horizon }}</template>
+                </span>
+            </span>
+        </span>
+    </span>
+</span>`,
+        };
+
+        /* ═══ v37.18 — RADAR DE COUVERTURE (« Sécurité des comptes ») ═════════
+           Chaque compte réel, projeté par le moteur du Relevé jusqu'au cycle de
+           décembre. Le chiffre qui compte est le POINT BAS : c'est lui qui dit
+           combien virer pour ne jamais passer sous zéro. */
+        const RadarComptes = {
+            props: { radar: { type: Object, required: true }, formatMad: { type: Function, required: true },
+                     focus: { type: String, default: null }, compact: { type: Boolean, default: false } },
+            emits: ['focus'],
+            data() { return { tout: false }; },
+            computed: {
+                lignes() {
+                    const base = this.radar.comptes.filter(c => c.nbLignes > 0 || c.t0 !== 0 || c.key === this.focus);
+                    if (this.focus) return base.filter(c => c.key === this.focus);
+                    if (this.compact && !this.tout) return base.filter(c => c.aVirer > 0);
+                    return base;
+                },
+                caches() { return this.radar.comptes.filter(c => c.nbLignes > 0 || c.t0 !== 0).length - this.lignes.length; },
+            },
+            methods: {
+                echelle(p) { const min = Math.min(0, ...p), max = Math.max(0, ...p); return { min, span: (max - min) || 1 }; },
+                chemin(p) {
+                    if (!p || p.length < 2) return '';
+                    const e = this.echelle(p), n = p.length;
+                    return p.map((v, i) => (i / (n - 1) * 200).toFixed(1) + ',' + (40 - (v - e.min) / e.span * 36).toFixed(1)).join(' ');
+                },
+                zero(p) { const e = this.echelle(p || [0]); return (40 - (0 - e.min) / e.span * 36).toFixed(1); },
+            },
+            template: `
+<section data-radar class="rounded-3xl bg-white/80 backdrop-blur-xl ring-1 ring-slate-900/5 shadow-[0_10px_40px_-14px_rgba(15,23,42,0.22)] p-4 md:p-5">
+    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">🛡️ Sécurité des comptes · jusqu'au {{ radar.horizon }}</p>
+    <h3 class="mt-0.5 text-base md:text-lg font-black text-slate-900" data-radar-titre>
+        <template v-if="radar.besoins.length">{{ radar.besoins.length }} virement{{ radar.besoins.length > 1 ? 's' : '' }} à prévoir · {{ formatMad(radar.totalAVirer) }}</template>
+        <template v-else>✅ Tous les comptes tiennent jusqu'au {{ radar.horizon }}</template>
+    </h3>
+    <p class="text-xs font-semibold text-slate-500">Solde du jour, puis chaque entrée et chaque prélèvement prévus, compte par compte — le moteur du Relevé.</p>
+    <ul class="mt-4 space-y-3">
+        <li v-for="c in lignes" :key="'rad_' + c.key" data-radar-compte :data-compte="c.key" :data-a-virer="c.aVirer"
+            :class="['rounded-2xl ring-1 p-3 md:p-4', c.aVirer > 0 ? 'ring-rose-200 bg-rose-50/70' : 'ring-emerald-100 bg-emerald-50/40']">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span :class="['w-2.5 h-2.5 rounded-full shrink-0', c.couleur]"></span>
+                    <p class="text-sm font-black text-slate-900 truncate">{{ c.icone }} {{ c.label }}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span v-if="c.aVirer > 0" class="text-[11px] font-black px-2 py-0.5 rounded-full bg-rose-600 text-white">🔁 Virer {{ formatMad(c.aVirer) }}</span>
+                    <span v-else class="text-[11px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white">✅ Tranquille</span>
+                    <button type="button" data-radar-focus @click="$emit('focus', c.key)"
+                            :class="['text-[10px] font-black px-2 py-0.5 rounded-full border transition-colors', focus === c.key ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-800']">🎯 {{ focus === c.key ? 'Focus actif' : 'Focus' }}</button>
+                </div>
+            </div>
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3 items-center">
+                <svg viewBox="0 0 200 44" preserveAspectRatio="none" class="w-full h-11" role="img" :aria-label="'Solde de ' + c.label + ' jusqu’au ' + radar.horizon">
+                    <line x1="0" x2="200" :y1="zero(c.points)" :y2="zero(c.points)" class="stroke-slate-300" stroke-width="1" stroke-dasharray="3 3"/>
+                    <polyline :points="chemin(c.points)" fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"
+                              :class="c.aVirer > 0 ? 'stroke-rose-500' : 'stroke-emerald-500'"/>
+                </svg>
+                <div class="grid grid-cols-3 gap-3 text-right">
+                    <div><p class="text-[10px] font-bold text-slate-400">Aujourd'hui</p><p class="text-sm font-black text-slate-900 tabular-nums">{{ formatMad(c.t0) }}</p></div>
+                    <div><p class="text-[10px] font-bold text-slate-400">Point bas · {{ c.datePointBas }}</p><p :class="['text-sm font-black tabular-nums', c.pointBas < 0 ? 'text-rose-600' : 'text-slate-900']" data-radar-point-bas>{{ formatMad(c.pointBas) }}</p></div>
+                    <div><p class="text-[10px] font-bold text-slate-400">Fin · {{ radar.horizon }}</p><p :class="['text-sm font-black tabular-nums', c.fin < 0 ? 'text-rose-600' : 'text-slate-900']">{{ formatMad(c.fin) }}</p></div>
+                </div>
+            </div>
+            <p v-if="c.aVirer > 0" class="mt-2 text-xs font-bold text-rose-800" data-radar-conseil>
+                Virer {{ formatMad(c.aVirer) }} sur {{ c.court }} avant le {{ c.avantLe }}<template v-if="c.donneur"> — par exemple depuis {{ c.donneur.label }}, qui garderait {{ formatMad(c.donneur.resteAuPlusBas) }} au plus bas</template>
+                <span v-if="c.fin >= 0" class="block font-semibold text-rose-700/80">La fin d'année est positive, mais le compte passe sous zéro avant.</span>
+            </p>
+        </li>
+    </ul>
+    <button v-if="compact && !focus && (caches > 0 || tout)" type="button" @click="tout = !tout"
+            class="mt-3 text-[11px] font-black text-slate-500 hover:text-slate-900">{{ tout ? '▲ Seulement les comptes à approvisionner' : '▼ Voir les ' + (caches) + ' autres comptes' }}</button>
+    <p class="mt-3 text-[10px] text-slate-400 font-semibold leading-snug">Point bas : le solde le plus bas atteint jusqu'au {{ radar.horizon }} — virer ce montant aujourd'hui garde le compte au-dessus de zéro jusqu'au bout.</p>
+</section>`,
+        };
+
         const MeteoFinanciere = {
             props: { meteo: { type: Object, required: true }, formatMad: { type: Function, required: true },
                      lien: { type: String, default: null }, chips: { type: Boolean, default: true } },
@@ -6948,6 +7128,7 @@
                 <h3 class="text-xl md:text-3xl font-black tracking-tight leading-tight" data-meteo-titre>{{ meteo.titre }}</h3>
                 <p class="mt-1 md:mt-1.5 text-xs md:text-sm font-semibold text-white/90 leading-snug" data-meteo-raison>{{ meteo.raison }}</p>
                 <p class="mt-1.5 md:mt-2 text-xs md:text-sm font-black text-white leading-snug" data-meteo-conseil>👉 {{ meteo.conseil }}</p>
+                <p v-if="meteo.logistique" class="mt-2 inline-block rounded-xl bg-black/20 ring-1 ring-white/15 px-2.5 py-1.5 text-xs font-bold text-white leading-snug" data-meteo-logistique>{{ meteo.logistique }}</p>
             </div>
         </div>
         <div class="rounded-2xl bg-white/15 backdrop-blur-md ring-1 ring-white/25 shadow-inner p-3.5 md:p-5 flex flex-col justify-center">
@@ -6991,10 +7172,17 @@
 
         try {
             const app = createApp({
-                components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere },
+                components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.17 Meteo-Financiere";
+                    const CURRENT_VERSION = "37.18 Logistique-Bancaire";
                     const CHANGELOG = [
+        { version: "37.18 Logistique-Bancaire", date: "2026-10-04", changes: [
+            "🛡️ SÉCURITÉ DES COMPTES — pour chaque compte bancaire : le solde du jour, sa courbe jusqu'au cycle de décembre, son POINT BAS, sa fin d'année, et le virement à faire. Tout vient du moteur du Relevé, projeté jusqu'en décembre : entrées affectées au compte, prélèvements affectés au compte, compte par compte. Vérifié : la fin d'année de chaque compte est celle du Relevé filtré sur ce compte.",
+            "POURQUOI LE POINT BAS, ET PAS SEULEMENT LA FIN D'ANNÉE — un compte qui plonge en octobre et remonte en décembre finit l'année positif… après un découvert. « À virer » est donc ce qui garde le point bas à zéro, avec la date avant laquelle le faire et un compte d'où le faire (celui qui garde le plus de marge au plus bas). Preuve par l'acte dans les tests : on exécute les virements proposés, et plus aucun compte ne passe sous zéro jusqu'en décembre.",
+            "OÙ PART L'ARGENT — chaque ligne, dans la file « À traiter », les entrées d'argent et toutes les cartes du Prévisionnel, porte une pastille discrète : un point de couleur et le nom court du compte. Au survol ou au tap : prélevé sur quel compte, selon quelle règle (réglage global des charges fixes ou variables, ou compte choisi sur la ligne), solde du jour, fin de cycle, point bas et virement éventuel. La règle est celle du Relevé, mot pour mot : la pastille nomme toujours le compte que le Relevé débitera.",
+            "🎯 FOCUS BANCAIRE — un clic sur un compte, dans le Réalisé comme dans le Prévisionnel : la file, l'Urgence, la Progression, la carte Atterrissage, le bouton ⚡, les entrées d'argent, la jauge de respiration et les cartes ne parlent plus que de ce compte. Un bandeau rappelle le filtre et le retire d'un clic. La Météo, elle, reste globale. Le filtre n'est pas mémorisé : on n'oublie jamais qu'on regarde un seul compte.",
+            "LA MÉTÉO GAGNE UNE LIGNE — « 🏦 Virer X DH sur Assafa avant le 10 oct., pour tenir jusqu'au 26 déc. » : le virement le plus pressant, et seulement s'il y en a un.",
+        ] },
         { version: "37.17 Meteo-Financiere", date: "2026-10-04", changes: [
             "LA MÉTÉO FINANCIÈRE, EN TÊTE DES DEUX VUES — le même bandeau chapeaute le Pilotage Réalisé, le Prévisionnel et, sur téléphone, l'accueil du Prévisionnel. ☀️ Grand soleil, ⛅ Ciel voilé ou ⛈️ Orage, et toujours la RAISON écrite en clair, puis un conseil chiffré. Orage = un compte réel finit le cycle à découvert. Nuages = plus rien de dépensable, coussin de fin de cycle sous 5 % des revenus, ou budget prévu en déficit. Soleil = le reste.",
             "LE RESTE À VIVRE, EN GRAND — « combien je peux dépenser aujourd'hui » : le budget conso réellement dépensable (déjà calculé par le Réalisé : le plus petit de l'enveloppe restante et du cash disponible), divisé par les jours jusqu'à la paie. Vérifié : atterrissage + enveloppe conso restante = cash disponible, au dirham. Dépenser ce reste à vivre, et pas un dirham de plus, fait donc atterrir le compte à zéro : c'est ce qui autorise la Météo à écrire « pour rester à flot : pas plus de X DH ».",
@@ -13561,7 +13749,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             dispLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu));
                             dispLegs.forEach(l => {
                                 const soldeCompteApres = _apply(l.account, l.montant, l.type);
-                                entries.push({ libelle: l.libelle, montant: l.montant, type: l.type, jourPrevu: l.jourPrevu, etat: 'prevu', soldeApres: soldeCompteApres, compteKey: l.account, soldeCompteApres });
+                                entries.push({ libelle: l.libelle, montant: l.montant, type: l.type, jourPrevu: l.jourPrevu, etat: 'prevu', soldeApres: soldeCompteApres, compteKey: l.account, soldeCompteApres, cycle: cyc.m + '-' + cyc.a });
                             });
 
                             // ── Avance silencieuse vers le cycle suivant (cycles intermédiaires non affichés) ──
@@ -14856,6 +15044,136 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     //  constante, pour que le badge, le paquet et la carte Urgence
                     //  ne puissent pas diverger.
                     const HORIZON_URGENCE = 7;
+
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.18 — LOGISTIQUE BANCAIRE
+                       « Où l'argent doit-il se trouver, et quand ? »
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _cleCourant = computed(() => {
+                        const c = (comptes.value || []).find(x => x.type === 'courant' || x.type === 'liquide');
+                        return c ? 'cpt_' + c.id : 'courant';
+                    });
+                    const cleDeCompte = (k) => _cleCompte(k, _cleCourant.value);
+                    //  La règle de routage du moteur du Relevé (_mkLegs), mot pour mot.
+                    const compteDeFlux = (nature, item) => {
+                        const si = soldesInitiaux.value || {};
+                        const it = item || {};
+                        if (nature === 'fixe') return cleDeCompte(si.compteChargesFixes || 'courant');
+                        if (nature === 'variable') return cleDeCompte(si.compteChargesVariables || 'courant');
+                        if (nature === 'epargne') return cleDeCompte(it.sourceCompte || 'courant');
+                        if (nature === 'exceptionnel') return cleDeCompte(it.sourceCompte);
+                        if (nature === 'revenu') return cleDeCompte(it.destinationCompte);
+                        return cleDeCompte('courant');
+                    };
+                    //  …et la même règle, dite en clair, pour la bulle.
+                    const regleDeRoutage = (nature, item) => {
+                        const it = item || {};
+                        if (nature === 'fixe') return 'Toutes les charges fixes sortent de ce compte (réglage « compte des charges fixes »).';
+                        if (nature === 'variable') return 'Toutes les charges variables sortent de ce compte (réglage « compte des charges variables »).';
+                        if (nature === 'epargne') return 'Transfert vers « ' + (it.nom || it.label || 'épargne') + ' » ; compte source choisi sur cette épargne' + (it.sourceCompte ? '' : ' (par défaut : le courant)') + '.';
+                        if (nature === 'exceptionnel') return it.sourceCompte ? 'Compte source choisi sur cette dépense.' : 'Aucun compte choisi sur cette dépense : par défaut, le compte courant.';
+                        if (nature === 'revenu' || nature === 'injection') return 'Arrive sur ce compte (destination choisie sur la ligne).';
+                        return '';
+                    };
+                    //  Une couleur stable par compte, dans l'ordre de la liste des comptes.
+                    const PALETTE_COMPTES = ['bg-indigo-500', 'bg-amber-500', 'bg-teal-500', 'bg-pink-500', 'bg-lime-500', 'bg-cyan-500', 'bg-fuchsia-500', 'bg-yellow-400'];
+                    const infoCompte = (key) => {
+                        const k = key || _cleCourant.value;
+                        const liste = comptes.value || [];
+                        const i = liste.findIndex(c => 'cpt_' + c.id === k);
+                        const base = _infoCompteKey(k);
+                        const label = i >= 0 ? (liste[i].label || base.label) : (k === 'courant' ? 'Compte Courant' : base.label);
+                        return {
+                            key: k, label, icone: i >= 0 ? (liste[i].icone || base.icon) : base.icon,
+                            court: (String(label).replace(/^compte\s+/i, '') || label),
+                            couleur: k.startsWith('ep_') ? 'bg-violet-400' : PALETTE_COMPTES[Math.max(0, i) % PALETTE_COMPTES.length],
+                            reel: k === _cleCourant.value || k.startsWith('cpt_'),
+                        };
+                    };
+
+                    //  Le filtre d'un clic. Pas mémorisé : on ne doit jamais oublier
+                    //  qu'on regarde un seul compte.
+                    const focusCompte = ref(null);
+                    const comptesFocus = computed(() => (comptes.value || []).map(c => infoCompte('cpt_' + c.id)));
+
+                    //  LE RADAR : le Relevé, du cycle en cours au cycle de décembre.
+                    const _MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+                    const radarComptes = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const jdp = jourDePaie.value;
+                        const cycles = [];
+                        for (let m = mb.mois; m <= 12; m++) cycles.push(m + '-' + mb.an);
+                        const finAnnee = new Date(mb.an, 11, jdp > 1 ? jdp - 1 : 31);
+                        const vide = { comptes: [], besoins: [], totalAVirer: 0, horizon: finAnnee.getDate() + ' ' + _MOIS_COURTS[11] };
+                        let j;
+                        try { j = _buildJournalReleve([], cycles); } catch (e) { return vide; }
+                        if (!j) return vide;
+                        //  Date réelle d'une ligne : le jour de paie ou après → mois PRÉCÉDENT
+                        //  du cycle (le cycle de novembre court du 27 oct. au 26 nov.).
+                        const dateDe = (jour, cycle) => {
+                            const [cm, ca] = String(cycle || (mb.mois + '-' + mb.an)).split('-').map(Number);
+                            let m = cm, a = ca;
+                            if (jdp > 1 && Number(jour) >= jdp) { m--; if (m < 1) { m = 12; a--; } }
+                            const der = new Date(a, m, 0).getDate();
+                            return new Date(a, m - 1, Math.min(Math.max(1, Number(jour) || 1), der));
+                        };
+                        const lib = (d) => d ? d.getDate() + ' ' + _MOIS_COURTS[d.getMonth()] : null;
+                        const series = {};
+                        (j.entries || []).forEach(e => {
+                            const k = e.compteKey;
+                            if (!k) return;
+                            const s = series[k] || (series[k] = []);
+                            if (e.type === 'initial') s.push({ solde: Number(e.montant) || 0, date: null, aujourdhui: true });
+                            else if (e.type === 'credit' || e.type === 'debit')
+                                s.push({ solde: Number(e.soldeCompteApres) || 0, date: dateDe(e.jourPrevu, e.cycle), libelle: e.libelle, montant: Number(e.montant) || 0, type: e.type });
+                        });
+                        const fin = j.soldesFinaux || {};
+                        const out = Object.keys(fin).map(k => {
+                            const info = infoCompte(k);
+                            if (!info.reel) return null;                       // une poche virtuelle ne se met pas à découvert
+                            const s = series[k] || [];
+                            const lignes = s.filter(p => !p.aujourdhui);
+                            const t0 = s.length && s[0].aujourdhui ? s[0].solde
+                                     : Math.round((Number(fin[k]) || 0) - lignes.reduce((x, p) => x + (p.type === 'credit' ? p.montant : -p.montant), 0));
+                            const points = [t0].concat(lignes.map(p => p.solde));
+                            let iBas = 0;
+                            points.forEach((v, i) => { if (v < points[iBas]) iBas = i; });
+                            const iNeg = points.findIndex(v => v < -0.5);
+                            const pointBas = Math.round(points[iBas]);
+                            const aVirer = pointBas < 0 ? Math.ceil(-pointBas) : 0;
+                            const dateNeg = iNeg <= 0 ? null : lignes[iNeg - 1].date;
+                            return {
+                                ...info, t0: Math.round(t0), fin: Math.round(Number(fin[k]) || 0), pointBas,
+                                datePointBas: iBas === 0 ? 'aujourd’hui' : lib(lignes[iBas - 1].date),
+                                avantLe: iNeg === 0 ? 'aujourd’hui' : lib(dateNeg),
+                                aVirer,
+                                entrees: Math.round(lignes.filter(p => p.type === 'credit').reduce((x, p) => x + p.montant, 0)),
+                                sorties: Math.round(lignes.filter(p => p.type === 'debit').reduce((x, p) => x + p.montant, 0)),
+                                points: points.map(v => Math.round(v)), nbLignes: lignes.length, donneur: null,
+                            };
+                        }).filter(Boolean);
+                        //  D'où virer ? Le compte qui garde le plus de marge AU PLUS BAS —
+                        //  le retirer aujourd'hui baisse tout son chemin du même montant.
+                        const capacite = {};
+                        out.forEach(c => { capacite[c.key] = Math.max(0, c.pointBas); });
+                        out.filter(c => c.aVirer > 0).sort((a, b) => b.aVirer - a.aVirer).forEach(c => {
+                            const d = out.filter(x => x.key !== c.key && capacite[x.key] >= c.aVirer).sort((a, b) => capacite[b.key] - capacite[a.key])[0];
+                            if (d) { c.donneur = { key: d.key, label: d.label, court: d.court, resteAuPlusBas: capacite[d.key] - c.aVirer }; capacite[d.key] -= c.aVirer; }
+                        });
+                        out.sort((a, b) => (b.aVirer > 0) - (a.aVirer > 0) || b.aVirer - a.aVirer || (b.key === _cleCourant.value) - (a.key === _cleCourant.value));
+                        const besoins = out.filter(c => c.aVirer > 0);
+                        return { comptes: out, besoins, totalAVirer: besoins.reduce((x, c) => x + c.aVirer, 0),
+                                 horizon: lib(finAnnee), annee: mb.an };
+                    });
+                    const radarParCle = computed(() => Object.fromEntries(radarComptes.value.comptes.map(c => [c.key, c])));
+                    //  Tout ce que la bulle d'une ligne doit savoir sur son compte.
+                    const mecaniqueCompte = (key) => {
+                        const info = infoCompte(key);
+                        const r = radarParCle.value[key] || null;
+                        const cy = (atterrissageCycle.value.comptes || []).find(c => c.key === key) || null;
+                        return { ...info, radar: r, finCycle: cy ? cy.atterrissage : null, t0: r ? r.t0 : (cy ? cy.t0 : null), horizon: radarComptes.value.horizon };
+                    };
                     //  Une table, partagée par la liste, la progression par nature et
                     //  le bouton de validation.
                     const NATURES_TACHE = {
@@ -14871,7 +15189,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return _rangDansCycle(new Date().getDate());
                     });
 
-                    const tachesPilotage = computed(() => {
+                    const tachesPilotageToutes = computed(() => {
                         calculationTick.value;
                         const an = isCyclePasse.value ? pilotageViewedAn.value : moisBudgetaire.value.an;
                         //  v37.14 : en rétro-navigation, les exceptions s'évaluent sur le
@@ -14884,6 +15202,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (d <= 0) return;              // suspendu ce mois → hors checklist
                             out.push({
                                 cle: groupe + ':' + (ref.id != null ? ref.id : libelle),
+                                //  v37.18 : le compte que le Relevé débitera pour cette ligne
+                                compte: compteDeFlux(nature, ref),
                                 ref, libelle: libelle || '(sans nom)', due: d, groupe, icone, teinte,
                                 //  v37.16 : la nature décide du badge [🏢 Fixe] [🛒 Variable]…
                                 nature, badge: (NATURES_TACHE[nature] || NATURES_TACHE.exceptionnel).badge,
@@ -14916,6 +15236,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return out.sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle));
                     });
 
+                    //  v37.18 : FOCUS BANCAIRE — filtré ici, à la source : la file,
+                    //  l'Urgence, la Progression et le bouton ⚡ suivent sans exception.
+                    const tachesPilotage = computed(() => focusCompte.value
+                        ? tachesPilotageToutes.value.filter(t => t.compte === focusCompte.value)
+                        : tachesPilotageToutes.value);
                     const tachesATraiter = computed(() => tachesPilotage.value.filter(t => !t.paye));
                     const tachesTerminees = computed(() => tachesPilotage.value.filter(t => t.paye));
 
@@ -14980,6 +15305,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return new Date(info.prochainAn, info.prochainMois - 1, jourDePaie.value - 1);
                     });
 
+                    //  v37.18 : la Météo ne suit pas le focus — son « 7 prochains jours »
+                    //  se calcule sur TOUTES les tâches, avec la même règle que les paquets.
+                    const urgenceGlobale = computed(() => {
+                        const r = _rangAujourdhui.value;
+                        return Math.round(tachesPilotageToutes.value
+                            .filter(t => !t.paye && t.rang <= r + HORIZON_URGENCE)
+                            .reduce((s, t) => s + Math.max(0, t.due - (t.regle || 0)), 0));
+                    });
                     const kpiUrgence = computed(() => {
                         const pq = (cle) => tachesGroupees.value.find(p => p.cle === cle) || { total: 0, taches: [] };
                         const retard = pq('retard'), semaine = pq('semaine');
@@ -15074,6 +15407,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     const kpiAtterrissage = computed(() => {
+                        const g = kpiAtterrissageGlobal.value;
+                        const f = focusCompte.value;
+                        if (!f) return g;
+                        //  En focus, la carte parle du compte choisi — et de lui seul.
+                        const info = infoCompte(f);
+                        const c = atterrissageCycle.value.comptes.find(x => x.key === f)
+                               || { key: f, icon: info.icone, label: info.label, reel: info.reel, atterrissage: 0, t0: 0, entrees: 0, sorties: 0, lignes: [] };
+                        const neg = c.reel && c.atterrissage < 0;
+                        return { ...g, montant: c.atterrissage, courant: c, alertes: [], vedette: neg ? c : null, negatif: neg, focus: f };
+                    });
+                    const kpiAtterrissageGlobal = computed(() => {
                         const a = atterrissageCycle.value;
                         const pire = a.alertes.slice().sort((x, y) => x.atterrissage - y.atterrissage)[0] || null;
                         return {
@@ -15194,39 +15538,40 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         { cle: 'epargne',      label: 'Épargne',              icone: '💎', couleur: 'bg-violet-500' },
                         { cle: 'exceptionnel', label: 'Exceptionnel',         icone: '⚠️', couleur: 'bg-rose-500' },
                     ];
-                    const respirationDuMois = (an, m) => {
+                    const respirationDuMois = (an, m, compte = null) => {
                         const d = (donneesAnnuelles.value || {})[an] || {};
                         const lignes = { revenus: [], fixes: [], mensuelles: [], conso: [], epargne: [], exceptionnel: [], injections: [] };
                         Object.values(d.revenus || {}).forEach(r => {
                             const v = valeurEffective(r, r.base, m);
-                            if (v > 0) lignes.revenus.push({ nom: r.label || r.nom || '?', montant: v, jourPrevu: r.jourPrevu || null });
+                            if (v > 0) lignes.revenus.push({ nom: r.label || r.nom || '?', montant: v, jourPrevu: r.jourPrevu || null, compte: compteDeFlux('revenu', r), nature: 'revenu' });
                         });
                         Object.values(d.chargesFixes || {}).forEach(f => {
                             const v = valeurEffective(f, f.valeur, m);
-                            if (v > 0) lignes.fixes.push({ nom: f.label || '?', montant: v, jourPrevu: f.jourPrevu || null });
+                            if (v > 0) lignes.fixes.push({ nom: f.label || '?', montant: v, jourPrevu: f.jourPrevu || null, compte: compteDeFlux('fixe', f), nature: 'fixe' });
                         });
                         Object.values(d.chargesVariables || {}).forEach(c => {
                             if (!c) return;
                             const v = valeurEffective(c, c.valeur, m);
                             if (v <= 0) return;
                             if (c.periode === 'semaine') {
-                                lignes.conso.push({ nom: c.label || '?', montant: Math.round(v * 4.3 * 100) / 100, parSemaine: v });
+                                lignes.conso.push({ nom: c.label || '?', montant: Math.round(v * 4.3 * 100) / 100, parSemaine: v, compte: compteDeFlux('variable', c), nature: 'variable' });
                             } else {
                                 const det = (c.details || []).filter(x => Number(x.montant) > 0).map(x => x.nom + ' ' + formatNombre(x.montant));
-                                lignes.mensuelles.push({ nom: c.label || '?', montant: v, jourPrevu: c.jourPrevu || null, detail: det.join(' · ') });
+                                lignes.mensuelles.push({ nom: c.label || '?', montant: v, jourPrevu: c.jourPrevu || null, detail: det.join(' · '), compte: compteDeFlux('variable', c), nature: 'variable' });
                             }
                         });
                         const epArr = Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {});
                         epArr.forEach(ep => {
                             const v = valeurEffective(ep, ep.valeur, m);
-                            if (v > 0) lignes.epargne.push({ nom: ep.nom || ep.label || '?', montant: v, jourPrevu: ep.jourPrevu || null });
+                            if (v > 0) lignes.epargne.push({ nom: ep.nom || ep.label || '?', montant: v, jourPrevu: ep.jourPrevu || null, compte: compteDeFlux('epargne', ep), nature: 'epargne', ref: ep });
                         });
                         const irr = Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : Object.values(d.depensesIrregulieres || {});
                         irr.filter(x => Number(x.mois) === Number(m)).forEach(x => {
                             const v = Number(x.montant) || 0;
-                            if (v > 0) lignes.exceptionnel.push({ nom: x.nom || x.label || '?', montant: v });
-                            else if (v < 0) lignes.injections.push({ nom: x.nom || x.label || '?', montant: -v });
+                            if (v > 0) lignes.exceptionnel.push({ nom: x.nom || x.label || '?', montant: v, compte: compteDeFlux('exceptionnel', x), nature: 'exceptionnel', ref: x });
+                            else if (v < 0) lignes.injections.push({ nom: x.nom || x.label || '?', montant: -v, compte: compteDeFlux('exceptionnel', x), nature: 'injection', ref: x });
                         });
+                        if (compte) Object.keys(lignes).forEach(k => { lignes[k] = lignes[k].filter(x => x.compte === compte); });
                         const somme = (a) => Math.round(a.reduce((s, x) => s + x.montant, 0));
                         const revenus = somme(lignes.revenus), injections = somme(lignes.injections);
                         const ressources = revenus + injections;
@@ -15247,9 +15592,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             consoParSemaine: Math.round(lignes.conso.reduce((s, x) => s + x.parSemaine, 0)),
                         };
                     };
-                    const respirationBudgetaire = computed(() => {
+                    //  La Météo lit TOUJOURS le budget entier ; l'écran du Prévisionnel
+                    //  suit le focus bancaire.
+                    const respirationGlobale = computed(() => {
                         calculationTick.value;
                         return respirationDuMois(moisBudgetaire.value.an, moisBudgetaire.value.mois);
+                    });
+                    const respirationBudgetaire = computed(() => {
+                        calculationTick.value;
+                        return focusCompte.value
+                            ? respirationDuMois(moisBudgetaire.value.an, moisBudgetaire.value.mois, focusCompte.value)
+                            : respirationGlobale.value;
                     });
                     const NIVEAUX_RESPIRATION = {
                         ample:  { label: 'Respiration ample',      phrase: 'Il reste de l’air chaque mois : le budget encaisse un imprévu.' },
@@ -15269,8 +15622,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                        le Réalisé ; on le ramène au jour, jusqu'à la veille de la paie.
                        ═══════════════════════════════════════════════════════════════ */
                     const meteoFinanciere = computed(() => {
-                        const A = kpiAtterrissage.value;
-                        const R = respirationBudgetaire.value;
+                        const A = kpiAtterrissageGlobal.value;
+                        const R = respirationGlobale.value;
                         const jours = Math.max(1, Number(joursRestantsAvantPaie.value) || 1);
                         const rav = Math.round(budgetConsoRestantReel.value);
                         const parJour = rav > 0 ? Math.floor(rav / jours) : 0;
@@ -15323,9 +15676,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             etat, icone, titre, raison, conseil,
                             rav, parJour, parSemaine, jours, cash, siRav,
                             prochainePaie: prochainePaieLabel.value,
-                            atterrissage: courant, dateFin: A.dateFin, urgence: kpiUrgence.value.montant,
+                            atterrissage: courant, dateFin: A.dateFin, urgence: urgenceGlobale.value,
                             respirationPct: R.pct, respirationNiveau: R.niveau,
                             retro: isCyclePasse.value, cycleConsulte: pilotageCycleLabel.value,
+                            logistique: (() => {
+                                const r = radarComptes.value;
+                                const b = r.besoins[0];
+                                if (!b) return null;
+                                return '🏦 Virer ' + formatMAD(b.aVirer) + ' sur ' + b.label + ' avant le ' + b.avantLe
+                                     + (b.donneur ? ', depuis ' + b.donneur.label : '')
+                                     + ', pour tenir jusqu’au ' + r.horizon.replace(/\.$/, '') + '.'
+                                     + (r.besoins.length > 1 ? ' (+ ' + (r.besoins.length - 1) + ' autre' + (r.besoins.length > 2 ? 's' : '') + ' compte' + (r.besoins.length > 2 ? 's' : '') + ')' : '');
+                            })(),
                         };
                     });
 
@@ -17763,6 +18125,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.17 : météo financière + respiration du Prévisionnel
                         meteoFinanciere, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION,
                         surbrillanceEchues, estEchue,
+                        // v37.18 : logistique bancaire
+                        compteDeFlux, regleDeRoutage, infoCompte, focusCompte, comptesFocus, radarComptes,
+                        mecaniqueCompte, tachesPilotageToutes, kpiAtterrissageGlobal, respirationGlobale,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup

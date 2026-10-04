@@ -58,5 +58,6 @@ suite "Mois budgétaire vs mois civil (exceptions)"              node test_cfo_e
 suite "Relevé : rangement et ordre par cycle de paie"           node test_cfo_engine_parity/test_releve_cycle.mjs
 suite "Cockpit du Pilotage (KPIs, file, bulles)"                node test_cfo_engine_parity/test_cockpit_pilotage.mjs
 suite "Météo financière & respiration du Prévisionnel"          node test_cfo_engine_parity/test_meteo.mjs
+suite "Logistique bancaire (routage, radar, focus)"             node test_cfo_engine_parity/test_logistique.mjs
 
 echo "✅ Toutes les suites passent."
