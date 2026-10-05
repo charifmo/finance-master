@@ -281,12 +281,12 @@ try {
             jauge: piste ? w(q('[data-pulse-jauge]')).width / w(piste).width : null,
             repere: piste ? (w(q('[data-pulse-repere]')).left + w(q('[data-pulse-repere]')).width / 2 - w(piste).left) / w(piste).width : null,
             jours: [...document.querySelectorAll('[data-meteo] [data-pulse-liberte] [aria-hidden="true"].grid-cols-7 span')].filter(s => s.offsetParent).length,
-            filet: q('[data-meteo-filet]')?.textContent, taillefilet: fs_(q('[data-meteo-filet]')), tailleMontant: fs_(q('[data-pulse-montant]')),
+            filet: q('[data-meteo-filet]')?.textContent, taillefilet: fs_(q('[data-meteo-filet]')), tailleMontant: fs_(q('[data-pulse-montant] span')),
             rav: q('[data-meteo-rav]')?.textContent, jour: q('[data-meteo-jour]')?.textContent,
         };
     });
     v('la tuile Liberté affiche 1 050 DH', sansEsp(dom.montant) === nf(1050) + 'DH', dom.montant);
-    v('  → et sa légende « N % … X sur Y »', sansEsp(dom.legende).includes(z.p.pct + '%') && sansEsp(dom.legende).includes(nf(550) + 'DHsur' + nf(ENVELOPPE) + 'DH'), dom.legende);
+    v('  → et sa légende « X dépensés sur Y · N % »', sansEsp(dom.legende).includes(z.p.pct + '%') && sansEsp(dom.legende).includes(nf(550) + 'DHdépenséssur' + nf(ENVELOPPE) + 'DH'), dom.legende);
     if (twCss) {
         v('la jauge est remplie à hauteur de la consommation', dom.jauge !== null && Math.abs(dom.jauge - z.p.pct / 100) < 0.015, JSON.stringify([dom.jauge, z.p.pct]));
         v('  → le repère blanc marque le jour de la semaine', dom.repere !== null && Math.abs(dom.repere - z.p.pctTemps / 100) < 0.015, JSON.stringify([dom.repere, z.p.pctTemps]));
@@ -321,13 +321,14 @@ try {
         return { debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                  hauteur: m ? m.getBoundingClientRect().height : 0,
                  montant: vis('[data-pulse-montant]'), sanct: vis('[data-pulse-sanctuaire-montant]'), jauge: vis('[data-pulse-jauge]'),
-                 categories: lib ? [...lib.querySelectorAll('ul')].some(u => u.offsetParent) : null,
+                 categories: !!(lib && lib.querySelector('[data-pulse-categories]') && lib.querySelector('[data-pulse-categories]').offsetParent),
+                 rangee: (() => { const r = lib && lib.querySelector('[data-pulse-categories]'); return !!r && getComputedStyle(r).overflowX === 'auto' && getComputedStyle(r).flexWrap === 'nowrap'; })(),
                  entete: lib ? lib.querySelector('p').getBoundingClientRect().height : 0 };
     });
     v('S24+ : Liberté, jauge et Sanctuaire visibles, aucun débordement', tel.montant && tel.sanct && tel.jauge && tel.debord <= 0, JSON.stringify(tel));
     if (twCss) {
         v('  → la Météo garde de la place sous elle (< 75 % de l\'écran)', tel.hauteur < 832 * 0.75, String(tel.hauteur));
-        v('  → le détail par catégorie est réservé au grand écran', tel.categories === false, String(tel.categories));
+        v('  → les catégories sont là, en une rangée qui défile au doigt', tel.categories === true && tel.rangee, JSON.stringify(tel));
         v('  → l\'en-tête de la Liberté tient sur une ligne', tel.entete > 0 && tel.entete < 20, String(tel.entete));
     }
     v('  → aucune erreur JavaScript', mo.erreurs.length === 0, mo.erreurs[0] || '');
