@@ -7121,7 +7121,7 @@
                      lien: { type: String, default: null }, chips: { type: Boolean, default: true } },
             emits: ['aller', 'revenir'],
             components: { 'mono-compte': MonoCompte },
-            data() { return { rx: null, rxEpingle: false, rxStyle: {} }; },
+            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false }; },
             computed: {
                 fond() {
                     return this.meteo.etat === 'orage' ? 'from-rose-600 via-red-700 to-slate-900'
@@ -7157,6 +7157,9 @@
             methods: {
                 chiffre(v) { return this.formatMad(v).replace(/\s*DH\s*$/, ''); },
                 anneau(c) { return Math.min(100, c.budget > 0 ? c.depense / c.budget * 100 : (c.depense > 0 ? 100 : 0)); },
+                //  v37.22 : 8 postes d'abord ; « +N » déplie (et le panneau se recale).
+                postesVisibles(c) { return this.rxTousPostes ? c.prevu : c.prevu.slice(0, 8); },
+                deplierPostes() { this.rxTousPostes = true; this.$nextTick(() => this.placer()); },
                 estOuvert(type, key) { return !!this.rx && this.rx.type === type && this.rx.key === key; },
                 //  Souris : le survol ouvre, la sortie referme (avec un temps de grâce
                 //  pour rejoindre le panneau) ; le clic épingle. Doigt : le toucher
@@ -7166,6 +7169,7 @@
                     this._ancre = el;
                     if (!this.estOuvert(type, key)) {
                         this.rx = { type, key };
+                        this.rxTousPostes = false;
                         this.rxStyle = { left: '0px', top: '0px', width: Math.min(340, window.innerWidth - 16) + 'px', visibility: 'hidden' };
                     }
                     this.$nextTick(() => this.placer());
@@ -7373,14 +7377,41 @@
                         <span class="block text-[10px] font-semibold text-slate-400">sur {{ formatMad(rxContenu.c.budget) }}</span>
                     </p>
                 </div>
-                <div class="mt-2.5 h-1 rounded-full bg-white/10 overflow-hidden">
-                    <div :class="['h-full rounded-full', rxContenu.c.reste < 0 ? 'bg-rose-400' : 'bg-emerald-300']" :style="{ width: anneau(rxContenu.c) + '%' }"></div>
+                <!-- 🧾 Le budget prévu : la liste de courses -->
+                <div v-if="rxContenu.c.prevu && rxContenu.c.prevu.length" data-rx-prevu class="mt-3 rounded-xl bg-slate-50 ring-1 ring-white/20 p-2.5 text-slate-600">
+                    <p class="flex items-baseline justify-between gap-2">
+                        <span class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">🧾 Budget prévu</span>
+                        <span class="text-[10px] font-bold text-slate-400 tabular-nums">{{ formatMad(rxContenu.c.budget) }} / semaine</span>
+                    </p>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                        <span v-for="(d, i) in postesVisibles(rxContenu.c)" :key="'rxp_' + i" data-rx-poste :data-depense="d.depense"
+                              :title="d.depense > 0 ? formatMad(d.depense) + ' dépensés cette semaine sur ' + formatMad(d.montant) : 'Rien dépensé sur ce poste cette semaine'"
+                              class="relative overflow-hidden inline-flex items-center gap-1 rounded-md bg-white ring-1 ring-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 tabular-nums">
+                            <span v-if="d.depense > 0" aria-hidden="true" data-rx-poste-rempli :class="['absolute inset-y-0 left-0', d.depense > d.montant ? 'bg-rose-100' : 'bg-emerald-100']" :style="{ width: d.pct + '%' }"></span>
+                            <span class="relative">{{ d.emoji }} {{ d.nom }} : <span class="font-black text-slate-800">{{ formatMad(d.montant) }}</span></span>
+                        </span>
+                        <button v-if="!rxTousPostes && rxContenu.c.prevu.length > 8" type="button" data-rx-plus @click.stop="deplierPostes()"
+                                class="inline-flex items-center rounded-md bg-slate-200/70 hover:bg-slate-300/70 px-1.5 py-0.5 text-[10px] font-black text-slate-600">+{{ rxContenu.c.prevu.length - 8 }}</button>
+                    </div>
+                    <p v-if="rxContenu.c.prevuAjuste" class="mt-1.5 text-[10px] font-semibold text-slate-400 leading-snug">Ajusté à l'exception de ce mois : postes ramenés au budget de la semaine.</p>
+                    <p v-if="rxContenu.c.nonVentile > 0" class="mt-1.5 text-[10px] font-semibold text-slate-400 leading-snug" data-rx-non-ventile>{{ formatMad(rxContenu.c.nonVentile) }} d'achats saisis sur « {{ rxContenu.c.label }} » sans sous-catégorie : non répartis ci-dessus.</p>
                 </div>
-                <ul v-if="rxContenu.c.transactions.length" class="mt-3 max-h-64 overflow-y-auto divide-y divide-white/5 -mx-1 px-1">
+                <!-- Les dépenses réelles de la semaine -->
+                <div :class="rxContenu.c.prevu && rxContenu.c.prevu.length ? 'mt-3 pt-3 border-t border-dashed border-white/15' : 'mt-2.5'">
+                    <p v-if="rxContenu.c.prevu && rxContenu.c.prevu.length" class="flex items-baseline justify-between gap-2 mb-2" data-rx-reel>
+                        <span class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">💳 Dépenses réelles de la semaine</span>
+                        <span class="text-[10px] font-bold text-slate-500 tabular-nums">{{ anneau(rxContenu.c).toFixed(0) }} %</span>
+                    </p>
+                    <div class="h-1 rounded-full bg-white/10 overflow-hidden">
+                        <div :class="['h-full rounded-full', rxContenu.c.reste < 0 ? 'bg-rose-400' : 'bg-emerald-300']" :style="{ width: anneau(rxContenu.c) + '%' }"></div>
+                    </div>
+                </div>
+                <ul v-if="rxContenu.c.transactions.length" class="mt-2 max-h-64 overflow-y-auto divide-y divide-white/5 -mx-1 px-1">
                     <li v-for="t in rxContenu.c.transactions" :key="'rxt_' + t.id" data-rx-ligne class="grid grid-cols-[3.1rem_minmax(0,1fr)_auto] items-center gap-2 py-2 text-xs">
                         <span class="text-[10px] font-bold text-slate-500 tabular-nums whitespace-nowrap" data-rx-quand>{{ t.quand }}</span>
                         <span class="min-w-0 flex items-center gap-1.5">
                             <span class="truncate font-semibold text-slate-100" data-rx-libelle>{{ t.libelle }}</span>
+                            <span v-if="t.poste" class="shrink-0 max-w-[5.5rem] truncate rounded bg-white/10 px-1 text-[9px] font-bold text-slate-300" data-rx-ligne-poste :title="t.poste">{{ t.posteEmoji }} {{ t.poste }}</span>
                             <mono-compte v-if="t.compte" :c="t.compte"></mono-compte>
                             <span v-if="t.horsCompte" class="shrink-0 text-[9px] font-black text-amber-300" title="Payé depuis un autre compte que celui des charges variables">≠ prévu</span>
                         </span>
@@ -7453,8 +7484,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.21 Rayons-X";
+                    const CURRENT_VERSION = "37.22 Liste-de-Courses";
                     const CHANGELOG = [
+        { version: "37.22 Liste-de-Courses", date: "2026-10-05", changes: [
+            "🧾 LA LISTE DE COURSES DANS LES RAYONS X — survoler (ou toucher) « Alimentation » rappelle d'abord le budget PRÉVU, sous-catégorie par sous-catégorie : [🛍️ Hri : 800 DH] [🥩 L7m : 400 DH] [🧺 Marché : 350 DH]. Un « ticket » clair dans le panneau sombre, le plus gros poste d'abord ; au-delà de 8 postes, « +N » déplie. Puis, séparées par un pointillé, les « Dépenses réelles de la semaine ».",
+            "CE QUI RESTE PAR POSTE — une dépense saisie sur une sous-catégorie (Saisie → catégorie « Hri ») remplit son étiquette : verte tant que le poste tient, rose au-delà ; l'achat porte le nom de son poste dans la liste. Les achats saisis sur la catégorie elle-même sont annoncés « non répartis » plutôt que de laisser croire qu'un poste est intact.",
+            "LES CHIFFRES TOMBENT JUSTE — les postes viennent de la même ligne du Prévisionnel que l'enveloppe (même année budgétaire) : leur somme est le budget affiché, au dirham. Si une exception change le budget de ce mois, les postes sont ramenés à ce budget, et c'est écrit. Un emoji est déduit du nom (darija et français : l7m 🥩, djaj 🍗, khdra 🥬, 7lib 🥛, essence ⛽…), sinon 🏷️.",
+            "PREUVE — la suite « Rayons X » gagne 13 contrôles : postes et emojis, Σ postes = budget, dépensé par poste + non réparti = total, bloc placé avant les dépenses réelles, remplissage de l'étiquette, repli « +N », exception du mois. Rejouée sur la v37.21 : échec ; trois défauts réintroduits exprès sont attrapés.",
+        ] },
         { version: "37.21 Rayons-X", date: "2026-10-05", changes: [
             "🔍 RAYONS X — dans la Liberté, chaque catégorie (Courses, Voiture…) est une tuile : au survol (souris) ou au toucher (téléphone), un panneau liste les vraies dépenses de la semaine qui composent son total — date, libellé, compte payeur, montant — puis le reste. La somme des lignes est le total affiché, au dirham : le budget s'audite d'un geste. Clic = épingler, Échap ou toucher ailleurs = fermer. Le lien « hors budget conso » s'audite de la même façon.",
             "LE PANNEAU NE SE CACHE JAMAIS — il est téléporté dans la page (position fixe, z-index 9999), recalé dans l'écran et retourné au-dessus de la ligne s'il manque de place en dessous : aucune carte, aucun flou ni aucun débordement ne peut le rogner.",
@@ -16035,6 +16072,26 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             horsCompte: !!(compte && cleVar && compte.key !== cleVar),
                         };
                     };
+                    //  v37.22 : un emoji par poste, déduit du nom (darija et français). Le
+                    //  produit l'emporte sur l'enseigne : « Marjane Lait » → 🥛.
+                    const _EMOJIS_POSTES = [
+                        [/hrr?i\b|hanout|epicerie|stock/, '🛍️'], [/l7m|lhm|lahm|viande|boucher/, '🥩'], [/djaj|dajaj|poulet|volaille/, '🍗'],
+                        [/samak|poisson|hout\b|crevette/, '🐟'], [/kfta|kefta|hache/, '🍖'], [/khdra|khodra|legume/, '🥬'], [/fakya|fruit/, '🍎'],
+                        [/lait|7lib|halib|danup|danone|yaourt|calin/, '🥛'], [/fromage|edam|parmesan|jben|gouda/, '🧀'], [/oeuf|\bbid\b|bayd/, '🥚'],
+                        [/farine|dqiq|semoule/, '🌾'], [/pain|khobz|boulang/, '🥖'], [/dessert|gateau|patiss|sucre/, '🍰'],
+                        [/marche|souk/, '🧺'], [/marjane?|carrefour|\bbim\b|aswak|supermarch|acima/, '🛒'],
+                        [/cafe|coffee/, '☕'], [/resto|restaurant|wknd|sortie/, '🍽️'], [/barber|coiff/, '💈'],
+                        [/essence|diesel|gasoil|carbur|afriquia/, '⛽'], [/ghsil|lavage/, '🧽'], [/psy|medecin|docteur|consult/, '🩺'],
+                        [/medic|pharma|complement|vitamine/, '💊'], [/\beau\b|lydec|redal|amendis/, '💧'], [/elec/, '⚡'],
+                        [/\btel\b|telephone|internet|fibre|inwi|orange/, '📶'], [/netflix|spotify|youtube|disney|shahid/, '🎬'],
+                        [/chatgpt|openai|claude|abonn/, '🤖'], [/ecole|cours|livre/, '📚'], [/bebe|couche/, '🍼'],
+                    ];
+                    const emojiPoste = (nom, icone) => {
+                        if (icone) return icone;
+                        const n = String(nom || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        const e = _EMOJIS_POSTES.find(([re]) => re.test(n));
+                        return e ? e[1] : '🏷️';
+                    };
                     const _parDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (Number(b.id) || 0) - (Number(a.id) || 0));
                     //  L'échéance réelle d'une ligne du cycle, à partir de son jour du mois.
                     const _dateEcheance = (jour, retard) => {
@@ -16064,7 +16121,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const v = valeurEffective(cv, cv.valeur, mb.mois);
                             if (cv.categorieId) carte[cv.categorieId] = key;
                             (cv.details || []).forEach(det => { if (det && det.categorieId) carte[det.categorieId] = key; });
-                            cats.push({ key, label: cv.label || key, budget: cv.periode === 'semaine' ? v : v / 4.3, depense: 0, tx: [] });
+                            const budget = cv.periode === 'semaine' ? v : v / 4.3;
+                            //  v37.22 : la décomposition prévue (la liste de courses)
+                            const dets = (cv.details || []).filter(x => x && Number(x.montant) > 0);
+                            const sommeDets = dets.reduce((s, x) => s + Number(x.montant), 0);
+                            const echelle = sommeDets > 0 ? budget / sommeDets : 0;
+                            cats.push({ key, label: cv.label || key, budget, depense: 0, tx: [], nonVentile: 0,
+                                        prevuAjuste: sommeDets > 0 && Math.abs(echelle - 1) > 0.001,
+                                        prevu: dets.map(x => ({ nom: x.nom || '—', emoji: emojiPoste(x.nom, x.icone),
+                                                                montant: Number(x.montant) * echelle, categorieId: x.categorieId || null, depense: 0 })) });
                         });
                         //  2. Le réel : transactions datées de lundi à aujourd'hui, toutes
                         //     années confondues (une semaine peut enjamber le 31 décembre).
@@ -16082,6 +16147,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const tx = _txRayonX(t, dt, cleVar);
                                 if (!c) { if (m > 0) { horsBudget += m; nbHors++; horsTx.push(tx); } return; }
                                 c.depense += m; nbTx++; c.tx.push(tx);
+                                const poste = t.categorieId ? c.prevu.find(x => x.categorieId === t.categorieId) : null;
+                                if (poste) { poste.depense += m; tx.poste = poste.nom; tx.posteEmoji = poste.emoji; }
+                                else c.nonVentile += m;
                             });
                         });
                         const enveloppe = Math.round(cats.reduce((s, c) => s + c.budget, 0));
@@ -16120,7 +16188,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const transactions = tx.sort(_parDateDesc);
                                     const autres = {};
                                     transactions.forEach(t => { if (t.horsCompte) autres[t.compte.key] = t.compte; });
+                                    //  Arrondis : le reliquat va au plus gros poste, pour que la
+                                    //  somme des étiquettes tombe EXACTEMENT sur le budget affiché.
+                                    const prevu = c.prevu.map(x => ({ ...x, montant: Math.round(x.montant), depense: Math.round(x.depense) }))
+                                        .sort((a, b) => b.montant - a.montant);
+                                    if (prevu.length) prevu[0].montant += Math.round(c.budget) - prevu.reduce((s, x) => s + x.montant, 0);
+                                    prevu.forEach(x => { x.pct = x.montant > 0 ? Math.min(100, Math.round(x.depense / x.montant * 100)) : (x.depense > 0 ? 100 : 0); });
                                     return { ...c, budget: Math.round(c.budget), depense: Math.round(c.depense),
+                                             prevu, nonVentile: Math.round(c.nonVentile),
                                              reste: Math.round(c.budget - c.depense), nb: transactions.length, transactions,
                                              comptesAutres: Object.values(autres),
                                              pct: c.budget > 0 ? Math.min(100, Math.round(c.depense / c.budget * 100)) : 100 };

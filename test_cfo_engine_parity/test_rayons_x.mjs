@@ -1,5 +1,6 @@
 /**
  * v37.21 — RAYONS X ET ROUTAGE ÉVIDENT.
+ * v37.22 — … ET LA LISTE DE COURSES (sous-catégories prévues, poste par poste).
  *
  *   « On voit un total, pas ce qui le compose » et « quel compte paie quoi ? ».
  *   Cette suite vérifie :
@@ -92,7 +93,10 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
                        ecole: Fx('—', 0), femmeMenage: Fx('—', 0), habitsCharif: Fx('—', 0), habitsBebe: Fx('—', 0), jouets: Fx('—', 0) };
     const V = (label, valeur, periode, details = []) => ({ ...neutre, label, valeur, periode, details });
     d.chargesVariables = {
-        alimentation: V('COURSES', 1000, 'semaine'), sorties: V('SORTIES', 400, 'semaine'), voiture: V('ESSENCE', 860, 'mois'),
+        //  v37.22 : les sous-catégories prévues (la liste de courses)
+        alimentation: V('COURSES', 1000, 'semaine', [{ id: 1, nom: 'MARCHE', montant: 200 }, { id: 2, nom: 'HRI', montant: 500 }, { id: 3, nom: 'L7M', montant: 300 }]),
+        sorties: V('SORTIES', 400, 'semaine', [76, 64, 52, 44, 40, 32, 28, 24, 20, 20].map((m, i) => ({ id: i + 1, nom: 'POSTE ' + (i + 1), montant: m }))),
+        voiture: V('ESSENCE', 860, 'mois'),
         sante: V('MUTUELLE', 500, 'mois', [{ nom: 'MUTUELLE', montant: 500, jourPrevu: jourDans(1) }]),
         factures: { ...V('FACTURES', 800, 'mois'), categorieId: 'cat_cv_factures' },
     };
@@ -103,7 +107,7 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
 }
 const TX = [
     { id: 900, date: iso(LUNDI), libelle: 'MARJANE', montant: 300, cat: 'alimentation', compteId: 1 },
-    { id: 901, date: iso(maintenant), libelle: 'CARREFOUR', montant: 150, cat: 'alimentation', compteId: 2 },   // payé par Assafa
+    { id: 901, date: iso(maintenant), libelle: 'CARREFOUR', montant: 150, cat: 'alimentation', poste: 'HRI', compteId: 2 },   // payé par Assafa, sur le poste Hri
     { id: 902, date: iso(maintenant), libelle: 'AFRIQUIA', montant: 100, cat: 'voiture', compteId: 1 },
     { id: 903, date: iso(dans(-IDX - 1)), libelle: 'SEMAINE DERNIERE', montant: 999, cat: 'alimentation', compteId: 1 },
     { id: 904, date: iso(maintenant), libelle: 'LYDEC', montant: 250, cat: 'factures', compteId: 1 },
@@ -141,7 +145,7 @@ const ouvrir = async (opts) => {
         const cv = st.donneesAnnuelles[st.moisBudgetaire.an].chargesVariables;
         Object.values(st.donneesAnnuelles).forEach(d => { d.transactionsReelles = []; });
         TX.forEach(t => st.donneesAnnuelles[st.moisBudgetaire.an].transactionsReelles.push(
-            { id: t.id, date: t.date, libelle: t.libelle, montant: t.montant, categorieId: cv[t.cat].categorieId, compteId: t.compteId, source: 'test' }));
+            { id: t.id, date: t.date, libelle: t.libelle, montant: t.montant, categorieId: t.poste ? cv[t.cat].details.find(d => d.nom === t.poste).categorieId : cv[t.cat].categorieId, compteId: t.compteId, source: 'test' }));
         st.forceUpdateCalculations();
     }, { ST, TX });
     await page.waitForTimeout(700);
@@ -189,6 +193,20 @@ try {
     v('reste de la catégorie = budget − dépensé (1 000 − 450)', alim.reste === 550, String(alim.reste));
     v('hors budget conso : la facture LYDEC, auditée à part', L.p.horsBudgetTx.length === 1 && L.p.horsBudgetTx[0].libelle === 'LYDEC', JSON.stringify(L.p.horsBudgetTx));
 
+    /* ── C bis. La liste de courses : le prévu, poste par poste ──────── */
+    v('Courses : postes prévus, le plus gros d\'abord, avec leur emoji (🛍️ 500 · 🥩 300 · 🧺 200)',
+      JSON.stringify(alim.prevu.map(x => [x.nom, x.montant, x.emoji])) === '[["HRI",500,"🛍️"],["L7M",300,"🥩"],["MARCHE",200,"🧺"]]', JSON.stringify(alim.prevu));
+    v('pour chaque catégorie détaillée, Σ des postes = budget affiché',
+      L.p.categories.filter(c => c.prevu.length).length === 2 && L.p.categories.every(c => !c.prevu.length || c.prevu.reduce((s, x) => s + x.montant, 0) === c.budget),
+      JSON.stringify(L.p.categories.map(c => [c.key, c.budget, c.prevu.reduce((s, x) => s + x.montant, 0)])));
+    v('dépensé par poste : Hri 150 (CARREFOUR), le reste « non ventilé » (300)',
+      alim.prevu.find(x => x.nom === 'HRI').depense === 150 && alim.prevu.filter(x => x.nom !== 'HRI').every(x => x.depense === 0) && alim.nonVentile === 300
+      && alim.transactions.find(t => t.libelle === 'CARREFOUR').poste === 'HRI' && !alim.transactions.find(t => t.libelle === 'MARJANE').poste,
+      JSON.stringify({ prevu: alim.prevu, nonVentile: alim.nonVentile }));
+    v('  → Σ postes dépensés + non ventilé = total dépensé, partout',
+      L.p.categories.every(c => c.prevu.reduce((s, x) => s + x.depense, 0) + c.nonVentile === c.depense), JSON.stringify(L.p.categories.map(c => [c.key, c.depense, c.nonVentile])));
+    v('catégorie sans sous-catégories (Essence, mensuelle) : pas de liste', L.p.categories.find(c => c.key === 'voiture').prevu.length === 0);
+
     /* ── D. Le routage : un monogramme par compte, le Sanctuaire par compte ─ */
     v('la Liberté nomme son compte : Courant (CO)', L.p.compte.key === 'cpt_1' && L.p.compte.tag === 'Courant' && L.p.compte.initiales === 'CO', JSON.stringify(L.p.compte));
     const pc = L.s.parCompte;
@@ -233,6 +251,24 @@ try {
       && p1.lignes[1].libelle === 'MARJANE' && p1.lignes[1].mono === 'cpt_1' && p1.lignes.every(l => !!l.quand), JSON.stringify(p1 && p1.lignes));
     v('  → « ≠ prévu » sur l\'achat payé par Assafa, total et reste exacts',
       !!p1 && p1.lignes[0].horsCompte && !p1.lignes[1].horsCompte && p1.total === '450DH' && p1.reste === 'Reste550DH', JSON.stringify(p1 && [p1.total, p1.reste]));
+    //  v37.22 : le bloc « Budget prévu » est sous l'en-tête, AVANT les dépenses réelles.
+    const courses = await page.evaluate(() => {
+        const p = document.querySelector('[data-rayonx]');
+        const bloc = p && p.querySelector('[data-rx-prevu]'), reel = p && p.querySelector('[data-rx-reel]'), l1 = p && p.querySelector('[data-rx-ligne]');
+        if (!bloc) return null;
+        const hri = bloc.querySelector('[data-rx-poste]'), rempli = hri && hri.querySelector('[data-rx-poste-rempli]');
+        return { etiquettes: [...bloc.querySelectorAll('[data-rx-poste]')].map(e => e.textContent.replace(/\s/g, '')),
+                 ordre: !!reel && bloc.getBoundingClientRect().bottom <= reel.getBoundingClientRect().top && reel.getBoundingClientRect().bottom <= l1.getBoundingClientRect().top,
+                 fond: getComputedStyle(bloc).backgroundColor, rempli: rempli ? rempli.getBoundingClientRect().width / hri.getBoundingClientRect().width : null,
+                 nonVentile: !!bloc.querySelector('[data-rx-non-ventile]'), postesLignes: [...p.querySelectorAll('[data-rx-ligne-poste]')].map(e => e.textContent.trim()) };
+    });
+    v('panneau : « Budget prévu » [🛍️ HRI : 500 DH] [🥩 L7M : 300 DH] [🧺 MARCHE : 200 DH]',
+      !!courses && JSON.stringify(courses.etiquettes) === JSON.stringify(['🛍️HRI:500DH', '🥩L7M:300DH', '🧺MARCHE:200DH']), JSON.stringify(courses));
+    v('  → sous l\'en-tête, séparé puis suivi des dépenses réelles', !!courses && courses.ordre, JSON.stringify(courses));
+    v('  → un « ticket » clair dans le panneau sombre', !!courses && /^rgba?\((2[3-5]\d), (2[3-5]\d), (2[3-5]\d)/.test(courses.fond), courses && courses.fond);
+    if (twCss) v('  → l\'étiquette Hri se remplit à 30 % (150 / 500)', !!courses && courses.rempli !== null && Math.abs(courses.rempli - 0.3) < 0.03, JSON.stringify(courses && courses.rempli));
+    v('  → les 300 DH non ventilés sont signalés ; l\'achat CARREFOUR porte « HRI »',
+      !!courses && courses.nonVentile && JSON.stringify(courses.postesLignes) === '["🛍️ HRI"]', JSON.stringify(courses));
     // La souris rejoint le panneau : il reste ouvert.
     const boite = await page.evaluate(() => { const r = document.querySelector('[data-rayonx]').getBoundingClientRect(); return { x: r.left + 30, y: r.top + 30 }; });
     await page.mouse.move(boite.x, boite.y, { steps: 4 });
@@ -247,9 +283,35 @@ try {
     await page.waitForTimeout(350);
     const p2 = await panneau(page);
     v('clic → panneau épinglé, il survit au départ de la souris', !!p2 && p2.lignes.length === 1 && p2.lignes[0].libelle === 'AFRIQUIA', JSON.stringify(p2));
+    v('  → catégorie sans sous-catégories : pas de bloc « Budget prévu »', await page.evaluate(() => !document.querySelector('[data-rayonx] [data-rx-prevu]')));
     await page.keyboard.press('Escape');
     await page.waitForTimeout(150);
     v('  → Échap le referme', !(await panneau(page)));
+    // Dix postes : huit d'abord, « +2 » déplie sans fermer le panneau.
+    await page.click('[data-pulse-cat][data-cat="sorties"]');
+    await page.waitForTimeout(250);
+    const plie = await page.evaluate(() => ({ n: document.querySelectorAll('[data-rayonx] [data-rx-poste]').length, plus: document.querySelector('[data-rayonx] [data-rx-plus]')?.textContent.trim() }));
+    await page.click('[data-rayonx] [data-rx-plus]');
+    await page.waitForTimeout(250);
+    const deplie = await page.evaluate(() => ({ n: document.querySelectorAll('[data-rayonx] [data-rx-poste]').length, plus: !!document.querySelector('[data-rayonx] [data-rx-plus]') }));
+    v('10 postes : 8 affichés et « +2 », qui déplie sans fermer le panneau',
+      plie.n === 8 && plie.plus === '+2' && deplie.n === 10 && !deplie.plus, JSON.stringify({ plie, deplie }));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    // Une exception ce mois-ci (1 200 au lieu de 1 000) : les postes suivent.
+    const ajuste = await page.evaluate(async (ST) => {
+        const st = eval(ST);
+        const m = st.moisBudgetaire.mois;
+        st.donneesAnnuelles[st.moisBudgetaire.an].chargesVariables.alimentation.exceptions = [{ moisDebut: m, moisFin: m, nouvelleValeur: 1200 }];
+        st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 200));
+        const c = st.pulseHebdo.categories.find(x => x.key === 'alimentation');
+        const res = { budget: c.budget, prevu: c.prevu.map(x => x.montant), ajuste: c.prevuAjuste };
+        st.donneesAnnuelles[st.moisBudgetaire.an].chargesVariables.alimentation.exceptions = [];
+        st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 200));
+        return res;
+    }, ST);
+    v('exception du mois (1 200) : postes ramenés au budget (600 · 360 · 240), et signalé',
+      ajuste.budget === 1200 && JSON.stringify(ajuste.prevu) === '[600,360,240]' && ajuste.ajuste === true, JSON.stringify(ajuste));
     // Un compte du Sanctuaire
     await page.hover('[data-sanct-compte][data-compte="cpt_2"]');
     await page.waitForTimeout(250);
