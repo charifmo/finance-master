@@ -170,7 +170,8 @@ try {
     // Soleil
     const sol = await scenario(60000);
     v('coussin confortable → ☀️ Soleil', sol.m.etat === 'soleil' && sol.atterr >= 1000, JSON.stringify(sol.m));
-    v('  → le conseil chiffre la dépense par jour', sol.m.conseil.includes(new Intl.NumberFormat('fr-FR').format(sol.m.parJour)), sol.m.conseil);
+    //  v37.20 : le conseil raisonne en semaines (le « par jour » est descendu au filet).
+    v('  → le conseil chiffre la dépense par semaine', sol.m.conseil.includes(new Intl.NumberFormat('fr-FR').format(sol.m.parSemaine)) && /par semaine/.test(sol.m.conseil), sol.m.conseil);
 
     /* ── E. La respiration suit le moteur du simulateur ──────────────── */
     const r = await page.evaluate(({ ST, AN }) => {
@@ -201,7 +202,7 @@ try {
         return { meteo: t('[data-meteo]'), kpis: t('[data-cockpit-kpis]') };
     });
     v('Réalisé : la Météo chapeaute les trois chiffres', !!dReel && ordre.meteo < ordre.kpis, JSON.stringify({ dReel, ordre }));
-    v('  → elle affiche le reste à vivre du jour',
+    v('  → le filet affiche toujours le reste à vivre du jour',
       !!dReel && dReel.jour.replace(/\s/g, '') === new Intl.NumberFormat('fr-FR').format(sol.m.parJour).replace(/\s/g, '') + 'DH', JSON.stringify(dReel));
     await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'previsionnel'; await new Promise(r => setTimeout(r, 200)); st.activeTab = 'pilotageTheo'; }, ST);
     await page.waitForTimeout(600);

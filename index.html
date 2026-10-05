@@ -7112,6 +7112,22 @@
                          : this.meteo.etat === 'nuages' ? 'from-slate-500 via-slate-600 to-slate-800'
                          : 'from-sky-500 via-sky-600 to-indigo-700';
                 },
+                p() { return this.meteo.pulse || {}; },
+                s() { return this.meteo.sanctuaire || {}; },
+                //  Le remplissage dit le rythme : vert tenu, ambre en avance, rouge dépassé.
+                remplissage() {
+                    return this.p.rythme === 'depasse' ? 'bg-gradient-to-r from-rose-400 to-red-500'
+                         : this.p.rythme === 'avance' ? 'bg-gradient-to-r from-amber-300 to-orange-400'
+                         : 'bg-gradient-to-r from-emerald-300 to-teal-300';
+                },
+                rythmeTexte() {
+                    return this.p.rythme === 'depasse' ? '⚠️ Enveloppe dépassée'
+                         : this.p.rythme === 'avance' ? '⏩ Plus vite que la semaine'
+                         : '✓ Rythme tenu';
+                },
+                rythmeCourt() {
+                    return this.p.rythme === 'depasse' ? '⚠️ Dépassée' : this.p.rythme === 'avance' ? '⏩ En avance' : '✓ Tenu';
+                },
             },
             template: `
 <section data-meteo :data-etat="meteo.etat" :class="['relative overflow-hidden rounded-3xl p-4 md:p-6 text-white shadow-xl shadow-slate-900/20 bg-gradient-to-br', fond]">
@@ -7121,31 +7137,92 @@
         <span>🕰️ Vous régularisez {{ meteo.cycleConsulte }} : la météo, elle, parle du cycle en cours.</span>
         <button type="button" @click="$emit('revenir')" class="shrink-0 rounded-lg bg-white/90 text-slate-900 px-2.5 py-1 text-[11px] font-black hover:bg-white">Cycle actuel</button>
     </div>
-    <div class="relative grid gap-4 md:gap-6 md:grid-cols-2 items-stretch">
-        <div class="flex gap-4 items-start min-w-0">
-            <div class="meteo-flotte text-4xl md:text-6xl leading-none drop-shadow-lg select-none shrink-0" aria-hidden="true">{{ meteo.icone }}</div>
+    <div class="relative grid gap-3 md:gap-6 md:grid-cols-2 items-stretch">
+        <div class="flex gap-3 md:gap-4 items-start min-w-0">
+            <div class="meteo-flotte text-3xl md:text-6xl leading-none drop-shadow-lg select-none shrink-0" aria-hidden="true">{{ meteo.icone }}</div>
             <div class="min-w-0">
                 <p class="text-[10px] font-black uppercase tracking-[0.2em] text-white/70">Météo financière</p>
                 <h3 class="text-xl md:text-3xl font-black tracking-tight leading-tight" data-meteo-titre>{{ meteo.titre }}</h3>
-                <p class="mt-1 md:mt-1.5 text-xs md:text-sm font-semibold text-white/90 leading-snug" data-meteo-raison>{{ meteo.raison }}</p>
+                <p class="mt-1 md:mt-1.5 text-xs md:text-sm font-semibold text-white/90 leading-snug line-clamp-2 md:line-clamp-none" data-meteo-raison>{{ meteo.raison }}</p>
                 <p class="mt-1.5 md:mt-2 text-xs md:text-sm font-black text-white leading-snug" data-meteo-conseil>👉 {{ meteo.conseil }}</p>
-                <p v-if="meteo.logistique" class="mt-2 inline-block rounded-xl bg-black/20 ring-1 ring-white/15 px-2.5 py-1.5 text-xs font-bold text-white leading-snug" data-meteo-logistique>{{ meteo.logistique }}</p>
+                <p v-if="meteo.logistique" class="mt-1.5 md:mt-2 inline-block rounded-xl bg-black/20 ring-1 ring-white/15 px-2.5 py-1 md:py-1.5 text-[11px] md:text-xs font-bold text-white leading-snug" data-meteo-logistique>{{ meteo.logistique }}</p>
             </div>
         </div>
-        <div class="rounded-2xl bg-white/15 backdrop-blur-md ring-1 ring-white/25 shadow-inner p-3.5 md:p-5 flex flex-col justify-center">
-            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-white/75">Reste à vivre aujourd'hui</p>
-            <p class="mt-1 flex items-baseline gap-2 flex-wrap tabular-nums">
-                <span class="text-4xl md:text-6xl font-black tracking-tight leading-none" data-meteo-jour>{{ formatMad(meteo.parJour) }}</span>
-                <span class="text-sm font-bold text-white/80">/ jour</span>
-            </p>
-            <p class="mt-1.5 md:mt-2 text-xs md:text-sm font-bold text-white/90"><span data-meteo-rav>{{ formatMad(Math.max(0, meteo.rav)) }}</span> jusqu'à la paie du {{ meteo.prochainePaie }} · J−{{ meteo.jours }}</p>
-            <p class="text-xs font-semibold text-white/75">soit {{ formatMad(meteo.parSemaine) }} par semaine</p>
+        <div class="grid gap-2.5 md:gap-3 content-start">
+            <!-- 🕊️ LIBERTÉ : la semaine en cours, prévu × réalisé -->
+            <div data-pulse-liberte :data-rythme="p.rythme" class="rounded-2xl bg-white/15 backdrop-blur-md ring-1 ring-white/25 shadow-inner p-3 md:p-4">
+                <div class="flex items-start justify-between gap-2">
+                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-white/75">🕊️ Liberté de la semaine</p>
+                    <span data-pulse-rythme :class="['shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1',
+                          p.rythme === 'depasse' ? 'bg-rose-500/30 ring-rose-200/40' : (p.rythme === 'avance' ? 'bg-amber-400/25 ring-amber-200/40' : 'bg-emerald-400/20 ring-emerald-200/30')]"><span class="hidden md:inline">{{ rythmeTexte }}</span><span class="md:hidden">{{ rythmeCourt }}</span></span>
+                </div>
+                <p class="mt-1 flex items-baseline gap-2 flex-wrap tabular-nums">
+                    <span class="text-3xl md:text-5xl font-black tracking-tight leading-none" data-pulse-montant>{{ formatMad(p.liberte) }}</span>
+                    <span class="text-xs md:text-sm font-bold text-white/80">à dépenser librement d'ici dimanche {{ p.au }}</span>
+                </p>
+                <!-- La semaine en 7 cases : le remplissage = l'enveloppe consommée, le repère = aujourd'hui -->
+                <div class="relative mt-3" role="img" :aria-label="p.pct + ' % de l’enveloppe hebdomadaire consommée, au jour ' + (p.idxJour + 1) + ' sur 7'">
+                    <div class="h-3 rounded-full bg-black/25 ring-1 ring-inset ring-white/10 overflow-hidden">
+                        <div data-pulse-jauge :class="['h-full rounded-full transition-all duration-700 ease-out', remplissage]" :style="{ width: Math.min(100, p.pct) + '%' }"></div>
+                    </div>
+                    <div aria-hidden="true" class="absolute inset-0 flex pointer-events-none">
+                        <span v-for="i in 6" :key="'sep' + i" class="flex-1 border-r border-white/25"></span><span class="flex-1"></span>
+                    </div>
+                    <div data-pulse-repere aria-hidden="true" class="absolute -top-1 -bottom-1 w-1 -ml-0.5 rounded-full bg-white shadow" :style="{ left: p.pctTemps + '%' }"></div>
+                </div>
+                <div aria-hidden="true" class="mt-1 hidden md:grid grid-cols-7 text-center text-[9px] font-black">
+                    <span v-for="(j, i) in p.jours" :key="'j' + i" :class="i === p.idxJour ? 'text-white' : (i < p.idxJour ? 'text-white/60' : 'text-white/35')">{{ j }}</span>
+                </div>
+                <p class="mt-1.5 text-[11px] font-bold text-white/90" data-pulse-legende>
+                    {{ p.pct }} % de l'enveloppe de la semaine consommée · {{ formatMad(p.depense) }} sur {{ formatMad(p.enveloppe) }}
+                </p>
+                <p v-if="p.depassement > 0" class="mt-1 text-[11px] font-black text-rose-100">Dépassée de {{ formatMad(p.depassement) }} depuis lundi.</p>
+                <p v-else-if="p.contrainte === 'tresorerie'" class="mt-1 text-[11px] font-bold text-amber-100 leading-snug" data-pulse-plafond>🏦 Plafonnée par la trésorerie : au-delà de {{ formatMad(p.plafond) }} cette semaine, vous entamez la part des semaines suivantes.</p>
+                <p v-if="p.reelSansDates" class="mt-1 text-[10px] font-semibold text-white/70 leading-snug" data-pulse-sans-dates>Votre réel est saisi par catégorie, sans dates : la semaine ne peut pas le voir.<span class="hidden md:inline"> Saisissez vos dépenses (onglet Saisie) pour suivre la semaine.</span></p>
+                <p v-else-if="!p.nbTx" class="mt-1 text-[10px] font-semibold text-white/70" data-pulse-vide>Aucune dépense saisie depuis lundi {{ p.du }}.</p>
+                <p v-if="p.horsBudget > 0" class="mt-0.5 text-[10px] font-semibold text-white/60">+ {{ formatMad(p.horsBudget) }} saisis hors budget conso (factures, divers) : non comptés ici.</p>
+                <ul v-if="p.categories && p.categories.length" class="hidden md:block mt-2.5 space-y-1">
+                    <li v-for="c in p.categories.slice(0, 4)" :key="'pc_' + c.key" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 text-[10px] font-bold text-white/85">
+                        <span class="truncate">{{ c.label }}</span>
+                        <span class="tabular-nums text-white/75">{{ formatMad(c.depense) }} / {{ formatMad(c.budget) }}</span>
+                        <span class="col-span-2 h-1 rounded-full bg-black/20 overflow-hidden"><span class="block h-full rounded-full bg-white/70" :style="{ width: c.pct + '%' }"></span></span>
+                    </li>
+                </ul>
+            </div>
+            <!-- 🔒 SANCTUAIRE : l'argent déjà promis -->
+            <div data-pulse-sanctuaire class="rounded-2xl bg-slate-950/35 backdrop-blur-md ring-1 ring-white/15 p-3 md:p-4">
+                <div class="flex items-center gap-3">
+                    <span aria-hidden="true" class="shrink-0 w-9 h-9 rounded-xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center text-lg">🔒</span>
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-white/70">Sanctuaire · 7<span class="hidden md:inline"> prochains</span> jours</p>
+                        <p class="tabular-nums"><span class="text-xl md:text-2xl font-black" data-pulse-sanctuaire-montant>{{ formatMad(s.montant) }}</span> <span class="text-xs font-bold text-white/75">verrouillés</span></p>
+                        <p v-if="s.nb" class="md:hidden text-[10px] font-semibold text-white/70">pour {{ s.nb }} prélèvement{{ s.nb > 1 ? 's' : '' }}<template v-if="s.retard">, dont {{ formatMad(s.retard) }} en retard</template></p>
+                    </div>
+                </div>
+                <p class="hidden md:block mt-1.5 text-[11px] font-semibold text-white/80 leading-snug">
+                    <template v-if="s.nb">Réservés à {{ s.nb }} prélèvement{{ s.nb > 1 ? 's' : '' }} à venir<template v-if="s.retard"> (dont {{ formatMad(s.retard) }} en retard)</template> : cet argent n'est pas à dépenser.</template>
+                    <template v-else>Aucun prélèvement programmé dans les 7 prochains jours.</template>
+                </p>
+                <div v-if="s.natures && s.natures.length" class="hidden md:flex flex-wrap gap-1 mt-2">
+                    <span v-for="n in s.natures" :key="'sn_' + n.cle" class="rounded-md bg-white/10 ring-1 ring-white/15 px-1.5 py-0.5 text-[10px] font-bold">{{ n.badge }} {{ formatMad(n.montant) }}</span>
+                </div>
+                <ul v-if="s.prochaines && s.prochaines.length" class="hidden md:block mt-2 space-y-0.5">
+                    <li v-for="(t, i) in s.prochaines" :key="'sp_' + i" class="flex justify-between gap-2 text-[10px] font-semibold text-white/80">
+                        <span class="truncate">{{ t.libelle }}<span v-if="t.jourPrevu" :class="['ml-1 font-black', t.retard ? 'text-rose-200' : 'text-white/60']">j.{{ t.jourPrevu }}</span></span>
+                        <span class="tabular-nums shrink-0">{{ formatMad(t.reste) }}</span>
+                    </li>
+                </ul>
+            </div>
         </div>
     </div>
-    <div v-if="chips || lien" class="relative mt-3 md:mt-4 flex flex-wrap items-center gap-1.5 md:gap-2 text-[10px] md:text-[11px] font-bold">
+    <!-- Le filet de sécurité : le cycle entier, en mention discrète -->
+    <p class="relative mt-3 text-[10px] md:text-[11px] font-semibold text-white/70 leading-snug" data-meteo-filet>
+        🛟 Filet du cycle : <span data-meteo-rav>{{ formatMad(Math.max(0, meteo.rav)) }}</span> <span class="hidden md:inline">dépensables </span>jusqu'à la paie<span class="hidden md:inline"> du {{ meteo.prochainePaie }}</span> (J−{{ meteo.jours }})<span class="hidden md:inline">,
+        soit ≈ {{ formatMad(meteo.parSemaine) }} / semaine</span> · <span data-meteo-jour>{{ formatMad(meteo.parJour) }}</span> / jour<span class="hidden md:inline"> en moyenne</span>
+    </p>
+    <div v-if="chips || lien" class="relative mt-2.5 md:mt-3 flex flex-wrap items-center gap-1.5 md:gap-2 text-[10px] md:text-[11px] font-bold">
         <template v-if="chips">
             <span class="rounded-full bg-white/15 ring-1 ring-white/20 px-2.5 py-1">🏁 Atterrissage le {{ meteo.dateFin }} : {{ formatMad(meteo.atterrissage) }}</span>
-            <span class="rounded-full bg-white/15 ring-1 ring-white/20 px-2.5 py-1">🔥 7 prochains jours : {{ formatMad(meteo.urgence) }}</span>
             <span class="rounded-full bg-white/15 ring-1 ring-white/20 px-2.5 py-1">🫁 Respiration du budget : {{ meteo.respirationPct }} %</span>
         </template>
         <button v-if="lien" type="button" data-meteo-lien @click="$emit('aller')"
@@ -7175,8 +7252,17 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.19 Sync-Coherente";
+                    const CURRENT_VERSION = "37.20 Pulse-Hebdo";
                     const CHANGELOG = [
+        { version: "37.20 Pulse-Hebdo", date: "2026-10-05", changes: [
+            "LE PULSE HEBDOMADAIRE — le « X DH / jour » de la Météo était anxiogène : la vraie vie ne se lisse pas au jour le jour. À sa place, deux chiffres de la semaine calendaire (lundi → dimanche), qui croisent le Prévu et le Réalisé.",
+            "🕊️ LIBERTÉ — l'enveloppe hebdo du Prévisionnel (catégories hebdo, + mensuelles non planifiées ÷ 4,3 ; factures exclues) moins les dépenses réelles saisies de lundi à aujourd'hui. Une jauge en 7 cases (L → D) : le remplissage est l'enveloppe consommée, le repère blanc est le jour ; si le remplissage dépasse le repère, la pastille passe à « Plus vite que la semaine », puis « Enveloppe dépassée ». Détail par catégorie sur grand écran.",
+            "PLAFOND DE TRÉSORERIE — la Liberté ne promet jamais plus que le cash ne permet, au rythme régulier jusqu'à la paie (cash ÷ jours avant la paie × jours restants d'ici dimanche). Quand le cash est serré, un lundi, elle vaut exactement le « X par semaine » du conseil de la Météo : les deux ne se contredisent plus.",
+            "🔒 SANCTUAIRE — ce qui reste à payer dans les 7 prochains jours (charges fixes, factures, épargne, exceptionnel, retards compris), payés exclus : au dirham près le total de la carte Urgence. Payer une ligne la retire aussitôt. Tuile sombre et verrouillée : cet argent n'est pas à dépenser.",
+            "LE FILET DU CYCLE — le reste à vivre jusqu'à la paie et la moyenne par jour ne disparaissent pas : ils descendent en une ligne discrète sous les tuiles. Le conseil de la Météo parle désormais en semaines.",
+            "HONNÊTETÉ — si votre réel est saisi par catégorie sans dates (bloc T0), la tuile le dit au lieu d'afficher une semaine vide ; les dépenses saisies hors budget conso (factures…) sont signalées, pas comptées ; une semaine qui enjambe le 31 décembre est lue sur les deux années.",
+            "PREUVE — nouvelle suite « Pulse hebdomadaire » : enveloppe, dépensé, Liberté, plafond, jauge, rythme, Sanctuaire = Urgence (recalcul indépendant), une ligne payée qui sort au dirham, rendu bureau et S24+. Rejouée sur la v37.19 : 3 échecs (sur 3 contrôles atteignables) ; trois défauts réintroduits exprès sont tous attrapés.",
+        ] },
         { version: "37.19 Sync-Coherente", date: "2026-10-05", changes: [
             "VOTRE SIGNALEMENT, REPRODUIT — « sur un autre PC, c'est comme si les données s'écrasaient ». Joué pour de vrai : le vrai save_data.php, deux navigateurs (deux PC), en mode fichier ET avec une vraie base Postgres. Deux défauts, tous deux confirmés.",
             "DÉFAUT 1 (mode Postgres) — LIRE AILLEURS QUE LÀ OÙ L'ON ÉCRIT. Les sauvegardes allaient dans la base, mais l'appli relisait au démarrage le FICHIER finance_data.json, que plus rien ne mettait à jour. Un autre PC ouvrait donc l'appli sur un état ancien — puis le ré-enregistrait par-dessus le bon, à la première modification ou au premier auto-backup. Désormais l'appli lit par save_data.php, la même porte que l'écriture ; chaque écriture en base est recopiée dans le fichier ; et une base encore vide laisse voir le fichier existant au lieu de valeurs par défaut.",
@@ -15694,6 +15780,103 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                        Le reste à vivre est budgetConsoRestantReel, déjà affiché dans
                        le Réalisé ; on le ramène au jour, jusqu'à la veille de la paie.
                        ═══════════════════════════════════════════════════════════════ */
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.20 — LE PULSE HEBDOMADAIRE
+                       La vraie vie ne se lisse pas au jour le jour : on raisonne en
+                       semaines. Deux chiffres, et chacun croise le Prévu et le Réalisé.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _JOURS_SEMAINE = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+                    const pulseHebdo = computed(() => {
+                        calculationTick.value;
+                        const auj = new Date();
+                        const idx = (auj.getDay() + 6) % 7;                   // 0 = lundi … 6 = dimanche
+                        const lundi = new Date(auj.getFullYear(), auj.getMonth(), auj.getDate() - idx);
+                        const dimanche = new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + 6);
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an] || {};
+                        //  1. L'enveloppe hebdomadaire du Prévisionnel, catégorie par catégorie
+                        const cats = [], carte = {};
+                        Object.entries(d.chargesVariables || {}).forEach(([key, cv]) => {
+                            if (!cv || cv.categorieId === 'cat_cv_factures') return;
+                            //  Une mensuelle découpée en détails est planifiée : ses détails
+                            //  sont des prélèvements (→ Sanctuaire), pas de la Liberté.
+                            if (cv.periode !== 'semaine' && (cv.details || []).length) return;
+                            const v = valeurEffective(cv, cv.valeur, mb.mois);
+                            if (cv.categorieId) carte[cv.categorieId] = key;
+                            (cv.details || []).forEach(det => { if (det && det.categorieId) carte[det.categorieId] = key; });
+                            cats.push({ key, label: cv.label || key, budget: cv.periode === 'semaine' ? v : v / 4.3, depense: 0 });
+                        });
+                        //  2. Le réel : transactions datées de lundi à aujourd'hui, toutes
+                        //     années confondues (une semaine peut enjamber le 31 décembre).
+                        const dMin = _ymd(lundi), dMax = _ymd(auj);
+                        let nbTx = 0, horsBudget = 0, nbHors = 0;
+                        Object.values(donneesAnnuelles.value || {}).forEach(an => {
+                            (an && Array.isArray(an.transactionsReelles) ? an.transactionsReelles : []).forEach(t => {
+                                const dt = String(t.date || '').slice(0, 10);
+                                if (!dt || dt < dMin || dt > dMax) return;
+                                const m = Number(t.montant) || 0;
+                                const k = carte[t.categorieId];
+                                const c = k ? cats.find(x => x.key === k) : null;
+                                if (!c) { if (m > 0) { horsBudget += m; nbHors++; } return; }
+                                c.depense += m; nbTx++;
+                            });
+                        });
+                        const enveloppe = Math.round(cats.reduce((s, c) => s + c.budget, 0));
+                        const depense = Math.round(cats.reduce((s, c) => s + c.depense, 0));
+                        //  3. Le plafond de la trésorerie : la part de cette semaine dans le
+                        //     cash disponible d'ici la paie, au rythme régulier (cash ÷ jours
+                        //     avant la paie × jours restants d'ici dimanche). Quand c'est le
+                        //     cash qui mord, un lundi, c'est exactement le « X par semaine »
+                        //     du conseil. Si la paie tombe avant dimanche, tout est à prendre.
+                        //     Le budget, lui, est déjà porté par l'enveloppe : son reste du
+                        //     cycle est une estimation au prorata du temps, qui fond même
+                        //     sans dépense — il ne doit pas brider la semaine une 2e fois.
+                        const cashCycle = Math.round(cashDispoPourConso.value);
+                        const joursPaie = Math.max(1, Number(joursRestantsAvantPaie.value) || 1);
+                        const plafond = cashCycle > 0 ? Math.floor(cashCycle / joursPaie * Math.min(7 - idx, joursPaie)) : 0;
+                        const restantBudget = enveloppe - depense;
+                        const liberte = Math.max(0, Math.min(restantBudget, plafond));
+                        const pct = enveloppe > 0 ? Math.round(depense / enveloppe * 100) : (depense > 0 ? 100 : 0);
+                        const pctTemps = Math.round((idx + 1) / 7 * 100);
+                        const rythme = depense > enveloppe ? 'depasse' : (pct > pctTemps + 10 ? 'avance' : 'tenu');
+                        const lib = (dt) => dt.getDate() + ' ' + _MOIS_COURTS[dt.getMonth()];
+                        return {
+                            enveloppe, depense, liberte, plafond, restantBudget, cashCycle, joursPaie,
+                            contrainte: plafond < restantBudget ? 'tresorerie' : 'budget',
+                            depassement: Math.max(0, depense - enveloppe),
+                            pct, pctTemps, rythme, idxJour: idx, joursRestants: 7 - idx, jours: _JOURS_SEMAINE,
+                            du: lib(lundi), au: lib(dimanche),
+                            nbTx, horsBudget: Math.round(horsBudget), nbHors,
+                            //  Réel saisi par catégorie (bloc T0) mais sans transaction datée :
+                            //  la semaine ne peut pas le voir — on le dit.
+                            reelSansDates: nbTx === 0 && consoT0Renseigne.value,
+                            categories: cats.filter(c => c.budget > 0 || c.depense > 0)
+                                .map(c => ({ ...c, budget: Math.round(c.budget), depense: Math.round(c.depense),
+                                             pct: c.budget > 0 ? Math.min(100, Math.round(c.depense / c.budget * 100)) : 100 }))
+                                .sort((a, b) => b.budget - a.budget),
+                        };
+                    });
+                    //  🔒 Le Sanctuaire : exactement la liste et le total de l'Urgence.
+                    const sanctuaireHebdo = computed(() => {
+                        const r = _rangAujourdhui.value;
+                        const lignes = tachesPilotageToutes.value
+                            .filter(t => !t.paye && t.rang <= r + HORIZON_URGENCE)
+                            .map(t => ({ libelle: t.libelle, nature: t.nature, badge: t.badge, jourPrevu: t.jourPrevu,
+                                         reste: Math.max(0, t.due - (t.regle || 0)), retard: t.rang < r, rang: t.rang }))
+                            .filter(t => t.reste > 0)
+                            .sort((a, b) => a.rang - b.rang);
+                        const parNature = {};
+                        lignes.forEach(t => { parNature[t.nature] = (parNature[t.nature] || 0) + t.reste; });
+                        return {
+                            montant: urgenceGlobale.value,
+                            nb: lignes.length,
+                            retard: Math.round(lignes.filter(t => t.retard).reduce((s, t) => s + t.reste, 0)),
+                            natures: Object.keys(NATURES_TACHE).filter(k => parNature[k])
+                                .map(k => ({ cle: k, badge: NATURES_TACHE[k].badge, montant: Math.round(parNature[k]) })),
+                            prochaines: lignes.slice(0, 3),
+                        };
+                    });
+
                     const meteoFinanciere = computed(() => {
                         const A = kpiAtterrissageGlobal.value;
                         const R = respirationGlobale.value;
@@ -15715,7 +15898,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (courant < 0) {
                                 raison = 'Découvert projeté le ' + A.dateFin + ' : ' + formatMAD(courant) + ' sur ' + ((A.courant && A.courant.label) || 'le compte courant') + ', si tout le budget conso est dépensé.';
                                 if (rav > 0 && siRav !== null && siRav >= -1)
-                                    conseil = 'Pour rester à flot : pas plus de ' + formatMAD(rav) + ' de dépenses courantes d’ici la paie, soit ' + formatMAD(parJour) + ' par jour.';
+                                    conseil = 'Pour rester à flot : pas plus de ' + formatMAD(rav) + ' de dépenses courantes d’ici la paie, soit environ ' + formatMAD(parSemaine) + ' par semaine.';
                                 else if (cash < 0)
                                     conseil = 'Même sans aucune dépense courante, il manque ' + formatMAD(-cash) + ' : un virement ou le report d’une charge s’impose.';
                                 else
@@ -15738,12 +15921,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             else
                                 raison = 'Le budget prévu dépense plus qu’il ne rentre : ' + formatMAD(R.marge) + ' par mois.';
                             conseil = rav > 0
-                                ? 'Rythme sûr : ' + formatMAD(parJour) + ' par jour jusqu’à la paie du ' + prochainePaieLabel.value + '.'
+                                ? 'Rythme sûr : environ ' + formatMAD(parSemaine) + ' par semaine jusqu’à la paie du ' + prochainePaieLabel.value + '.'
                                 : 'Limitez les dépenses courantes jusqu’à la paie du ' + prochainePaieLabel.value + '.';
                         } else {
                             etat = 'soleil'; icone = '☀️'; titre = 'Grand soleil';
                             raison = 'Atterrissage le ' + A.dateFin + ' : ' + formatMAD(courant) + ' de coussin, tout le budget conso compris.';
-                            conseil = 'Vous pouvez dépenser ' + formatMAD(parJour) + ' par jour sans toucher à ce coussin.';
+                            conseil = 'Vous pouvez dépenser environ ' + formatMAD(parSemaine) + ' par semaine sans toucher à ce coussin.';
                         }
                         return {
                             etat, icone, titre, raison, conseil,
@@ -15752,6 +15935,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             atterrissage: courant, dateFin: A.dateFin, urgence: urgenceGlobale.value,
                             respirationPct: R.pct, respirationNiveau: R.niveau,
                             retro: isCyclePasse.value, cycleConsulte: pilotageCycleLabel.value,
+                            pulse: pulseHebdo.value, sanctuaire: sanctuaireHebdo.value,
                             logistique: (() => {
                                 const r = radarComptes.value;
                                 const b = r.besoins[0];
@@ -18199,6 +18383,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.18 : logistique bancaire
                         compteDeFlux, regleDeRoutage, infoCompte, focusCompte, comptesFocus, radarComptes,
                         mecaniqueCompte, tachesPilotageToutes, kpiAtterrissageGlobal, respirationGlobale,
+                        // v37.20 : pulse hebdomadaire
+                        pulseHebdo, sanctuaireHebdo,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur, imposerMaVersion,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup
