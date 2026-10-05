@@ -130,11 +130,12 @@
         <!-- v37.7 : le serveur a bougé sous nos pieds et l'écran ne peut pas suivre tout seul -->
         <transition name="fade">
             <div v-if="serveurDivergent" class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-[92vw] max-w-2xl bg-amber-50 border-2 border-amber-400 text-amber-900 px-5 py-3 rounded-2xl shadow-2xl">
-                <p class="text-sm font-black">⚠️ Le serveur a été modifié depuis votre chargement</p>
-                <p class="text-[11px] font-bold leading-snug mt-1 opacity-90">L'agent CFO (ou un autre appareil) a écrit sur le VPS, et vous avez ici des modifications non sauvegardées. Recharger les perdra ; les garder écrasera l'écriture du serveur au prochain « Sauver sur VPS ».</p>
+                <p class="text-sm font-black">⚠️ Le serveur a été modifié depuis votre chargement — rien n'a été écrasé</p>
+                <p class="text-[11px] font-bold leading-snug mt-1 opacity-90">Un autre appareil (ou l'agent CFO) a enregistré sur le VPS pendant que cet onglet était ouvert, et vous avez ici des modifications non sauvegardées. Le serveur a refusé de les écrire par-dessus. Recharger récupère sa version (vos saisies d'ici seront perdues) ; imposer remplace sa version par la vôtre.</p>
                 <div class="flex flex-wrap gap-2 mt-3">
                     <button @click="forcerRechargementServeur()" :disabled="rafraichissementEnCours" :class="['px-3 py-1.5 rounded-lg text-white font-black text-[11px] uppercase tracking-widest transition-colors', rafraichissementEnCours ? 'bg-amber-400 cursor-wait' : 'bg-amber-600 hover:bg-amber-700']">{{ rafraichissementEnCours ? '⏳ Rechargement…' : '🔄 Recharger depuis le VPS' }}</button>
-                    <button @click="serveurDivergent = false" class="px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 text-amber-800 font-black text-[11px] uppercase tracking-widest transition-colors">Garder ma version</button>
+                    <button @click="imposerMaVersion()" data-imposer class="px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 text-amber-800 font-black text-[11px] uppercase tracking-widest transition-colors">Imposer la version de cet appareil</button>
+                    <button @click="serveurDivergent = false" class="px-3 py-1.5 rounded-lg text-amber-700 hover:underline font-black text-[11px] uppercase tracking-widest">Plus tard</button>
                 </div>
             </div>
         </transition>
@@ -7174,8 +7175,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.18 Logistique-Bancaire";
+                    const CURRENT_VERSION = "37.19 Sync-Coherente";
                     const CHANGELOG = [
+        { version: "37.19 Sync-Coherente", date: "2026-10-05", changes: [
+            "VOTRE SIGNALEMENT, REPRODUIT — « sur un autre PC, c'est comme si les données s'écrasaient ». Joué pour de vrai : le vrai save_data.php, deux navigateurs (deux PC), en mode fichier ET avec une vraie base Postgres. Deux défauts, tous deux confirmés.",
+            "DÉFAUT 1 (mode Postgres) — LIRE AILLEURS QUE LÀ OÙ L'ON ÉCRIT. Les sauvegardes allaient dans la base, mais l'appli relisait au démarrage le FICHIER finance_data.json, que plus rien ne mettait à jour. Un autre PC ouvrait donc l'appli sur un état ancien — puis le ré-enregistrait par-dessus le bon, à la première modification ou au premier auto-backup. Désormais l'appli lit par save_data.php, la même porte que l'écriture ; chaque écriture en base est recopiée dans le fichier ; et une base encore vide laisse voir le fichier existant au lieu de valeurs par défaut.",
+            "DÉFAUT 2 (les deux modes) — UN ONGLET OUBLIÉ ÉCRASAIT LES AUTRES. Un onglet resté ouvert sur le PC A, sur une version périmée, enregistrait par-dessus ce que le PC B venait d'enregistrer, sans le moindre avertissement. Désormais chaque sauvegarde dit au serveur sur quelle version elle a travaillé ; si le serveur a bougé entre-temps, il REFUSE (409) et rien n'est écrasé. Le bandeau propose alors : recharger la version du serveur, ou imposer celle de l'appareil — un choix explicite, jamais un accident.",
+            "REVENIR SUR UN ONGLET LE MET À JOUR — dès que l'onglet redevient visible, l'appli relit le serveur. Sans modification en cours, l'écran se met à jour tout seul ; avec des saisies non enregistrées, le bandeau demande quoi faire.",
+            "L'AGENT CFO N'EST PAS CASSÉ — ses écritures (n8n) ne présentent pas de version : elles sont acceptées exactement comme avant. Le journal indique maintenant la source des données (postgres ou fichier) à l'ouverture et à chaque sauvegarde.",
+            "PREUVE — nouvelle suite « deux PC » : ce que l'un enregistre, l'autre le lit ; l'onglet périmé est refusé et prévenu ; « Recharger » et « Imposer » font ce qu'ils disent ; le retour sur l'onglet rattrape ; un troisième PC ouvert à froid voit le dernier état ; le fichier suit la base. Rejouée sur la v37.18 : 13 échecs.",
+        ] },
         { version: "37.18 Logistique-Bancaire", date: "2026-10-04", changes: [
             "🛡️ SÉCURITÉ DES COMPTES — pour chaque compte bancaire : le solde du jour, sa courbe jusqu'au cycle de décembre, son POINT BAS, sa fin d'année, et le virement à faire. Tout vient du moteur du Relevé, projeté jusqu'en décembre : entrées affectées au compte, prélèvements affectés au compte, compte par compte. Vérifié : la fin d'année de chaque compte est celle du Relevé filtré sur ce compte.",
             "POURQUOI LE POINT BAS, ET PAS SEULEMENT LA FIN D'ANNÉE — un compte qui plonge en octobre et remonte en décembre finit l'année positif… après un découvert. « À virer » est donc ce qui garde le point bas à zéro, avec la date avant laquelle le faire et un compte d'où le faire (celui qui garde le plus de marge au plus bas). Preuve par l'acte dans les tests : on exécute les virements proposés, et plus aucun compte ne passe sous zéro jusqu'en décembre.",
@@ -9249,10 +9258,38 @@
                         for (let i = 0; i < t.length; i++) h = (((h << 5) + h) ^ t.charCodeAt(i)) >>> 0;
                         return t.length + ':' + h.toString(36);
                     };
-                    const _lireSignatureServeur = async () => {
+                    //  v37.19 : la version du serveur (X-Finance-Version) sur laquelle
+                    //  cet onglet travaille. Renvoyée à chaque sauvegarde : si le serveur
+                    //  a bougé entre-temps, il refuse au lieu d'écraser.
+                    let _serverVersion = null;
+                    //  v37.19 : UNE seule porte de lecture — save_data.php, là où l'on
+                    //  écrit. Le fichier statique n'est plus qu'un repli (ancien serveur).
+                    const _lireServeur = async () => {
+                        try {
+                            const res = await fetch(SERVER_PATH + '?t=' + Date.now(), { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+                            if (res.ok) {
+                                const texte = await res.text();
+                                //  On n'accepte qu'un ÉTAT FINANCIER (ou un état vide) : une page
+                                //  HTML, un « {status: ok} » ou toute autre réponse fait retomber
+                                //  sur le fichier, au lieu d'être importée comme des données.
+                                let o = null;
+                                try { o = JSON.parse(texte); } catch (_) { o = null; }
+                                const etat = o && typeof o === 'object' && !Array.isArray(o)
+                                    && (Object.keys(o).length === 0 || 'donneesAnnuelles' in o || 'soldesInitiaux' in o || 'comptes' in o);
+                                if (etat) {
+                                    return { ok: true, texte, version: res.headers.get('X-Finance-Version'), mode: res.headers.get('X-Finance-Mode') };
+                                }
+                            }
+                        } catch (_) { /* repli ci-dessous */ }
                         const res = await fetch(DATA_PATH + '?t=' + Date.now(), { cache: 'no-store' });
-                        if (!res.ok) throw new Error('HTTP ' + res.status);
-                        return _sig(await res.text());
+                        if (!res.ok) return { ok: false, statut: res.status, texte: '' };
+                        return { ok: true, texte: await res.text(), version: null, mode: 'fichier statique' };
+                    };
+                    const _vide = (t) => !t || !t.trim() || t.trim() === '{}' || t.trim() === '[]';
+                    const _lireSignatureServeur = async () => {
+                        const r = await _lireServeur();
+                        if (!r.ok) throw new Error('HTTP ' + r.statut);
+                        return _sig(r.texte);
                     };
 
                     // ═══ v37.7 — RETOUR D'ÉCRITURE ════════════════════════════════
@@ -9265,12 +9302,13 @@
                     const serveurDivergent = ref(false);
                     const rafraichissementEnCours = ref(false);
 
-                    const _appliquerEtatServeur = (texte) => {
+                    const _appliquerEtatServeur = (texte, version = null) => {
                         try {
                             const d = JSON.parse(texte);
                             rafraichissementEnCours.value = true;
                             executerImportFusion(d);
                             _serverSignature = _sig(texte);
+                            _serverVersion = version;
                             serveurDivergent.value = false;
                             // executerImportFusion réveille les watchers profonds
                             // (wealthGoals, masterAssets, donneesAnnuelles) : sans ce
@@ -9297,11 +9335,11 @@
                     //   voyait sans pouvoir le nommer.
                     const rafraichirDepuisServeur = async () => {
                         if (_serverSignature === null) return { change: false, applique: false, raison: 'aucune référence serveur' };
-                        let texte = null;
+                        let texte = null, version = null;
                         try {
-                            const res = await fetch(DATA_PATH + '?t=' + Date.now(), { cache: 'no-store' });
-                            if (!res.ok) throw new Error('HTTP ' + res.status);
-                            texte = await res.text();
+                            const r = await _lireServeur();
+                            if (!r.ok) throw new Error('HTTP ' + r.statut);
+                            texte = r.texte; version = r.version;
                         } catch (e) {
                             return { change: false, applique: false, raison: 'lecture impossible : ' + (e.message || e) };
                         }
@@ -9315,7 +9353,7 @@
                             addLog('⚠️ Le serveur a changé (agent CFO ou autre appareil) ALORS que vous avez des modifications non sauvegardées. Rien n\'a été rechargé : choisissez dans le bandeau.', 'warn');
                             return { change: true, applique: false, raison: 'modifications locales non sauvegardées' };
                         }
-                        return _appliquerEtatServeur(texte);
+                        return _appliquerEtatServeur(texte, version);
                     };
 
                     //   Choix explicite de l'utilisateur depuis le bandeau : le
@@ -9325,13 +9363,36 @@
                         if (serverSyncStatus.value === 'modified'
                             && !confirm('Recharger l\'état du serveur ?\n\nVos modifications locales non sauvegardées seront perdues.')) return;
                         try {
-                            const res = await fetch(DATA_PATH + '?t=' + Date.now(), { cache: 'no-store' });
-                            if (!res.ok) throw new Error('HTTP ' + res.status);
-                            const texte = await res.text();
-                            if (!texte || !texte.trim()) { addLog('❌ Rechargement annulé : le serveur a renvoyé un contenu vide.', 'error'); return; }
-                            _appliquerEtatServeur(texte);
+                            const r = await _lireServeur();
+                            if (!r.ok) throw new Error('HTTP ' + r.statut);
+                            if (_vide(r.texte)) { addLog('❌ Rechargement annulé : le serveur a renvoyé un contenu vide.', 'error'); return; }
+                            _appliquerEtatServeur(r.texte, r.version);
                         } catch (e) { addLog('❌ Rechargement impossible : ' + (e.message || e), 'error'); }
                     };
+
+                    //  v37.19 : choix explicite, depuis le bandeau — « c'est MA version
+                    //  qui doit gagner ». La seule écriture qui ignore la version.
+                    const imposerMaVersion = async () => {
+                        if (!confirm('Imposer la version de cet appareil ?\n\nCe que le serveur a reçu depuis votre chargement (autre appareil, agent CFO) sera remplacé.')) return;
+                        await saveToServer(true);
+                        if (serverSyncStatus.value === 'synced') serveurDivergent.value = false;
+                    };
+
+                    //  v37.19 : revenir sur l'onglet, c'est relire le serveur. Sans
+                    //  modification locale en cours, l'écran se met à jour tout seul ;
+                    //  sinon, le bandeau demande quoi faire. Jamais plus d'une fois
+                    //  toutes les 5 secondes.
+                    let _dernierRetour = 0;
+                    const _auRetourSurOnglet = () => {
+                        if (document.visibilityState && document.visibilityState !== 'visible') return;
+                        if (Date.now() - _dernierRetour < 5000) return;
+                        _dernierRetour = Date.now();
+                        rafraichirDepuisServeur().then((r) => {
+                            if (r && r.applique) addLog('🔄 Retour sur l\'onglet : données mises à jour depuis le serveur (un autre appareil avait enregistré).', 'success');
+                        }).catch(() => {});
+                    };
+                    document.addEventListener('visibilitychange', _auRetourSurOnglet);
+                    window.addEventListener('focus', _auRetourSurOnglet);
                     
                     // DRIVE
                     const syncStatus = ref('disconnected');
@@ -12016,21 +12077,33 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         } catch (e) { addLog("Coupure réseau ou CORS.", 'error'); }
                     };
 
-                    const saveToServer = async () => {
+                    const saveToServer = async (forcer = false) => {
                         serverSyncStatus.value = 'saving';
                         addLog("Écriture vers VPS...", 'info');
                         try {
                             const controller = new AbortController();
                             const timeoutId = setTimeout(() => controller.abort(), 10000);
-                            const res = await fetch(SERVER_PATH, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(getExportData()), signal: controller.signal });
+                            //  v37.19 : on dit au serveur sur quelle version on a travaillé.
+                            const entetes = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+                            if (_serverVersion && forcer !== true) entetes['X-Finance-Base'] = _serverVersion;
+                            const res = await fetch(SERVER_PATH, { method: 'POST', headers: entetes, body: JSON.stringify(getExportData()), signal: controller.signal });
                             clearTimeout(timeoutId);
                             
                             const text = (await res.text()).trim();
                             if (text.startsWith('<!DOCTYPE html>')) { addLog("CONFLIT : Caddy envoie vers n8n.", 'error'); serverSyncStatus.value = 'error'; return; }
 
                             let data = JSON.parse(text);
+                            //  v37.19 : le serveur a bougé depuis notre chargement — il a
+                            //  REFUSÉ d'écraser. Nos saisies restent à l'écran, non sauvegardées.
+                            if (res.status === 409 || data.status === 'conflict') {
+                                serverSyncStatus.value = 'modified';
+                                serveurDivergent.value = true;
+                                addLog('⛔ Sauvegarde refusée par le serveur : un autre appareil (ou l\'agent CFO) a enregistré depuis votre chargement. Rien n\'a été écrasé — choisissez dans le bandeau.', 'error');
+                                return;
+                            }
                             if (data.status === 'ok') {
-                                serverSyncStatus.value = 'synced'; serverLastSync.value = new Date().toLocaleTimeString(); addLog("Sauvegarde VPS OK.", 'success');
+                                if (data.version) _serverVersion = data.version;
+                                serverSyncStatus.value = 'synced'; serverLastSync.value = new Date().toLocaleTimeString(); addLog('Sauvegarde VPS OK' + (data.mode ? ' (' + data.mode + ')' : '') + '.', 'success');
                                 // v35.5 : notre ecriture devient la nouvelle reference, sinon
                                 //   l'auto-backup suivant prendrait notre propre trace pour
                                 //   une modification tierce et refuserait de sauvegarder.
@@ -17906,16 +17979,14 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
 
                         addLog("Initialisation VPS...", 'info');
                         try {
-                            const res = await fetch(DATA_PATH + '?t=' + Date.now(), {
-                                headers: {
-                                    'Cache-Control': 'no-cache, no-store, must-revalidate',
-                                    'Pragma': 'no-cache'
-                                }
-                            });
+                            //  v37.19 : lu par save_data.php — la même source que l'écriture.
+                            const res = await _lireServeur();
                             if (res.ok) {
-                                const text = await res.text();
+                                const text = res.texte;
                                 _serverSignature = _sig(text); // v35.5 : reference anti-ecrasement
-                                if(!text || text.trim()==="") {
+                                _serverVersion = res.version;
+                                if (res.mode) addLog('Source des données : ' + res.mode + '.', 'info');
+                                if(_vide(text)) {
                                     addLog("Fichier vide. Chargement de vos données récupérées.", "warn");
                                     migrateCategoriesV22(); // v22.00 P1 : init référentiel sur défaut
                                     handleDataChange(); // Force un recalcul avec les données de secours
@@ -18129,7 +18200,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         compteDeFlux, regleDeRoutage, infoCompte, focusCompte, comptesFocus, radarComptes,
                         mecaniqueCompte, tachesPilotageToutes, kpiAtterrissageGlobal, respirationGlobale,
                         // v37.7 — retour d'écriture
-                        serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur,
+                        serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur, imposerMaVersion,
                         merlinActive, merlinBubble, toggleMerlin, closeMerlinBubble, askMerlinFollowup
                     };
                 }
