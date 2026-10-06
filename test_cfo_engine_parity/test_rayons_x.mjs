@@ -1,6 +1,8 @@
 /**
  * v37.21 — RAYONS X ET ROUTAGE ÉVIDENT.
  * v37.22 — … ET LA LISTE DE COURSES (sous-catégories prévues, poste par poste).
+ * v37.23 — les tickets sont ceux du CYCLE de paie (plus de la semaine) : le
+ *          panneau audite l'engagé du cycle, à côté du compteur en vrac.
  *
  *   « On voit un total, pas ce qui le compose » et « quel compte paie quoi ? ».
  *   Cette suite vérifie :
@@ -106,10 +108,10 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
     d.virementsInternes = []; d.transactionsReelles = [];
 }
 const TX = [
-    { id: 900, date: iso(LUNDI), libelle: 'MARJANE', montant: 300, cat: 'alimentation', compteId: 1 },
+    { id: 900, date: iso(maintenant), libelle: 'MARJANE', montant: 300, cat: 'alimentation', compteId: 1 },
     { id: 901, date: iso(maintenant), libelle: 'CARREFOUR', montant: 150, cat: 'alimentation', poste: 'HRI', compteId: 2 },   // payé par Assafa, sur le poste Hri
     { id: 902, date: iso(maintenant), libelle: 'AFRIQUIA', montant: 100, cat: 'voiture', compteId: 1 },
-    { id: 903, date: iso(dans(-IDX - 1)), libelle: 'SEMAINE DERNIERE', montant: 999, cat: 'alimentation', compteId: 1 },
+    { id: 903, date: iso(dans(-40)), libelle: 'CYCLE PRECEDENT', montant: 999, cat: 'alimentation', compteId: 1 },
     { id: 904, date: iso(maintenant), libelle: 'LYDEC', montant: 250, cat: 'factures', compteId: 1 },
 ];
 
@@ -171,7 +173,7 @@ try {
     const { page, erreurs } = await ouvrir({ viewport: { width: 1400, height: 1100 } });
     const L = await page.evaluate((ST) => {
         const st = eval(ST);
-        return { p: JSON.parse(JSON.stringify(st.pulseHebdo)), s: JSON.parse(JSON.stringify(st.sanctuaireHebdo)), urgence: st.kpiUrgence.montant,
+        return { p: JSON.parse(JSON.stringify(st.liberteCycle)), s: JSON.parse(JSON.stringify(st.sanctuaireHebdo)), urgence: st.kpiUrgence.montant,
                  routes: st.tachesPilotageToutes.map(t => [t.libelle, t.compte]) };
     }, ST);
     const present = !!(L.p.categories && L.p.categories[0] && Array.isArray(L.p.categories[0].transactions) && Array.isArray(L.s.parCompte));
@@ -180,31 +182,33 @@ try {
 
     /* ── C. L'audit : le panneau = les transactions, la somme = le total ─ */
     const alim = L.p.categories.find(c => c.key === 'alimentation');
-    v('Courses : CARREFOUR puis MARJANE (plus récent d\'abord), pas la semaine dernière',
+    v('Courses : CARREFOUR puis MARJANE (plus récent d\'abord), pas le cycle précédent',
       JSON.stringify(alim.transactions.map(t => t.libelle)) === '["CARREFOUR","MARJANE"]', JSON.stringify(alim.transactions.map(t => [t.libelle, t.date])));
     v('pour CHAQUE catégorie, Σ des lignes = total affiché',
-      L.p.categories.every(c => Math.round(c.transactions.reduce((s, t) => s + t.montant, 0)) === c.depense && c.nb === c.transactions.length),
-      JSON.stringify(L.p.categories.map(c => [c.key, c.depense, c.transactions.map(t => t.montant)])));
+      L.p.categories.every(c => Math.round(c.transactions.reduce((s, t) => s + t.montant, 0)) === c.tickets && c.nb === c.transactions.length),
+      JSON.stringify(L.p.categories.map(c => [c.key, c.tickets, c.transactions.map(t => t.montant)])));
     v('chaque ligne dit son compte payeur', alim.transactions.find(t => t.libelle === 'MARJANE').compte.key === 'cpt_1'
       && alim.transactions.find(t => t.libelle === 'CARREFOUR').compte.key === 'cpt_2', JSON.stringify(alim.transactions.map(t => t.compte && t.compte.key)));
     v('  → payé hors du compte des variables : signalé (et seulement là)',
       L.p.categories.flatMap(c => c.transactions).filter(t => t.horsCompte).map(t => t.libelle).join() === 'CARREFOUR'
       && JSON.stringify(alim.comptesAutres.map(c => c.key)) === '["cpt_2"]', JSON.stringify(alim.comptesAutres));
-    v('reste de la catégorie = budget − dépensé (1 000 − 450)', alim.reste === 550, String(alim.reste));
+    v('reste de la catégorie = budget du cycle − tickets (1 000 × 4,3 − 450)', alim.budget === 4300 && alim.engage === 450 && alim.reste === 3850, JSON.stringify([alim.budget, alim.engage, alim.reste]));
     v('hors budget conso : la facture LYDEC, auditée à part', L.p.horsBudgetTx.length === 1 && L.p.horsBudgetTx[0].libelle === 'LYDEC', JSON.stringify(L.p.horsBudgetTx));
 
     /* ── C bis. La liste de courses : le prévu, poste par poste ──────── */
     v('Courses : postes prévus, le plus gros d\'abord, avec leur emoji (🛍️ 500 · 🥩 300 · 🧺 200)',
       JSON.stringify(alim.prevu.map(x => [x.nom, x.montant, x.emoji])) === '[["HRI",500,"🛍️"],["L7M",300,"🥩"],["MARCHE",200,"🧺"]]', JSON.stringify(alim.prevu));
-    v('pour chaque catégorie détaillée, Σ des postes = budget affiché',
-      L.p.categories.filter(c => c.prevu.length).length === 2 && L.p.categories.every(c => !c.prevu.length || c.prevu.reduce((s, x) => s + x.montant, 0) === c.budget),
+    //  La liste de courses est dans l'unité de la ligne (ici la semaine) ; le
+    //  budget de la catégorie est celui du cycle (× 4,3).
+    v('pour chaque catégorie détaillée, Σ des postes = budget de la ligne (hebdo : cycle ÷ 4,3)',
+      L.p.categories.filter(c => c.prevu.length).length === 3 && L.p.categories.every(c => !c.prevu.length || c.prevu.reduce((s, x) => s + x.montant, 0) === Math.round(c.budget / (c.prevuUnite === 'semaine' ? 4.3 : 1))),
       JSON.stringify(L.p.categories.map(c => [c.key, c.budget, c.prevu.reduce((s, x) => s + x.montant, 0)])));
     v('dépensé par poste : Hri 150 (CARREFOUR), le reste « non ventilé » (300)',
       alim.prevu.find(x => x.nom === 'HRI').depense === 150 && alim.prevu.filter(x => x.nom !== 'HRI').every(x => x.depense === 0) && alim.nonVentile === 300
       && alim.transactions.find(t => t.libelle === 'CARREFOUR').poste === 'HRI' && !alim.transactions.find(t => t.libelle === 'MARJANE').poste,
       JSON.stringify({ prevu: alim.prevu, nonVentile: alim.nonVentile }));
     v('  → Σ postes dépensés + non ventilé = total dépensé, partout',
-      L.p.categories.every(c => c.prevu.reduce((s, x) => s + x.depense, 0) + c.nonVentile === c.depense), JSON.stringify(L.p.categories.map(c => [c.key, c.depense, c.nonVentile])));
+      L.p.categories.every(c => c.prevu.reduce((s, x) => s + x.depense, 0) + c.nonVentile === c.tickets), JSON.stringify(L.p.categories.map(c => [c.key, c.tickets, c.nonVentile])));
     v('catégorie sans sous-catégories (Essence, mensuelle) : pas de liste', L.p.categories.find(c => c.key === 'voiture').prevu.length === 0);
 
     /* ── D. Le routage : un monogramme par compte, le Sanctuaire par compte ─ */
@@ -250,7 +254,7 @@ try {
       !!p1 && p1.lignes.length === 2 && p1.lignes[0].libelle === 'CARREFOUR' && p1.lignes[0].montant === '150DH' && p1.lignes[0].mono === 'cpt_2'
       && p1.lignes[1].libelle === 'MARJANE' && p1.lignes[1].mono === 'cpt_1' && p1.lignes.every(l => !!l.quand), JSON.stringify(p1 && p1.lignes));
     v('  → « ≠ prévu » sur l\'achat payé par Assafa, total et reste exacts',
-      !!p1 && p1.lignes[0].horsCompte && !p1.lignes[1].horsCompte && p1.total === '450DH' && p1.reste === 'Reste550DH', JSON.stringify(p1 && [p1.total, p1.reste]));
+      !!p1 && p1.lignes[0].horsCompte && !p1.lignes[1].horsCompte && p1.total === '450DH' && p1.reste === 'Reste3850DH', JSON.stringify(p1 && [p1.total, p1.reste]));
     //  v37.22 : le bloc « Budget prévu » est sous l'en-tête, AVANT les dépenses réelles.
     const courses = await page.evaluate(() => {
         const p = document.querySelector('[data-rayonx]');
@@ -266,7 +270,9 @@ try {
       !!courses && JSON.stringify(courses.etiquettes) === JSON.stringify(['🛍️HRI:500DH', '🥩L7M:300DH', '🧺MARCHE:200DH']), JSON.stringify(courses));
     v('  → sous l\'en-tête, séparé puis suivi des dépenses réelles', !!courses && courses.ordre, JSON.stringify(courses));
     v('  → un « ticket » clair dans le panneau sombre', !!courses && /^rgba?\((2[3-5]\d), (2[3-5]\d), (2[3-5]\d)/.test(courses.fond), courses && courses.fond);
-    if (twCss) v('  → l\'étiquette Hri se remplit à 30 % (150 / 500)', !!courses && courses.rempli !== null && Math.abs(courses.rempli - 0.3) < 0.03, JSON.stringify(courses && courses.rempli));
+    //  Le remplissage compare les tickets du poste à SA part du budget du cycle :
+    //  150 / (4 300 × 500 / 1 000) = 7 %.
+    if (twCss) v('  → l\'étiquette Hri se remplit à 7 % (150 / 2 150 du cycle)', !!courses && courses.rempli !== null && Math.abs(courses.rempli - 150 / 2150) < 0.02, JSON.stringify(courses && courses.rempli));
     v('  → les 300 DH non ventilés sont signalés ; l\'achat CARREFOUR porte « HRI »',
       !!courses && courses.nonVentile && JSON.stringify(courses.postesLignes) === '["🛍️ HRI"]', JSON.stringify(courses));
     // La souris rejoint le panneau : il reste ouvert.
@@ -304,14 +310,14 @@ try {
         const m = st.moisBudgetaire.mois;
         st.donneesAnnuelles[st.moisBudgetaire.an].chargesVariables.alimentation.exceptions = [{ moisDebut: m, moisFin: m, nouvelleValeur: 1200 }];
         st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 200));
-        const c = st.pulseHebdo.categories.find(x => x.key === 'alimentation');
+        const c = st.liberteCycle.categories.find(x => x.key === 'alimentation');
         const res = { budget: c.budget, prevu: c.prevu.map(x => x.montant), ajuste: c.prevuAjuste };
         st.donneesAnnuelles[st.moisBudgetaire.an].chargesVariables.alimentation.exceptions = [];
         st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 200));
         return res;
     }, ST);
-    v('exception du mois (1 200) : postes ramenés au budget (600 · 360 · 240), et signalé',
-      ajuste.budget === 1200 && JSON.stringify(ajuste.prevu) === '[600,360,240]' && ajuste.ajuste === true, JSON.stringify(ajuste));
+    v('exception du mois (1 200 / sem.) : budget du cycle 5 160, postes 600 · 360 · 240, signalé',
+      ajuste.budget === 5160 && JSON.stringify(ajuste.prevu) === '[600,360,240]' && ajuste.ajuste === true, JSON.stringify(ajuste));
     // Un compte du Sanctuaire
     await page.hover('[data-sanct-compte][data-compte="cpt_2"]');
     await page.waitForTimeout(250);

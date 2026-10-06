@@ -170,8 +170,10 @@ try {
     // Soleil
     const sol = await scenario(60000);
     v('coussin confortable → ☀️ Soleil', sol.m.etat === 'soleil' && sol.atterr >= 1000, JSON.stringify(sol.m));
-    //  v37.20 : le conseil raisonne en semaines (le « par jour » est descendu au filet).
-    v('  → le conseil chiffre la dépense par semaine', sol.m.conseil.includes(new Intl.NumberFormat('fr-FR').format(sol.m.parSemaine)) && /par semaine/.test(sol.m.conseil), sol.m.conseil);
+    //  v37.23 : la gauche dit l'état ; l'argent à vivre n'est chiffré QU'À DROITE
+    //  (« Reste à dépenser »). Le conseil y renvoie, sans chiffre concurrent.
+    v('  → le conseil ne chiffre plus l\'argent à vivre : il renvoie au Reste à dépenser',
+      [sol, n].every(x => !/\d[\d\s\u202f\u00a0]*DH/.test(x.m.conseil)) && /Reste à dépenser/.test(sol.m.conseil), JSON.stringify([sol.m.conseil, n.m.conseil]));
 
     /* ── E. La respiration suit le moteur du simulateur ──────────────── */
     const r = await page.evaluate(({ ST, AN }) => {
@@ -202,7 +204,14 @@ try {
         return { meteo: t('[data-meteo]'), kpis: t('[data-cockpit-kpis]') };
     });
     v('Réalisé : la Météo chapeaute les trois chiffres', !!dReel && ordre.meteo < ordre.kpis, JSON.stringify({ dReel, ordre }));
-    v('  → le filet affiche toujours le reste à vivre du jour',
+    const roles = await page.evaluate(() => {
+        const m = document.querySelector('[data-meteo]'), lib = m && m.querySelector('[data-liberte]');
+        const chiffres = [...m.querySelectorAll('[data-meteo-rav], [data-meteo-jour], [data-liberte-semaine]')];
+        return { n: chiffres.length, tousADroite: !!lib && chiffres.every(e => lib.contains(e)), filet: !!m.querySelector('[data-meteo-filet]') };
+    });
+    v('rôles : reste, par semaine, par jour vivent dans la carte de droite, et nulle part ailleurs',
+      roles.n === 3 && roles.tousADroite && !roles.filet, JSON.stringify(roles));
+    v('  → la carte de droite affiche le reste à vivre du jour',
       !!dReel && dReel.jour.replace(/\s/g, '') === new Intl.NumberFormat('fr-FR').format(sol.m.parJour).replace(/\s/g, '') + 'DH', JSON.stringify(dReel));
     await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'previsionnel'; await new Promise(r => setTimeout(r, 200)); st.activeTab = 'pilotageTheo'; }, ST);
     await page.waitForTimeout(600);
