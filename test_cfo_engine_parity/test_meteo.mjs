@@ -254,7 +254,9 @@ try {
         const d = await domMeteo(m.page);
         const debord = await m.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         v(`S24+ (${nom}) : Météo présente, aucun débordement`, !!d && debord <= 0, JSON.stringify({ d, debord }));
-        if (twCss) v(`  → elle laisse de la place sous elle (< 75 % de l'écran)`, !!d && d.hauteur < 832 * 0.75, JSON.stringify(d));
+        //  v37.24 : la Météo porte désormais la saisie (elle remplace l'ancien bloc
+        //  « Réalisé à T0 ») : elle doit tenir dans un écran, plus en laisser un quart libre.
+        if (twCss) v(`  → elle tient dans un écran, saisie comprise`, !!d && d.hauteur < 832, JSON.stringify(d));
         v(`  → aucune erreur JavaScript`, m.erreurs.length === 0, m.erreurs[0] || '');
         await m.page.close();
     }

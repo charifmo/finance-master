@@ -43,13 +43,15 @@ v('l\'onglet Pilotage est localisable dans le source', onglet.length > 1000);
 v('plus aucune infobulle « transparente à la souris » dans l\'onglet',
   !/pointer-events-none[^"]*group-hover:opacity-100/.test(onglet) && !/group-hover:opacity-100[^"]*pointer-events-none/.test(onglet),
   'une bulle qui laisse passer la souris réveille la carte du dessous');
+//  v37.24 : la bulle « Budget conso » est partie avec l'ancien bloc « Réalisé à T0 »
+//  (son contenu vit dans le panneau ⓘ de la Météo) : il en reste deux.
 const bulles = onglet.match(/<div[^>]*\sdata-bulle\s[^>]*>\s*<div[^>]*>/g) || [];
 v('chaque bulle est en absolute z-[200], boîte en shadow-2xl',
-  bulles.length >= 3 && bulles.every(b => /class="[^"]*\babsolute\b[^"]*z-\[200\]/.test(b) && /shadow-2xl/.test(b)),
+  bulles.length >= 2 && bulles.every(b => /class="[^"]*\babsolute\b[^"]*z-\[200\]/.test(b) && /shadow-2xl/.test(b)),
   JSON.stringify(bulles.map(b => b.slice(0, 120))));
 const porteurs = onglet.match(/<div[^>]*data-bulle-cle[^>]*>/g) || [];
 v('… et chaque porteur de bulle est en « relative »',
-  porteurs.length >= 3 && porteurs.every(t => /class="relative\b/.test(t)), JSON.stringify(porteurs.map(t => t.slice(0, 100))));
+  porteurs.length >= 2 && porteurs.every(t => /class="relative\b/.test(t)), JSON.stringify(porteurs.map(t => t.slice(0, 100))));
 v('l\'ancien atterrissage isolé (journalHybride) n\'est plus affiché',
   !onglet.includes('journalHybride.soldeAtterrissage'), 'un troisième chiffre pour la même question');
 

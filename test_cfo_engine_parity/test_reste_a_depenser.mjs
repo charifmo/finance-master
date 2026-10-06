@@ -13,7 +13,9 @@
  *       une catégorie ne fait pas croire que les autres n'ont rien coûté) ;
  *     - la carte = le moteur (enveloppeConsoRestante, budgetConsoRestantReel) ;
  *     - le rythme (par semaine, par jour) se déduit du temps restant ;
- *     - la saisie en vrac se fait depuis le panneau Rayons X, sans le fermer.
+ *     - v37.24 : la saisie en vrac se fait sur la LIGNE de la carte (un champ
+ *       par catégorie) ; l'ancien bloc « Réalisé à T0 » a disparu ; les Rayons X
+ *       ne servent plus qu'à l'audit ; le mode Voyage survit, replié.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -156,6 +158,7 @@ try {
 
     /* ── C. Rien de déclaré : l'estimation du moteur, dite comme telle ── */
     const a0 = await lire();
+    const i0cats = a0.L.categories.map(c => c.key);
     v(`budget conso du cycle = ${BUDGET} (4 300 + 1 720 + 860)`, a0.L.budget === BUDGET && a0.budgetConso === BUDGET, JSON.stringify([a0.L.budget, a0.budgetConso]));
     v('rien de déclaré → « estimé », reste = prorata du moteur', !a0.L.declare && a0.L.rythme === 'estime' && a0.L.reste === a0.prorata && a0.L.reste === a0.rav,
       JSON.stringify({ declare: a0.L.declare, reste: a0.L.reste, prorata: a0.prorata, rav: a0.rav }));
@@ -260,27 +263,60 @@ try {
       JSON.stringify([dom.jauge, z.L.pct, dom.repere, z.L.pctAttendu]));
     v('  → chaque tuile dit d\'où vient son chiffre (📝 / 🧾 / estimé)', dom.sources.alimentation === 'compteur' && dom.sources.sorties === 'estime' && !dom.estime, JSON.stringify(dom.sources));
 
-    /* ── I. La saisie en vrac depuis le panneau Rayons X ──────────────── */
-    await page.click('[data-pulse-cat][data-cat="sorties"]');
-    await page.waitForTimeout(250);
-    v('Rayons X : le champ « Déjà dépensé ce cycle » est là', await page.evaluate(() => !!document.querySelector('[data-rayonx] [data-rx-compteur-input]')));
-    await page.fill('[data-rayonx] [data-rx-compteur-input]', '640');
-    await page.press('[data-rayonx] [data-rx-compteur-input]', 'Enter');
+    /* ── I. v37.24 : UNE seule saisie, sur la ligne de la carte ─────────── */
+    const surface = await page.evaluate(() => ({
+        //  Le titre exact du bloc (textContent : innerText applique « uppercase » ;
+        //  le changelog, lui, cite encore le nom dans ses notes).
+        ancienBloc: [...document.querySelectorAll('p')].some(p => p.textContent.trim() === 'Réalisé à T0 — conso engagée'),
+        champsHorsMeteo: [...document.querySelectorAll('input[type=number]')].filter(i => !i.closest('[data-meteo]') && /conso|engag/i.test(i.closest('div')?.textContent || '')).length,
+        champs: [...document.querySelectorAll('[data-meteo] [data-pulse-saisie]')].map(i => i.dataset.cat),
+        voyage: !!document.querySelector('[data-voyage]'),
+    }));
+    v('l\'ancien bloc « Réalisé à T0 » a quitté la page', !surface.ancienBloc, JSON.stringify(surface));
+    v('un champ « déjà dépensé » par ligne de catégorie, dans la Météo', JSON.stringify(surface.champs) === JSON.stringify(i0cats), JSON.stringify([surface.champs, i0cats]));
+    await page.click('[data-meteo] [data-pulse-saisie][data-cat="sorties"]');
+    await page.keyboard.type('640');
     await page.waitForTimeout(300);
     const i1 = await lire();
-    const panneau = await page.evaluate(() => ({ ouvert: !!document.querySelector('[data-rayonx]'), valeur: document.querySelector('[data-rayonx] [data-rx-compteur-input]')?.value,
-                                                total: document.querySelector('[data-rayonx] [data-rx-total]')?.textContent.replace(/\s/g, '') }));
-    v('taper 640 + Entrée : le moteur suit, le panneau reste ouvert et se met à jour',
-      i1.cat.s.engage === 640 && i1.cat.s.source === 'compteur' && i1.L.reste === i1.env && panneau.ouvert && panneau.valeur === '640' && panneau.total === '640DH',
-      JSON.stringify({ s: i1.cat.s, panneau }));
+    const vu = await page.evaluate(() => ({ panneau: !!document.querySelector('[data-rayonx]'), montant: document.querySelector('[data-pulse-montant]')?.textContent.replace(/\s/g, '') }));
+    v('cliquer sur la ligne Sorties et taper 640 : le moteur suit EN DIRECT, sans panneau',
+      i1.cat.s.engage === 640 && i1.cat.s.source === 'compteur' && i1.L.reste === i1.env && !vu.panneau && vu.montant === nf(i1.L.reste) + 'DH', JSON.stringify({ s: i1.cat.s, vu, reste: i1.L.reste }));
     const persiste = await page.evaluate((ST) => { const st = eval(ST); const d = st.donneesAnnuelles[st.moisBudgetaire.an]; return JSON.parse(JSON.stringify(d.consoRealiseeT0 || {})); }, ST);
-    v('  → enregistré dans le compteur du cycle (consoRealiseeT0), comme dans le Réalisé',
-      Object.values(persiste).some(l => l && l.sorties === 640), JSON.stringify(persiste));
-    await page.fill('[data-rayonx] [data-rx-compteur-input]', '');
-    await page.press('[data-rayonx] [data-rx-compteur-input]', 'Enter');
+    v('  → enregistré dans le compteur du cycle (consoRealiseeT0)', Object.values(persiste).some(l => l && l.sorties === 640), JSON.stringify(persiste));
+    await page.fill('[data-meteo] [data-pulse-saisie][data-cat="sorties"]', '');
     await page.waitForTimeout(300);
     v('  → vider le champ rend la catégorie à l\'estimation', (await lire()).cat.s.source === 'estime');
-    await page.keyboard.press('Escape');
+    //  Rayons X : l'audit seul, plus de champ de saisie
+    await page.hover('[data-pulse-cat][data-cat="alimentation"]');
+    await page.waitForTimeout(250);
+    const audit = await page.evaluate(() => { const p = document.querySelector('[data-rayonx]'); return p ? { champ: !!p.querySelector('input'), retenu: p.querySelector('[data-rx-retenu]')?.textContent.trim() } : null; });
+    v('Rayons X = audit : aucun champ dans le panneau, il dit ce qui est retenu', !!audit && !audit.champ && /Total saisi/.test(audit.retenu), JSON.stringify(audit));
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
+    //  ⓘ : le calcul du chiffre, terme à terme
+    await page.hover('[data-liberte-calcul]');
+    await page.waitForTimeout(250);
+    const k = await lire();
+    const calc = await page.evaluate(() => ({ ouvert: document.querySelector('[data-rayonx]')?.dataset.rxType, total: document.querySelector('[data-rayonx] [data-rx-total]')?.textContent.replace(/\s/g, '') }));
+    v('ⓘ : 🅰️ budget − déclaré − estimé = reste au budget ; 🅱️ tréso + à venir − charges = cash',
+      calc.ouvert === 'calcul' && calc.total === nf(k.L.reste) + 'DH'
+      && k.L.budget - k.L.calcul.engageDeclare - k.L.calcul.engageEstime === k.L.resteBudget
+      && Math.abs(k.L.calcul.treso + k.L.calcul.revenusAttente - k.L.calcul.obligations - k.L.cash) <= 1
+      && k.L.reste === Math.max(0, Math.min(k.L.resteBudget, k.L.cash)), JSON.stringify({ calc, L: { budget: k.L.budget, resteBudget: k.L.resteBudget, cash: k.L.cash, reste: k.L.reste, calcul: k.L.calcul } }));
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
+    //  Le mode Voyage, rescapé de l'ancien bloc
+    const vy = await page.evaluate(async (ST) => {
+        const st = eval(ST);
+        const avant = st.consoCategoriesT0.find(c => c.key === 'sorties').suspendue;
+        document.querySelector('[data-voyage]').open = true;
+        await new Promise(r => setTimeout(r, 100));
+        document.querySelector('[data-voyage-cat][data-cat="sorties"]').click();
+        await new Promise(r => setTimeout(r, 150));
+        const apres = st.consoCategoriesT0.find(c => c.key === 'sorties').suspendue;
+        document.querySelector('[data-voyage-cat][data-cat="sorties"]').click();
+        await new Promise(r => setTimeout(r, 150));
+        return { avant, apres, dates: !!document.querySelector('[data-voyage-debut]') && !!document.querySelector('[data-voyage-fin]') };
+    }, ST);
+    v('le mode Voyage survit : dates d\'absence et catégories suspendues', surface.voyage && vy.dates && vy.avant !== vy.apres, JSON.stringify(vy));
     v('aucune erreur JavaScript (bureau)', erreurs.length === 0, erreurs[0] || '');
     await page.close();
 
@@ -289,21 +325,21 @@ try {
     const tel = await mo.page.evaluate(() => {
         const m = document.querySelector('[data-meteo]');
         return { h: m.getBoundingClientRect().height, debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-                 tuiles: [...m.querySelectorAll('[data-pulse-cat]')].filter(e => e.offsetParent).length };
+                 champs: [...m.querySelectorAll('[data-pulse-saisie]')].filter(e => e.offsetParent).length };
     });
-    v('S24+ : aucun débordement, tuiles visibles même sans rien déclaré', tel.debord <= 0 && tel.tuiles >= 3, JSON.stringify(tel));
-    if (twCss) v('  → la Météo garde de la place sous elle (< 75 % de l\'écran)', tel.h < 832 * 0.75, String(tel.h));
-    await mo.page.evaluate(() => document.querySelector('[data-pulse-cat]').scrollIntoView({ block: 'center' }));
+    v('S24+ : aucun débordement, un champ visible par catégorie', tel.debord <= 0 && tel.champs >= 3, JSON.stringify(tel));
+    //  v37.24 : la Météo est devenue LA surface de saisie (elle remplace un bloc
+    //  de plusieurs écrans) : elle doit tenir dans un écran.
+    if (twCss) v('  → la Météo, saisie comprise, tient dans un écran', tel.h < 832, String(tel.h));
+    await mo.page.evaluate(() => document.querySelector('[data-pulse-saisie]').scrollIntoView({ block: 'center' }));
+    await mo.page.tap('[data-pulse-saisie][data-cat="alimentation"]');
+    await mo.page.keyboard.type('1500');
+    await mo.page.waitForTimeout(300);
+    const t1 = await mo.page.evaluate((ST) => { const st = eval(ST); return { a: st.liberteCycle.categories.find(c => c.key === 'alimentation').engage, panneau: !!document.querySelector('[data-rayonx]') }; }, ST);
+    v('  → toucher la ligne et taper 1500 : saisi, sans ouvrir de panneau', t1.a === 1500 && !t1.panneau, JSON.stringify(t1));
     await mo.page.tap('[data-pulse-cat][data-cat="alimentation"]');
     await mo.page.waitForTimeout(300);
-    const t1 = await mo.page.evaluate(() => {
-        const p = document.querySelector('[data-rayonx]'), a = document.querySelector('[data-pulse-cat][data-cat="alimentation"]');
-        if (!p) return null;
-        const r = p.getBoundingClientRect(), ra = a.getBoundingClientRect();
-        return { champ: !!p.querySelector('[data-rx-compteur-input]'), dansEcran: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight,
-                 ancreLibre: r.bottom <= ra.top || r.top >= ra.bottom };
-    });
-    v('  → toucher une catégorie ouvre la saisie, dans l\'écran, sans masquer la tuile', !!t1 && t1.champ && t1.dansEcran && t1.ancreLibre, JSON.stringify(t1));
+    v('  → toucher le nom ouvre l\'audit (Rayons X)', await mo.page.evaluate(() => document.querySelector('[data-rayonx]')?.dataset.rxType === 'cat'));
     v('  → aucune erreur JavaScript', mo.erreurs.length === 0, mo.erreurs[0] || '');
     await mo.page.close();
 } catch (e) {
