@@ -286,6 +286,36 @@ try {
     await page.fill('[data-meteo] [data-pulse-saisie][data-cat="sorties"]', '');
     await page.waitForTimeout(300);
     v('  → vider le champ rend la catégorie à l\'estimation', (await lire()).cat.s.source === 'estime');
+    //  v37.25 : le panneau d'audit ne doit JAMAIS recouvrir une case de saisie
+    //  (capture de l'utilisateur : « je ne peux pas changer les valeurs »).
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
+    for (const cat of ['alimentation', 'sorties', 'voiture']) {
+        const n = await (await page.$('[data-pulse-cat][data-cat="' + cat + '"]')).boundingBox();
+        await page.mouse.move(n.x + 30, n.y + n.height / 2, { steps: 5 });
+        await page.waitForTimeout(300);
+        const couvre = await page.evaluate(() => {
+            const p = document.querySelector('[data-rayonx]');
+            if (!p) return { ouvert: false };
+            const r = p.getBoundingClientRect();
+            const mal = [...document.querySelectorAll('[data-pulse-saisie]')].filter(i => {
+                const q = i.getBoundingClientRect(), e = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2);
+                return e !== i;
+            }).map(i => i.dataset.cat);
+            return { ouvert: true, gauche: r.right <= document.querySelector('[data-liberte]').getBoundingClientRect().left, mal };
+        });
+        v('panneau de « ' + cat + ' » : à gauche de la carte, toutes les cases restent cliquables', couvre.ouvert && couvre.gauche && couvre.mal.length === 0, JSON.stringify(couvre));
+    }
+    //  Le parcours réel : survol du nom d'Alimentation, puis la souris glisse vers la case de Sorties
+    const nA = await (await page.$('[data-pulse-cat][data-cat="alimentation"]')).boundingBox();
+    await page.mouse.move(nA.x + 30, nA.y + nA.height / 2, { steps: 5 }); await page.waitForTimeout(300);
+    const cS = await (await page.$('[data-pulse-saisie][data-cat="sorties"]')).boundingBox();
+    await page.mouse.move(cS.x + cS.width / 2, cS.y + cS.height / 2, { steps: 15 }); await page.waitForTimeout(300);
+    await page.mouse.down(); await page.mouse.up();
+    await page.keyboard.type('777');
+    await page.waitForTimeout(300);
+    v('depuis le nom d\'Alimentation, glisser jusqu\'à la case de Sorties et taper 777 : ça marche', (await lire()).cat.s.engage === 777, JSON.stringify((await lire()).cat.s));
+    await page.fill('[data-meteo] [data-pulse-saisie][data-cat="sorties"]', '');
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
     //  Rayons X : l'audit seul, plus de champ de saisie
     await page.hover('[data-pulse-cat][data-cat="alimentation"]');
     await page.waitForTimeout(250);

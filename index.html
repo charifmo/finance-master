@@ -7084,6 +7084,19 @@
                     //  pouvoir la toucher à nouveau pour fermer) : dessous s'il tient,
                     //  sinon dessus, sinon du côté le plus spacieux, avec défilement.
                     const h = el.scrollHeight;
+                    //  v37.25 : la colonne des cases de saisie est celle de la carte « Reste à
+                    //  dépenser ». Au bureau, le panneau s'ouvre À GAUCHE de cette carte : il ne
+                    //  recouvre jamais une case qu'on voudrait remplir.
+                    const carte = a.closest && a.closest('[data-liberte]');
+                    if (carte && vw >= 768) {
+                        const rc = carte.getBoundingClientRect();
+                        if (rc.left - 8 - W >= 8) {
+                            const hMax = vh - 16, hh = Math.min(h, hMax);
+                            const top = Math.min(Math.max(8, r.top - 24), vh - 8 - hh);
+                            this.rxStyle = { left: (rc.left - 8 - W) + 'px', top: top + 'px', width: W + 'px', maxHeight: h > hMax ? hMax + 'px' : null, overflowY: h > hMax ? 'auto' : null };
+                            return;
+                        }
+                    }
                     const bas = vh - r.bottom - 16, haut = r.top - 16;
                     let top, maxH = null;
                     if (h <= bas) top = r.bottom + 8;
@@ -7237,14 +7250,15 @@
                                 </span>
                             </span>
                         </button>
-                        <label :class="['shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 md:py-1.5 cursor-text transition-colors focus-within:ring-2 focus-within:ring-white/80 focus-within:bg-black/30',
-                                        c.source === 'compteur' ? 'bg-black/25 ring-white/30' : 'bg-black/15 ring-white/15 hover:ring-white/40']"
+                        <label :class="['shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 md:py-1.5 cursor-text transition-colors shadow-inner focus-within:ring-2 focus-within:ring-white focus-within:bg-black/40',
+                                        c.source === 'compteur' ? 'bg-black/35 ring-white/50' : 'bg-black/25 ring-white/35 hover:ring-white/70']"
                                :title="c.source === 'tickets' ? 'Les tickets datés (' + formatMad(c.tickets) + ') comptent tant que votre total est plus petit' : 'Total dépensé ce cycle, sans date'">
                             <span class="sr-only">Déjà dépensé ce cycle en {{ c.label }}</span>
+                            <span aria-hidden="true" class="text-[11px] text-white/60">✎</span>
                             <input type="number" inputmode="decimal" min="0" step="1" data-saisie data-pulse-saisie :data-cat="c.key"
                                    :value="c.saisi || ''" :placeholder="invite(c)"
                                    @input="saisirCompteur(c.key, $event)" @focus="fermer()" @keydown.enter="$event.target.blur()"
-                                   class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/40 placeholder:font-semibold outline-none">
+                                   class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/55 placeholder:italic placeholder:font-semibold outline-none">
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                         </label>
                     </div>
@@ -7446,8 +7460,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.24 Une-Seule-Saisie";
+                    const CURRENT_VERSION = "37.25 Saisie-Accessible";
                     const CHANGELOG = [
+        { version: "37.25 Saisie-Accessible", date: "2026-10-06", changes: [
+            "VOTRE SIGNALEMENT : « je ne peux pas changer les valeurs ». Reproduit à la souris réelle : survoler le NOM d'une catégorie ouvrait le panneau d'audit SOUS la ligne, par-dessus les cases « déjà dépensé » des lignes suivantes — visibles, mais impossibles à cliquer. Désormais, au bureau, le panneau s'ouvre à GAUCHE de la carte (sur le verdict) : la colonne des cases n'est plus jamais recouverte, et on peut glisser d'un nom à n'importe quelle case.",
+            "DES CASES QUI ONT L'AIR DE CASES — les montants grisés « ≈ 2 051 » (l'estimation du moteur) ressemblaient à des champs désactivés. Les cases ont maintenant un fond sombre, un contour franc, un crayon ✎ et une invite en italique ; au clic, le contour passe en blanc.",
+            "PREUVE — la suite « Reste à dépenser » vérifie que le panneau de chaque catégorie s'ouvre à gauche de la carte sans recouvrir aucune case, et rejoue le parcours exact : survol du nom d'Alimentation, glissement jusqu'à la case de Sorties, saisie de 777. Rejouée sur la v37.24 : échec.",
+        ] },
         { version: "37.24 Une-Seule-Saisie", date: "2026-10-06", changes: [
             "UN SEUL ENDROIT POUR REGARDER ET AGIR — la v37.23 laissait deux saisies de la conso sur la même page : l'ancien bloc « Réalisé à T0 — conso engagée » et le panneau de la Météo. Le bloc a quitté la page ; la carte « 💸 Reste à dépenser » l'absorbe.",
             "TAPER SUR LA LIGNE — chaque catégorie de la carte porte son champ « ✍️ Déjà dépensé » : on clique sur la ligne « Alimentation », on tape 1500, le grand chiffre et le rythme bougent en direct. Tant que rien n'est tapé, l'invite grisée montre ce qui compte (le total des tickets, ou ≈ l'estimation). Vider le champ rend la catégorie à l'estimation ; « ↩ tout effacer » remet le cycle à zéro.",
