@@ -158,7 +158,8 @@ try {
 
     /* ── C. Rien de déclaré : l'estimation du moteur, dite comme telle ── */
     const a0 = await lire();
-    const i0cats = a0.L.categories.map(c => c.key);
+    const i0cats = a0.L.categories.filter(c => !c.prevu.length).map(c => c.key);       // sans poste : une case
+    const i0postes = a0.L.categories.filter(c => c.prevu.length).map(c => c.key);       // avec postes : un ✎ qui déplie
     v(`budget conso du cycle = ${BUDGET} (4 300 + 1 720 + 860)`, a0.L.budget === BUDGET && a0.budgetConso === BUDGET, JSON.stringify([a0.L.budget, a0.budgetConso]));
     v('rien de déclaré → « estimé », reste = prorata du moteur', !a0.L.declare && a0.L.rythme === 'estime' && a0.L.reste === a0.prorata && a0.L.reste === a0.rav,
       JSON.stringify({ declare: a0.L.declare, reste: a0.L.reste, prorata: a0.prorata, rav: a0.rav }));
@@ -270,10 +271,12 @@ try {
         ancienBloc: [...document.querySelectorAll('p')].some(p => p.textContent.trim() === 'Réalisé à T0 — conso engagée'),
         champsHorsMeteo: [...document.querySelectorAll('input[type=number]')].filter(i => !i.closest('[data-meteo]') && /conso|engag/i.test(i.closest('div')?.textContent || '')).length,
         champs: [...document.querySelectorAll('[data-meteo] [data-pulse-saisie]')].map(i => i.dataset.cat),
+        ouvrir: [...document.querySelectorAll('[data-meteo] [data-pulse-ouvrir]')].map(i => i.dataset.cat),
         voyage: !!document.querySelector('[data-voyage]'),
     }));
     v('l\'ancien bloc « Réalisé à T0 » a quitté la page', !surface.ancienBloc, JSON.stringify(surface));
-    v('un champ « déjà dépensé » par ligne de catégorie, dans la Météo', JSON.stringify(surface.champs) === JSON.stringify(i0cats), JSON.stringify([surface.champs, i0cats]));
+    v('une case par catégorie sans poste ; un bouton ✎ qui déplie les postes pour les autres',
+      JSON.stringify(surface.champs) === JSON.stringify(i0cats) && JSON.stringify(surface.ouvrir) === JSON.stringify(i0postes) && i0postes.length > 0, JSON.stringify([surface, i0cats, i0postes]));
     await page.click('[data-meteo] [data-pulse-saisie][data-cat="sorties"]');
     await page.keyboard.type('640');
     await page.waitForTimeout(300);
@@ -347,6 +350,76 @@ try {
         return { avant, apres, dates: !!document.querySelector('[data-voyage-debut]') && !!document.querySelector('[data-voyage-fin]') };
     }, ST);
     v('le mode Voyage survit : dates d\'absence et catégories suspendues', surface.voyage && vy.dates && vy.avant !== vy.apres, JSON.stringify(vy));
+    /* ── K. v37.26 : une case par POSTE, pas de totaux à éditer ─────────── */
+    await page.mouse.move(5, 5);
+    await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); await new Promise(r => setTimeout(r, 150)); }, ST);
+    const k0 = await lire();
+    const cA = k0.L.categories.find(c => c.key === 'alimentation');
+    v('Alimentation (2 postes) : plus de case « total », un bouton ✎ qui déplie',
+      await page.evaluate(() => !document.querySelector('[data-meteo] [data-pulse-saisie][data-cat="alimentation"]') && !!document.querySelector('[data-meteo] [data-pulse-ouvrir][data-cat="alimentation"]') && !document.querySelector('[data-pulse-postes]')));
+    await page.click('[data-pulse-ouvrir][data-cat="alimentation"]');
+    await page.waitForTimeout(250);
+    const lignes = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-postes] [data-pulse-poste]')].map(e => e.dataset.poste));
+    v('déplier : une case par poste (HRI, L7M) + « Autre »', JSON.stringify(lignes) === JSON.stringify([cA.prevu[0].cle, cA.prevu[1].cle, 'libre']) && lignes.length === 3, JSON.stringify([lignes, cA.prevu.map(p => p.cle)]));
+    const place = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste-saisie]')].map(i => i.placeholder));
+    v('  → avant toute saisie, chaque poste montre son estimation (≈) ; « Autre » : 0', place[0].startsWith('≈') && place[1].startsWith('≈') && place[2] === '0', JSON.stringify(place));
+    const [pH, pL] = cA.prevu;                                            // HRI 600 → 2 580 ; L7M 400 → 1 720 sur le cycle
+    v('  → le budget du cycle de chaque poste s\'affiche (2 580 / 1 720)', pH.partCycle === 2580 && pL.partCycle === 1720 && pH.cle === 'alimentation::1', JSON.stringify([pH, pL]));
+    await page.click('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]');
+    await page.keyboard.type('800');
+    await page.keyboard.press('Enter');
+    const actif = await page.evaluate(() => document.activeElement.dataset.poste);
+    await page.keyboard.type('300');
+    await page.waitForTimeout(300);
+    const k1 = await lire();
+    const kA = k1.cat.a;
+    v('taper 800, Entrée → focus sur le poste suivant ; 300 : Alimentation = 1 100, en direct',
+      actif === pL.cle && kA.engage === 1100 && kA.saisi === 1100 && kA.source === 'compteur' && k1.L.reste === k1.env, JSON.stringify({ actif, kA }));
+    const stock = await page.evaluate((ST) => { const st = eval(ST); const d = st.donneesAnnuelles[st.moisBudgetaire.an]; return JSON.parse(JSON.stringify(Object.values(d.consoRealiseeT0 || {})[0] || {})); }, ST);
+    v('  → stocké dans le compteur du cycle, par poste (alimentation::1, ::2)', stock['alimentation::1'] === 800 && stock['alimentation::2'] === 300 && stock.alimentation === undefined, JSON.stringify(stock));
+    const total = await page.evaluate(() => document.querySelector('[data-pulse-ouvrir][data-cat="alimentation"] [data-pulse-total]').textContent.replace(/\s/g, ''));
+    v('  → le total de la ligne se met à jour (lecture seule) : 1100', total === '1100', total);
+    await page.fill('[data-pulse-poste-saisie][data-poste="libre"]', '200');
+    await page.waitForTimeout(250);
+    v('« Autre » 200 s\'ajoute : 1 300', (await lire()).cat.a.engage === 1300);
+    await page.click('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]');
+    await page.keyboard.type('+50');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const k2 = await lire();
+    const hv = await page.evaluate((cle) => document.querySelector('[data-pulse-poste-saisie][data-poste="' + cle + '"]').value, pH.cle);
+    v('« +50 » + Entrée AJOUTE au poste : 800 → 850, total 1 350', hv === '850' && k2.cat.a.engage === 1350, JSON.stringify([hv, k2.cat.a.engage]));
+    await page.click('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]');
+    await page.keyboard.type('abc');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const hv2 = await page.evaluate((cle) => document.querySelector('[data-pulse-poste-saisie][data-poste="' + cle + '"]').value, pH.cle);
+    v('un texte invalide est refusé : le poste garde 850', hv2 === '850' && (await lire()).cat.a.engage === 1350, hv2);
+    await page.fill('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]', '');
+    await page.waitForTimeout(250);
+    const k3 = await lire();
+    v('vider un poste le retire : 850 en moins → 500', k3.cat.a.engage === 500 && k3.cat.a.prevu[0].declare === false, JSON.stringify([k3.cat.a.engage, k3.cat.a.prevu.map(p => p.declare)]));
+    //  Un ticket daté de 900 sur HRI, compteur 500 : le plus grand l'emporte
+    await tickets([{ date: iso(maintenant), montant: 900, cat: 'alimentation', poste: 'HRI' }].map(t => ({ ...t, cat: 'alimentation' })));
+    const k4 = await lire();
+    v('compteur 500 < tickets 900 → engagé 900, le poste Hri montre 🧾 900', k4.cat.a.engage === 900 && k4.cat.a.source === 'tickets', JSON.stringify(k4.cat.a));
+    await tickets([]);
+    //  Un ancien total (v37.23/24) devient « Autre » et reste compté
+    await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); st.saisirCompteurConso('alimentation', 2500); await new Promise(r => setTimeout(r, 200)); }, ST);
+    await page.waitForTimeout(250);
+    const k5 = await lire();
+    const libre = await page.evaluate(() => document.querySelector('[data-pulse-poste-saisie][data-poste="libre"]').value);
+    v('un ancien total (2 500) reste valable : il devient « Autre »', k5.cat.a.engage === 2500 && libre === '2500', JSON.stringify([k5.cat.a.engage, libre]));
+    await page.fill('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]', '100');
+    await page.waitForTimeout(250);
+    v('  → et un poste s\'ajoute à lui : 2 600', (await lire()).cat.a.engage === 2600);
+    v('  → effacer le cycle remet tous les postes à zéro',
+      await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); await new Promise(r => setTimeout(r, 200)); return !st.liberteCycle.declare; }, ST));
+    await page.click('[data-pulse-ouvrir][data-cat="alimentation"]');
+    await page.waitForTimeout(200);
+    v('un second clic sur ✎ replie les postes', await page.evaluate(() => !document.querySelector('[data-pulse-postes]')));
+    v('aucune erreur JavaScript (postes)', erreurs.length === 0, erreurs[0] || '');
+
     v('aucune erreur JavaScript (bureau)', erreurs.length === 0, erreurs[0] || '');
     await page.close();
 
@@ -355,18 +428,30 @@ try {
     const tel = await mo.page.evaluate(() => {
         const m = document.querySelector('[data-meteo]');
         return { h: m.getBoundingClientRect().height, debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-                 champs: [...m.querySelectorAll('[data-pulse-saisie]')].filter(e => e.offsetParent).length };
+                 champs: [...m.querySelectorAll('[data-pulse-saisie], [data-pulse-ouvrir]')].filter(e => e.offsetParent).length };
     });
-    v('S24+ : aucun débordement, un champ visible par catégorie', tel.debord <= 0 && tel.champs >= 3, JSON.stringify(tel));
+    v('S24+ : aucun débordement, une case ou un ✎ visible par catégorie', tel.debord <= 0 && tel.champs >= 3, JSON.stringify(tel));
     //  v37.24 : la Météo est devenue LA surface de saisie (elle remplace un bloc
     //  de plusieurs écrans) : elle doit tenir dans un écran.
     if (twCss) v('  → la Météo, saisie comprise, tient dans un écran', tel.h < 832, String(tel.h));
     await mo.page.evaluate(() => document.querySelector('[data-pulse-saisie]').scrollIntoView({ block: 'center' }));
-    await mo.page.tap('[data-pulse-saisie][data-cat="alimentation"]');
+    await mo.page.tap('[data-pulse-saisie][data-cat="sorties"]');
     await mo.page.keyboard.type('1500');
     await mo.page.waitForTimeout(300);
-    const t1 = await mo.page.evaluate((ST) => { const st = eval(ST); return { a: st.liberteCycle.categories.find(c => c.key === 'alimentation').engage, panneau: !!document.querySelector('[data-rayonx]') }; }, ST);
-    v('  → toucher la ligne et taper 1500 : saisi, sans ouvrir de panneau', t1.a === 1500 && !t1.panneau, JSON.stringify(t1));
+    const t1 = await mo.page.evaluate((ST) => { const st = eval(ST); return { a: st.liberteCycle.categories.find(c => c.key === 'sorties').engage, panneau: !!document.querySelector('[data-rayonx]') }; }, ST);
+    v('  → toucher la case de Sorties et taper 1500 : saisi, sans ouvrir de panneau', t1.a === 1500 && !t1.panneau, JSON.stringify(t1));
+    //  v37.26 : Alimentation a des postes — toucher ✎, puis la case d'un poste
+    await mo.page.tap('[data-pulse-ouvrir][data-cat="alimentation"]');
+    await mo.page.waitForTimeout(300);
+    await mo.page.tap('[data-pulse-poste-saisie][data-poste="alimentation::1"]');
+    await mo.page.keyboard.type('640');
+    await mo.page.waitForTimeout(300);
+    const t2 = await mo.page.evaluate((ST) => {
+        const st = eval(ST), p = document.querySelector('[data-pulse-postes]'), r = p.getBoundingClientRect();
+        return { a: st.liberteCycle.categories.find(c => c.key === 'alimentation').engage, dansEcran: r.left >= 0 && r.right <= innerWidth,
+                 debord: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    }, ST);
+    v('  → toucher ✎ puis la case d\'un poste et taper 640 : saisi, rien ne déborde', t2.a === 640 && t2.dansEcran && t2.debord <= 0, JSON.stringify(t2));
     await mo.page.tap('[data-pulse-cat][data-cat="alimentation"]');
     await mo.page.waitForTimeout(300);
     v('  → toucher le nom ouvre l\'audit (Rayons X)', await mo.page.evaluate(() => document.querySelector('[data-rayonx]')?.dataset.rxType === 'cat'));

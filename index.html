@@ -7002,7 +7002,7 @@
                      lien: { type: String, default: null }, chips: { type: Boolean, default: true } },
             emits: ['aller', 'revenir', 'compteur', 'effacer'],
             components: { 'mono-compte': MonoCompte },
-            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false }; },
+            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: {} }; },
             computed: {
                 fond() {
                     return this.meteo.etat === 'orage' ? 'from-rose-600 via-red-700 to-slate-900'
@@ -7046,6 +7046,40 @@
                 //  L'invite du champ dit ce qui compte tant qu'on n'a rien tapé :
                 //  les tickets s'il y en a, sinon l'estimation au rythme attendu.
                 invite(c) { return c.tickets > 0 ? String(c.tickets) : (c.source === 'estime' ? '≈ ' + this.chiffre(c.engage) : '0'); },
+                //  v37.26 : saisie poste par poste
+                ouverte(k) { return !!this.ouvertes[k]; },
+                basculerOuverte(k) { this.ouvertes = { ...this.ouvertes, [k]: !this.ouvertes[k] }; this.fermer(); },
+                //  Le « hors-liste » : le total libre de la catégorie (clé = la catégorie)
+                libreDe(c) { return { cle: c.key, saisi: c.libre, declare: c.libre > 0 }; },
+                invitePoste(c, d) {
+                    if (c.source === 'estime' && c.budget > 0) return '≈ ' + this.chiffre(Math.round(c.engage * d.partCycle / c.budget));
+                    return '0';
+                },
+                //  Des chiffres : pris en compte en direct. « +50 » / « -20 » : s'ajoute au poste à la
+                //  validation. Tout autre texte est refusé et le poste retrouve sa valeur.
+                saisirPoste(d, e, fin) {
+                    const t = String(e.target.value).trim().replace(',', '.');
+                    if (/^\d*\.?\d*$/.test(t)) {
+                        if (t === '.') return;
+                        this.$emit('compteur', d.cle, t);
+                        return;
+                    }
+                    if (!fin) return;
+                    const m = t.match(/^([+\-−])\s*(\d+(?:\.\d+)?)$/);
+                    if (m) {
+                        const v = Math.max(0, Math.round((Number(d.saisi) || 0) + (m[1] === '+' ? 1 : -1) * Number(m[2])));
+                        this.$emit('compteur', d.cle, String(v));
+                        e.target.value = String(v);
+                    } else e.target.value = d.declare ? String(d.saisi) : '';
+                },
+                //  Entrée : valide ce poste et passe au suivant (le dernier : on referme le clavier)
+                suivant(e) {
+                    const el = e.target, tous = [...el.closest('[data-pulse-postes]').querySelectorAll('[data-pulse-poste-saisie]')];
+                    const i = tous.indexOf(el);
+                    el.blur();
+                    const n = tous[i + 1];
+                    if (n) n.focus();
+                },
                 //  v37.22 : 8 postes d'abord ; « +N » déplie (et le panneau se recale).
                 postesVisibles(c) { return this.rxTousPostes ? c.prevu : c.prevu.slice(0, 8); },
                 deplierPostes() { this.rxTousPostes = true; this.$nextTick(() => this.placer()); },
@@ -7208,7 +7242,7 @@
                 </p>
                 <p class="hidden md:block mt-0.5 text-[10px] font-semibold text-white/45">Repère blanc : où vous devriez en être au jour {{ p.jourCycle }} sur {{ p.joursCycle }} du cycle.</p>
                 <!-- UNE note, la plus importante -->
-                <p v-if="!p.declare" class="mt-2 text-[11px] font-semibold text-white/80 leading-snug" data-liberte-estime>✍️ <span class="hidden md:inline">Rien de déclaré : reste estimé au prorata du temps. Tapez ce que vous avez déjà dépensé sur chaque ligne ci-dessous — un total suffit, sans date.</span><span class="md:hidden">Estimé : tapez vos totaux ci-dessous.</span></p>
+                <p v-if="!p.declare" class="mt-2 text-[11px] font-semibold text-white/80 leading-snug" data-liberte-estime>✍️ <span class="hidden md:inline">Rien de déclaré : reste estimé au prorata du temps. Ouvrez une catégorie (✎) et tapez ce que vous avez dépensé sur chaque poste — sans date.</span><span class="md:hidden">Estimé : touchez ✎ et tapez vos dépenses.</span></p>
                 <p v-else-if="p.depassement > 0" class="mt-2 text-[11px] font-black text-rose-100" data-liberte-depasse>⚠️ Budget conso du cycle dépassé de {{ formatMad(p.depassement) }}.</p>
                 <p v-else-if="p.contrainte === 'tresorerie'" class="hidden md:block mt-2 text-[11px] font-bold text-amber-100 leading-snug" data-pulse-plafond>🏦 Plafonné par la trésorerie : le budget laisserait {{ formatMad(p.resteBudget) }}, le compte n'en couvre que {{ formatMad(p.reste) }} d'ici la paie.</p>
             </div>
@@ -7226,7 +7260,8 @@
                     </span>
                 </p>
                 <div data-pulse-categories class="space-y-1 md:space-y-1.5">
-                    <div v-for="c in p.categories" :key="'pc_' + c.key" data-pulse-ligne :data-cat="c.key" :data-source="c.source"
+                    <div v-for="c in p.categories" :key="'pc_' + c.key" data-pulse-categorie :data-cat="c.key">
+                    <div data-pulse-ligne :data-cat="c.key" :data-source="c.source"
                          :class="['flex items-center gap-1.5 md:gap-2 rounded-xl ring-1 p-1 md:p-1.5 transition-colors',
                                   estOuvert('cat', c.key) ? 'bg-white/20 ring-white/40' : (c.source === 'estime' ? 'bg-white/[0.04] ring-white/10' : 'bg-white/[0.08] ring-white/15')]">
                         <button type="button" data-rx-ancre data-pulse-cat :data-cat="c.key" :data-source="c.source"
@@ -7250,7 +7285,18 @@
                                 </span>
                             </span>
                         </button>
-                        <label :class="['shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 md:py-1.5 cursor-text transition-colors shadow-inner focus-within:ring-2 focus-within:ring-white focus-within:bg-black/40',
+                        <!-- Avec des postes : le total se LIT, on déplie pour saisir poste par poste -->
+                        <button v-if="c.prevu.length" type="button" data-pulse-ouvrir :data-cat="c.key" :aria-expanded="ouverte(c.key) ? 'true' : 'false'"
+                                :title="'Saisir poste par poste (' + c.prevu.length + ' postes)'" @click="basculerOuverte(c.key)"
+                                :class="['shrink-0 flex items-center gap-1.5 rounded-lg ring-1 px-2.5 py-1 md:py-1.5 shadow-inner transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white',
+                                         ouverte(c.key) ? 'bg-black/45 ring-white/80' : (c.source === 'estime' ? 'bg-black/25 ring-white/35 hover:ring-white/70' : 'bg-black/35 ring-white/50 hover:ring-white/70')]">
+                            <span aria-hidden="true" class="text-[11px] text-white/60">✎</span>
+                            <span :class="['text-[13px] md:text-sm font-black tabular-nums', c.source === 'estime' ? 'italic text-white/65' : 'text-white']" data-pulse-total>{{ c.source === 'estime' ? '≈ ' : '' }}{{ chiffre(c.engage) }}</span>
+                            <span class="text-[10px] font-bold text-white/45">DH</span>
+                            <span aria-hidden="true" :class="['text-[10px] text-white/75 transition-transform', ouverte(c.key) ? 'rotate-180' : '']">▾</span>
+                        </button>
+                        <!-- Sans poste : la case unique, comme avant -->
+                        <label v-else :class="['shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 md:py-1.5 cursor-text transition-colors shadow-inner focus-within:ring-2 focus-within:ring-white focus-within:bg-black/40',
                                         c.source === 'compteur' ? 'bg-black/35 ring-white/50' : 'bg-black/25 ring-white/35 hover:ring-white/70']"
                                :title="c.source === 'tickets' ? 'Les tickets datés (' + formatMad(c.tickets) + ') comptent tant que votre total est plus petit' : 'Total dépensé ce cycle, sans date'">
                             <span class="sr-only">Déjà dépensé ce cycle en {{ c.label }}</span>
@@ -7261,6 +7307,42 @@
                                    class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/55 placeholder:italic placeholder:font-semibold outline-none">
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                         </label>
+                    </div>
+                    <!-- ✍️ Les postes : une case chacun -->
+                    <div v-if="c.prevu.length && ouverte(c.key)" data-pulse-postes :data-cat="c.key" class="mt-1 ml-3 md:ml-5 pl-2 md:pl-3 border-l-2 border-white/20 space-y-0.5">
+                        <p class="px-1.5 pt-0.5 text-[10px] font-semibold text-white/45 leading-snug">Tapez ce que vous avez dépensé sur chaque poste<span class="hidden md:inline"> · <span class="text-white/70">+50</span> ajoute 50 · <span class="text-white/70">Entrée</span> passe au suivant</span></p>
+                        <div v-for="d in c.prevu" :key="'po_' + d.cle" data-pulse-poste :data-poste="d.cle" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
+                            <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }}</span>
+                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight whitespace-nowrap">prévu {{ chiffre(d.partCycle) }}<template v-if="d.depense > 0"> · 🧾 {{ chiffre(d.depense) }}</template></span>
+                                <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.engage > d.partCycle ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pctEngage + '%' }"></span></span>
+                            </span>
+                            <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
+                                <span class="sr-only">Dépensé sur {{ d.nom }} ce cycle</span>
+                                <input type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="c.key"
+                                       :value="d.declare ? d.saisi : ''" :placeholder="invitePoste(c, d)"
+                                       @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="$event.target.select(); fermer()" @keydown.enter.prevent="suivant($event)"
+                                       class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/45 placeholder:italic placeholder:font-semibold outline-none">
+                                <span class="text-[10px] font-bold text-white/45">DH</span>
+                            </label>
+                        </div>
+                        <div data-pulse-poste data-poste="libre" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
+                            <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">🏷️</span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-[12px] md:text-[13px] font-bold text-white/85 leading-tight">Autre</span>
+                                <span class="block text-[10px] font-semibold text-white/45 leading-tight">hors de la liste ci-dessus</span>
+                            </span>
+                            <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
+                                <span class="sr-only">Autres dépenses en {{ c.label }} ce cycle</span>
+                                <input type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie data-poste="libre" :data-cat="c.key"
+                                       :value="c.libre || ''" placeholder="0"
+                                       @input="saisirPoste(libreDe(c), $event, false)" @change="saisirPoste(libreDe(c), $event, true)" @focus="$event.target.select(); fermer()" @keydown.enter.prevent="suivant($event)"
+                                       class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/45 placeholder:italic placeholder:font-semibold outline-none">
+                                <span class="text-[10px] font-bold text-white/45">DH</span>
+                            </label>
+                        </div>
+                    </div>
                     </div>
                 </div>
                 <button v-if="p.horsBudget > 0" type="button" data-rx-ancre data-pulse-hors
@@ -7350,7 +7432,7 @@
                 </div>
                 <!-- Ce qui a été retenu, et pourquoi (la saisie se fait sur la ligne de la carte) -->
                 <p class="mt-3 rounded-lg bg-white/[0.04] ring-1 ring-white/10 px-2.5 py-2 text-[10px] font-semibold text-slate-400 leading-snug" data-rx-retenu>
-                    <template v-if="rxContenu.c.source === 'estime'">≈ Rien de déclaré : estimé au rythme attendu ({{ formatMad(rxContenu.c.engage) }}). Tapez le total sur la ligne de la carte.</template>
+                    <template v-if="rxContenu.c.source === 'estime'">≈ Rien de déclaré : estimé au rythme attendu ({{ formatMad(rxContenu.c.engage) }}). Saisissez-le sur la carte (bouton ✎ de la ligne).</template>
                     <template v-else-if="rxContenu.c.saisi > 0 && rxContenu.c.tickets > 0">📝 Total saisi {{ formatMad(rxContenu.c.saisi) }} · 🧾 tickets {{ formatMad(rxContenu.c.tickets) }} : on retient le plus grand, {{ formatMad(rxContenu.c.engage) }} — jamais la somme.</template>
                     <template v-else-if="rxContenu.c.source === 'compteur'">📝 Total saisi sur la carte : {{ formatMad(rxContenu.c.engage) }}.</template>
                     <template v-else>🧾 Retenu : la somme des tickets datés du cycle, {{ formatMad(rxContenu.c.engage) }}.</template>
@@ -7460,8 +7542,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.25 Saisie-Accessible";
+                    const CURRENT_VERSION = "37.26 Saisie-Par-Poste";
                     const CHANGELOG = [
+        { version: "37.26 Saisie-Par-Poste", date: "2026-10-07", changes: [
+            "PAS DE TOTAL À ÉDITER : UNE CASE PAR POSTE — une catégorie qui a des sous-catégories (Alimentation : Marjane, lhrri, khdra, kfta, sqata, dessert, Nuggets, samak…) n'a plus de case « total ». Sa ligne affiche le total en LECTURE ; le bouton ✎ la déplie sur une case par poste, plus « Autre » pour le hors-liste. Une catégorie sans poste garde sa case unique.",
+            "SAISIR SANS LA SOURIS — au clic, le contenu d'une case est sélectionné : on tape, Entrée valide et passe au poste SUIVANT (le dernier referme le clavier). « +50 » puis Entrée AJOUTE 50 au poste (« -20 » retire) : on met à jour sans refaire l'addition de tête. Un texte invalide est refusé, le poste garde sa valeur ; vider une case retire la saisie du poste.",
+            "CHAQUE POSTE SE SITUE — son budget du cycle (ex. Marjane : prévu 1 720), une jauge fine qui passe au rose au-delà, ses tickets datés s'il y en a ; avant toute saisie, l'estimation du moteur en grisé (≈ 598).",
+            "RIEN DE PERDU — les saisies sont rangées dans le MÊME compteur du cycle (alimentation::1, alimentation::2…) : rien de nouveau à sauvegarder ni à fusionner. Un ancien total saisi en v37.23/24 reste compté : il devient la ligne « Autre ». La règle ne change pas : engagé = le plus grand entre le total des postes et les tickets datés, jamais leur somme.",
+            "PREUVE — la suite « Reste à dépenser » (63 contrôles) : une case par poste, Entrée = suivant, « +50 », texte refusé, vider un poste, tickets, ancien total devenu « Autre », saisie au doigt sur S24+. Rejouée sur la v37.25 : échec ; trois défauts réintroduits exprès (postes non comptés, « +50 » sans effet, Entrée sans suivant) sont attrapés.",
+        ] },
         { version: "37.25 Saisie-Accessible", date: "2026-10-06", changes: [
             "VOTRE SIGNALEMENT : « je ne peux pas changer les valeurs ». Reproduit à la souris réelle : survoler le NOM d'une catégorie ouvrait le panneau d'audit SOUS la ligne, par-dessus les cases « déjà dépensé » des lignes suivantes — visibles, mais impossibles à cliquer. Désormais, au bureau, le panneau s'ouvre à GAUCHE de la carte (sur le verdict) : la colonne des cases n'est plus jamais recouverte, et on peut glisser d'un nom à n'importe quelle case.",
             "DES CASES QUI ONT L'AIR DE CASES — les montants grisés « ≈ 2 051 » (l'estimation du moteur) ressemblaient à des champs désactivés. Les cases ont maintenant un fond sombre, un contour franc, un crayon ✎ et une invite en italique ; au clic, le contour passe en blanc.",
@@ -16140,8 +16229,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const part = Number(x.montant) / S;
                                 const dep = Math.round(g.parPoste[x.categorieId] || 0);
                                 const partCycle = c.budget * part;
+                                //  v37.26 : ce que l'utilisateur a TAPÉ sur ce poste (sans date) ; les
+                                //  tickets datés du poste restent dans `depense` (audit).
+                                const cle = cleDetailT0(c.key, x);
+                                const saisiP = Math.max(0, Math.round(Number(consoT0Saisies.value[cle] || 0)));
+                                const engP = Math.max(saisiP, dep);
                                 const p = { nom: x.nom || '—', emoji: emojiPoste(x.nom, x.icone), montant: Math.round(v * part), categorieId: x.categorieId || null,
-                                            depense: dep, pct: partCycle > 0 ? Math.min(100, Math.round(dep / partCycle * 100)) : (dep > 0 ? 100 : 0), depasse: dep > partCycle };
+                                            depense: dep, pct: partCycle > 0 ? Math.min(100, Math.round(dep / partCycle * 100)) : (dep > 0 ? 100 : 0), depasse: dep > partCycle,
+                                            cle, saisi: saisiP, declare: Object.prototype.hasOwnProperty.call(consoT0Saisies.value, cle),
+                                            partCycle: Math.round(partCycle), engage: engP,
+                                            pctEngage: partCycle > 0 ? Math.min(100, Math.round(engP / partCycle * 100)) : (engP > 0 ? 100 : 0) };
                                 if (x.categorieId) parId[x.categorieId] = p;
                                 return p;
                             }).sort((a, b) => b.montant - a.montant);
@@ -16155,7 +16252,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const engageCat = c.declare || declare ? c.engage : c.theorique;
                             const resteCat = c.budget - engageCat;
                             return {
-                                key: c.key, label: c.label, budget: c.budget, engage: engageCat, saisi: c.saisi, tickets: c.tickets, declare: c.declare,
+                                key: c.key, label: c.label, budget: c.budget, engage: engageCat, saisi: c.saisi, libre: c.libre, parPostes: c.parPostes, tickets: c.tickets, declare: c.declare,
                                 reste: resteCat, parSemaine: resteCat > 0 ? Math.floor(resteCat / jours * 7) : 0,
                                 theorique: c.theorique, pct: c.budget > 0 ? Math.round(engageCat / c.budget * 100) : 0,
                                 source: !c.declare ? 'estime' : (c.tickets > c.saisi ? 'tickets' : 'compteur'),
@@ -16625,6 +16722,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const d = donneesAnnuelles.value[consoT0Annee.value];
                         return (d && d.consoRealiseeT0 && d.consoRealiseeT0[consoT0CycleKey.value]) || {};
                     });
+                    //  v37.26 : la clé d'un poste dans le compteur du cycle. L'id du détail
+                    //  quand il existe (stable si on renomme), sinon le nom normalisé.
+                    const cleDetailT0 = (catKey, det) => catKey + '::' + (det && det.id != null ? det.id : 'n' + _slugCat((det && det.nom) || ''));
                     //  v37.23 : les tickets datés du cycle (onglet Saisie), par catégorie et
                     //  par sous-catégorie. Fenêtre = début du cycle → aujourd'hui.
                     const _ticketsCycle = computed(() => {
@@ -16702,13 +16802,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 //  Une catégorie NON déclarée, dès qu'une autre l'est, reste
                                 //  estimée à son rythme attendu : déclarer « Alimentation »
                                 //  ne doit pas faire croire que Sorties n'a rien coûté.
-                                const saisi = Math.max(0, Math.round(Number(saisies[key] || 0)));
+                                const libre = Math.max(0, Math.round(Number(saisies[key] || 0)));
+                                const clesPostes = Object.keys(saisies).filter(k => k.startsWith(key + '::'));
+                                const parPostes = clesPostes.reduce((s, k) => s + Math.max(0, Math.round(Number(saisies[k] || 0))), 0);
+                                const saisi = libre + parPostes;
                                 const tickets = Math.round(((_ticketsCycle.value.parCle[key] || {}).total) || 0);
                                 const theoriqueCat = Math.round(budget * (estSuspendableAbsence(cv) ? ratioEcoule : ratioEcouleBrut));
-                                const declare = saisi > 0 || tickets > 0 || (declareQuelquePart && Object.prototype.hasOwnProperty.call(saisies, key));
+                                const declare = saisi > 0 || tickets > 0 || (declareQuelquePart && (Object.prototype.hasOwnProperty.call(saisies, key) || clesPostes.length > 0));
                                 const engage = declare ? Math.max(saisi, tickets) : (declareQuelquePart ? theoriqueCat : 0);
                                 return {
-                                    key, saisi, tickets, declare,
+                                    key, saisi, libre, parPostes, tickets, declare,
                                     label: cv.label || key,
                                     periode: cv.periode || 'mois',
                                     budgetInitial,
