@@ -66,5 +66,6 @@ suite "Semaines réelles du cycle (4 ou 5, plus × 4,3)"          node test_cfo_
 suite "Semaines réelles du cycle — serveur (PHP)"              php test_cfo_engine_parity/test_semaines_cycle.php
 suite "Un rythme par ligne de détail (/sem, /15j, /cycle)"     node test_cfo_engine_parity/test_rythmes.mjs
 suite "Un rythme par ligne — serveur (PHP)"                    php test_cfo_engine_parity/test_rythmes.php
+suite "Semaine écoulée sans saisie = son prévu"               node test_cfo_engine_parity/test_prevu_par_defaut.mjs
 
 echo "✅ Toutes les suites passent."

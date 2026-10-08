@@ -7010,7 +7010,7 @@
                      lien: { type: String, default: null }, chips: { type: Boolean, default: true } },
             emits: ['aller', 'revenir', 'effacer', 'semaine', 'saisie', 'retirer'],
             components: { 'mono-compte': MonoCompte },
-            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: {} }; },
+            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: {}, caseActive: null }; },
             computed: {
                 fond() {
                     return this.meteo.etat === 'orage' ? 'from-rose-600 via-red-700 to-slate-900'
@@ -7058,6 +7058,10 @@
                 anneau(c) { const e = c.engage != null ? c.engage : c.depense; return Math.min(100, c.budget > 0 ? e / c.budget * 100 : (e > 0 ? 100 : 0)); },
                 //  v37.23 : la saisie en vrac part au parent (setConsoT0), le panneau reste ouvert.
                 saisirCompteur(cle, e) { this.$emit('saisie', this.sm.lundi, cle, e.target.value); },
+                //  v37.31 : une case au prévu retenu se vide quand on y entre — le prévu reste en
+                //  invite, on tape le vrai montant ; ressortie sans rien taper, elle le retrouve.
+                entrerCase(e, cle, defaut) { this.caseActive = cle; if (!(defaut > 0)) e.target.select(); },
+                sortirCase(cle) { if (this.caseActive === cle) this.caseActive = null; },
                 anneauSem(c) { return c.sem.pct; },
                 //  v37.26 : saisie poste par poste
                 ouverte(k) { return !!this.ouvertes[k]; },
@@ -7076,7 +7080,7 @@
                     if (!fin) return;
                     const m = t.match(/^([+\-−])\s*(\d+(?:\.\d+)?)$/);
                     if (m) {
-                        const v = Math.max(0, Math.round((Number(d.saisi) || 0) + (m[1] === '+' ? 1 : -1) * Number(m[2])));
+                        const v = Math.max(0, Math.round((Number(d.declare ? d.saisi : d.defaut) || 0) + (m[1] === '+' ? 1 : -1) * Number(m[2])));
                         this.$emit('saisie', this.sm.lundi, d.cle, String(v));
                         e.target.value = String(v);
                     } else e.target.value = d.declare ? String(d.saisi) : '';
@@ -7286,6 +7290,9 @@
                 <p v-if="!sm.dansCycle" data-semaine-hors class="mb-2 rounded-lg bg-white/[0.07] ring-1 ring-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/75 leading-snug">
                     ℹ️ Cette semaine appartient au cycle {{ sm.cycleRel === 'precedent' ? 'précédent' : 'suivant' }} : elle ne change pas le Reste à dépenser ci-dessus.
                 </p>
+                <p v-if="sm.defaut > 0" data-semaine-defaut class="mb-2 rounded-lg bg-emerald-400/15 ring-1 ring-emerald-200/30 px-2.5 py-1.5 text-[10px] font-semibold text-white/85 leading-snug">
+                    ✓ Semaine écoulée : les lignes laissées vides comptent leur prévu ({{ formatMad(sm.defaut) }}). Tapez le vrai montant pour corriger — 0 si rien n'a été dépensé.
+                </p>
                 <div data-pulse-categories class="space-y-1 md:space-y-1.5">
                     <div v-for="c in p.categories" :key="'pc_' + c.key" data-pulse-categorie :data-cat="c.key">
                     <div data-pulse-ligne :data-cat="c.key" :data-source="c.sem.source"
@@ -7309,6 +7316,7 @@
                                     <span data-pulse-prevu>Prévu : {{ chiffre(c.sem.prevuSemaine) }} DH</span>
                                     <template v-if="c.sem.declare"> · <template v-if="c.sem.reste >= 0">reste <span class="font-black text-white/90">{{ chiffre(c.sem.reste) }}</span></template><span v-else class="font-black text-rose-200">dépassé de {{ chiffre(-c.sem.reste) }}</span></template>
                                     <template v-if="c.sem.tickets > 0"> · 🧾 {{ chiffre(c.sem.tickets) }}</template>
+                                    <template v-if="c.sem.defaut > 0"> · <span class="text-emerald-200" data-pulse-defaut>✓ au prévu</span></template>
                                 </span>
                                 <span v-if="c.sem.prevuCycle > 0" data-pulse-prevu-cycle class="block text-[10px] font-semibold text-white/50 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ '+ ' + chiffre(c.sem.prevuCycle) + ' DH / cycle (' + c.sem.postes.filter(p => p.unite !== 'semaine').map(p => p.nom).join(' · ') + ')' }}</span>
                             </span>
@@ -7330,8 +7338,8 @@
                             <span class="sr-only">Dépensé cette semaine en {{ c.label }}</span>
                             <span aria-hidden="true" class="text-[11px] text-white/60">✎</span>
                             <input :key="'u_' + c.key + sm.lundi" type="number" inputmode="decimal" min="0" step="1" data-saisie data-pulse-saisie :data-cat="c.key"
-                                   :value="c.sem.saisi || ''" placeholder="0"
-                                   @input="saisirCompteur(c.key, $event)" @focus="fermer()" @keydown.enter="$event.target.blur()"
+                                   :value="c.sem.saisi || (caseActive === c.key ? '' : (c.sem.defaut || ''))" :placeholder="!c.sem.saisi && c.sem.defaut > 0 && caseActive === c.key ? String(c.sem.defaut) : '0'" :data-defaut="!c.sem.saisi && c.sem.defaut > 0 ? '1' : null" :class="!c.sem.saisi && c.sem.defaut > 0 ? 'opacity-60' : ''"
+                                   @input="saisirCompteur(c.key, $event)" @focus="entrerCase($event, c.key, !c.sem.saisi ? c.sem.defaut : 0); fermer()" @blur="sortirCase(c.key)" @keydown.enter="$event.target.blur()"
                                    class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                         </label>
@@ -7348,14 +7356,14 @@
                             <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }}</span>
-                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">Prévu : {{ chiffre(d.prevu) }} DH{{ d.unite !== 'semaine' ? ' ' + uniteCourte(d.unite) : '' }}<template v-if="d.unite !== 'semaine' && d.cycleEngage > 0"> · <span class="text-white/75">{{ chiffre(d.cycleEngage) }} ce cycle</span></template><template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template></span>
+                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">Prévu : {{ chiffre(d.prevu) }} DH{{ d.unite !== 'semaine' ? ' ' + uniteCourte(d.unite) : '' }}<template v-if="d.unite !== 'semaine' && d.cycleEngage > 0"> · <span class="text-white/75">{{ chiffre(d.cycleEngage) }} ce cycle</span></template><template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template><template v-if="d.defaut > 0"> · <span class="text-emerald-200" data-pulse-poste-defaut>✓ au prévu</span></template></span>
                                 <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.depasse ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pct + '%' }"></span></span>
                             </span>
                             <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
                                 <span class="sr-only">Dépensé sur {{ d.nom }} cette semaine</span>
                                 <input :key="'ip_' + d.cle + sm.lundi" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="c.key"
-                                       :value="d.declare ? d.saisi : ''" placeholder="0"
-                                       @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="$event.target.select(); fermer()" @keydown.enter.prevent="suivant($event)"
+                                       :value="d.declare ? d.saisi : (caseActive === d.cle ? '' : (d.defaut || ''))" :placeholder="!d.declare && d.defaut > 0 && caseActive === d.cle ? String(d.defaut) : '0'" :data-defaut="!d.declare && d.defaut > 0 ? '1' : null" :class="!d.declare && d.defaut > 0 ? 'opacity-60' : ''"
+                                       @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="entrerCase($event, d.cle, !d.declare ? d.defaut : 0); fermer()" @blur="sortirCase(d.cle)" @keydown.enter.prevent="suivant($event)"
                                        class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                                 <span class="text-[10px] font-bold text-white/45">DH</span>
                             </label>
@@ -7467,9 +7475,11 @@
                 <!-- Ce qui a été retenu, et pourquoi (la saisie se fait sur la ligne de la carte) -->
                 <p class="mt-3 rounded-lg bg-white/[0.04] ring-1 ring-white/10 px-2.5 py-2 text-[10px] font-semibold text-slate-400 leading-snug" data-rx-retenu>
                     <template v-if="rxContenu.c.source === 'estime'">✍️ Rien de saisi ce cycle : 0 DH dépensé. Tapez vos dépenses dans les cases de la ligne (✎), semaine par semaine.<span v-if="rxContenu.c.engage > 0" class="block mt-1 text-slate-500" data-rx-prudence>En attendant, le Reste à dépenser en déduit par prudence {{ formatMad(rxContenu.c.engage) }} (rythme attendu, voir ⓘ) — rien n'est écrit dans vos cases.</span></template>
-                    <template v-else-if="rxContenu.c.saisi > 0 && rxContenu.c.tickets > 0">📝 Total saisi {{ formatMad(rxContenu.c.saisi) }} · 🧾 tickets {{ formatMad(rxContenu.c.tickets) }} : on retient le plus grand, {{ formatMad(rxContenu.c.engage) }} — jamais la somme.</template>
-                    <template v-else-if="rxContenu.c.source === 'compteur'">📝 Total saisi sur la carte : {{ formatMad(rxContenu.c.engage) }}.</template>
-                    <template v-else>🧾 Retenu : la somme des tickets datés du cycle, {{ formatMad(rxContenu.c.engage) }}.</template>
+                    <template v-else-if="rxContenu.c.source === 'defaut'">✓ Rien saisi ce cycle : les semaines écoulées comptent leur prévu, {{ formatMad(rxContenu.c.defaut) }}. Tapez le vrai montant sur la ligne pour corriger.</template>
+                    <template v-else-if="rxContenu.c.saisi > 0 && rxContenu.c.tickets > 0">📝 Total saisi {{ formatMad(rxContenu.c.saisi) }} · 🧾 tickets {{ formatMad(rxContenu.c.tickets) }} : on retient le plus grand, {{ formatMad(Math.max(rxContenu.c.saisi, rxContenu.c.tickets)) }} — jamais la somme.</template>
+                    <template v-else-if="rxContenu.c.source === 'compteur'">📝 Total saisi sur la carte : {{ formatMad(rxContenu.c.saisi) }}.</template>
+                    <template v-else>🧾 Retenu : la somme des tickets datés du cycle, {{ formatMad(rxContenu.c.tickets) }}.</template>
+                    <span v-if="rxContenu.c.defaut > 0 && rxContenu.c.source !== 'defaut'" class="block mt-1 text-emerald-300/90" data-rx-defaut>✓ + {{ formatMad(rxContenu.c.defaut) }} au prévu : semaines écoulées sans saisie.</span>
                 </p>
                 <!-- 🧾 Les tickets datés du cycle, s'il y en a -->
                 <div v-if="rxContenu.c.transactions.length" class="mt-3 pt-3 border-t border-dashed border-white/15">
@@ -7502,6 +7512,7 @@
                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-500">🅰️ Le budget</p>
                     <p class="flex justify-between gap-3"><span class="text-slate-300">Budget conso du cycle</span><span class="font-black text-white tabular-nums">{{ formatMad(p.budget) }}</span></p>
                     <p v-if="p.declare" class="flex justify-between gap-3"><span class="text-slate-300">− Déjà dépensé (déclaré)</span><span class="font-black text-white tabular-nums">− {{ formatMad(p.calcul.engageDeclare) }}</span></p>
+                    <p v-if="p.calcul.engageDefaut > 0" class="flex justify-between gap-3 pl-3 text-[10px]" data-rx-calcul-defaut><span class="text-slate-400">dont au prévu (semaines écoulées sans saisie)</span><span class="tabular-nums text-slate-300">{{ formatMad(p.calcul.engageDefaut) }}</span></p>
                     <p v-if="p.declare && p.calcul.engageEstime > 0" class="flex justify-between gap-3"><span class="text-slate-400">− Estimé (catégories non déclarées)</span><span class="font-black text-slate-300 tabular-nums">− {{ formatMad(p.calcul.engageEstime) }}</span></p>
                     <p v-if="!p.declare" class="flex justify-between gap-3"><span class="text-slate-400">− Estimé au prorata du temps</span><span class="font-black text-slate-300 tabular-nums">− {{ formatMad(p.engage) }}</span></p>
                     <p :class="['flex justify-between gap-3 font-black', p.contrainte === 'budget' ? 'text-emerald-300' : 'text-slate-400']"><span>= Reste au budget {{ p.contrainte === 'budget' ? '◀' : '' }}</span><span class="tabular-nums">{{ formatMad(p.resteBudget) }}</span></p>
@@ -7576,8 +7587,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.30 Rythmes-Par-Ligne";
+                    const CURRENT_VERSION = "37.31 Prevu-Par-Defaut";
                     const CHANGELOG = [
+        { version: "37.31 Prevu-Par-Defaut", date: "2026-10-08", changes: [
+            "UNE SEMAINE ÉCOULÉE SANS SAISIE COMPTE SON PRÉVU — dès que le dimanche est passé, chaque ligne « / sem » (Marjane, L7m…) et chaque charge sans ligne (Sorties, Essence…) laissée vide compte son prévu de la semaine comme RÉALISÉ. Le Reste à dépenser, les Rayons X et le Pilotage en tiennent compte. La semaine en cours et les semaines à venir restent vierges (v37.28).",
+            "VISIBLE ET CORRIGEABLE — dans la semaine écoulée, la case montre le prévu retenu (texte pâli, « ✓ au prévu »), et une note le dit : « les lignes laissées vides comptent leur prévu ». On y entre : la case se vide, le prévu reste en invite, on tape le vrai montant — 0 pour « rien dépensé » ; « +50 » part du prévu ; vider la case lui rend son prévu.",
+            "PAS DE DOUBLE COMPTAGE — pas de prévu par défaut pour : une ligne /15 j ou /cycle (suivie sur le cycle) ; une ligne qui a un ticket daté cette semaine-là ; une catégorie saisie en vrac cette semaine-là (« Autre », ou un ticket non ventilé) ; une catégorie qui porte encore un ancien total de cycle. Moteur : engagé = max(saisi, tickets) + prévus retenus.",
+            "RIEN N'EST ÉCRIT — le prévu retenu est calculé, pas stocké : il suit le prévu si on le modifie, et « effacer tout le cycle » ne touche que vos saisies. Rayons X : « ✓ Rien saisi ce cycle : les semaines écoulées comptent leur prévu » ou « ✓ + X au prévu » ; ⓘ : « dont au prévu (semaines écoulées sans saisie) ».",
+            "TICKETS DU CYCLE = TICKETS DE SES SEMAINES — comme les saisies (règle du jeudi, v37.27) : un ticket du lundi 5 oct. compte dans le cycle qui commence le jeudi 8 (il ne comptait nulle part).",
+            "PREUVE — suite nouvelle « Semaine écoulée sans saisie » (22 contrôles, horloges fixes mercredi 21 et dimanche 18 oct. 23 h) ; la suite « Reste à dépenser » joue désormais ses règles de saisie au dimanche 11 (aucune semaine écoulée) et la navigation par semaine au mercredi 14 (avec le prévu retenu). Douze défauts réintroduits exprès : tous attrapés.",
+        ] },
         { version: "37.30 Rythmes-Par-Ligne", date: "2026-10-08", changes: [
             "UN RYTHME PAR SOUS-CATÉGORIE — dans le détail d'une charge variable, chaque ligne a désormais son sélecteur : /sem, /15j ou /cycle. Le ravitaillement (« Hri ») une fois par cycle, la viande (« L7m ») à la semaine, le « Psy » à la quinzaine. Sur un cycle de N semaines réelles (v37.29) : /sem → montant × N, /15j → montant × N/2, /cycle → montant × 1.",
             "AUCUNE DONNÉE NE BOUGE — une ligne sans rythme hérite de sa catégorie (« / sem » → /sem, « / mois » → /cycle) : Factures, Alimentation… gardent exactement leurs montants. « + Nouvelle ligne » prend le rythme de la catégorie.",
@@ -16390,6 +16409,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const valsSem = _valeursSemaine(lundiSel);
                         const baseCycle = consoT0SaisiesCycle.value;
                         const aSaisie = (cle) => Object.prototype.hasOwnProperty.call(valsSem, cle);
+                        const defsSem = defautsSemaine(lundiSel);                        // v37.31 : {} si pas écoulée
                         const categories = consoCategoriesT0.value.map(c => {
                             const cv = (d.chargesVariables || {})[c.key] || {};
                             const g = T.parCle[c.key] || { total: 0, tx: [], parPoste: {} };
@@ -16415,7 +16435,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 //  tickets datés du poste restent dans `depense` (audit).
                                 const cle = cleDetailT0(c.key, x);
                                 const saisiP = Math.max(0, Math.round(Number(consoT0Saisies.value[cle] || 0)));
-                                const engP = Math.max(saisiP, dep);
+                                const engP = Math.max(saisiP, dep) + Math.round(consoDefautsParCle.value[cle] || 0);   // v37.31
                                 const p = { nom: x.nom || '—', emoji: emojiPoste(x.nom, x.icone), montant: Math.round(Number(x.montant) * ajuste), unite: periodeDetail(x, cv), categorieId: x.categorieId || null,
                                             depense: dep, pct: partCycle > 0 ? Math.min(100, Math.round(dep / partCycle * 100)) : (dep > 0 ? 100 : 0), depasse: dep > partCycle,
                                             cle, saisi: saisiP, declare: Object.prototype.hasOwnProperty.call(consoT0Saisies.value, cle),
@@ -16445,8 +16465,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const postesSem = prevu.map(p => {
                                 const sai = Math.max(0, Math.round(Number(valsSem[p.cle] || 0)));
                                 const tk = Math.round(gS.parPoste[p.categorieId] || 0);
-                                const eng = Math.max(sai, tk);
-                                const base = { cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, saisi: sai, declare: aSaisie(p.cle), tickets: tk, engage: eng };
+                                //  v37.31 : semaine écoulée, rien saisi ni ticketé → son prévu
+                                const defaut = Math.round(defsSem[p.cle] || 0);
+                                const eng = Math.max(sai, tk) + defaut;
+                                const base = { cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, saisi: sai, declare: aSaisie(p.cle), tickets: tk, engage: eng, defaut };
                                 if (p.unite === 'semaine') {
                                     const bud = Math.round(p.partCycle / nSem);
                                     return { ...base, budget: bud, prevu: bud, planifie: 0,
@@ -16467,14 +16489,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const libreS = Math.max(0, Math.round(Number(valsSem[c.key] || 0)));
                             const saisiS = libreS + postesSem.reduce((s, p) => s + p.saisi, 0);
                             const ticketsS = Math.round(gS.total);
-                            const declS = saisiS > 0 || ticketsS > 0 || Object.keys(valsSem).some(k => k === c.key || k.startsWith(c.key + '::'));
-                            //  v37.28 : une semaine vaut ce qui a été TAPÉ (ou ticketé), rien d'autre.
-                            //  Aucune estimation n'entre dans une case : sans saisie, 0.
-                            const engS = declS ? Math.max(saisiS, ticketsS) : 0;
+                            //  v37.31 : une semaine ÉCOULÉE : chaque ligne laissée vide compte son prévu
+                            const defautS = Math.round(defsSem[c.key] || 0) + postesSem.reduce((s, p) => s + (p.defaut || 0), 0);
+                            const declS = saisiS > 0 || ticketsS > 0 || defautS > 0 || Object.keys(valsSem).some(k => k === c.key || k.startsWith(c.key + '::'));
+                            //  v37.28 : la semaine en cours (et à venir) vaut ce qui a été TAPÉ (ou
+                            //  ticketé), rien d'autre ; aucune estimation n'entre dans une case.
+                            const engS = declS ? Math.max(saisiS, ticketsS) + defautS : 0;
                             const sem = {
-                                budget: semBudget, prevuSemaine, prevuCycle: prevuCycleLignes, engage: engS, saisi: saisiS, libre: libreS, tickets: ticketsS, declare: declS,
+                                budget: semBudget, prevuSemaine, prevuCycle: prevuCycleLignes, engage: engS, saisi: saisiS, libre: libreS, tickets: ticketsS, declare: declS, defaut: defautS,
                                 reste: semBudget - engS, pct: semBudget > 0 ? Math.min(100, Math.round(engS / semBudget * 100)) : (engS > 0 ? 100 : 0),
-                                source: declS ? (ticketsS > saisiS ? 'tickets' : 'compteur') : 'vide',
+                                source: declS ? (saisiS === 0 && ticketsS === 0 && defautS > 0 ? 'defaut' : (ticketsS > saisiS ? 'tickets' : 'compteur')) : 'vide',
                                 postes: postesSem, nb: gS.tx.length,
                                 //  Les saisies de CYCLE d'avant la saisie hebdomadaire, toujours comptées
                                 cycleAvant: Object.keys(baseCycle).filter(k => k === c.key || k.startsWith(c.key + '::')).reduce((s, k) => s + (Number(baseCycle[k]) || 0), 0),
@@ -16485,7 +16509,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 reste: resteCat, parSemaine: resteCat > 0 ? Math.floor(resteCat / jours * 7) : 0,
                                 reel: reelCat, resteReel: c.budget - reelCat, parSemaineReel: c.budget - reelCat > 0 ? Math.floor((c.budget - reelCat) / jours * 7) : 0,
                                 theorique: c.theorique, pct: c.budget > 0 ? Math.round(engageCat / c.budget * 100) : 0,
-                                source: !c.declare ? 'estime' : (c.tickets > c.saisi ? 'tickets' : 'compteur'),
+                                defaut: c.defaut || 0,
+                                source: !c.declare ? 'estime' : (c.saisi === 0 && c.tickets === 0 && c.defaut > 0 ? 'defaut' : (c.tickets > c.saisi ? 'tickets' : 'compteur')),
                                 transactions, nb: transactions.length, comptesAutres: Object.values(autres),
                                 prevu, prevuUnite: cv.periode === 'semaine' ? 'semaine' : 'mois',
                                 prevuAjuste: W > 0 && Math.abs(c.budget - W) > 0.5,
@@ -16503,6 +16528,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 obligations: Math.round(obligationsCourantHorsConso.value),
                                 engageDeclare: categories.filter(c => c.declare).reduce((s, c) => s + c.engage, 0),
                                 engageEstime: categories.filter(c => !c.declare).reduce((s, c) => s + c.engage, 0),
+                                engageDefaut: categories.reduce((s, c) => s + (c.defaut || 0), 0),
                             },
                             declare, compteur: consoCompteurRenseigne.value, nbTickets: Object.values(T.parCle).reduce((s, g) => s + g.tx.length, 0),
                             jours, semaines: Math.round(jours / 7 * 10) / 10,
@@ -16525,6 +16551,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                          cycleRel: th < _ymd(debut) ? 'precedent' : (th > _ymd(fin) ? 'suivant' : null),
                                          //  v37.29 : « semaine 2 sur 4 » du cycle
                                          nb: nSem, rang: _semaineDansCycle(lundiSel) ? Math.round((_decaler(th, 0) - new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7))) / 6048e5) + 1 : null,
+                                         defaut: categories.reduce((s, c) => s + (c.sem.defaut || 0), 0),
                                          budget: sb, engage: se, reste: sb - se, pct: sb > 0 ? Math.min(100, Math.round(se / sb * 100)) : 0 };
                             })(),
                         };
@@ -17049,8 +17076,86 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value;
                         const { debut, fin } = consoT0Fenetre.value;
                         const auj = new Date();
-                        return _lireTickets(_ymd(debut), _ymd(fin < auj ? fin : auj));
+                        //  v37.31 : les tickets des SEMAINES du cycle (règle du jeudi, v37.27), comme
+                        //  les saisies : du lundi de la 1ʳᵉ semaine au dimanche de la dernière.
+                        //  Un ticket du lundi 5 oct. compte dans le cycle qui commence le jeudi 8.
+                        const j1 = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
+                        const jN = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate() - ((fin.getDay() - 4 + 7) % 7));
+                        const lundi1 = new Date(j1.getFullYear(), j1.getMonth(), j1.getDate() - 3), dimN = new Date(jN.getFullYear(), jN.getMonth(), jN.getDate() + 3);
+                        return _lireTickets(_ymd(lundi1), _ymd(dimN < auj ? dimN : auj));
                     });
+                    /*  v37.31 — UNE SEMAINE ÉCOULÉE SANS SAISIE COMPTE SON PRÉVU.
+                        Le prévu HEBDO de chaque ligne « / sem » d'une charge (ou de la charge
+                        entière, sans ligne) pour un budget de cycle donné : le MÊME calcul que
+                        l'affichage de la Météo (parts du cycle triées, reste d'arrondi sur la
+                        première), pour que le défaut tombe pile sur le « Prévu » affiché. */
+                    const prevuHebdoLignes = (key, cv, budget, n) => {
+                        const dets = (cv.details || []).filter(x => x && Number(x.montant) > 0);
+                        if (!dets.length) return { [key]: Math.round(budget / n) };
+                        const poids = (x) => Number(x.montant) * facteurPeriode(periodeDetail(x, cv), n);
+                        const W = dets.reduce((s, x) => s + poids(x), 0);
+                        const parts = dets.map(x => ({ x, part: Math.round(W > 0 ? budget * poids(x) / W : 0), montant: Math.round(Number(x.montant) * (W > 0 ? budget / W : 1)) }))
+                                          .sort((a, b) => b.part - a.part || b.montant - a.montant);
+                        if (parts.length) parts[0].part += Math.round(budget) - parts.reduce((s, p) => s + p.part, 0);
+                        const out = {};
+                        parts.forEach(p => { if (periodeDetail(p.x, cv) === 'semaine') out[cleDetailT0(key, p.x)] = Math.round(p.part / n); });
+                        return out;
+                    };
+                    //  Les défauts d'UNE semaine (lundi ISO) : {} tant qu'elle n'est pas écoulée.
+                    const defautsSemaine = (lundiISO) => {
+                        const dimanche = _ymd(_decaler(lundiISO, 6));
+                        if (!(dimanche < _ymd(new Date()))) return {};
+                        const d = donneesAnnuelles.value[consoT0Annee.value];
+                        if (!d) return {};
+                        const mb = moisBudgetaire.value, n = semainesDuCycle(mb.mois, mb.an);
+                        const vals = _valeursSemaine(lundiISO), base = consoT0SaisiesCycle.value;
+                        const T = _lireTickets(lundiISO, dimanche);
+                        const out = {};
+                        Object.entries(d.chargesVariables || {}).forEach(([key, cv]) => {
+                            if (!cv || cv.categorieId === 'cat_cv_factures') return;
+                            //  Un ancien total de CYCLE (avant la saisie par semaine) couvre déjà ses semaines
+                            if (Object.keys(base).some(k => k === key || k.startsWith(key + '::'))) return;
+                            const budget = Math.round(budgetCategorieRevise(cv));
+                            if (!(budget > 0)) return;
+                            const g = T.parCle[key] || { total: 0, parPoste: {} };
+                            //  Saisie EN VRAC cette semaine-là (« Autre », ou un ticket non ventilé sur
+                            //  un poste) : la catégorie est réglée en bloc — pas de prévu ajouté aux
+                            //  lignes vides, sinon la même dépense compterait deux fois.
+                            const nonVentile = g.total - Object.values(g.parPoste || {}).reduce((s, x) => s + x, 0);
+                            if ((cv.details || []).some(x => x && Number(x.montant) > 0) && (Number(vals[key] || 0) > 0 || nonVentile > 0.5)) return;
+                            const idDe = {};
+                            (cv.details || []).forEach(x => { if (x) idDe[cleDetailT0(key, x)] = x.categorieId; });
+                            Object.entries(prevuHebdoLignes(key, cv, budget, n)).forEach(([cle, v]) => {
+                                if (!(v > 0) || Object.prototype.hasOwnProperty.call(vals, cle)) return;   // saisi, même 0
+                                const tk = cle === key ? g.total : (idDe[cle] ? (g.parPoste[idDe[cle]] || 0) : 0);
+                                if (tk > 0) return;                                                         // un ticket daté
+                                out[cle] = v;
+                            });
+                        });
+                        return out;
+                    };
+                    //  Les défauts des semaines ÉCOULÉES du cycle : { lundi: { clé: montant } }
+                    const consoDefautsDuCycle = computed(() => {
+                        calculationTick.value;
+                        const { debut, fin } = consoT0Fenetre.value;
+                        const out = {};
+                        const j = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
+                        for (; j.getTime() <= fin.getTime(); j.setDate(j.getDate() + 7)) {
+                            const lundi = _ymd(new Date(j.getFullYear(), j.getMonth(), j.getDate() - 3));
+                            const dft = defautsSemaine(lundi);
+                            if (Object.keys(dft).length) out[lundi] = dft;
+                        }
+                        return out;
+                    });
+                    //  … additionnés par clé (ligne ou charge)
+                    const consoDefautsParCle = computed(() => {
+                        const out = {};
+                        Object.values(consoDefautsDuCycle.value).forEach(w => Object.entries(w).forEach(([k, v]) => { out[k] = (out[k] || 0) + v; }));
+                        return out;
+                    });
+                    const defautDeCategorie = (key) => Object.entries(consoDefautsParCle.value)
+                        .filter(([k]) => k === key || k.startsWith(key + '::')).reduce((s, [, v]) => s + v, 0);
+
                     //  Le compteur en vrac a-t-il été rempli ? (bouton ↩ d'effacement)
                     const consoCompteurRenseigne = computed(() =>
                         Object.values(consoT0Saisies.value).some(v => Number(v) > 0)
@@ -17058,7 +17163,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Au moins une dépense déclarée (compteur OU tickets datés) → on pilote
                     // au réel, plus au temps
                     const consoT0Renseigne = computed(() =>
-                        consoCompteurRenseigne.value || _ticketsCycle.value.total > 0
+                        consoCompteurRenseigne.value || _ticketsCycle.value.total > 0 || Object.keys(consoDefautsDuCycle.value).length > 0
                     );
 
                     // Budget conso du cycle (variables consommables, HORS factures)
@@ -17097,10 +17202,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const saisi = libre + parPostes;
                                 const tickets = Math.round(((_ticketsCycle.value.parCle[key] || {}).total) || 0);
                                 const theoriqueCat = Math.round(budget * (estSuspendableAbsence(cv) ? ratioEcoule : ratioEcouleBrut));
-                                const declare = saisi > 0 || tickets > 0 || (declareQuelquePart && (Object.prototype.hasOwnProperty.call(saisies, key) || clesPostes.length > 0));
-                                const engage = declare ? Math.max(saisi, tickets) : (declareQuelquePart ? theoriqueCat : 0);
+                                //  v37.31 : les semaines écoulées sans saisie comptent leur prévu. Ces
+                                //  défauts ne couvrent que des lignes-semaines SANS saisie ni ticket :
+                                //  ils s'ajoutent au max(saisi, tickets), sans double comptage.
+                                const defaut = Math.round(defautDeCategorie(key));
+                                const declare = saisi > 0 || tickets > 0 || defaut > 0 || (declareQuelquePart && (Object.prototype.hasOwnProperty.call(saisies, key) || clesPostes.length > 0));
+                                const engage = declare ? Math.max(saisi, tickets) + defaut : (declareQuelquePart ? theoriqueCat : 0);
                                 return {
-                                    key, saisi, libre, parPostes, tickets, declare,
+                                    key, saisi, libre, parPostes, tickets, declare, defaut,
                                     label: cv.label || key,
                                     periode: cv.periode || 'mois',
                                     budgetInitial,
@@ -19198,6 +19307,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         semainesDuCycle, semainesDeLAnnee, cyclesSemaines,
                         // v37.30 : un rythme par ligne de détail
                         periodeDetail, coutVariableDuCycle, dependDesSemaines, valeurEquivalente,
+                        // v37.31 : semaine écoulée sans saisie = son prévu
+                        defautsSemaine, consoDefautsDuCycle,
                         semaineDecalage, changerSemaine, saisirSemaineConso, retirerSaisiesCycle,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur, imposerMaVersion,
