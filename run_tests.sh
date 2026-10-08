@@ -64,5 +64,7 @@ suite "Reste à dépenser du cycle (vrac, rythme, rôles)"         node test_cfo
 suite "Rayons X & routage bancaire évident"                    node test_cfo_engine_parity/test_rayons_x.mjs
 suite "Semaines réelles du cycle (4 ou 5, plus × 4,3)"          node test_cfo_engine_parity/test_semaines_cycle.mjs
 suite "Semaines réelles du cycle — serveur (PHP)"              php test_cfo_engine_parity/test_semaines_cycle.php
+suite "Un rythme par ligne de détail (/sem, /15j, /cycle)"     node test_cfo_engine_parity/test_rythmes.mjs
+suite "Un rythme par ligne — serveur (PHP)"                    php test_cfo_engine_parity/test_rythmes.php
 
 echo "✅ Toutes les suites passent."

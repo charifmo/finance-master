@@ -270,8 +270,8 @@ try {
                  fond: getComputedStyle(bloc).backgroundColor, rempli: rempli ? rempli.getBoundingClientRect().width / hri.getBoundingClientRect().width : null,
                  nonVentile: !!bloc.querySelector('[data-rx-non-ventile]'), postesLignes: [...p.querySelectorAll('[data-rx-ligne-poste]')].map(e => e.textContent.trim()) };
     });
-    v('panneau : « Budget prévu » [🛍️ HRI : 500 DH] [🥩 L7M : 300 DH] [🧺 MARCHE : 200 DH]',
-      !!courses && JSON.stringify(courses.etiquettes) === JSON.stringify(['🛍️HRI:500DH', '🥩L7M:300DH', '🧺MARCHE:200DH']), JSON.stringify(courses));
+    v('panneau : « Budget prévu » [🛍️ HRI : 500 DH / sem] [🥩 L7M : 300 DH / sem] [🧺 MARCHE : 200 DH / sem] (v37.30 : le rythme de chaque ligne)',
+      !!courses && JSON.stringify(courses.etiquettes) === JSON.stringify(['🛍️HRI:500DH/sem', '🥩L7M:300DH/sem', '🧺MARCHE:200DH/sem']), JSON.stringify(courses));
     v('  → sous l\'en-tête, séparé puis suivi des dépenses réelles', !!courses && courses.ordre, JSON.stringify(courses));
     v('  → un « ticket » clair dans le panneau sombre', !!courses && /^rgba?\((2[3-5]\d), (2[3-5]\d), (2[3-5]\d)/.test(courses.fond), courses && courses.fond);
     //  Le remplissage compare les tickets du poste à SA part du budget du cycle :

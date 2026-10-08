@@ -1488,8 +1488,8 @@
                                     </select>
                                 </div>
                             </div>
-                            <div v-if="item.periode === 'semaine' || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mb-2 space-x-2">
-                                <span v-for="cy in cyclesSemaines" :key="'cvs_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ item.periode === 'semaine' ? formatMAD((item.valeur || 0) * cy.n) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
+                            <div v-if="dependDesSemaines(item) || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mb-2 space-x-2">
+                                <span v-for="cy in cyclesSemaines" :key="'cvs_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ dependDesSemaines(item) ? formatMAD(coutVariableDuCycle(item, cy.mois, cy.an, false)) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
                             </div>
                             <!-- v17.29 : Sous-parties charges variables -->
                             <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-4 pl-3 border-l-2 border-red-300 space-y-2 mb-2">
@@ -1511,16 +1511,20 @@
                             </div>
 
                             <div v-if="item.showDetails" class="mt-4 bg-gray-50 rounded-xl p-5 border border-gray-200 shadow-inner">
-                                <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4 text-center border-b border-gray-200 pb-2">Détail des dépenses (Le total remplace la valeur ci-dessus)</p>
+                                <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4 text-center border-b border-gray-200 pb-2">Détail des dépenses — chaque ligne a son rythme : /sem, /15j ou /cycle</p>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                                     <div v-for="(detail, idx) in (item.details || [])" :key="detail.id" class="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-sm focus-within:border-red-300 transition-colors">
                                         <input type="text" v-model="detail.nom" @input="handleDataChange" placeholder="Nom..." class="flex-1 p-1.5 text-xs font-bold text-gray-700 outline-none bg-transparent"/>
                                         <input type="number" v-model.number="detail.montant" @input="handleDataChange" class="w-20 p-1.5 text-sm font-black text-red-600 text-right outline-none bg-gray-50 rounded border border-transparent focus:border-red-200"/>
+                                        <select :value="periodeDetail(detail, item)" @change="detail.periode = $event.target.value; handleDataChange()" data-cv-detail-periode :aria-label="'Rythme de ' + (detail.nom || 'cette ligne')"
+                                                class="shrink-0 py-1.5 pl-1 pr-0.5 text-[10px] font-black text-gray-600 bg-gray-100 rounded border border-transparent focus:border-red-200 outline-none cursor-pointer">
+                                            <option value="semaine">/sem</option><option value="quinzaine">/15j</option><option value="cycle">/cycle</option>
+                                        </select>
                                         <button @click="(item.details || []).splice(idx, 1); handleDataChange()" class="text-red-400 hover:text-red-600 px-1 font-bold">✕</button>
                                     </div>
                                 </div>
                                 <div class="text-center">
-                                    <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, paye: false, montantPaye: 0 }); handleDataChange()" class="text-[10px] text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 hover:text-blue-600 px-4 py-2 rounded-lg font-black transition-colors shadow-sm uppercase tracking-widest">+ Nouvelle ligne</button>
+                                    <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, periode: item.periode === 'mois' ? 'cycle' : 'semaine', paye: false, montantPaye: 0 }); handleDataChange()" class="text-[10px] text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 hover:text-blue-600 px-4 py-2 rounded-lg font-black transition-colors shadow-sm uppercase tracking-widest">+ Nouvelle ligne</button>
                                 </div>
                             </div>
                             <!-- v17.99 : Gérer Périodes — Exceptions variables -->
@@ -4769,8 +4773,8 @@
                                         <option value="mois">/ mois</option>
                                     </select>
                                 </div>
-                                <p v-if="item.periode === 'semaine' || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mt-1 space-x-2">
-                                    <span v-for="cy in cyclesSemaines" :key="'cvsm_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ item.periode === 'semaine' ? formatMAD((item.valeur || 0) * cy.n) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
+                                <p v-if="dependDesSemaines(item) || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mt-1 space-x-2">
+                                    <span v-for="cy in cyclesSemaines" :key="'cvsm_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ dependDesSemaines(item) ? formatMAD(coutVariableDuCycle(item, cy.mois, cy.an, false)) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
                                 </p>
                                 <!-- v17.29 : Sous-parties charges variables mobile -->
                                 <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-red-300 space-y-2">
@@ -4830,15 +4834,19 @@
                                     <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2.5 mt-1 text-xs text-white bg-red-600 rounded-lg font-bold uppercase tracking-widest min-h-[44px]">+ Ajouter Règle</button>
                                 </div>
                                 <div v-if="item.showDetails" class="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
-                                    <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3 text-center border-b border-gray-200 pb-1">Détail (total remplace la valeur)</p>
+                                    <p class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3 text-center border-b border-gray-200 pb-1">Détail — un rythme par ligne</p>
                                     <div class="space-y-2">
-                                        <div v-for="(detail, idx) in (item.details || [])" :key="detail.id" class="bg-white p-2 rounded-lg border border-gray-200 flex items-stretch gap-2">
-                                            <input type="text" v-model="detail.nom" @input="handleDataChange" placeholder="Nom..." class="flex-1 p-3 text-sm font-bold text-gray-700 outline-none bg-gray-50 rounded"/>
-                                            <input type="number" v-model.number="detail.montant" @input="handleDataChange" class="w-24 p-3 text-sm font-black text-red-600 text-right outline-none bg-gray-50 rounded"/>
+                                        <div v-for="(detail, idx) in (item.details || [])" :key="detail.id" class="bg-white p-2 rounded-lg border border-gray-200 flex flex-wrap items-stretch gap-2">
+                                            <input type="text" v-model="detail.nom" @input="handleDataChange" placeholder="Nom..." class="basis-full min-w-0 p-3 text-sm font-bold text-gray-700 outline-none bg-gray-50 rounded"/>
+                                            <input type="number" v-model.number="detail.montant" @input="handleDataChange" class="flex-1 min-w-0 p-3 text-sm font-black text-red-600 text-right outline-none bg-gray-50 rounded"/>
+                                            <select :value="periodeDetail(detail, item)" @change="detail.periode = $event.target.value; handleDataChange()" data-cv-detail-periode :aria-label="'Rythme de ' + (detail.nom || 'cette ligne')"
+                                                    class="shrink-0 px-1 text-xs font-black text-gray-700 bg-gray-100 rounded border border-gray-200 outline-none">
+                                                <option value="semaine">/sem</option><option value="quinzaine">/15j</option><option value="cycle">/cycle</option>
+                                            </select>
                                             <button @click="(item.details || []).splice(idx, 1); handleDataChange()" class="px-3 text-red-500 hover:text-red-700 font-black text-lg bg-red-50 rounded border border-red-200">✕</button>
                                         </div>
                                     </div>
-                                    <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, paye: false, montantPaye: 0 }); handleDataChange()" class="w-full py-2 mt-3 text-xs text-white bg-gray-700 rounded-lg font-bold uppercase tracking-widest">+ Nouvelle ligne</button>
+                                    <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, periode: item.periode === 'mois' ? 'cycle' : 'semaine', paye: false, montantPaye: 0 }); handleDataChange()" class="w-full py-2 mt-3 text-xs text-white bg-gray-700 rounded-lg font-bold uppercase tracking-widest">+ Nouvelle ligne</button>
                                 </div>
                             </div>
                             <button v-if="modeEdition" @click="ajouterChargeVariable()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-red-600 bg-red-50 border-2 border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
@@ -7083,6 +7091,8 @@
                 },
                 //  v37.22 : 8 postes d'abord ; « +N » déplie (et le panneau se recale).
                 postesVisibles(c) { return this.rxTousPostes ? c.prevu : c.prevu.slice(0, 8); },
+                //  v37.30 : le rythme d'une ligne, en court
+                uniteCourte(u) { return u === 'quinzaine' ? '/ 15 j' : (u === 'cycle' ? '/ cycle' : '/ sem'); },
                 deplierPostes() { this.rxTousPostes = true; this.$nextTick(() => this.placer()); },
                 estOuvert(type, key) { return !!this.rx && this.rx.type === type && this.rx.key === key; },
                 //  Souris : le survol ouvre, la sortie referme (avec un temps de grâce
@@ -7296,10 +7306,11 @@
                                     <span aria-hidden="true" class="shrink-0 text-[10px] opacity-40 group-hover:opacity-100 transition-opacity">🔍</span>
                                 </span>
                                 <span class="block mt-0.5 text-[10px] md:text-[11px] font-semibold text-white/55 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis" data-pulse-reste>
-                                    <span data-pulse-prevu>Prévu : {{ chiffre(c.sem.budget) }} DH</span>
+                                    <span data-pulse-prevu>Prévu : {{ chiffre(c.sem.prevuSemaine) }} DH</span>
                                     <template v-if="c.sem.declare"> · <template v-if="c.sem.reste >= 0">reste <span class="font-black text-white/90">{{ chiffre(c.sem.reste) }}</span></template><span v-else class="font-black text-rose-200">dépassé de {{ chiffre(-c.sem.reste) }}</span></template>
                                     <template v-if="c.sem.tickets > 0"> · 🧾 {{ chiffre(c.sem.tickets) }}</template>
                                 </span>
+                                <span v-if="c.sem.prevuCycle > 0" data-pulse-prevu-cycle class="block text-[10px] font-semibold text-white/50 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ '+ ' + chiffre(c.sem.prevuCycle) + ' DH / cycle (' + c.sem.postes.filter(p => p.unite !== 'semaine').map(p => p.nom).join(' · ') + ')' }}</span>
                             </span>
                         </button>
                         <!-- Avec des postes : le total de la semaine se LIT, on déplie pour saisir poste par poste -->
@@ -7337,7 +7348,7 @@
                             <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }}</span>
-                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight whitespace-nowrap" data-pulse-prevu>Prévu : {{ chiffre(d.budget) }} DH<template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template></span>
+                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">Prévu : {{ chiffre(d.prevu) }} DH{{ d.unite !== 'semaine' ? ' ' + uniteCourte(d.unite) : '' }}<template v-if="d.unite !== 'semaine' && d.cycleEngage > 0"> · <span class="text-white/75">{{ chiffre(d.cycleEngage) }} ce cycle</span></template><template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template></span>
                                 <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.depasse ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pct + '%' }"></span></span>
                             </span>
                             <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
@@ -7438,14 +7449,14 @@
                 <div v-if="rxContenu.c.prevu && rxContenu.c.prevu.length" data-rx-prevu class="mt-3 rounded-xl bg-slate-50 ring-1 ring-white/20 p-2.5 text-slate-600">
                     <p class="flex items-baseline justify-between gap-2">
                         <span class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">🧾 Budget prévu</span>
-                        <span class="text-[10px] font-bold text-slate-400 tabular-nums">par {{ rxContenu.c.prevuUnite }}</span>
+                        <span class="text-[10px] font-bold text-slate-400 tabular-nums" data-rx-prevu-semaines>cycle de {{ p.nbSemaines }} semaines</span>
                     </p>
                     <div class="mt-2 flex flex-wrap gap-1">
                         <span v-for="(d, i) in postesVisibles(rxContenu.c)" :key="'rxp_' + i" data-rx-poste :data-depense="d.depense"
-                              :title="d.depense > 0 ? formatMad(d.depense) + ' de tickets sur ce poste ce cycle' : 'Aucun ticket sur ce poste ce cycle'"
+                              :data-unite="d.unite" :title="formatMad(d.montant) + ' ' + uniteCourte(d.unite) + ' → ' + formatMad(d.partCycle) + ' sur ce cycle de ' + p.nbSemaines + ' semaines · ' + (d.depense > 0 ? formatMad(d.depense) + ' de tickets' : 'aucun ticket')"
                               class="relative overflow-hidden inline-flex items-center gap-1 rounded-md bg-white ring-1 ring-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 tabular-nums">
                             <span v-if="d.depense > 0" aria-hidden="true" data-rx-poste-rempli :class="['absolute inset-y-0 left-0', d.depasse ? 'bg-rose-100' : 'bg-emerald-100']" :style="{ width: d.pct + '%' }"></span>
-                            <span class="relative">{{ d.emoji }} {{ d.nom }} : <span class="font-black text-slate-800">{{ formatMad(d.montant) }}</span></span>
+                            <span class="relative">{{ d.emoji }} {{ d.nom }} : <span class="font-black text-slate-800">{{ formatMad(d.montant) }}</span> <span class="text-slate-400" data-rx-poste-unite>{{ uniteCourte(d.unite) }}</span></span>
                         </span>
                         <button v-if="!rxTousPostes && rxContenu.c.prevu.length > 8" type="button" data-rx-plus @click.stop="deplierPostes()"
                                 class="inline-flex items-center rounded-md bg-slate-200/70 hover:bg-slate-300/70 px-1.5 py-0.5 text-[10px] font-black text-slate-600">+{{ rxContenu.c.prevu.length - 8 }}</button>
@@ -7565,8 +7576,17 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.29 Semaines-Reelles";
+                    const CURRENT_VERSION = "37.30 Rythmes-Par-Ligne";
                     const CHANGELOG = [
+        { version: "37.30 Rythmes-Par-Ligne", date: "2026-10-08", changes: [
+            "UN RYTHME PAR SOUS-CATÉGORIE — dans le détail d'une charge variable, chaque ligne a désormais son sélecteur : /sem, /15j ou /cycle. Le ravitaillement (« Hri ») une fois par cycle, la viande (« L7m ») à la semaine, le « Psy » à la quinzaine. Sur un cycle de N semaines réelles (v37.29) : /sem → montant × N, /15j → montant × N/2, /cycle → montant × 1.",
+            "AUCUNE DONNÉE NE BOUGE — une ligne sans rythme hérite de sa catégorie (« / sem » → /sem, « / mois » → /cycle) : Factures, Alimentation… gardent exactement leurs montants. « + Nouvelle ligne » prend le rythme de la catégorie.",
+            "LA LIGNE DEVIENT LA SOURCE DE VÉRITÉ — le budget d'une catégorie est calculé ligne par ligne partout : Pilotage, Reste à dépenser, Prévisionnel (chaque mois avec ses semaines), surplus, journal, relevé, contrôle, graphiques, indépendance financière. La valeur affichée à côté du titre devient un résumé (l'équivalent dans l'unité de la catégorie) ; le calcul exact du cycle en cours et du suivant s'affiche dessous.",
+            "RAYONS X — chaque étiquette du budget prévu dit son rythme : [🛍️ Hri : 1 000 DH / cycle] [🥩 L7m : 150 DH / sem] [Psy : 400 DH / 15 j], triées par poids dans le cycle ; au survol, ce que la ligne pèse sur le cycle.",
+            "LA SEMAINE SANS FAUX DÉPASSEMENT — une ligne /15j ou /cycle se suit sur le CYCLE (« Prévu : 1 000 DH / cycle · 1 000 ce cycle ») ; la ligne de la catégorie affiche « Prévu : 250 DH + 2 000 / cycle ». La semaine du ravitaillement, la dépense compte comme PRÉVUE dans la limite de l'enveloppe restante : plus de « dépassé » ce jour-là ; au-delà de l'enveloppe, oui.",
+            "SERVEUR (CFO) — même règle dans cfo_intent_engine.php (net mensuel de secours, valeur résumée) ; quand le CFO change le total d'une catégorie aux rythmes mêlés, chaque ligne suit le même ratio et garde son rythme. Parité 27/27 intacte avec l'ancien moteur (lignes héritées).",
+            "PREUVE — deux suites nouvelles (37 + 12 contrôles), calculs faits à la main, cycles de 5 et de 4 semaines : héritage, coût du cycle, Prévisionnel des 12 mois, surplus, journal, Rayons X, semaine du ravitaillement, cycle complet tenu au dirham près, éditeur (sélecteurs, nouvelle ligne, valeur résumée). Onze défauts réintroduits exprès côté application et quatre côté serveur : tous attrapés.",
+        ] },
         { version: "37.29 Semaines-Reelles", date: "2026-10-08", changes: [
             "FIN DU « × 4,3 » — un cycle de paie compte 4 ou 5 semaines, jamais 4,3 : les jeudis entre le jour de paie du mois précédent et la veille du suivant (la règle de la saisie par semaine). Une charge « / sem » coûte désormais valeur × les semaines RÉELLES de son cycle ; une charge « / mois » se répartit sur ses 4 ou 5 semaines. Sur l'année : 52 ou 53 semaines (et non 4,3 × 12 = 51,6).",
             "POURQUOI — avec 4,3, tenir exactement son prévu chaque semaine pendant un cycle de 5 semaines affichait un FAUX dépassement (5 × 3 097 = 15 485 pour un budget de 13 317) ; dans un cycle de 4 semaines, 929 DH n'étaient portés par aucune semaine. Désormais : prévu tenu chaque semaine = budget du cycle tenu, au dirham près.",
@@ -8939,7 +8959,7 @@
                             //  (ses sous-lignes aussi : elles étaient comptées comme mensuelles).
                             const kSem = cv.periode === 'semaine' ? semainesDuCycle(m, a) : 1;
                             if (Array.isArray(cv.details) && cv.details.length) {
-                                cv.details.forEach(det => add(det.categorieId || cv.categorieId, det.nom, 'charge_variable_detail', Number(det.montant || 0) * kSem));
+                                cv.details.forEach(det => add(det.categorieId || cv.categorieId, det.nom, 'charge_variable_detail', dueDetailDuCycle(det, cv, m, a)));
                             } else {
                                 add(cv.categorieId, cv.label, 'charge_variable', Number(cv.valeur || 0) * kSem);
                             }
@@ -11715,11 +11735,11 @@
                         });
                         Object.entries(d.chargesVariables || {}).forEach(([k, c]) => {
                             //  v37.29 : chaque mois restant avec SES semaines (4 ou 5), plus × 4,3.
-                            const hebdo = (c || {}).periode === 'semaine';
-                            const m = hebdo ? N((c || {}).valeur) * semainesDuCycle(annee === mb.an ? mb.mois : 1, annee) : N((c || {}).valeur);
+                            //  v37.30 : et chaque ligne avec SON rythme (/sem, /15 j, /cycle).
+                            const m = coutVariableDuCycle(c, annee === mb.an ? mb.mois : 1, annee, false);
                             if (m <= 0) return;
                             let annuel = 0;
-                            for (let mm = 13 - moisRestants; mm <= 12; mm++) annuel += hebdo ? N((c || {}).valeur) * semainesDuCycle(mm, annee) : N((c || {}).valeur);
+                            for (let mm = 13 - moisRestants; mm <= 12; mm++) annuel += coutVariableDuCycle(c, mm, annee, false);
                             lignes.push({ cle: 'cv_' + k, nom: (c || {}).label || k, mensuel: Math.round(m),
                                           annuel: Math.round(annuel), onglet: 'saisie', categorie: 'Charge variable' });
                         });
@@ -13060,7 +13080,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if(newVal[anneeAffichage.value] && newVal[anneeAffichage.value].chargesVariables) {
                             Object.keys(newVal[anneeAffichage.value].chargesVariables || {}).forEach(key => {
                                 const cv = newVal[anneeAffichage.value].chargesVariables[key];
-                                if (cv?.details?.length > 0) cv.valeur = cv.details.reduce((sum, d) => sum + (Number(d.montant) || 0), 0);
+                                //  v37.30 : l'équivalent dans l'unité de la catégorie (= la somme si
+                                //  toutes les lignes ont son rythme ; sinon, rythmes mêlés convertis).
+                                if (cv?.details?.length > 0) { const eq = valeurEquivalente(cv, anneeAffichage.value); if (cv.valeur !== eq) cv.valeur = eq; }
                             });
                         }
                         handleDataChange();
@@ -13651,12 +13673,64 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return n || 4;
                     };
                     const semainesDeLAnnee = (an) => { let s = 0; for (let m = 1; m <= 12; m++) s += semainesDuCycle(m, an); return s; };
-                    //  Le coût d'une charge variable sur UN cycle : exception du mois comprise,
-                    //  puis × les semaines du cycle si elle est saisie « / sem ».
-                    const valeurVariableDuCycle = (cv, mois, an) => {
-                        const v = valeurEffective(cv, (cv || {}).valeur, mois);
-                        return (cv || {}).periode === 'semaine' ? v * semainesDuCycle(mois, an) : v;
+                    /*  v37.30 — UN RYTHME PAR LIGNE DE DÉTAIL.
+                        details[i].periode : 'semaine' | 'quinzaine' | 'cycle'. Sans rythme,
+                        une ligne hérite de sa catégorie (« / sem » → semaine, « / mois » →
+                        cycle) : les données existantes ne bougent pas d'un dirham. */
+                    const RYTHMES = ['semaine', 'quinzaine', 'cycle'];
+                    const periodeDetail = (d, cv) => RYTHMES.includes(d && d.periode) ? d.periode : ((cv || {}).periode === 'semaine' ? 'semaine' : 'cycle');
+                    //  Combien de fois une ligne tombe dans un cycle de N semaines réelles
+                    const facteurPeriode = (p, n) => p === 'semaine' ? n : (p === 'quinzaine' ? n / 2 : 1);
+                    //  L'exception du mois budgétaire (même règle que valeurEffective), ou null
+                    const exceptionDuMois = (item, mois) => {
+                        let v = null; const m = Number(mois);
+                        ((item || {}).exceptions || []).forEach(e => {
+                            const md = Number(e.moisDebut || 0), mf = Number(e.moisFin || 0);
+                            if (md && mf && m >= md && m <= mf) v = Number(e.nouvelleValeur || 0);
+                        });
+                        return v;
                     };
+                    const aDesLignes = (cv) => Array.isArray((cv || {}).details) && cv.details.length > 0;
+                    //  Ce que coûte UNE ligne sur le cycle (mois, an) — cycle courant par défaut
+                    const dueDetailDuCycle = (d, cv, mois, an) => {
+                        const mb = moisBudgetaire.value;
+                        const n = semainesDuCycle(Number(mois) || mb.mois, Number(an) || mb.an);
+                        return (Number((d || {}).montant) || 0) * facteurPeriode(periodeDetail(d, cv), n);
+                    };
+                    /*  LE coût d'une charge variable sur UN cycle — utilisé par TOUS les moteurs.
+                          • une exception du mois remplace la catégorie entière (dans son unité) ;
+                          • sinon, avec des lignes : Σ montant × (N, N/2 ou 1) selon le rythme ;
+                          • sans ligne : valeur × N (« / sem ») ou valeur (« / mois »). */
+                    const coutVariableDuCycle = (cv, mois, an, avecExceptions = true) => {
+                        const c = cv || {};
+                        const mb = moisBudgetaire.value;
+                        const m = Number(mois) || mb.mois, a = Number(an) || mb.an;
+                        const n = semainesDuCycle(m, a);
+                        const exc = avecExceptions ? exceptionDuMois(c, m) : null;
+                        if (exc === null && aDesLignes(c))
+                            return c.details.reduce((s, d) => s + (Number((d || {}).montant) || 0) * facteurPeriode(periodeDetail(d, c), n), 0);
+                        const v = exc !== null ? exc : (Number(c.valeur) || 0);
+                        return c.periode === 'semaine' ? v * n : v;
+                    };
+                    //  Le coût dépend-il du nombre de semaines du cycle ? (non : tout au /cycle)
+                    const dependDesSemaines = (cv) => aDesLignes(cv)
+                        ? cv.details.some(d => Number((d || {}).montant) > 0 && periodeDetail(d, cv) !== 'cycle')
+                        : (cv || {}).periode === 'semaine';
+                    //  `valeur` d'une catégorie à lignes : l'équivalent dans SON unité. Lignes au
+                    //  rythme de la catégorie → leur somme exacte (comme avant) ; rythmes mêlés →
+                    //  l'équivalent sur une année réelle (semaines de l'année ÷ 12), arrondi.
+                    const valeurEquivalente = (cv, an) => {
+                        const c = cv || {};
+                        if (!aDesLignes(c)) return Number(c.valeur) || 0;
+                        const brut = c.details.reduce((s, d) => s + (Number((d || {}).montant) || 0), 0);
+                        const unite = c.periode === 'semaine' ? 'semaine' : 'cycle';
+                        if (c.details.every(d => periodeDetail(d, c) === unite)) return brut;
+                        const sa = semainesDeLAnnee(Number(an) || moisBudgetaire.value.an);
+                        const parCycle = c.details.reduce((s, d) => s + (Number((d || {}).montant) || 0) * facteurPeriode(periodeDetail(d, c), sa / 12), 0);
+                        return Math.round(unite === 'semaine' ? parCycle / (sa / 12) : parCycle);
+                    };
+                    //  Le coût d'une charge variable sur UN cycle, exception du mois comprise.
+                    const valeurVariableDuCycle = (cv, mois, an) => coutVariableDuCycle(cv, mois, an, true);
                     //  Le cycle en cours et le suivant, pour la section Charges variables.
                     const _MOIS_CAP = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
                     const cyclesSemaines = computed(() => {
@@ -13881,7 +13955,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
                         Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
                             (cv.details || []).forEach(d => {
-                                const amt = getPaidAmount(d, Number(d.montant || 0));
+                                const amt = getPaidAmount(d, dueDetailDuCycle(d, cv, mois, an));
                                 if (amt > 0) paidChg += amt;
                             });
                         });
@@ -13982,7 +14056,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if ((cv.details || []).length > 0) {
                                     let _paidAmt = 0, _unpaidAmt = 0;
                                     cv.details.forEach(d => {
-                                        const due = Number(d.montant || 0);
+                                        const due = dueDetailDuCycle(d, cv, mois, an);   // v37.30 : son rythme
                                         if (!due) return;
                                         if (isItemPaid(d, due, _cyc)) _paidAmt += getPaidAmount(d, due, _cyc) || due;
                                         else _unpaidAmt += due;
@@ -14107,12 +14181,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             // montant d'une catégorie de charge variable sur le cycle (hebdo × semaines réelles du cycle, v37.29)
                             const _varAmt = (cv) => {
                                 const effValeur = _effVal(cv, cv.valeur, m);
-                                let monthly = (cv.periode === 'semaine') ? effValeur * semainesDuCycle(m, a) : effValeur;
+                                let monthly = coutVariableDuCycle(cv, m, a, true);   // v37.30 : ligne par ligne
                                 monthly = Math.round(monthly * 100) / 100;
                                 if (monthly <= 0) return 0;
                                 if (mode === 'full') return monthly;
                                 let paid = 0;
-                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, Number(d.montant || 0), _cyc) || 0; });
+                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, dueDetailDuCycle(d, cv, m, a), _cyc) || 0; });
                                 else paid = getPaidAmount(cv, effValeur, _cyc) || 0;
                                 const rem = monthly - paid;
                                 return rem > 0 ? Math.round(rem * 100) / 100 : 0;
@@ -14507,12 +14581,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                     //  v37.29 : × les semaines RÉELLES du cycle (celui du mois budgétaire courant
                     //  par défaut), plus × 4,3.
-                    const getMonthlyVariableValue = (item, mois, an) => {
-                        const v = Number((item || {}).valeur) || 0;
-                        if (item?.periode !== 'semaine') return v;
-                        const mb = moisBudgetaire.value;
-                        return v * (mois ? semainesDuCycle(mois, an || mb.an) : semainesDuCycle(mb.mois, mb.an));
-                    };
+                    //  v37.30 : ligne par ligne (chacune son rythme), hors exception du mois.
+                    const getMonthlyVariableValue = (item, mois, an) => coutVariableDuCycle(item, mois, an, false);
 
                     const totalRevenusBase = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.revenus || {}).reduce((sum, item) => sum + Number((item || {}).base||0), 0) : 0; });
                     const totalFixes = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.chargesFixes || {}).reduce((sum, item) => sum + Number((item || {}).valeur||0), 0) : 0; });
@@ -14604,12 +14674,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!_courantOnly || _varSrc === courantKey) {
                             Object.values(dA.chargesVariables || {}).forEach(cv => {
                                 const effV = _effVal(cv, cv.valeur);
-                                let monthly = (cv.periode === 'semaine') ? effV * semainesDuCycle(mNum, annee) : effV;
+                                let monthly = coutVariableDuCycle(cv, mNum, annee, true);   // v37.30 : ligne par ligne
                                 monthly = Math.round(monthly * 100) / 100;
                                 if (monthly <= 0) return;
                                 if (mode === 'full') { sortants += monthly; return; }
                                 let paid = 0;
-                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, Number(d.montant||0)) || 0; });
+                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, dueDetailDuCycle(d, cv, mNum, annee)) || 0; });
                                 else paid = getPaidAmount(cv, effV) || 0;
                                 const rem = monthly - paid;
                                 if (rem > 0) sortants += Math.round(rem * 100) / 100;
@@ -14752,7 +14822,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (isItemPaid(f, due)) sorties += due;
                         });
                         Object.values(dActuelle.chargesVariables || {}).filter(c => c?.periode === 'mois').forEach(cat => {
-                            (cat.details || []).forEach(f => { if (isItemPaid(f, Number(f.montant || 0))) sorties += Number(f.montant || 0); });
+                            (cat.details || []).forEach(f => { const due = dueDetailDuCycle(f, cat); if (isItemPaid(f, due)) sorties += due; });
                         });
                         getDepensesMois(soldesInitiaux.value.moisActuel, an).forEach(dep => {
                             const m = Number(dep.montant || 0);
@@ -15004,7 +15074,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let totalVarDue = 0, totalVarPaid = 0;
                         Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
                             if ((cv.details || []).length > 0) {
-                                cv.details.forEach(d => { const due = Number(d.montant || 0); totalVarDue += due; totalVarPaid += getPaidAmount(d, due); });
+                                cv.details.forEach(d => { const due = dueDetailDuCycle(d, cv); totalVarDue += due; totalVarPaid += getPaidAmount(d, due); });
                             } else {
                                 const due = Number(cv.valeur || 0); totalVarDue += due; totalVarPaid += getPaidAmount(cv, due);
                             }
@@ -15830,7 +15900,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         chargesVarMensuellePilotage.value.forEach(cat => {
                             if (valeurEffective(cat, cat.valeur, moisBud) <= 0) return;
                             (cat.details || []).forEach(d =>
-                                pousser(d, d.nom, Number(d.montant || 0), cat.label, '🛒', 'blue', d.jourPrevu || cat.jourPrevu, 'variable'));
+                                pousser(d, d.nom, dueDetailDuCycle(d, cat, moisBud, an), cat.label, '🛒', 'blue', d.jourPrevu || cat.jourPrevu, 'variable'));
                         });
                         epargneBudgetairePilotage.value.forEach(ep =>
                             pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an, moisBud), 'Épargne', '💎', 'purple', ep.jourPrevu, 'epargne'));
@@ -16156,11 +16226,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (!c) return;
                             const v = valeurEffective(c, c.valeur, m);
                             if (v <= 0) return;
+                            //  v37.30 : le coût du cycle, ligne par ligne (chacune son rythme)
+                            const cout = Math.round(coutVariableDuCycle(c, m, an, true) * 100) / 100;
                             if (c.periode === 'semaine') {
-                                lignes.conso.push({ nom: c.label || '?', montant: Math.round(v * semainesDuCycle(m, an) * 100) / 100, parSemaine: v, compte: compteDeFlux('variable', c), nature: 'variable' });
+                                lignes.conso.push({ nom: c.label || '?', montant: cout, parSemaine: Math.round(cout / semainesDuCycle(m, an) * 100) / 100, compte: compteDeFlux('variable', c), nature: 'variable' });
                             } else {
-                                const det = (c.details || []).filter(x => Number(x.montant) > 0).map(x => x.nom + ' ' + formatNombre(x.montant));
-                                lignes.mensuelles.push({ nom: c.label || '?', montant: v, jourPrevu: c.jourPrevu || null, detail: det.join(' · '), compte: compteDeFlux('variable', c), nature: 'variable' });
+                                const det = (c.details || []).filter(x => Number(x.montant) > 0).map(x => x.nom + ' ' + formatNombre(x.montant) + (periodeDetail(x, c) === 'cycle' ? '' : (periodeDetail(x, c) === 'semaine' ? ' / sem' : ' / 15 j')));
+                                lignes.mensuelles.push({ nom: c.label || '?', montant: cout, jourPrevu: c.jourPrevu || null, detail: det.join(' · '), compte: compteDeFlux('variable', c), nature: 'variable' });
                             }
                         });
                         const epArr = Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {});
@@ -16327,10 +16399,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  tickets du cycle à SA part du budget du cycle.
                             const v = cv.periode === 'semaine' ? c.budget / nSem : c.budget;
                             const dets = (cv.details || []).filter(x => x && Number(x.montant) > 0);
-                            const S = dets.reduce((s, x) => s + Number(x.montant), 0);
+                            //  v37.30 : le poids d'une ligne dans le cycle = montant × (N, N/2 ou 1)
+                            //  selon SON rythme ; le budget du moteur (exception, voyage) se répartit
+                            //  au prorata de ces poids — `ajuste` vaut 1 sans exception ni voyage.
+                            const poidsLigne = (x) => Number(x.montant) * facteurPeriode(periodeDetail(x, cv), nSem);
+                            const W = dets.reduce((s, x) => s + poidsLigne(x), 0);
+                            const ajuste = W > 0 ? c.budget / W : 1;
+                            const uniformes = dets.every(x => periodeDetail(x, cv) === (cv.periode === 'semaine' ? 'semaine' : 'cycle'));
                             const parId = {};
                             const prevu = dets.map(x => {
-                                const part = Number(x.montant) / S;
+                                const part = poidsLigne(x) / W;
                                 const dep = Math.round(g.parPoste[x.categorieId] || 0);
                                 const partCycle = c.budget * part;
                                 //  v37.26 : ce que l'utilisateur a TAPÉ sur ce poste (sans date) ; les
@@ -16338,15 +16416,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const cle = cleDetailT0(c.key, x);
                                 const saisiP = Math.max(0, Math.round(Number(consoT0Saisies.value[cle] || 0)));
                                 const engP = Math.max(saisiP, dep);
-                                const p = { nom: x.nom || '—', emoji: emojiPoste(x.nom, x.icone), montant: Math.round(v * part), categorieId: x.categorieId || null,
+                                const p = { nom: x.nom || '—', emoji: emojiPoste(x.nom, x.icone), montant: Math.round(Number(x.montant) * ajuste), unite: periodeDetail(x, cv), categorieId: x.categorieId || null,
                                             depense: dep, pct: partCycle > 0 ? Math.min(100, Math.round(dep / partCycle * 100)) : (dep > 0 ? 100 : 0), depasse: dep > partCycle,
                                             cle, saisi: saisiP, declare: Object.prototype.hasOwnProperty.call(consoT0Saisies.value, cle),
                                             partCycle: Math.round(partCycle), engage: engP,
                                             pctEngage: partCycle > 0 ? Math.min(100, Math.round(engP / partCycle * 100)) : (engP > 0 ? 100 : 0) };
                                 if (x.categorieId) parId[x.categorieId] = p;
                                 return p;
-                            }).sort((a, b) => b.montant - a.montant);
-                            if (prevu.length) prevu[0].montant += Math.round(v) - prevu.reduce((s, x) => s + x.montant, 0);
+                            }).sort((a, b) => b.partCycle - a.partCycle || b.montant - a.montant);
+                            //  Les parts du cycle tombent juste sur le budget ; les montants affichés
+                            //  aussi, quand toutes les lignes ont le rythme de la catégorie.
+                            if (prevu.length) prevu[0].partCycle += Math.round(c.budget) - prevu.reduce((s, x) => s + x.partCycle, 0);
+                            if (prevu.length && uniformes) prevu[0].montant += Math.round(v) - prevu.reduce((s, x) => s + x.montant, 0);
                             const transactions = g.tx.map(t => { const p = parId[t.categorieId]; return p ? { ...t, poste: p.nom, posteEmoji: p.emoji } : t; }).sort(_parDateDesc);
                             const autres = {};
                             transactions.forEach(t => { if (t.horsCompte) autres[t.compte.key] = t.compte; });
@@ -16358,17 +16439,31 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  v37.28 : ce qui a VRAIMENT été saisi ou ticketé — 0 tant que rien
                             //  n'est déclaré. C'est ce qu'affichent les Rayons X ; l'estimation
                             //  reste l'affaire du moteur (grand chiffre, ⓘ), jamais d'une case.
-                            const reelCat = c.declare ? engageCat : 0;                            //  ── v37.27 : la même catégorie, vue SEMAINE ──
+                            const reelCat = c.declare ? engageCat : 0;
+                            //  ── v37.27 : la même catégorie, vue SEMAINE ──
                             const gS = TS.parCle[c.key] || { total: 0, tx: [], parPoste: {} };
-                            const semBudget = Math.round(c.budget / nSem);
                             const postesSem = prevu.map(p => {
-                                const bud = Math.round(p.partCycle / nSem);
                                 const sai = Math.max(0, Math.round(Number(valsSem[p.cle] || 0)));
                                 const tk = Math.round(gS.parPoste[p.categorieId] || 0);
                                 const eng = Math.max(sai, tk);
-                                return { cle: p.cle, nom: p.nom, emoji: p.emoji, budget: bud, saisi: sai, declare: aSaisie(p.cle), tickets: tk, engage: eng,
-                                         pct: bud > 0 ? Math.min(100, Math.round(eng / bud * 100)) : (eng > 0 ? 100 : 0), depasse: eng > bud };
+                                const base = { cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, saisi: sai, declare: aSaisie(p.cle), tickets: tk, engage: eng };
+                                if (p.unite === 'semaine') {
+                                    const bud = Math.round(p.partCycle / nSem);
+                                    return { ...base, budget: bud, prevu: bud, planifie: 0,
+                                             pct: bud > 0 ? Math.min(100, Math.round(eng / bud * 100)) : (eng > 0 ? 100 : 0), depasse: eng > bud };
+                                }
+                                //  v37.30 : une ligne /15 j ou /cycle se suit sur le CYCLE ; dépensée cette
+                                //  semaine, elle compte comme PRÉVUE dans la limite de son enveloppe restante.
+                                const ailleurs = Math.max(0, p.engage - eng);
+                                return { ...base, budget: 0, prevu: p.montant, cyclePrevu: p.partCycle, cycleEngage: p.engage,
+                                         planifie: Math.min(eng, Math.max(0, p.partCycle - ailleurs)),
+                                         pct: p.pctEngage, depasse: p.engage > p.partCycle };
                             });
+                            //  Le prévu de la semaine : les lignes « / sem » (ou la catégorie entière,
+                            //  sans ligne) + les lignes /15 j et /cycle dépensées cette semaine.
+                            const prevuCycleLignes = postesSem.filter(p => p.unite !== 'semaine').reduce((s, p) => s + p.cyclePrevu, 0);
+                            const prevuSemaine = Math.round((c.budget - prevuCycleLignes) / nSem);
+                            const semBudget = prevuSemaine + postesSem.reduce((s, p) => s + p.planifie, 0);
                             const libreS = Math.max(0, Math.round(Number(valsSem[c.key] || 0)));
                             const saisiS = libreS + postesSem.reduce((s, p) => s + p.saisi, 0);
                             const ticketsS = Math.round(gS.total);
@@ -16377,7 +16472,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  Aucune estimation n'entre dans une case : sans saisie, 0.
                             const engS = declS ? Math.max(saisiS, ticketsS) : 0;
                             const sem = {
-                                budget: semBudget, engage: engS, saisi: saisiS, libre: libreS, tickets: ticketsS, declare: declS,
+                                budget: semBudget, prevuSemaine, prevuCycle: prevuCycleLignes, engage: engS, saisi: saisiS, libre: libreS, tickets: ticketsS, declare: declS,
                                 reste: semBudget - engS, pct: semBudget > 0 ? Math.min(100, Math.round(engS / semBudget * 100)) : (engS > 0 ? 100 : 0),
                                 source: declS ? (ticketsS > saisiS ? 'tickets' : 'compteur') : 'vide',
                                 postes: postesSem, nb: gS.tx.length,
@@ -16393,7 +16488,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 source: !c.declare ? 'estime' : (c.tickets > c.saisi ? 'tickets' : 'compteur'),
                                 transactions, nb: transactions.length, comptesAutres: Object.values(autres),
                                 prevu, prevuUnite: cv.periode === 'semaine' ? 'semaine' : 'mois',
-                                prevuAjuste: S > 0 && Math.abs(v - S) > 0.5,
+                                prevuAjuste: W > 0 && Math.abs(c.budget - W) > 0.5,
                                 nonVentile: Math.round(g.total - Object.values(g.parPoste).reduce((s, x) => s + x, 0)),
                             };
                         });
@@ -16597,7 +16692,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             .filter(c => c?.periode === 'mois')
                             .forEach(cat => {
                                 if (cat.details && cat.details.length) {
-                                    cat.details.forEach(d => { total += Number(d.montant || 0); });
+                                    cat.details.forEach(d => { total += dueDetailDuCycle(d, cat, mb.mois, mb.an); });
                                 } else {
                                     total += Number(cat.valeur || 0);
                                 }
@@ -16767,8 +16862,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const budgetCategorieRevise = (cv) => {
                         const c = cv || {};
                         //  v37.23 : l'exception du mois budgétaire, comme au Prévisionnel.
-                        const v = valeurEffective(c, c.valeur, moisBudgetaire.value.mois);
-                        return Math.max(0, getMonthlyVariableValue({ ...c, valeur: v }) - economieCategorieAbsence(cv));
+                        //  v37.30 : sans exception, ligne par ligne (chacune son rythme).
+                        return Math.max(0, coutVariableDuCycle(c, moisBudgetaire.value.mois, moisBudgetaire.value.an, true) - economieCategorieAbsence(cv));
                     };
 
                     const setVoyage = (champ, valeur) => {
@@ -17188,7 +17283,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (effCat <= 0) return;
                                 if (cat.details && cat.details.length) {
                                     cat.details.forEach(d => {
-                                        const m = Number(d.montant || 0);
+                                        const m = dueDetailDuCycle(d, cat, mois, an);   // v37.30 : son rythme
                                         if (m > 0) out.variables.push({ nom: d.nom || cat.label || '?', montant: m, jourPrevu: cat.jourPrevu || null });
                                     });
                                 } else {
@@ -17300,7 +17395,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             .filter(([k]) => !k.startsWith('credit'))
                             .reduce((s, [, f]) => s + N(f.valeur), 0);
                         const variables = Object.values(d.chargesVariables || {})
-                            .reduce((s, c) => s + (c.periode === 'semaine' ? N(c.valeur) * semainesDeLAnnee(anneeAffichage.value) / 12 : N(c.valeur)), 0);   // v37.29 : mois MOYEN de l'année
+                            .reduce((s, c) => { let t = 0; for (let m = 1; m <= 12; m++) t += coutVariableDuCycle(c, m, anneeAffichage.value, false); return s + t / 12; }, 0);   // v37.29-30 : mois MOYEN, ligne par ligne
                         return Math.round((fixesHorsCredit + variables) * 100) / 100;
                     });
                     const mensualitesCreditsMensuel = computed(() => {
@@ -18085,14 +18180,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const vRestParCompte = {};
                                 Object.values(dataAnnee.chargesVariables || {}).forEach(curr => {
                                     let remaining;
-                                    if (curr?.periode === 'semaine') {
+                                    if (curr?.details && curr.details.length > 0) {
+                                        //  v37.30 : chaque ligne à son rythme — /sem et /15 j au prorata des
+                                        //  semaines restantes, /cycle : ce qui n'est pas encore payé.
+                                        remaining = curr.details.reduce((sum, d) => {
+                                            const p = periodeDetail(d, curr), mt = Number(d.montant || 0);
+                                            if (p === 'semaine') return sum + mt * semRest;
+                                            if (p === 'quinzaine') return sum + mt * semRest / 2;
+                                            return sum + Math.max(0, mt - getPaidAmount(d, mt));
+                                        }, 0);
+                                    } else if (curr?.periode === 'semaine') {
                                         remaining = Number(curr?.valeur || 0) * semRest;
                                     } else {
-                                        if (curr?.details && curr.details.length > 0) {
-                                            remaining = curr.details.reduce((sum, d) => sum + Math.max(0, Number(d.montant || 0) - getPaidAmount(d, Number(d.montant || 0))), 0);
-                                        } else {
-                                            remaining = Number(curr?.valeur || 0) * rConso;
-                                        }
+                                        remaining = Number(curr?.valeur || 0) * rConso;
                                     }
                                     if (remaining <= 0) return;
                                     // v24.80 : routing macro-compte
@@ -18855,7 +18955,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 const itms=[...epArr].sort((a,b)=>b.valeur-a.valeur); lbs=itms.map(i=>i.nom||i.label); dt=itms.map(i=>i.valeur); } 
                         } else { 
                             const cat=(dAnnee.chargesVariables || {})[key]; if(!cat?.details?.length) return null; 
-                            lbs=cat.details.map(d=>d.nom); dt=cat.details.map(d=>getMonthlyVariableValue({ periode: cat.periode, valeur: d.montant })); 
+                            lbs=cat.details.map(d=>d.nom); dt=cat.details.map(d=>dueDetailDuCycle(d, cat)); 
                         } return { type: 'bar', data: { labels: lbs, datasets: [{ data: dt, backgroundColor: color+'CC', borderColor: color, borderWidth: 1, borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } }; 
                     });
 
@@ -19096,6 +19196,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         liberteCycle, sanctuaireHebdo, consoCompteurRenseigne, saisirCompteurConso,
                         // v37.29 : semaines réelles du cycle
                         semainesDuCycle, semainesDeLAnnee, cyclesSemaines,
+                        // v37.30 : un rythme par ligne de détail
+                        periodeDetail, coutVariableDuCycle, dependDesSemaines, valeurEquivalente,
                         semaineDecalage, changerSemaine, saisirSemaineConso, retirerSaisiesCycle,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur, imposerMaVersion,

@@ -292,6 +292,61 @@ function cfo_jour_de_paie($fd): int {
     return (int)(oget(oget($fd, 'soldesInitiaux', onew()), 'jourDePaie') ?: 27) ?: 27;
 }
 
+/*  v37.30 — UN RYTHME PAR LIGNE DE DÉTAIL (miroir de periodeDetail / coutVariableDuCycle,
+    index.html). Sans rythme, une ligne hérite de sa catégorie : « semaine » → semaine,
+    « mois » → cycle. Une ligne coûte montant × N (/sem), × N/2 (/15 j) ou × 1 (/cycle). */
+function cfo_periode_detail($d, $cv): string {
+    $p = oget($d, 'periode');
+    if (in_array($p, ['semaine', 'quinzaine', 'cycle'], true)) return $p;
+    return oget($cv, 'periode') === 'semaine' ? 'semaine' : 'cycle';
+}
+function cfo_facteur_periode(string $p, float $n): float { return $p === 'semaine' ? $n : ($p === 'quinzaine' ? $n / 2 : 1.0); }
+function cfo_a_des_lignes($cv): bool { $d = oget($cv, 'details'); return is_array($d) && count($d) > 0; }
+function cfo_exception_du_mois($item, int $m) {
+    $v = null;
+    foreach ((oget($item, 'exceptions') ?: []) as $e) {
+        $md = (int)(oget($e, 'moisDebut', 0) ?: 0); $mf = (int)(oget($e, 'moisFin', 0) ?: 0);
+        if ($md && $mf && $m >= $md && $m <= $mf) $v = (float)(oget($e, 'nouvelleValeur', 0) ?: 0);
+    }
+    return $v;
+}
+function cfo_cout_variable_cycle($cv, int $m, int $an, int $jdp, bool $avecExceptions = true): float {
+    $n = cfo_semaines_cycle($m, $an, $jdp);
+    $exc = $avecExceptions ? cfo_exception_du_mois($cv, $m) : null;
+    if ($exc === null && cfo_a_des_lignes($cv)) {
+        $s = 0.0;
+        foreach (oget($cv, 'details') as $d) $s += (float)(oget($d, 'montant', 0) ?: 0) * cfo_facteur_periode(cfo_periode_detail($d, $cv), $n);
+        return $s;
+    }
+    $v = $exc !== null ? $exc : (float)(oget($cv, 'valeur', 0) ?: 0);
+    return oget($cv, 'periode') === 'semaine' ? $v * $n : $v;
+}
+function cfo_details_uniformes($cv): bool {
+    $unite = oget($cv, 'periode') === 'semaine' ? 'semaine' : 'cycle';
+    foreach ((oget($cv, 'details') ?: []) as $d) if (cfo_periode_detail($d, $cv) !== $unite) return false;
+    return true;
+}
+//  `valeur` d'une catégorie à lignes : la somme brute si toutes ont son rythme (comme
+//  avant) ; sinon l'équivalent dans son unité sur une année réelle, arrondi.
+function cfo_valeur_equivalente($cv, int $an, int $jdp): float {
+    $det = oget($cv, 'details') ?: [];
+    $brut = 0.0; foreach ($det as $d) $brut += (float)(oget($d, 'montant', 0) ?: 0);
+    if (cfo_details_uniformes($cv)) return $brut;
+    $nMoy = cfo_semaines_annee($an, $jdp) / 12;
+    $parCycle = 0.0;
+    foreach ($det as $d) $parCycle += (float)(oget($d, 'montant', 0) ?: 0) * cfo_facteur_periode(cfo_periode_detail($d, $cv), $nMoy);
+    return (float)round(oget($cv, 'periode') === 'semaine' ? $parCycle / $nMoy : $parCycle);
+}
+//  Un nouveau total (dans l'unité de la catégorie) réparti sur des lignes aux rythmes
+//  MÊLÉS : chaque montant suit le même ratio, chaque ligne garde son rythme.
+function cfo_redistribuer_rythmes(array $det, $cv, float $v, int $an, int $jdp): ?float {
+    $eq = cfo_valeur_equivalente($cv, $an, $jdp);
+    if ($eq == 0.0) return null;
+    $ratio = $v / $eq;
+    foreach ($det as $d) oset($d, 'montant', (int)round((float)oget($d, 'montant') * $ratio));
+    return $ratio;
+}
+
 function cfo_compute_reliquat($fd, $yr) {
     $da = oget($fd, 'donneesAnnuelles');
     $y  = is_object($da) ? oget($da, (string)$yr) : null;
@@ -300,9 +355,10 @@ function cfo_compute_reliquat($fd, $yr) {
     foreach (ovals(oget($y, 'revenus', onew())) as $o)      $sumRev += (float)(oget($o, 'base', 0) ?: 0);
     foreach (ovals(oget($y, 'chargesFixes', onew())) as $o) $sumFix += (float)(oget($o, 'valeur', 0) ?: 0);
     foreach (ovals(oget($y, 'chargesVariables', onew())) as $o) {
-        $v = (float)(oget($o, 'valeur', 0) ?: 0);
         // v37.29 : un mois MOYEN de l'année = ses semaines réelles ÷ 12 (plus × 4,3)
-        $sumVar += (oget($o, 'periode') === 'semaine') ? $v * cfo_semaines_annee((int)$yr, cfo_jour_de_paie($fd)) / 12 : $v;
+        // v37.30 : et chaque ligne de détail avec SON rythme
+        $t = 0.0; for ($mm = 1; $mm <= 12; $mm++) $t += cfo_cout_variable_cycle($o, $mm, (int)$yr, cfo_jour_de_paie($fd), false);
+        $sumVar += $t / 12;
     }
     return round($sumRev - $sumFix - $sumVar, 2);
 }
@@ -372,8 +428,7 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
         }
         if ($varSrc === $courantKey) {
             foreach (ovals(oget($y, 'chargesVariables', onew())) as $cv) {
-                $v = $eff($cv, oget($cv, 'valeur'), $m);
-                if (oget($cv, 'periode') === 'semaine') $v *= cfo_semaines_cycle($m, (int)$year, $jdp);   // v37.29
+                $v = cfo_cout_variable_cycle($cv, $m, (int)$year, $jdp, true);   // v37.29-30 : semaines réelles, ligne par ligne
                 if ($v > 0) $sortants += $v;
             }
         }
@@ -1645,9 +1700,14 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
                     $log['lignes']=array_map(function($d){return ['id'=>oget($d,'id'),'nom'=>oget($d,'nom'),'montant_actuel'=>oget($d,'montant')];}, $det);
                     break;
                 }
-                $ratio = $v / $cs; $dist = 0;
-                for ($i = 0; $i < count($det) - 1; $i++) { $nm = (int)round((float)oget($det[$i],'montant') * $ratio); oset($det[$i],'montant',$nm); $dist += $nm; }
-                oset($det[count($det)-1],'montant', $v - $dist);
+                if (cfo_details_uniformes($item)) {
+                    $ratio = $v / $cs; $dist = 0;
+                    for ($i = 0; $i < count($det) - 1; $i++) { $nm = (int)round((float)oget($det[$i],'montant') * $ratio); oset($det[$i],'montant',$nm); $dist += $nm; }
+                    oset($det[count($det)-1],'montant', $v - $dist);
+                } else {
+                    // v37.30 : rythmes mêlés — même ratio pour chaque ligne, rythmes conservés
+                    $ratio = cfo_redistribuer_rythmes($det, $item, (float)$v, $a, cfo_jour_de_paie($fd)) ?? ($v / $cs);
+                }
                 $log['redistribution']='proportionnelle'; $log['ratio']=round($ratio,3);
                 $log['details_apres']=array_map(function($d){return ['nom'=>oget($d,'nom'),'montant'=>oget($d,'montant')];}, $det);
             }
@@ -1687,7 +1747,8 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             $v = cfo_pick_num($op, ['montant','valeur','value','amount']);
             if ($v === null) { $log['status']='error'; $log['reason']='montant manquant'; break; }
             $old = oget($detail,'montant'); oset($detail,'montant',$v);
-            $tot = 0.0; foreach ($det as $d) $tot += (float)(oget($d,'montant',0) ?: 0);
+            // v37.30 : l'équivalent dans l'unité de la catégorie (la somme si rythmes uniformes)
+            $tot = cfo_valeur_equivalente($t, $a, cfo_jour_de_paie($fd));
             oset($t,'valeur',$tot);
             $log['key']=$K; $log['sub_key']=oget($detail,'nom'); $log['avant']=$old; $log['apres']=$v; $log['nouveau_total']=$tot; break;
         }
@@ -1706,9 +1767,14 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
                         $log['lignes']=array_map(function($d){return ['id'=>oget($d,'id'),'nom'=>oget($d,'nom'),'montant_actuel'=>oget($d,'montant')];}, $det);
                         break;
                     }
-                    $ratio = $v / $cs; $dist = 0;
-                    for ($i = 0; $i < count($det) - 1; $i++) { $nm = (int)round((float)oget($det[$i],'montant') * $ratio); oset($det[$i],'montant',$nm); $dist += $nm; }
-                    oset($det[count($det)-1],'montant', $v - $dist);
+                    if (cfo_details_uniformes($t)) {
+                        $ratio = $v / $cs; $dist = 0;
+                        for ($i = 0; $i < count($det) - 1; $i++) { $nm = (int)round((float)oget($det[$i],'montant') * $ratio); oset($det[$i],'montant',$nm); $dist += $nm; }
+                        oset($det[count($det)-1],'montant', $v - $dist);
+                    } else {
+                        // v37.30 : rythmes mêlés — même ratio pour chaque ligne, rythmes conservés
+                        $ratio = cfo_redistribuer_rythmes($det, $t, (float)$v, $a, cfo_jour_de_paie($fd)) ?? ($v / $cs);
+                    }
                     $ch['redistribution'] = ['mode'=>'proportionnelle','ratio'=>round($ratio,3),
                         'details_apres'=>array_map(function($d){return ['nom'=>oget($d,'nom'),'montant'=>oget($d,'montant')];}, $det)];
                 }
