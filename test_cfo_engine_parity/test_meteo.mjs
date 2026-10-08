@@ -199,7 +199,7 @@ try {
         const m = document.querySelector('[data-meteo]');
         if (!m) return null;
         const r = m.getBoundingClientRect();
-        return { etat: m.dataset.etat, jour: m.querySelector('[data-meteo-jour]')?.textContent.trim(),
+        return { etat: m.dataset.etat, rav: m.querySelector('[data-meteo-rav]')?.textContent.replace(/\s/g, ''),
                  titre: m.querySelector('[data-meteo-titre]')?.textContent.trim(), haut: r.top + window.scrollY, hauteur: r.height };
     });
     const dReel = await domMeteo(page);
@@ -210,17 +210,19 @@ try {
     v('Réalisé : la Météo chapeaute les trois chiffres', !!dReel && ordre.meteo < ordre.kpis, JSON.stringify({ dReel, ordre }));
     const roles = await page.evaluate(() => {
         const m = document.querySelector('[data-meteo]'), lib = m && m.querySelector('[data-liberte]');
-        const chiffres = [...m.querySelectorAll('[data-meteo-rav], [data-meteo-jour], [data-liberte-semaine]')];
-        return { n: chiffres.length, tousADroite: !!lib && chiffres.every(e => lib.contains(e)), filet: !!m.querySelector('[data-meteo-filet]') };
+        const chiffres = [...m.querySelectorAll('[data-meteo-rav]')];
+        return { n: chiffres.length, tousADroite: !!lib && chiffres.every(e => lib.contains(e)), filet: !!m.querySelector('[data-meteo-filet]'),
+                 tuiles: m.querySelectorAll('[data-meteo-jour], [data-liberte-semaine], [data-liberte-rythme]').length };
     });
-    v('rôles : reste, par semaine, par jour vivent dans la carte de droite, et nulle part ailleurs',
-      roles.n === 3 && roles.tousADroite && !roles.filet, JSON.stringify(roles));
-    v('  → la carte de droite affiche le reste à vivre du jour',
-      !!dReel && dReel.jour.replace(/\s/g, '') === new Intl.NumberFormat('fr-FR').format(sol.m.parJour).replace(/\s/g, '') + 'DH', JSON.stringify(dReel));
+    //  v37.32 : plus de « par semaine » ni « par jour » — le reste à dépenser seul, dans la carte de droite
+    v('rôles : le reste à dépenser vit dans la carte de droite, et nulle part ailleurs ; plus de « par semaine » ni « par jour »',
+      roles.n === 1 && roles.tousADroite && !roles.filet && roles.tuiles === 0, JSON.stringify(roles));
+    v('  → la carte de droite affiche le reste à dépenser',
+      !!dReel && dReel.rav === new Intl.NumberFormat('fr-FR').format(sol.m.rav).replace(/\s/g, '') + 'DH', JSON.stringify(dReel));
     await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'previsionnel'; await new Promise(r => setTimeout(r, 200)); st.activeTab = 'pilotageTheo'; }, ST);
     await page.waitForTimeout(600);
     const dTheo = await domMeteo(page);
-    v('Prévisionnel : la MÊME Météo, au même chiffre', !!dTheo && dTheo.etat === dReel.etat && dTheo.jour === dReel.jour, JSON.stringify({ dTheo, dReel }));
+    v('Prévisionnel : la MÊME Météo, au même chiffre', !!dTheo && dTheo.etat === dReel.etat && dTheo.rav === dReel.rav, JSON.stringify({ dTheo, dReel }));
     const barre = await page.evaluate(() => {
         const b = document.querySelector('[data-respiration-barre]');
         if (!b) return null;

@@ -12,7 +12,8 @@
  *     - une catégorie non déclarée reste ESTIMÉE à son rythme attendu (déclarer
  *       une catégorie ne fait pas croire que les autres n'ont rien coûté) ;
  *     - la carte = le moteur (enveloppeConsoRestante, budgetConsoRestantReel) ;
- *     - le rythme (par semaine, par jour) se déduit du temps restant ;
+ *     - le rythme (par semaine, par jour) se déduit du temps restant (moteur ; la carte ne
+ *       l'affiche plus depuis la v37.32) ;
  *     - v37.24 : la saisie en vrac se fait sur la LIGNE de la carte (un champ
  *       par catégorie) ; l'ancien bloc « Réalisé à T0 » a disparu ; les Rayons X
  *       ne servent plus qu'à l'audit ; le mode Voyage survit, replié.
@@ -34,7 +35,9 @@ console.log('\n  RESTE À DÉPENSER DU CYCLE : SAISIE EN VRAC, RYTHME, RÔLES\n 
 
 /* ── A. Statique ─────────────────────────────────────────────────────── */
 v('plus de Pulse hebdomadaire ni de « filet » concurrent', !/const pulseHebdo = computed/.test(html) && !/data-meteo-filet/.test(html));
-v('la carte de droite s\'appelle « Reste à dépenser »', /💸 Reste à dépenser/.test(html) && /data-liberte-semaine/.test(html));
+v('la carte de droite s\'appelle « Reste à dépenser »', /💸 Reste à dépenser/.test(html) && /data-liberte-jours/.test(html));
+//  v37.32 : plus de tuiles « par semaine » ni « par jour » — pollution visuelle, anxiogène en pleine urgence
+v('  → sans tuiles « ≈ par semaine » ni « par jour » (v37.32)', !/data-liberte-semaine/.test(html) && !/data-meteo-jour/.test(html) && !/data-liberte-rythme/.test(html) && !/≈ Par semaine/.test(html));
 
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
@@ -282,8 +285,8 @@ try {
                  sources: Object.fromEntries([...document.querySelectorAll('[data-pulse-cat]')].map(b => [b.dataset.cat, b.dataset.source])),
                  estime: !!q('[data-liberte-estime]') };
     });
-    v('la carte affiche le reste, ≈ par semaine, par jour, jours avant la paie',
-      sansEsp(dom.montant) === nf(z.L.reste) + 'DH' && sansEsp(dom.semaine) === nf(z.L.parSemaine) + 'DH' && sansEsp(dom.jour) === nf(z.L.parJour) + 'DH' && sansEsp(dom.jours) === z.L.jours + 'j',
+    v('la carte affiche le reste et les jours avant la paie (« dans N j ») — plus de « par semaine » ni « par jour »',
+      sansEsp(dom.montant) === nf(z.L.reste) + 'DH' && dom.semaine === undefined && dom.jour === undefined && sansEsp(dom.jours) === '(dans' + z.L.jours + 'j)',
       JSON.stringify(dom));
     v('  → légende « X dépensés sur Y · N % »', sansEsp(dom.legende).includes(nf(z.L.engage) + 'DHdépenséssur' + nf(BUDGET) + 'DH') && sansEsp(dom.legende).includes(z.L.pct + '%'), dom.legende);
     if (twCss) v('  → jauge = engagé / budget, repère = rythme attendu', Math.abs(dom.jauge - z.L.pct / 100) < 0.015 && Math.abs(dom.repere - z.L.pctAttendu / 100) < 0.015,

@@ -67,5 +67,6 @@ suite "Semaines réelles du cycle — serveur (PHP)"              php test_cfo_e
 suite "Un rythme par ligne de détail (/sem, /15j, /cycle)"     node test_cfo_engine_parity/test_rythmes.mjs
 suite "Un rythme par ligne — serveur (PHP)"                    php test_cfo_engine_parity/test_rythmes.php
 suite "Semaine écoulée sans saisie = son prévu"               node test_cfo_engine_parity/test_prevu_par_defaut.mjs
+suite "L'interface se souvient · le découvert d'abord"          node test_cfo_engine_parity/test_memoire_alerte.mjs
 
 echo "✅ Toutes les suites passent."
