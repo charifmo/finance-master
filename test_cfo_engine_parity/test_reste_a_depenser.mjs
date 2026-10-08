@@ -63,9 +63,15 @@ const twCss = essai(() => {
 /* ── B. Le décor : un budget conso lisible à la main ─────────────────── */
 //    COURSES 1 000 / sem. → 4 300 · SORTIES 400 / sem. → 1 720 · ESSENCE 860 / mois
 //    budget conso du cycle = 6 880 (factures exclues)
-const maintenant = new Date();
+//  L'HORLOGE EST FIXÉE (navigateur compris) : mercredi 14 octobre 2026. Le calendrier des semaines et
+//  des cycles ne dépend plus du jour où l'on lance le test — et les deux règles de rattachement
+//  d'une semaine à un cycle (jeudi / lundi) restent toujours distinguables.
+const maintenant = new Date(2026, 9, 14, 10, 0, 0);
 const T = maintenant.getDate();
-const jourDePaie = T === 1 ? 28 : Math.min(28, Math.max(2, T - 1));
+//  v37.27 : une semaine appartient au cycle où tombe son JEUDI. Paie le 8 (un jeudi) : le cycle va du
+//  jeudi 8 oct. au 7 nov. — la semaine en cours (12-18), la précédente (5-11, jeudi 8 = début du cycle)
+//  et les suivantes en font partie ; celle d'avant (28 sept.-4 oct., jeudi 1ᵉʳ) est dans le cycle précédent.
+const jourDePaie = 8;
 const Y = maintenant.getFullYear(), MC = maintenant.getMonth() + 1;
 const MOIS_BUDGET = T >= jourDePaie ? (MC === 12 ? 1 : MC + 1) : MC;
 const AN_BUDGET = (T >= jourDePaie && MC === 12) ? Y + 1 : Y;
@@ -96,6 +102,7 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
     d.epargne = []; d.depensesIrregulieres = []; d.virementsInternes = []; d.transactionsReelles = []; d.consoRealiseeT0 = {};
 }
 const BUDGET = 4300 + 1720 + 860;
+const IDX = (maintenant.getDay() + 6) % 7;                                   // 0 = lundi
 
 const page0 = html
     .replace('<script src="https://unpkg.com/vue@3/dist/vue.global.js"', '<script src="/vue.js"')
@@ -118,6 +125,7 @@ const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--n
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 const ouvrir = async (opts) => {
     const page = await browser.newPage(opts);
+    await page.clock.setFixedTime(maintenant);
     const erreurs = []; page.on('pageerror', e => erreurs.push(String(e)));
     page.on('dialog', d => d.accept());
     await page.goto(`http://127.0.0.1:${port}/finance/`, { waitUntil: 'load' });
@@ -262,7 +270,11 @@ try {
     v('  → légende « X dépensés sur Y · N % »', sansEsp(dom.legende).includes(nf(z.L.engage) + 'DHdépenséssur' + nf(BUDGET) + 'DH') && sansEsp(dom.legende).includes(z.L.pct + '%'), dom.legende);
     if (twCss) v('  → jauge = engagé / budget, repère = rythme attendu', Math.abs(dom.jauge - z.L.pct / 100) < 0.015 && Math.abs(dom.repere - z.L.pctAttendu / 100) < 0.015,
       JSON.stringify([dom.jauge, z.L.pct, dom.repere, z.L.pctAttendu]));
-    v('  → chaque tuile dit d\'où vient son chiffre (📝 / 🧾 / estimé)', dom.sources.alimentation === 'compteur' && dom.sources.sorties === 'estime' && !dom.estime, JSON.stringify(dom.sources));
+    //  v37.27 : les lignes montrent la SEMAINE. Le compteur d'Alimentation (1 000, saisi sur le cycle
+    //  via l'API) n'est pas dans cette semaine : la ligne est « vide », et la note le rappelle.
+    const avant = await page.evaluate(() => document.querySelector('[data-pulse-categorie][data-cat="alimentation"] [data-pulse-cycle-avant]')?.textContent.replace(/\s/g, '') || '');
+    v('  → les lignes disent la semaine ; le total de cycle d\'Alimentation (1 000) est rappelé',
+      Object.values(dom.sources).every(x => x === 'vide') && !dom.estime && /1000DH/.test(avant), JSON.stringify([dom.sources, avant]));
 
     /* ── I. v37.24 : UNE seule saisie, sur la ligne de la carte ─────────── */
     const surface = await page.evaluate(() => ({
@@ -408,17 +420,114 @@ try {
     await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); st.saisirCompteurConso('alimentation', 2500); await new Promise(r => setTimeout(r, 200)); }, ST);
     await page.waitForTimeout(250);
     const k5 = await lire();
-    const libre = await page.evaluate(() => document.querySelector('[data-pulse-poste-saisie][data-poste="libre"]').value);
-    v('un ancien total (2 500) reste valable : il devient « Autre »', k5.cat.a.engage === 2500 && libre === '2500', JSON.stringify([k5.cat.a.engage, libre]));
+    const note = await page.evaluate(() => document.querySelector('[data-pulse-cycle-avant]')?.textContent.replace(/\s/g, '') || '');
+    v('un ancien total de CYCLE (2 500) reste compté, et on le dit', k5.cat.a.engage === 2500 && /2500DH/.test(note), JSON.stringify([k5.cat.a.engage, note]));
     await page.fill('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]', '100');
     await page.waitForTimeout(250);
-    v('  → et un poste s\'ajoute à lui : 2 600', (await lire()).cat.a.engage === 2600);
+    v('  → et la saisie de la semaine s\'y ajoute : 2 600', (await lire()).cat.a.engage === 2600);
+    await page.click('[data-pulse-retirer]');
+    await page.waitForTimeout(250);
+    v('  → « retirer » ôte l\'ancien total de cycle : il reste les 100 de la semaine', (await lire()).cat.a.engage === 100 && await page.evaluate(() => !document.querySelector('[data-pulse-cycle-avant]')));
     v('  → effacer le cycle remet tous les postes à zéro',
       await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); await new Promise(r => setTimeout(r, 200)); return !st.liberteCycle.declare; }, ST));
     await page.click('[data-pulse-ouvrir][data-cat="alimentation"]');
     await page.waitForTimeout(200);
     v('un second clic sur ✎ replie les postes', await page.evaluate(() => !document.querySelector('[data-pulse-postes]')));
     v('aucune erreur JavaScript (postes)', erreurs.length === 0, erreurs[0] || '');
+
+    /* ── L. v37.27 : PAR SEMAINE — en cours, passée, à venir ──────────── */
+    await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); st.changerSemaine(0); await new Promise(r => setTimeout(r, 150)); }, ST);
+    await tickets([]);
+    const fr = (d) => d.getDate() + ' ' + ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][d.getMonth()];
+    const sem = (k) => ({ lundi: iso(dans(-IDX + 7 * k)), du: fr(dans(-IDX + 7 * k)), au: fr(dans(-IDX + 7 * k + 6)) });
+    const nav = () => page.evaluate(() => ({ titre: document.querySelector('[data-semaine-titre]')?.textContent.trim(), statut: document.querySelector('[data-semaine-statut]')?.dataset.statut,
+        total: document.querySelector('[data-semaine-total]')?.textContent.replace(/\s/g, ''), aujourdhui: !!document.querySelector('[data-semaine-aujourdhui]'), hors: !!document.querySelector('[data-semaine-hors]') }));
+    //  Rien de déclaré : la semaine EN COURS est estimée (≈), les autres valent 0 — pas « tout dépensé »
+    const est0 = await page.evaluate(() => ({ total: document.querySelector('[data-semaine-total]').textContent.replace(/\s/g, ''), cases: [...document.querySelectorAll('[data-pulse-saisie]')].map(i => i.placeholder) }));
+    await page.click('[data-semaine-prec]'); await page.waitForTimeout(250);
+    const est1 = await page.evaluate(() => ({ total: document.querySelector('[data-semaine-total]').textContent.replace(/\s/g, ''), cases: [...document.querySelectorAll('[data-pulse-saisie]')].map(i => i.placeholder) }));
+    await page.click('[data-semaine-aujourdhui]'); await page.waitForTimeout(250);
+    v('rien déclaré : la semaine en cours est estimée (≈), la passée vaut 0 (pas « tout dépensé »)',
+      est0.total.startsWith('≈') && est0.cases.every(x => x.startsWith('≈')) && est1.total.startsWith('0DH') && est1.cases.every(x => x === '0'), JSON.stringify([est0, est1]));
+    const n0 = await nav();
+    v('barre de semaine : « Semaine du lundi au dimanche », en cours', n0.titre === 'Semaine du ' + sem(0).du + ' au ' + sem(0).au && n0.statut === 'en_cours' && !n0.aujourdhui, JSON.stringify([n0, sem(0)]));
+    await page.click('[data-pulse-ouvrir][data-cat="alimentation"]');
+    await page.waitForTimeout(200);
+    await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('320'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const w0 = await lire();
+    v('saisie de la semaine en cours : 320 sur Hri → stocké sous le lundi, compté dans le cycle',
+      w0.cat.a.engage === 320 && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); const d = st.donneesAnnuelles[st.moisBudgetaire.an]; return Object.keys(d.consoRealiseeT0 || {}).includes(cle); }, 'S' + sem(0).lundi),
+      JSON.stringify([w0.cat.a.engage, sem(0).lundi]));
+    //  ‹ : la semaine passée (dans le cycle) — vide, indépendante
+    await page.click('[data-semaine-prec]');
+    await page.waitForTimeout(250);
+    const n1 = await nav();
+    const vide = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste-saisie]')].map(i => i.value));
+    v('‹ : la semaine passée (« passée », « Cette semaine » apparaît), ses cases sont vides',
+      n1.titre === 'Semaine du ' + sem(-1).du + ' au ' + sem(-1).au && n1.statut === 'passee' && n1.aujourdhui && !n1.hors && vide.every(x => x === ''), JSON.stringify([n1, vide]));
+    await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('410'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const w1 = await lire();
+    v('saisir 410 la semaine passée : le cycle compte 320 + 410 = 730', w1.cat.a.engage === 730, JSON.stringify(w1.cat.a.engage));
+    //  ‹‹ : deux semaines en arrière = le cycle précédent : dit, et ne change rien
+    await page.click('[data-semaine-prec]');
+    await page.waitForTimeout(250);
+    const n2 = await nav();
+    await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('999'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const w2 = await lire();
+    v('deux semaines en arrière : « cycle précédent », sa saisie ne change PAS le Reste à dépenser',
+      n2.hors && w2.cat.a.engage === 730 && w2.L.reste === w1.L.reste && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); return Object.values(st.donneesAnnuelles).some(d => d.consoRealiseeT0 && d.consoRealiseeT0[cle]); }, 'S' + sem(-2).lundi),
+      JSON.stringify([n2, w2.cat.a.engage, w1.L.reste, w2.L.reste]));
+    //  › › › : la semaine en cours, puis à venir
+    await page.click('[data-semaine-suiv]'); await page.click('[data-semaine-suiv]');
+    await page.waitForTimeout(250);
+    const back = await page.evaluate(() => document.querySelector('[data-pulse-poste-saisie][data-poste="alimentation::1"]').value);
+    v('› › : on retrouve la semaine en cours telle qu\'on l\'a laissée (Hri 320)', back === '320' && (await nav()).statut === 'en_cours', JSON.stringify([back, await nav()]));
+    await page.click('[data-semaine-suiv]');
+    await page.waitForTimeout(250);
+    const n3 = await nav();
+    await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('150'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const w3 = await lire();
+    v('semaine à venir : « à venir », saisissable (un achat déjà payé d\'avance) : 730 + 150 = 880',
+      n3.statut === 'avenir' && n3.titre === 'Semaine du ' + sem(1).du + ' au ' + sem(1).au && w3.cat.a.engage === 880, JSON.stringify([n3, w3.cat.a.engage]));
+    //  La frontière de FIN du cycle (7 nov.) : la semaine du 2 au 8 nov. a son jeudi (5) dedans, pas son dimanche
+    await page.click('[data-semaine-suiv]'); await page.click('[data-semaine-suiv]');
+    await page.waitForTimeout(250);
+    const n3b = await nav();
+    await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('60'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const w3b = await lire();
+    v('semaine du 2 au 8 nov. (jeudi 5 dans le cycle, dimanche 8 dehors) : elle compte — 880 + 60 = 940',
+      n3b.titre === 'Semaine du ' + sem(3).du + ' au ' + sem(3).au && !n3b.hors && w3b.cat.a.engage === 940, JSON.stringify([n3b, w3b.cat.a.engage]));
+    await page.click('[data-semaine-suiv]');
+    await page.waitForTimeout(250);
+    const n3c = await nav();
+    await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('777'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    v('semaine du 9 au 15 nov. (jeudi 12 > fin du cycle) : « cycle suivant », ne change rien (940)', n3c.hors && (await lire()).cat.a.engage === 940, JSON.stringify([n3c, (await lire()).cat.a.engage]));
+    await page.click('[data-semaine-aujourdhui]');
+    await page.waitForTimeout(250);
+    const n4 = await nav();
+    v('« ↩ Cette semaine » ramène à la semaine en cours', n4.statut === 'en_cours' && !n4.aujourdhui, JSON.stringify(n4));
+    //  Les tickets datés se rangent dans LEUR semaine
+    await tickets([{ date: iso(dans(-IDX - 6)), montant: 275, cat: 'alimentation' }]);     // mardi de la semaine passée
+    const wt = await page.evaluate((ST) => { const st = eval(ST); const c = st.liberteCycle.categories.find(x => x.key === 'alimentation'); return { cetteSemaine: c.sem.tickets }; }, ST);
+    await page.click('[data-semaine-prec]');
+    await page.waitForTimeout(250);
+    const wt1 = await page.evaluate((ST) => { const st = eval(ST); const c = st.liberteCycle.categories.find(x => x.key === 'alimentation'); return { tickets: c.sem.tickets, engage: c.sem.engage, source: c.sem.source }; }, ST);
+    v('un ticket daté de la semaine passée n\'apparaît que dans CETTE semaine-là (275 < 410 saisis → on retient 410)',
+      wt.cetteSemaine === 0 && wt1.tickets === 275 && wt1.engage === 410 && wt1.source === 'compteur', JSON.stringify([wt, wt1]));
+    await tickets([]);
+    await page.click('[data-semaine-aujourdhui]');
+    await page.waitForTimeout(200);
+    await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); await new Promise(r => setTimeout(r, 150)); }, ST);
+    v('« effacer tout le cycle » vide aussi les semaines du cycle (mais pas celle du cycle précédent)',
+      await page.evaluate(({ ST, a, b }) => { const st = eval(ST); const cles = Object.values(st.donneesAnnuelles).flatMap(d => Object.keys(d.consoRealiseeT0 || {})); return !cles.includes('S' + a) && cles.includes('S' + b); }, { ST, a: sem(0).lundi, b: sem(-2).lundi }),
+      'les semaines du cycle devraient disparaître, celle du cycle précédent rester');
+    v('aucune erreur JavaScript (semaines)', erreurs.length === 0, erreurs[0] || '');
 
     v('aucune erreur JavaScript (bureau)', erreurs.length === 0, erreurs[0] || '');
     await page.close();
