@@ -373,8 +373,13 @@ try {
     await page.waitForTimeout(250);
     const lignes = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-postes] [data-pulse-poste]')].map(e => e.dataset.poste));
     v('déplier : une case par poste (HRI, L7M) + « Autre »', JSON.stringify(lignes) === JSON.stringify([cA.prevu[0].cle, cA.prevu[1].cle, 'libre']) && lignes.length === 3, JSON.stringify([lignes, cA.prevu.map(p => p.cle)]));
-    const place = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste-saisie]')].map(i => i.placeholder));
-    v('  → avant toute saisie, chaque poste montre son estimation (≈) ; « Autre » : 0', place[0].startsWith('≈') && place[1].startsWith('≈') && place[2] === '0', JSON.stringify(place));
+    //  v37.28 : une case vaut ce qu'on a TAPÉ — vide, invite « 0 » ; le prévu se lit À CÔTÉ
+    const vierge = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste-saisie]')].map(i => ({ v: i.value, p: i.placeholder })));
+    const prevuP = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-postes] [data-pulse-poste]')].map(e => {
+        const t = e.querySelector('[data-pulse-prevu]'); return t ? { t: t.textContent.replace(/\s/g, ''), dansCase: !!t.closest('label') || !!t.querySelector('input') } : null; }));
+    v('  → avant toute saisie, chaque case est VIDE (invite « 0 », pas d\'estimation) ; « Prévu : 600 DH » / « 400 DH » se lisent à côté',
+      vierge.length === 3 && vierge.every(x => x.v === '' && x.p === '0') && prevuP[0] && prevuP[0].t === 'Prévu:600DH' && prevuP[1] && prevuP[1].t === 'Prévu:400DH'
+      && !prevuP[0].dansCase && !prevuP[1].dansCase, JSON.stringify([vierge, prevuP]));
     const [pH, pL] = cA.prevu;                                            // HRI 600 → 2 580 ; L7M 400 → 1 720 sur le cycle
     v('  → le budget du cycle de chaque poste s\'affiche (2 580 / 1 720)', pH.partCycle === 2580 && pL.partCycle === 1720 && pH.cle === 'alimentation::1', JSON.stringify([pH, pL]));
     await page.click('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]');
@@ -442,13 +447,15 @@ try {
     const sem = (k) => ({ lundi: iso(dans(-IDX + 7 * k)), du: fr(dans(-IDX + 7 * k)), au: fr(dans(-IDX + 7 * k + 6)) });
     const nav = () => page.evaluate(() => ({ titre: document.querySelector('[data-semaine-titre]')?.textContent.trim(), statut: document.querySelector('[data-semaine-statut]')?.dataset.statut,
         total: document.querySelector('[data-semaine-total]')?.textContent.replace(/\s/g, ''), aujourdhui: !!document.querySelector('[data-semaine-aujourdhui]'), hors: !!document.querySelector('[data-semaine-hors]') }));
-    //  Rien de déclaré : la semaine EN COURS est estimée (≈), les autres valent 0 — pas « tout dépensé »
-    const est0 = await page.evaluate(() => ({ total: document.querySelector('[data-semaine-total]').textContent.replace(/\s/g, ''), cases: [...document.querySelectorAll('[data-pulse-saisie]')].map(i => i.placeholder) }));
+    //  v37.28 : rien de déclaré → la semaine en cours comme la passée valent 0 ; cases vides, invite « 0 »
+    const est0 = await page.evaluate(() => ({ total: document.querySelector('[data-semaine-total]').textContent.replace(/\s/g, ''), cases: [...document.querySelectorAll('[data-pulse-saisie]')].map(i => i.placeholder),
+        valeurs: [...document.querySelectorAll('[data-pulse-saisie]')].map(i => i.value), lignes: [...document.querySelectorAll('[data-pulse-total]')].map(e => e.textContent.replace(/\s/g, '')) }));
     await page.click('[data-semaine-prec]'); await page.waitForTimeout(250);
     const est1 = await page.evaluate(() => ({ total: document.querySelector('[data-semaine-total]').textContent.replace(/\s/g, ''), cases: [...document.querySelectorAll('[data-pulse-saisie]')].map(i => i.placeholder) }));
     await page.click('[data-semaine-aujourdhui]'); await page.waitForTimeout(250);
-    v('rien déclaré : la semaine en cours est estimée (≈), la passée vaut 0 (pas « tout dépensé »)',
-      est0.total.startsWith('≈') && est0.cases.every(x => x.startsWith('≈')) && est1.total.startsWith('0DH') && est1.cases.every(x => x === '0'), JSON.stringify([est0, est1]));
+    v('rien déclaré : semaine en cours ET passée à 0 DH, cases vides (invite « 0 »), totaux de ligne à 0 — aucune estimation',
+      est0.total.startsWith('0DH') && est0.cases.length > 0 && est0.cases.every(x => x === '0') && est0.valeurs.every(x => x === '') && est0.lignes.length > 0 && est0.lignes.every(x => x === '0')
+      && est1.total.startsWith('0DH') && est1.cases.every(x => x === '0'), JSON.stringify([est0, est1]));
     const n0 = await nav();
     v('barre de semaine : « Semaine du lundi au dimanche », en cours', n0.titre === 'Semaine du ' + sem(0).du + ' au ' + sem(0).au && n0.statut === 'en_cours' && !n0.aujourdhui, JSON.stringify([n0, sem(0)]));
     await page.click('[data-pulse-ouvrir][data-cat="alimentation"]');
@@ -528,6 +535,74 @@ try {
       await page.evaluate(({ ST, a, b }) => { const st = eval(ST); const cles = Object.values(st.donneesAnnuelles).flatMap(d => Object.keys(d.consoRealiseeT0 || {})); return !cles.includes('S' + a) && cles.includes('S' + b); }, { ST, a: sem(0).lundi, b: sem(-2).lundi }),
       'les semaines du cycle devraient disparaître, celle du cycle précédent rester');
     v('aucune erreur JavaScript (semaines)', erreurs.length === 0, erreurs[0] || '');
+
+    /* ── M. v37.28 : des CASES VIERGES — zéro par défaut, le prévu à côté ── */
+    await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); st.changerSemaine(0); await new Promise(r => setTimeout(r, 150)); }, ST);
+    await tickets([]);
+    await page.mouse.move(5, 5); await page.waitForTimeout(200);
+    if (!(await page.$('[data-pulse-postes][data-cat="alimentation"]'))) { await page.click('[data-pulse-ouvrir][data-cat="alimentation"]'); await page.waitForTimeout(200); }
+    const m0 = await lire();
+    const cases = () => page.evaluate(() => [...document.querySelectorAll('[data-meteo] input[data-saisie]')].map(i => ({ cle: i.dataset.poste || i.dataset.cat, v: i.value, p: i.placeholder, italique: /placeholder:italic/.test(i.className) })));
+    const v0 = await cases();
+    v('M. toutes les cases de la Météo (catégories, postes, « Autre ») : vides, invite « 0 », droite (pas d\'italique)',
+      v0.length >= 5 && v0.every(x => x.v === '' && x.p === '0' && !x.italique), JSON.stringify(v0));
+    const lg = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-ligne]')].map(l => {
+        const p = l.querySelector('[data-pulse-prevu]'), r = l.querySelector('[data-pulse-reste]');
+        return { cat: l.dataset.cat, prevu: p && p.textContent.replace(/\s/g, ''), dansCase: !!(p && p.closest('label')), reste: r && r.textContent.replace(/\s/g, '') };
+    }));
+    v('  → chaque ligne dit « Prévu : X DH » (le budget de la SEMAINE), hors de la case, sans « reste » tant que rien n\'est saisi',
+      lg.length === m0.L.categories.length && lg.every(x => { const c = m0.L.categories.find(k => k.key === x.cat); return c && x.prevu === 'Prévu:' + nf(c.sem.budget) + 'DH' && !x.dansCase && !/reste|dépassé/.test(x.reste); }),
+      JSON.stringify([lg, m0.L.categories.map(c => [c.key, c.sem.budget])]));
+    const sansApprox = await page.evaluate(() => { const z = document.querySelector('[data-liberte-saisie]'); return !/≈/.test(z.textContent) && ![...z.querySelectorAll('input')].some(i => /≈/.test(i.placeholder + i.value)); });
+    v('  → plus aucun « ≈ » dans la zone de saisie (cases, totaux, semaine)', sansApprox);
+    v('  → le grand chiffre garde sa prudence, dite en clair (« estimé au prorata »)', !m0.L.declare && m0.L.reste === m0.prorata && await page.evaluate(() => !!document.querySelector('[data-liberte-estime]')),
+      JSON.stringify({ reste: m0.L.reste, prorata: m0.prorata }));
+    //  Rayons X d'une catégorie sans saisie : 0 DH dépensé, le prévu à part, l'estimation nommée comme telle
+    await page.hover('[data-pulse-cat][data-cat="alimentation"]'); await page.waitForTimeout(300);
+    const cAm = m0.L.categories.find(c => c.key === 'alimentation');
+    const rx0 = await page.evaluate(() => { const p = document.querySelector('[data-rayonx]'); const q = (s) => p && p.querySelector(s);
+        return p && { total: q('[data-rx-total]')?.textContent.replace(/\s/g, ''), prevu: q('[data-rx-prevu-total]')?.textContent.replace(/\s/g, ''), barre: q('[data-rx-barre]')?.style.width,
+                      reste: q('[data-rx-reste]')?.textContent.replace(/\s/g, ''), retenu: q('[data-rx-retenu]')?.textContent.replace(/\s+/g, ' ').trim(), prudence: q('[data-rx-prudence]')?.textContent.replace(/\s/g, '') }; });
+    v('  → Rayons X sans saisie : « 0 DH dépensé », « Prévu : 4 300 DH » à part, barre vide, reste = le prévu entier',
+      !!rx0 && rx0.total === '0DH' && rx0.prevu === 'Prévu:' + nf(cAm.budget) + 'DH' && rx0.barre === '0%' && rx0.reste === 'Reste' + nf(cAm.budget) + 'DH', JSON.stringify([rx0, cAm.budget]));
+    v('  → l\'estimation du moteur n\'y est plus un « dépensé » : elle est nommée « par prudence », à part',
+      !!rx0 && /Rien de saisi ce cycle : 0 DH/.test(rx0.retenu) && cAm.engage > 0 && rx0.prudence && rx0.prudence.includes(nf(cAm.engage) + 'DH'), JSON.stringify([rx0 && rx0.retenu, cAm.engage]));
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
+    //  On tape : seule la case touchée se remplit, les autres restent vierges
+    await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('250'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const v1 = await cases();
+    const m1 = await lire();
+    const tot1 = await page.evaluate(() => document.querySelector('[data-pulse-ouvrir][data-cat="alimentation"] [data-pulse-total]').textContent.replace(/\s/g, ''));
+    const reste1 = await page.evaluate(() => document.querySelector('[data-pulse-ligne][data-cat="alimentation"] [data-pulse-reste]').textContent.replace(/\s/g, ''));
+    v('  → taper 250 sur Hri : seule cette case porte 250, les autres restent vides ; la ligne dit « Prévu : 1 000 DH · reste 750 »',
+      v1.find(x => x.cle === 'alimentation::1').v === '250' && v1.filter(x => x.cle !== 'alimentation::1').every(x => x.v === '' && x.p === '0') && tot1 === '250'
+      && reste1 === 'Prévu:1000DH·reste750', JSON.stringify([v1, tot1, reste1]));
+    await page.hover('[data-pulse-cat][data-cat="alimentation"]'); await page.waitForTimeout(300);
+    const rx1 = await page.evaluate(() => { const p = document.querySelector('[data-rayonx]'); return p && { total: p.querySelector('[data-rx-total]')?.textContent.replace(/\s/g, ''), reste: p.querySelector('[data-rx-reste]')?.textContent.replace(/\s/g, ''), prudence: !!p.querySelector('[data-rx-prudence]') }; });
+    const cA1 = m1.L.categories.find(c => c.key === 'alimentation');
+    v('  → Rayons X après saisie : 250 DH dépensé, reste du cycle = 4 300 − 250', !!rx1 && rx1.total === '250DH' && rx1.reste === 'Reste' + nf(cA1.budget - 250) + 'DH' && !rx1.prudence && cA1.reel === 250,
+      JSON.stringify([rx1, cA1.reel]));
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
+    //  Une catégorie encore vide, alors qu'une autre est déclarée : le moteur l'estime, la case et les Rayons X disent 0
+    await page.hover('[data-pulse-cat][data-cat="sorties"]'); await page.waitForTimeout(300);
+    const cS1 = m1.L.categories.find(c => c.key === 'sorties');
+    const rx2 = await page.evaluate(() => { const p = document.querySelector('[data-rayonx]'); return p && { total: p.querySelector('[data-rx-total]')?.textContent.replace(/\s/g, ''), prudence: p.querySelector('[data-rx-prudence]')?.textContent.replace(/\s/g, '') }; });
+    v('  → Sorties encore vide (Alimentation déclarée) : le moteur l\'estime, mais les Rayons X disent 0 DH dépensé',
+      cS1.source === 'estime' && cS1.engage > 0 && cS1.reel === 0 && !!rx2 && rx2.total === '0DH' && rx2.prudence.includes(nf(cS1.engage) + 'DH'), JSON.stringify([cS1.engage, cS1.reel, rx2]));
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
+    //  Vider la case : elle redevient vierge ; une autre semaine : vierge aussi
+    await page.fill('[data-pulse-poste-saisie][data-poste="alimentation::1"]', ''); await page.waitForTimeout(250);
+    const v2 = await cases();
+    await page.click('[data-semaine-prec]'); await page.waitForTimeout(250);
+    const v3 = await cases();
+    await page.click('[data-semaine-aujourdhui]'); await page.waitForTimeout(250);
+    v('  → vider la case la rend vierge (invite « 0 ») ; la semaine passée : toutes vierges',
+      v2.every(x => x.v === '' && x.p === '0') && v3.length === v2.length && v3.every(x => x.v === '' && x.p === '0'), JSON.stringify([v2, v3]));
+    v('  → plus aucune fonction ne remplit les saisies à la place de l\'utilisateur',
+      await page.evaluate((ST) => { const st = eval(ST); return typeof st.remplirConsoT0DepuisReel === 'undefined'; }, ST));
+    await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); await new Promise(r => setTimeout(r, 150)); }, ST);
+    v('aucune erreur JavaScript (cases vierges)', erreurs.length === 0, erreurs[0] || '');
 
     v('aucune erreur JavaScript (bureau)', erreurs.length === 0, erreurs[0] || '');
     await page.close();

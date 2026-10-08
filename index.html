@@ -7050,20 +7050,12 @@
                 anneau(c) { const e = c.engage != null ? c.engage : c.depense; return Math.min(100, c.budget > 0 ? e / c.budget * 100 : (e > 0 ? 100 : 0)); },
                 //  v37.23 : la saisie en vrac part au parent (setConsoT0), le panneau reste ouvert.
                 saisirCompteur(cle, e) { this.$emit('saisie', this.sm.lundi, cle, e.target.value); },
-                //  L'invite du champ dit ce qui compte tant qu'on n'a rien tapé :
-                //  les tickets s'il y en a, sinon l'estimation au rythme attendu.
-                invite(c) { return c.sem.tickets > 0 ? String(c.sem.tickets) : (c.sem.source === 'estime' && c.sem.engage > 0 ? '≈ ' + this.chiffre(c.sem.engage) : '0'); },
                 anneauSem(c) { return c.sem.pct; },
                 //  v37.26 : saisie poste par poste
                 ouverte(k) { return !!this.ouvertes[k]; },
                 basculerOuverte(k) { this.ouvertes = { ...this.ouvertes, [k]: !this.ouvertes[k] }; this.fermer(); },
                 //  Le « hors-liste » : le total libre de la catégorie (clé = la catégorie)
                 libreDe(c) { return { cle: c.key, saisi: c.sem.libre, declare: c.sem.libre > 0 }; },
-                //  Avant toute saisie : l'estimation du poste pour la part écoulée de la semaine.
-                invitePoste(c, d) {
-                    const e = c.sem.source === 'estime' ? Math.round(d.budget * (this.sm.frac || 0)) : 0;
-                    return e > 0 ? '≈ ' + this.chiffre(e) : '0';
-                },
                 //  Des chiffres : pris en compte en direct. « +50 » / « -20 » : s'ajoute au poste à la
                 //  validation. Tout autre texte est refusé et le poste retrouve sa valeur.
                 saisirPoste(d, e, fin) {
@@ -7267,7 +7259,7 @@
                         <p class="text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] text-white/85" data-semaine-titre>Semaine du {{ sm.du }} au {{ sm.au }}</p>
                         <p class="mt-1 flex items-center justify-center gap-1.5 text-[10px] md:text-[11px] font-semibold text-white/60 tabular-nums">
                             <span data-semaine-statut :data-statut="sm.statut" :class="['rounded-full px-1.5 py-px text-[9px] font-black uppercase tracking-wider ring-1', statutClasse]">{{ statutTexte }}</span>
-                            <span data-semaine-total><span class="font-black text-white/90">{{ sm.estime ? '≈ ' : '' }}{{ formatMad(sm.engage) }}</span> / {{ formatMad(sm.budget) }}</span>
+                            <span data-semaine-total><span class="font-black text-white/90">{{ formatMad(sm.engage) }}</span> / {{ formatMad(sm.budget) }}</span>
                         </p>
                     </div>
                     <button type="button" data-semaine-suiv @click="$emit('semaine', 1)" aria-label="Semaine suivante" title="Semaine suivante"
@@ -7287,7 +7279,7 @@
                     <div v-for="c in p.categories" :key="'pc_' + c.key" data-pulse-categorie :data-cat="c.key">
                     <div data-pulse-ligne :data-cat="c.key" :data-source="c.sem.source"
                          :class="['flex items-center gap-1.5 md:gap-2 rounded-xl ring-1 p-1 md:p-1.5 transition-colors',
-                                  estOuvert('cat', c.key) ? 'bg-white/20 ring-white/40' : (c.sem.source === 'estime' ? 'bg-white/[0.04] ring-white/10' : 'bg-white/[0.08] ring-white/15')]">
+                                  estOuvert('cat', c.key) ? 'bg-white/20 ring-white/40' : 'bg-white/[0.08] ring-white/15']">
                         <button type="button" data-rx-ancre data-pulse-cat :data-cat="c.key" :data-source="c.sem.source"
                                 :aria-expanded="estOuvert('cat', c.key) ? 'true' : 'false'" :aria-label="'Audit de ' + c.label + ' : courses prévues et tickets'"
                                 @pointerenter="survolEntree($event, 'cat', c.key)" @pointerleave="survolSortie($event)" @click="basculer($event, 'cat', c.key)"
@@ -7295,7 +7287,7 @@
                             <svg viewBox="0 0 36 36" class="w-6 h-6 md:w-7 md:h-7 -rotate-90 shrink-0" aria-hidden="true">
                                 <circle cx="18" cy="18" r="14" fill="none" stroke-width="5" class="stroke-white/15"></circle>
                                 <circle cx="18" cy="18" r="14" fill="none" stroke-width="5" pathLength="100" :stroke-linecap="anneauSem(c) > 0 ? 'round' : 'butt'"
-                                        :stroke-dasharray="anneauSem(c) + ' 100'" :class="c.sem.reste < 0 ? 'stroke-rose-200' : (c.sem.source === 'estime' ? 'stroke-white/50' : 'stroke-white')"></circle>
+                                        :stroke-dasharray="anneauSem(c) + ' 100'" :class="c.sem.reste < 0 ? 'stroke-rose-200' : 'stroke-white'"></circle>
                             </svg>
                             <span class="min-w-0 flex-1">
                                 <span class="flex items-center gap-1 text-[12px] md:text-[13px] font-bold text-white leading-tight">
@@ -7303,8 +7295,8 @@
                                     <span aria-hidden="true" class="shrink-0 text-[10px] opacity-40 group-hover:opacity-100 transition-opacity">🔍</span>
                                 </span>
                                 <span class="block mt-0.5 text-[10px] md:text-[11px] font-semibold text-white/55 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis" data-pulse-reste>
-                                    <template v-if="c.sem.reste >= 0">{{ c.sem.source === 'estime' ? '≈ ' : '' }}reste <span class="font-black text-white/90">{{ chiffre(c.sem.reste) }}</span> / {{ chiffre(c.sem.budget) }}</template>
-                                    <template v-else><span class="font-black text-rose-200">dépassé de {{ chiffre(-c.sem.reste) }}</span> / {{ chiffre(c.sem.budget) }}</template>
+                                    <span data-pulse-prevu>Prévu : {{ chiffre(c.sem.budget) }} DH</span>
+                                    <template v-if="c.sem.declare"> · <template v-if="c.sem.reste >= 0">reste <span class="font-black text-white/90">{{ chiffre(c.sem.reste) }}</span></template><span v-else class="font-black text-rose-200">dépassé de {{ chiffre(-c.sem.reste) }}</span></template>
                                     <template v-if="c.sem.tickets > 0"> · 🧾 {{ chiffre(c.sem.tickets) }}</template>
                                 </span>
                             </span>
@@ -7313,9 +7305,9 @@
                         <button v-if="c.sem.postes.length" type="button" data-pulse-ouvrir :data-cat="c.key" :aria-expanded="ouverte(c.key) ? 'true' : 'false'"
                                 :title="'Saisir poste par poste (' + c.sem.postes.length + ' postes)'" @click="basculerOuverte(c.key)"
                                 :class="['shrink-0 flex items-center gap-1.5 rounded-lg ring-1 px-2.5 py-1 md:py-1.5 shadow-inner transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white',
-                                         ouverte(c.key) ? 'bg-black/45 ring-white/80' : (c.sem.source === 'estime' ? 'bg-black/25 ring-white/35 hover:ring-white/70' : 'bg-black/35 ring-white/50 hover:ring-white/70')]">
+                                         ouverte(c.key) ? 'bg-black/45 ring-white/80' : 'bg-black/35 ring-white/50 hover:ring-white/70']">
                             <span aria-hidden="true" class="text-[11px] text-white/60">✎</span>
-                            <span :class="['text-[13px] md:text-sm font-black tabular-nums', c.sem.source === 'estime' ? 'italic text-white/65' : 'text-white']" data-pulse-total>{{ c.sem.source === 'estime' ? '≈ ' : '' }}{{ chiffre(c.sem.engage) }}</span>
+                            <span class="text-[13px] md:text-sm font-black tabular-nums text-white" data-pulse-total>{{ chiffre(c.sem.engage) }}</span>
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                             <span aria-hidden="true" :class="['text-[10px] text-white/75 transition-transform', ouverte(c.key) ? 'rotate-180' : '']">▾</span>
                         </button>
@@ -7326,9 +7318,9 @@
                             <span class="sr-only">Dépensé cette semaine en {{ c.label }}</span>
                             <span aria-hidden="true" class="text-[11px] text-white/60">✎</span>
                             <input :key="'u_' + c.key + sm.lundi" type="number" inputmode="decimal" min="0" step="1" data-saisie data-pulse-saisie :data-cat="c.key"
-                                   :value="c.sem.saisi || ''" :placeholder="invite(c)"
+                                   :value="c.sem.saisi || ''" placeholder="0"
                                    @input="saisirCompteur(c.key, $event)" @focus="fermer()" @keydown.enter="$event.target.blur()"
-                                   class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/55 placeholder:italic placeholder:font-semibold outline-none">
+                                   class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                         </label>
                     </div>
@@ -7344,15 +7336,15 @@
                             <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }}</span>
-                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight whitespace-nowrap">prévu {{ chiffre(d.budget) }}<template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template></span>
+                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight whitespace-nowrap" data-pulse-prevu>Prévu : {{ chiffre(d.budget) }} DH<template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template></span>
                                 <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.depasse ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pct + '%' }"></span></span>
                             </span>
                             <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
                                 <span class="sr-only">Dépensé sur {{ d.nom }} cette semaine</span>
                                 <input :key="'ip_' + d.cle + sm.lundi" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="c.key"
-                                       :value="d.declare ? d.saisi : ''" :placeholder="invitePoste(c, d)"
+                                       :value="d.declare ? d.saisi : ''" placeholder="0"
                                        @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="$event.target.select(); fermer()" @keydown.enter.prevent="suivant($event)"
-                                       class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/45 placeholder:italic placeholder:font-semibold outline-none">
+                                       class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                                 <span class="text-[10px] font-bold text-white/45">DH</span>
                             </label>
                         </div>
@@ -7367,7 +7359,7 @@
                                 <input :key="'il_' + c.key + sm.lundi" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie data-poste="libre" :data-cat="c.key"
                                        :value="c.sem.libre || ''" placeholder="0"
                                        @input="saisirPoste(libreDe(c), $event, false)" @change="saisirPoste(libreDe(c), $event, true)" @focus="$event.target.select(); fermer()" @keydown.enter.prevent="suivant($event)"
-                                       class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/45 placeholder:italic placeholder:font-semibold outline-none">
+                                       class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                                 <span class="text-[10px] font-bold text-white/45">DH</span>
                             </label>
                         </div>
@@ -7431,14 +7423,15 @@
                     <div class="min-w-0">
                         <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">🔍 Ce cycle</p>
                         <p class="text-sm font-black text-white truncate">{{ rxContenu.c.label }}</p>
+                        <p class="text-[10px] font-semibold text-slate-400 tabular-nums" data-rx-prevu-total>Prévu : {{ formatMad(rxContenu.c.budget) }}</p>
                     </div>
                     <p class="shrink-0 text-right tabular-nums leading-tight">
-                        <span class="block text-lg font-black text-white" data-rx-total>{{ formatMad(rxContenu.c.engage) }}</span>
-                        <span class="block text-[10px] font-semibold text-slate-400">sur {{ formatMad(rxContenu.c.budget) }}</span>
+                        <span class="block text-lg font-black text-white" data-rx-total>{{ formatMad(rxContenu.c.reel) }}</span>
+                        <span class="block text-[10px] font-semibold text-slate-400">dépensé</span>
                     </p>
                 </div>
                 <div class="mt-2.5 h-1 rounded-full bg-white/10 overflow-hidden">
-                    <div :class="['h-full rounded-full', rxContenu.c.reste < 0 ? 'bg-rose-400' : 'bg-emerald-300']" :style="{ width: anneau(rxContenu.c) + '%' }"></div>
+                    <div data-rx-barre :class="['h-full rounded-full', rxContenu.c.resteReel < 0 ? 'bg-rose-400' : 'bg-emerald-300']" :style="{ width: anneau({ engage: rxContenu.c.reel, budget: rxContenu.c.budget }) + '%' }"></div>
                 </div>
                 <!-- 🧾 Le budget prévu : la liste de courses -->
                 <div v-if="rxContenu.c.prevu && rxContenu.c.prevu.length" data-rx-prevu class="mt-3 rounded-xl bg-slate-50 ring-1 ring-white/20 p-2.5 text-slate-600">
@@ -7461,7 +7454,7 @@
                 </div>
                 <!-- Ce qui a été retenu, et pourquoi (la saisie se fait sur la ligne de la carte) -->
                 <p class="mt-3 rounded-lg bg-white/[0.04] ring-1 ring-white/10 px-2.5 py-2 text-[10px] font-semibold text-slate-400 leading-snug" data-rx-retenu>
-                    <template v-if="rxContenu.c.source === 'estime'">≈ Rien de déclaré : estimé au rythme attendu ({{ formatMad(rxContenu.c.engage) }}). Saisissez-le sur la carte (bouton ✎ de la ligne).</template>
+                    <template v-if="rxContenu.c.source === 'estime'">✍️ Rien de saisi ce cycle : 0 DH dépensé. Tapez vos dépenses dans les cases de la ligne (✎), semaine par semaine.<span v-if="rxContenu.c.engage > 0" class="block mt-1 text-slate-500" data-rx-prudence>En attendant, le Reste à dépenser en déduit par prudence {{ formatMad(rxContenu.c.engage) }} (rythme attendu, voir ⓘ) — rien n'est écrit dans vos cases.</span></template>
                     <template v-else-if="rxContenu.c.saisi > 0 && rxContenu.c.tickets > 0">📝 Total saisi {{ formatMad(rxContenu.c.saisi) }} · 🧾 tickets {{ formatMad(rxContenu.c.tickets) }} : on retient le plus grand, {{ formatMad(rxContenu.c.engage) }} — jamais la somme.</template>
                     <template v-else-if="rxContenu.c.source === 'compteur'">📝 Total saisi sur la carte : {{ formatMad(rxContenu.c.engage) }}.</template>
                     <template v-else>🧾 Retenu : la somme des tickets datés du cycle, {{ formatMad(rxContenu.c.engage) }}.</template>
@@ -7486,8 +7479,8 @@
                     </ul>
                 </div>
                 <p class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between gap-2 text-[11px] font-bold">
-                    <span class="text-slate-400"><template v-if="rxContenu.c.reste > 0">≈ {{ formatMad(rxContenu.c.parSemaine) }} / sem. d'ici la paie</template><template v-else>Plus rien à dépenser ici</template></span>
-                    <span :class="['whitespace-nowrap', rxContenu.c.reste < 0 ? 'text-rose-300' : 'text-emerald-300']" data-rx-reste>{{ rxContenu.c.reste >= 0 ? 'Reste ' + formatMad(rxContenu.c.reste) : 'Dépassé de ' + formatMad(-rxContenu.c.reste) }}</span>
+                    <span class="text-slate-400"><template v-if="rxContenu.c.resteReel > 0">≈ {{ formatMad(rxContenu.c.parSemaineReel) }} / sem. d'ici la paie</template><template v-else>Plus rien à dépenser ici</template></span>
+                    <span :class="['whitespace-nowrap', rxContenu.c.resteReel < 0 ? 'text-rose-300' : 'text-emerald-300']" data-rx-reste>{{ rxContenu.c.resteReel >= 0 ? 'Reste ' + formatMad(rxContenu.c.resteReel) : 'Dépassé de ' + formatMad(-rxContenu.c.resteReel) }}</span>
                 </p>
             </template>
             <!-- ⓘ Le calcul du Reste à dépenser (ex-bulle « Disponible réel ») -->
@@ -7571,8 +7564,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.27 Semaine-Glissante";
+                    const CURRENT_VERSION = "37.28 Cases-Vierges";
                     const CHANGELOG = [
+        { version: "37.28 Cases-Vierges", date: "2026-10-08", changes: [
+            "ZÉRO PAR DÉFAUT — les cases de saisie (Marjane, Hri, « Autre », les catégories sans poste) sont VIDES tant que vous n'avez rien tapé : simple invite « 0 », droite et pâle. Plus aucune estimation « ≈ 172 » en italique dans une case, qui la faisait passer pour déjà remplie ; plus de total de tickets dans l'invite non plus (il reste lisible sur la ligne : « 🧾 450 »).",
+            "LE PRÉVU À CÔTÉ, JAMAIS DEDANS — chaque poste affiche « Prévu : 400 DH » en petit texte gris sous son nom, chaque ligne « Prévu : 1 000 DH » (le budget de la semaine), puis « · reste 750 » dès qu'une dépense est saisie. Le total d'une ligne et celui de la semaine valent ce qui a été saisi : 0 DH sans saisie, sans « ≈ ».",
+            "RAYONS X — l'en-tête d'une catégorie montre ce qui est DÉPENSÉ (0 DH sans saisie) et, à part, « Prévu : 4 300 DH » ; la barre et le reste en découlent. L'estimation du moteur n'y est plus présentée comme une dépense : elle est nommée en une ligne (« le Reste à dépenser en déduit par prudence … ; rien n'est écrit dans vos cases »).",
+            "AUCUN PRÉ-REMPLISSAGE — la semaine sans saisie vaut 0, y compris la semaine en cours ; la vieille agrégation automatique des tickets vers le compteur (orpheline depuis la v37.24) est retirée : plus rien n'écrit dans vos saisies à votre place. Le grand Reste à dépenser garde sa prudence tant que rien n'est saisi, dite en clair dessous (« estimé au prorata ») et détaillée dans ⓘ.",
+            "PREUVE — la suite « Reste à dépenser » passe à 90 contrôles : toutes les cases vides avec l'invite « 0 », « Prévu : X DH » hors de la case, aucun « ≈ » dans la zone de saisie, Rayons X à 0 DH sans saisie, une saisie ne remplit que sa case, vider une case la rend vierge. Rejouée sur la v37.27 : 12 échecs. Huit défauts réintroduits exprès (estimation hebdo, invite = budget, valeur pré-remplie, case unique pré-remplie, en-tête Rayons X estimé, réel = engagé, Prévu retiré, agrégation ré-exposée) : tous attrapés.",
+        ] },
         { version: "37.27 Semaine-Glissante", date: "2026-10-08", changes: [
             "PAR SEMAINE, PAS PAR CYCLE — les postes sont des budgets hebdomadaires (Marjane : 400 / semaine) : on les saisit désormais à la semaine. La carte « Par semaine » s'ouvre sur la SEMAINE EN COURS (lundi → dimanche) ; les flèches ‹ › passent à la semaine passée ou à venir, « ↩ Cette semaine » ramène à la semaine en cours. Chaque ligne montre le reste de la semaine ; chaque poste, son prévu hebdomadaire, sa jauge et ses tickets datés de CETTE semaine.",
             "UNE SEMAINE APPARTIENT AU CYCLE OÙ TOMBE SON JEUDI (la majorité de ses jours). Le Reste à dépenser du cycle additionne les semaines qui lui appartiennent : saisir la semaine passée ou une semaine à venir (un achat payé d'avance) le met à jour. Une semaine d'un autre cycle le dit (« appartient au cycle précédent ») et ne change pas le Reste à dépenser affiché.",
@@ -16298,7 +16298,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  racontent la même histoire que le grand chiffre.
                             const engageCat = c.declare || declare ? c.engage : c.theorique;
                             const resteCat = c.budget - engageCat;
-                            //  ── v37.27 : la même catégorie, vue SEMAINE ──
+                            //  v37.28 : ce qui a VRAIMENT été saisi ou ticketé — 0 tant que rien
+                            //  n'est déclaré. C'est ce qu'affichent les Rayons X ; l'estimation
+                            //  reste l'affaire du moteur (grand chiffre, ⓘ), jamais d'une case.
+                            const reelCat = c.declare ? engageCat : 0;                            //  ── v37.27 : la même catégorie, vue SEMAINE ──
                             const gS = TS.parCle[c.key] || { total: 0, tx: [], parPoste: {} };
                             const semBudget = Math.round(c.budget / 4.3);
                             const postesSem = prevu.map(p => {
@@ -16313,15 +16316,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const saisiS = libreS + postesSem.reduce((s, p) => s + p.saisi, 0);
                             const ticketsS = Math.round(gS.total);
                             const declS = saisiS > 0 || ticketsS > 0 || Object.keys(valsSem).some(k => k === c.key || k.startsWith(c.key + '::'));
-                            const ailleurs = c.declare || declare;                       // déclaré ailleurs dans le cycle
-                            //  Une estimation n'a de sens que pour la semaine EN COURS, tant que rien n'est déclaré
-                            //  dans le cycle ; une semaine passée ou à venir sans saisie vaut 0, pas « tout dépensé ».
-                            const estimee = !declS && !ailleurs && decal === 0;
-                            const engS = declS ? Math.max(saisiS, ticketsS) : (estimee ? Math.round(semBudget * frac) : 0);
+                            //  v37.28 : une semaine vaut ce qui a été TAPÉ (ou ticketé), rien d'autre.
+                            //  Aucune estimation n'entre dans une case : sans saisie, 0.
+                            const engS = declS ? Math.max(saisiS, ticketsS) : 0;
                             const sem = {
                                 budget: semBudget, engage: engS, saisi: saisiS, libre: libreS, tickets: ticketsS, declare: declS,
                                 reste: semBudget - engS, pct: semBudget > 0 ? Math.min(100, Math.round(engS / semBudget * 100)) : (engS > 0 ? 100 : 0),
-                                source: declS ? (ticketsS > saisiS ? 'tickets' : 'compteur') : (estimee ? 'estime' : 'vide'),
+                                source: declS ? (ticketsS > saisiS ? 'tickets' : 'compteur') : 'vide',
                                 postes: postesSem, nb: gS.tx.length,
                                 //  Les saisies de CYCLE d'avant la saisie hebdomadaire, toujours comptées
                                 cycleAvant: Object.keys(baseCycle).filter(k => k === c.key || k.startsWith(c.key + '::')).reduce((s, k) => s + (Number(baseCycle[k]) || 0), 0),
@@ -16330,6 +16331,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 sem,
                                 key: c.key, label: c.label, budget: c.budget, engage: engageCat, saisi: c.saisi, libre: c.libre, parPostes: c.parPostes, tickets: c.tickets, declare: c.declare,
                                 reste: resteCat, parSemaine: resteCat > 0 ? Math.floor(resteCat / jours * 7) : 0,
+                                reel: reelCat, resteReel: c.budget - reelCat, parSemaineReel: c.budget - reelCat > 0 ? Math.floor((c.budget - reelCat) / jours * 7) : 0,
                                 theorique: c.theorique, pct: c.budget > 0 ? Math.round(engageCat / c.budget * 100) : 0,
                                 source: !c.declare ? 'estime' : (c.tickets > c.saisi ? 'tickets' : 'compteur'),
                                 transactions, nb: transactions.length, comptesAutres: Object.values(autres),
@@ -16369,7 +16371,6 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                          statut: decal === 0 ? 'en_cours' : (decal < 0 ? 'passee' : 'avenir'),
                                          idxJour: decal === 0 ? idxAuj : null, frac, dansCycle: _semaineDansCycle(lundiSel),
                                          cycleRel: th < _ymd(debut) ? 'precedent' : (th > _ymd(fin) ? 'suivant' : null),
-                                         estime: categories.length > 0 && categories.every(c => c.sem.source === 'estime'),
                                          budget: sb, engage: se, reste: sb - se, pct: sb > 0 ? Math.min(100, Math.round(se / sb * 100)) : 0 };
                             })(),
                         };
@@ -17095,49 +17096,6 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value++;
                         handleDataChange();
                         addLog('↩️ Conso T0 remise à zéro — retour à l\'estimation temporelle.', 'warn');
-                    };
-
-                    // ⚡ Agrégation automatique depuis les transactions réelles du cycle
-                    const remplirConsoT0DepuisReel = () => {
-                        const an = consoT0Annee.value;
-                        const d = donneesAnnuelles.value[an];
-                        if (!d) return;
-                        const { debut, fin } = consoT0Fenetre.value;
-                        const today = new Date();
-                        // On n'agrège que le passé : borne haute = min(fin de cycle, aujourd'hui)
-                        const dMin = _ymd(debut), dMax = _ymd(fin < today ? fin : today);
-                        // catégorieId (y compris celles des détails) → clé de la charge variable
-                        const map = {};
-                        Object.entries(d.chargesVariables || {})
-                            .filter(([, cv]) => cv && cv.categorieId !== 'cat_cv_factures')
-                            .forEach(([key, cv]) => {
-                                if (cv.categorieId) map[cv.categorieId] = key;
-                                (cv.details || []).forEach(det => { if (det && det.categorieId) map[det.categorieId] = key; });
-                            });
-                        const totaux = {};
-                        let nbTx = 0;
-                        // an−1 inclus : un cycle peut être à cheval sur le 31 décembre
-                        [an, an - 1].forEach(yr => {
-                            (donneesAnnuelles.value[yr]?.transactionsReelles || []).forEach(t => {
-                                const dt = String(t.date || '').slice(0, 10);
-                                if (!dt || dt < dMin || dt > dMax) return;
-                                const k = map[t.categorieId];
-                                if (!k) return;
-                                totaux[k] = (totaux[k] || 0) + (Number(t.montant) || 0);
-                                nbTx++;
-                            });
-                        });
-                        if (!nbTx) {
-                            addLog('⚠️ Aucune transaction conso trouvée entre le ' + dMin + ' et le ' + dMax + ' — saisie manuelle nécessaire.', 'warn');
-                            return;
-                        }
-                        if (!d.consoRealiseeT0 || typeof d.consoRealiseeT0 !== 'object') d.consoRealiseeT0 = {};
-                        const ligne = {};
-                        Object.entries(totaux).forEach(([k, v]) => { ligne[k] = Math.max(0, Math.round(v)); });
-                        d.consoRealiseeT0[consoT0CycleKey.value] = ligne;
-                        calculationTick.value++;
-                        handleDataChange();
-                        addLog('⚡ Conso T0 : ' + nbTx + ' transaction(s) agrégée(s) sur ' + Object.keys(ligne).length + ' catégorie(s) (' + dMin + ' → ' + dMax + ').', 'success');
                     };
 
                     // Listes en lecture seule pour la vue théorique (groupées par compte)
@@ -18945,7 +18903,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         budgetVariableSansAbsence, economieVoyageBudget, toggleSuspendreAbsence, estSuspendableAbsence,
                         voyageJoursDuMois, cycleRepartitionJours, voyageDetailMois, setVoyage, effacerVoyage,
                         consoT0Renseigne, budgetConsoCycle, enveloppeConsoRestante, enveloppeConsoProrataTemps,
-                        setConsoT0, resetConsoT0, remplirConsoT0DepuisReel,
+                        setConsoT0, resetConsoT0,
                         obligationsCourantHorsConso, budgetConsoRestantReel, contrainteConso,
                         // v32.10 Reste-Par-Compte : découpage courant / autres comptes
                         resteAPayerGroupes, resteAPayerGroupeCourant, resteAPayerCourantCycle,
