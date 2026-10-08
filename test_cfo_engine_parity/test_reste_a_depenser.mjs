@@ -61,8 +61,9 @@ const twCss = essai(() => {
 });
 
 /* ── B. Le décor : un budget conso lisible à la main ─────────────────── */
-//    COURSES 1 000 / sem. → 4 300 · SORTIES 400 / sem. → 1 720 · ESSENCE 860 / mois
-//    budget conso du cycle = 6 880 (factures exclues)
+//    COURSES 1 000 / sem. → 1 000 × N · SORTIES 400 / sem. → 400 × N · ESSENCE 860 / mois
+//    (v37.29 : N = les semaines RÉELLES du cycle — 5 ici, du 8 oct. au 7 nov. 2026)
+//    budget conso du cycle = 1 400 × N + 860 (factures exclues)
 //  L'HORLOGE EST FIXÉE (navigateur compris) : mercredi 14 octobre 2026. Le calendrier des semaines et
 //  des cycles ne dépend plus du jour où l'on lance le test — et les deux règles de rattachement
 //  d'une semaine à un cycle (jeudi / lundi) restent toujours distinguables.
@@ -101,7 +102,10 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
     };
     d.epargne = []; d.depensesIrregulieres = []; d.virementsInternes = []; d.transactionsReelles = []; d.consoRealiseeT0 = {};
 }
-const BUDGET = 4300 + 1720 + 860;
+//  v37.29 : les jeudis entre la paie de M−1 et la veille de celle de M, comptés jour par jour
+const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getDay() === 4) n++; return n; };
+const NS = semainesCycle(MOIS_BUDGET, AN_BUDGET, jourDePaie);
+const BUDGET = 1000 * NS + 400 * NS + 860;
 const IDX = (maintenant.getDay() + 6) % 7;                                   // 0 = lundi
 
 const page0 = html
@@ -168,7 +172,7 @@ try {
     const a0 = await lire();
     const i0cats = a0.L.categories.filter(c => !c.prevu.length).map(c => c.key);       // sans poste : une case
     const i0postes = a0.L.categories.filter(c => c.prevu.length).map(c => c.key);       // avec postes : un ✎ qui déplie
-    v(`budget conso du cycle = ${BUDGET} (4 300 + 1 720 + 860)`, a0.L.budget === BUDGET && a0.budgetConso === BUDGET, JSON.stringify([a0.L.budget, a0.budgetConso]));
+    v(`budget conso du cycle = ${BUDGET} (1 000 × ${NS} + 400 × ${NS} + 860 : les ${NS} semaines réelles du cycle)`, a0.L.budget === BUDGET && a0.budgetConso === BUDGET, JSON.stringify([a0.L.budget, a0.budgetConso]));
     v('rien de déclaré → « estimé », reste = prorata du moteur', !a0.L.declare && a0.L.rythme === 'estime' && a0.L.reste === a0.prorata && a0.L.reste === a0.rav,
       JSON.stringify({ declare: a0.L.declare, reste: a0.L.reste, prorata: a0.prorata, rav: a0.rav }));
     v('  → chaque catégorie s\'affiche à son rythme attendu', Object.values(a0.cat).every(c => c.source === 'estime' && c.engage === c.theorique), JSON.stringify(a0.cat));
@@ -236,7 +240,7 @@ try {
     await compteur('alimentation', 8000);
     const r3 = await lire();
     v('au-delà du budget du cycle → « depasse », écart chiffré, reste 0',
-      r3.L.rythme === 'depasse' && r3.L.depassement === r3.L.engage - BUDGET && r3.L.reste === 0 && r3.cat.a.reste === 4300 - 8000, JSON.stringify([r3.L.rythme, r3.L.depassement, r3.L.reste]));
+      r3.L.rythme === 'depasse' && r3.L.depassement === r3.L.engage - BUDGET && r3.L.reste === 0 && r3.cat.a.reste === 1000 * NS - 8000, JSON.stringify([r3.L.rythme, r3.L.depassement, r3.L.reste]));
     await compteur('alimentation', 1000);
 
     /* ── G. Le cash mord : la carte ne promet pas plus que le compte ──── */
@@ -380,8 +384,8 @@ try {
     v('  → avant toute saisie, chaque case est VIDE (invite « 0 », pas d\'estimation) ; « Prévu : 600 DH » / « 400 DH » se lisent à côté',
       vierge.length === 3 && vierge.every(x => x.v === '' && x.p === '0') && prevuP[0] && prevuP[0].t === 'Prévu:600DH' && prevuP[1] && prevuP[1].t === 'Prévu:400DH'
       && !prevuP[0].dansCase && !prevuP[1].dansCase, JSON.stringify([vierge, prevuP]));
-    const [pH, pL] = cA.prevu;                                            // HRI 600 → 2 580 ; L7M 400 → 1 720 sur le cycle
-    v('  → le budget du cycle de chaque poste s\'affiche (2 580 / 1 720)', pH.partCycle === 2580 && pL.partCycle === 1720 && pH.cle === 'alimentation::1', JSON.stringify([pH, pL]));
+    const [pH, pL] = cA.prevu;                                            // HRI 600 → 600 × N ; L7M 400 → 400 × N sur le cycle (v37.29)
+    v('  → le budget du cycle de chaque poste s\'affiche (600 × ' + NS + ' / 400 × ' + NS + ')', pH.partCycle === 600 * NS && pL.partCycle === 400 * NS && pH.cle === 'alimentation::1', JSON.stringify([pH, pL]));
     await page.click('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]');
     await page.keyboard.type('800');
     await page.keyboard.press('Enter');

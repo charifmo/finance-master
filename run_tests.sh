@@ -62,5 +62,7 @@ suite "Logistique bancaire (routage, radar, focus)"             node test_cfo_en
 suite "Deux PC, un seul état (vrai save_data.php)"               node test_cfo_engine_parity/test_deux_pc.mjs
 suite "Reste à dépenser du cycle (vrac, rythme, rôles)"         node test_cfo_engine_parity/test_reste_a_depenser.mjs
 suite "Rayons X & routage bancaire évident"                    node test_cfo_engine_parity/test_rayons_x.mjs
+suite "Semaines réelles du cycle (4 ou 5, plus × 4,3)"          node test_cfo_engine_parity/test_semaines_cycle.mjs
+suite "Semaines réelles du cycle — serveur (PHP)"              php test_cfo_engine_parity/test_semaines_cycle.php
 
 echo "✅ Toutes les suites passent."

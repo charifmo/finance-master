@@ -68,6 +68,10 @@ const jourDePaie = T === 1 ? 28 : Math.min(28, Math.max(2, T - 1));
 const Y = maintenant.getFullYear(), MC = maintenant.getMonth() + 1;
 const MOIS_BUDGET = T >= jourDePaie ? (MC === 12 ? 1 : MC + 1) : MC;
 const AN_BUDGET = (T >= jourDePaie && MC === 12) ? Y + 1 : Y;
+//  v37.29 : les semaines RÉELLES du cycle (4 ou 5, plus 4,3) — les jeudis entre la paie de M−1
+//  et la veille de celle de M, comptés jour par jour, indépendamment de l'application.
+const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getDay() === 4) n++; return n; };
+const NS = semainesCycle(MOIS_BUDGET, AN_BUDGET, jourDePaie);
 const dans = (k) => new Date(maintenant.getFullYear(), maintenant.getMonth(), maintenant.getDate() + k);
 const jourDans = (k) => dans(k).getDate();
 const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -192,16 +196,16 @@ try {
     v('  → payé hors du compte des variables : signalé (et seulement là)',
       L.p.categories.flatMap(c => c.transactions).filter(t => t.horsCompte).map(t => t.libelle).join() === 'CARREFOUR'
       && JSON.stringify(alim.comptesAutres.map(c => c.key)) === '["cpt_2"]', JSON.stringify(alim.comptesAutres));
-    v('reste de la catégorie = budget du cycle − tickets (1 000 × 4,3 − 450)', alim.budget === 4300 && alim.engage === 450 && alim.reste === 3850, JSON.stringify([alim.budget, alim.engage, alim.reste]));
+    v('reste de la catégorie = budget du cycle − tickets (1 000 × ' + NS + ' semaines − 450)', alim.budget === 1000 * NS && alim.engage === 450 && alim.reste === 1000 * NS - 450, JSON.stringify([alim.budget, alim.engage, alim.reste]));
     v('hors budget conso : la facture LYDEC, auditée à part', L.p.horsBudgetTx.length === 1 && L.p.horsBudgetTx[0].libelle === 'LYDEC', JSON.stringify(L.p.horsBudgetTx));
 
     /* ── C bis. La liste de courses : le prévu, poste par poste ──────── */
     v('Courses : postes prévus, le plus gros d\'abord, avec leur emoji (🛍️ 500 · 🥩 300 · 🧺 200)',
       JSON.stringify(alim.prevu.map(x => [x.nom, x.montant, x.emoji])) === '[["HRI",500,"🛍️"],["L7M",300,"🥩"],["MARCHE",200,"🧺"]]', JSON.stringify(alim.prevu));
     //  La liste de courses est dans l'unité de la ligne (ici la semaine) ; le
-    //  budget de la catégorie est celui du cycle (× 4,3).
-    v('pour chaque catégorie détaillée, Σ des postes = budget de la ligne (hebdo : cycle ÷ 4,3)',
-      L.p.categories.filter(c => c.prevu.length).length === 3 && L.p.categories.every(c => !c.prevu.length || c.prevu.reduce((s, x) => s + x.montant, 0) === Math.round(c.budget / (c.prevuUnite === 'semaine' ? 4.3 : 1))),
+    //  budget de la catégorie est celui du cycle (× ses semaines réelles, v37.29).
+    v('pour chaque catégorie détaillée, Σ des postes = budget de la ligne (hebdo : cycle ÷ ' + NS + ' semaines)',
+      L.p.categories.filter(c => c.prevu.length).length === 3 && L.p.categories.every(c => !c.prevu.length || c.prevu.reduce((s, x) => s + x.montant, 0) === Math.round(c.budget / (c.prevuUnite === 'semaine' ? NS : 1))),
       JSON.stringify(L.p.categories.map(c => [c.key, c.budget, c.prevu.reduce((s, x) => s + x.montant, 0)])));
     v('dépensé par poste : Hri 150 (CARREFOUR), le reste « non ventilé » (300)',
       alim.prevu.find(x => x.nom === 'HRI').depense === 150 && alim.prevu.filter(x => x.nom !== 'HRI').every(x => x.depense === 0) && alim.nonVentile === 300
@@ -254,7 +258,7 @@ try {
       !!p1 && p1.lignes.length === 2 && p1.lignes[0].libelle === 'CARREFOUR' && p1.lignes[0].montant === '150DH' && p1.lignes[0].mono === 'cpt_2'
       && p1.lignes[1].libelle === 'MARJANE' && p1.lignes[1].mono === 'cpt_1' && p1.lignes.every(l => !!l.quand), JSON.stringify(p1 && p1.lignes));
     v('  → « ≠ prévu » sur l\'achat payé par Assafa, total et reste exacts',
-      !!p1 && p1.lignes[0].horsCompte && !p1.lignes[1].horsCompte && p1.total === '450DH' && p1.reste === 'Reste3850DH', JSON.stringify(p1 && [p1.total, p1.reste]));
+      !!p1 && p1.lignes[0].horsCompte && !p1.lignes[1].horsCompte && p1.total === '450DH' && p1.reste === 'Reste' + new Intl.NumberFormat('fr-FR').format(1000 * NS - 450).replace(/\s/g, '') + 'DH', JSON.stringify(p1 && [p1.total, p1.reste]));
     //  v37.22 : le bloc « Budget prévu » est sous l'en-tête, AVANT les dépenses réelles.
     const courses = await page.evaluate(() => {
         const p = document.querySelector('[data-rayonx]');
@@ -316,8 +320,8 @@ try {
         st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 200));
         return res;
     }, ST);
-    v('exception du mois (1 200 / sem.) : budget du cycle 5 160, postes 600 · 360 · 240, signalé',
-      ajuste.budget === 5160 && JSON.stringify(ajuste.prevu) === '[600,360,240]' && ajuste.ajuste === true, JSON.stringify(ajuste));
+    v('exception du mois (1 200 / sem.) : budget du cycle 1 200 × ' + NS + ' semaines, postes 600 · 360 · 240, signalé',
+      ajuste.budget === 1200 * NS && JSON.stringify(ajuste.prevu) === '[600,360,240]' && ajuste.ajuste === true, JSON.stringify(ajuste));
     // Un compte du Sanctuaire
     await page.hover('[data-sanct-compte][data-compte="cpt_2"]');
     await page.waitForTimeout(250);

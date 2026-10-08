@@ -90,9 +90,13 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
     d.virementsInternes = []; d.transactionsReelles = [];
 }
 /*  Respiration du mois budgétaire, à la main :
-      ressources 20 000 ; sorties 6 000 + 800 + 1 000 × 4,3 + 2 000 + 700 = 13 800
-      marge 6 200 → 31 %, « ample ».                                          */
-const RESP = { ressources: 20000, sorties: 13800, marge: 6200, pct: 31 };
+      ressources 20 000 ; sorties 6 000 + 800 + 1 000 × N + 2 000 + 700
+      N = les semaines RÉELLES du cycle (v37.29 : 4 ou 5, plus 4,3) — les jeudis
+      entre la paie de M−1 et la veille de celle de M, comptés jour par jour.
+      N = 4 → 13 500, marge 6 500 (33 %) ; N = 5 → 14 500, marge 5 500 (28 %) : « ample ». */
+const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getDay() === 4) n++; return n; };
+const NS = semainesCycle(MOIS_BUDGET, AN_BUDGET, jourDePaie);
+const RESP = (() => { const sorties = 6000 + 800 + 1000 * NS + 2000 + 700; return { ressources: 20000, sorties, marge: 20000 - sorties, pct: Math.round((20000 - sorties) / 20000 * 100) }; })();
 
 const page0 = html
     .replace('<script src="https://unpkg.com/vue@3/dist/vue.global.js"', '<script src="/vue.js"')

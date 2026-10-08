@@ -743,7 +743,7 @@
                          chaque poste prend sa vraie place face aux revenus, et pour
                          chaque ligne une barre de poids. On ressent avant de lire.
                          Mêmes conventions que le moteur du simulateur : exceptions au
-                         mois budgétaire, catégories hebdomadaires × 4,3.
+                         mois budgétaire, catégories hebdomadaires × les semaines du cycle (4 ou 5).
                          ═══════════════════════════════════════════════════════════════ -->
                     <div class="flex items-start justify-between gap-3 flex-wrap">
                         <div class="min-w-0">
@@ -870,7 +870,7 @@
                                 <h3 class="text-xs font-black uppercase tracking-[0.15em] text-slate-700 whitespace-nowrap">{{ s.icone }} {{ s.label }}</h3>
                                 <span class="text-sm font-black text-slate-900 tabular-nums whitespace-nowrap">{{ formatMAD(s.montant) }} <span class="text-[11px] font-bold text-slate-400">· {{ s.pctRevenus }} % des revenus</span></span>
                             </div>
-                            <p v-if="s.cle === 'conso'" class="-mt-1.5 mb-3 text-[11px] font-bold text-teal-700">≈ {{ formatMAD(respirationBudgetaire.consoParSemaine) }} par semaine · budget hebdo × 4,3</p>
+                            <p v-if="s.cle === 'conso'" class="-mt-1.5 mb-3 text-[11px] font-bold text-teal-700"><span data-theo-semaines>{{ formatMAD(respirationBudgetaire.consoParSemaine) }} par semaine × {{ respirationBudgetaire.semaines }} semaines ce cycle</span></p>
                             <ul class="space-y-2.5">
                                 <li v-for="(l, i) in s.lignes" :key="'tl_' + s.cle + i">
                                     <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
@@ -1488,8 +1488,8 @@
                                     </select>
                                 </div>
                             </div>
-                            <div v-if="item.periode === 'semaine'" class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mb-2">
-                                Impact mensuel calculé (x4.3) : {{ formatMAD((item.valeur || 0) * 4.3) }}
+                            <div v-if="item.periode === 'semaine' || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mb-2 space-x-2">
+                                <span v-for="cy in cyclesSemaines" :key="'cvs_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ item.periode === 'semaine' ? formatMAD((item.valeur || 0) * cy.n) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
                             </div>
                             <!-- v17.29 : Sous-parties charges variables -->
                             <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-4 pl-3 border-l-2 border-red-300 space-y-2 mb-2">
@@ -4769,8 +4769,8 @@
                                         <option value="mois">/ mois</option>
                                     </select>
                                 </div>
-                                <p v-if="item.periode === 'semaine'" class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mt-1">
-                                    Mensuel (x4.3) : {{ formatMAD((item.valeur || 0) * 4.3) }}
+                                <p v-if="item.periode === 'semaine' || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mt-1 space-x-2">
+                                    <span v-for="cy in cyclesSemaines" :key="'cvsm_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ item.periode === 'semaine' ? formatMAD((item.valeur || 0) * cy.n) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
                                 </p>
                                 <!-- v17.29 : Sous-parties charges variables mobile -->
                                 <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-red-300 space-y-2">
@@ -7259,6 +7259,7 @@
                         <p class="text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] text-white/85" data-semaine-titre>Semaine du {{ sm.du }} au {{ sm.au }}</p>
                         <p class="mt-1 flex items-center justify-center gap-1.5 text-[10px] md:text-[11px] font-semibold text-white/60 tabular-nums">
                             <span data-semaine-statut :data-statut="sm.statut" :class="['rounded-full px-1.5 py-px text-[9px] font-black uppercase tracking-wider ring-1', statutClasse]">{{ statutTexte }}</span>
+                            <span v-if="sm.rang" data-semaine-rang class="font-bold text-white/70" :title="'Ce cycle compte ' + sm.nb + ' semaines : son budget = ' + sm.nb + ' × le prévu de la semaine'">sem. {{ sm.rang }}/{{ sm.nb }}</span>
                             <span data-semaine-total><span class="font-black text-white/90">{{ formatMad(sm.engage) }}</span> / {{ formatMad(sm.budget) }}</span>
                         </p>
                     </div>
@@ -7564,8 +7565,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.28 Cases-Vierges";
+                    const CURRENT_VERSION = "37.29 Semaines-Reelles";
                     const CHANGELOG = [
+        { version: "37.29 Semaines-Reelles", date: "2026-10-08", changes: [
+            "FIN DU « × 4,3 » — un cycle de paie compte 4 ou 5 semaines, jamais 4,3 : les jeudis entre le jour de paie du mois précédent et la veille du suivant (la règle de la saisie par semaine). Une charge « / sem » coûte désormais valeur × les semaines RÉELLES de son cycle ; une charge « / mois » se répartit sur ses 4 ou 5 semaines. Sur l'année : 52 ou 53 semaines (et non 4,3 × 12 = 51,6).",
+            "POURQUOI — avec 4,3, tenir exactement son prévu chaque semaine pendant un cycle de 5 semaines affichait un FAUX dépassement (5 × 3 097 = 15 485 pour un budget de 13 317) ; dans un cycle de 4 semaines, 929 DH n'étaient portés par aucune semaine. Désormais : prévu tenu chaque semaine = budget du cycle tenu, au dirham près.",
+            "PARTOUT, Y COMPRIS LÀ OÙ L'ON SAISIT LE PRÉVU — section Charges variables (bureau et téléphone) : « Octobre : 4 sem. → 5 948 DH · Novembre : 5 sem. → 7 435 DH » remplace « Impact mensuel calculé (x4.3) » ; une charge mensuelle affiche sa part par semaine. Prévisionnel : chaque mois avec SES semaines (« 3 097 DH par semaine × 4 semaines ce cycle »). Pilotage, Reste à dépenser, Rayons X, surplus mois par mois et annuel, journal de trésorerie, relevé, graphiques, indépendance financière (mois moyen = semaines de l'année ÷ 12). La Météo dit « sem. 2/4 ».",
+            "DEUX DÉFAUTS DU MÊME CALCUL CORRIGÉS — journal de trésorerie : l'exception d'une charge « / sem » remplaçait le montant du mois par la valeur HEBDO (non multipliée) ; contrôle budget vs réalisé : les sous-lignes d'une charge « / sem » étaient comptées comme mensuelles.",
+            "SERVEUR (CFO) — l'application envoie déjà son net mensuel au CFO ; le recalcul de secours de cfo_intent_engine.php applique désormais la même règle (cfo_semaines_cycle). La parité avec l'ancien moteur JS figé déclare cet écart, et lui seul, comme voulu.",
+            "PREUVE — deux suites nouvelles (28 + 8 contrôles), contre un comptage INDÉPENDANT jour par jour : 144 cycles côté application, 336 côté serveur ; un cycle de 5 semaines ET un de 4 (horloges fixes) où le prévu tenu chaque semaine tombe pile sur le budget ; Prévisionnel des 12 mois ; section Charges variables ; surplus ; journal avec exception. Dix défauts réintroduits exprès côté application (dont la règle du lundi, le rang de semaine, l'exception non multipliée) et deux côté serveur : tous attrapés. Les suites existantes calculent maintenant leurs attendus avec les semaines réelles.",
+        ] },
         { version: "37.28 Cases-Vierges", date: "2026-10-08", changes: [
             "ZÉRO PAR DÉFAUT — les cases de saisie (Marjane, Hri, « Autre », les catégories sans poste) sont VIDES tant que vous n'avez rien tapé : simple invite « 0 », droite et pâle. Plus aucune estimation « ≈ 172 » en italique dans une case, qui la faisait passer pour déjà remplie ; plus de total de tickets dans l'invite non plus (il reste lisible sur la ligne : « 🧾 450 »).",
             "LE PRÉVU À CÔTÉ, JAMAIS DEDANS — chaque poste affiche « Prévu : 400 DH » en petit texte gris sous son nom, chaque ligne « Prévu : 1 000 DH » (le budget de la semaine), puis « · reste 750 » dès qu'une dépense est saisie. Le total d'une ligne et celui de la semaine valent ce qui a été saisi : 0 DH sans saisie, sans « ≈ ».",
@@ -8926,12 +8935,13 @@
                         // Charges variables : par détail si présents, sinon valeur globale
                         Object.values(d.chargesVariables || {}).forEach(cv => {
                             if (!cv) return;
+                            //  v37.29 : une ligne « / sem » × les semaines réelles du cycle contrôlé
+                            //  (ses sous-lignes aussi : elles étaient comptées comme mensuelles).
+                            const kSem = cv.periode === 'semaine' ? semainesDuCycle(m, a) : 1;
                             if (Array.isArray(cv.details) && cv.details.length) {
-                                cv.details.forEach(det => add(det.categorieId || cv.categorieId, det.nom, 'charge_variable_detail', det.montant));
-                            } else if (cv.periode === 'mois' || !cv.periode) {
-                                add(cv.categorieId, cv.label, 'charge_variable', cv.valeur);
-                            } else if (cv.periode === 'semaine') {
-                                add(cv.categorieId, cv.label, 'charge_variable', Number(cv.valeur || 0) * 4.3);
+                                cv.details.forEach(det => add(det.categorieId || cv.categorieId, det.nom, 'charge_variable_detail', Number(det.montant || 0) * kSem));
+                            } else {
+                                add(cv.categorieId, cv.label, 'charge_variable', Number(cv.valeur || 0) * kSem);
                             }
                         });
 
@@ -10715,8 +10725,7 @@
                             Object.values(d.revenus || {}).forEach(r => { revenus += valeurEffective(r, r.base, m); });
                             Object.values(d.chargesFixes || {}).forEach(f => { fixes += valeurEffective(f, f.valeur, m); });
                             Object.values(d.chargesVariables || {}).forEach(c => {
-                                const v = valeurEffective(c, c.valeur, m);
-                                variables += (c.periode === 'semaine' ? v * 4.3 : v);
+                                variables += valeurVariableDuCycle(c, m, Number(annee));
                             });
                         }
                         const irr = (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : Object.values(d.depensesIrregulieres || {}))
@@ -11705,10 +11714,14 @@
                                           categorie: estCredit(k, (f || {}).label) ? 'Mensualité de crédit' : 'Charge fixe' });
                         });
                         Object.entries(d.chargesVariables || {}).forEach(([k, c]) => {
-                            const m = ((c || {}).periode === 'semaine' ? N((c || {}).valeur) * 4.3 : N((c || {}).valeur));
+                            //  v37.29 : chaque mois restant avec SES semaines (4 ou 5), plus × 4,3.
+                            const hebdo = (c || {}).periode === 'semaine';
+                            const m = hebdo ? N((c || {}).valeur) * semainesDuCycle(annee === mb.an ? mb.mois : 1, annee) : N((c || {}).valeur);
                             if (m <= 0) return;
+                            let annuel = 0;
+                            for (let mm = 13 - moisRestants; mm <= 12; mm++) annuel += hebdo ? N((c || {}).valeur) * semainesDuCycle(mm, annee) : N((c || {}).valeur);
                             lignes.push({ cle: 'cv_' + k, nom: (c || {}).label || k, mensuel: Math.round(m),
-                                          annuel: Math.round(m * moisRestants), onglet: 'saisie', categorie: 'Charge variable' });
+                                          annuel: Math.round(annuel), onglet: 'saisie', categorie: 'Charge variable' });
                         });
                         const irr = Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres
                                   : Object.values(d.depensesIrregulieres || {});
@@ -13620,6 +13633,41 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return v;
                     };
 
+                    /*  v37.29 — LES VRAIES SEMAINES D'UN CYCLE (fin du « × 4,3 »).
+                        Le cycle du mois budgétaire M court du jour de paie de M−1 à la
+                        veille du jour de paie de M (la fenêtre de la saisie par semaine) ;
+                        une semaine lui appartient si son JEUDI y tombe (v37.27). Un cycle
+                        compte donc 4 ou 5 semaines — jamais 4,3 — et l'année 52 ou 53.
+                        Une catégorie « / sem » coûte valeur × N ce cycle-là ; une catégorie
+                        « / mois » se répartit sur ses N semaines. */
+                    const semainesDuCycle = (mois, an) => {
+                        const jdp = Number((soldesInitiaux.value || {}).jourDePaie) || 27;
+                        const m = Number(mois) || MOIS_BUDGETAIRE_COURANT();
+                        const a = Number(an) || Number(moisBudgetaire?.value?.an) || new Date().getFullYear();
+                        const debut = new Date(a, m - 2, jdp), fin = new Date(a, m - 1, jdp - 1);
+                        const jeudi = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
+                        let n = 0;
+                        while (jeudi.getTime() <= fin.getTime() && n < 6) { n++; jeudi.setDate(jeudi.getDate() + 7); }
+                        return n || 4;
+                    };
+                    const semainesDeLAnnee = (an) => { let s = 0; for (let m = 1; m <= 12; m++) s += semainesDuCycle(m, an); return s; };
+                    //  Le coût d'une charge variable sur UN cycle : exception du mois comprise,
+                    //  puis × les semaines du cycle si elle est saisie « / sem ».
+                    const valeurVariableDuCycle = (cv, mois, an) => {
+                        const v = valeurEffective(cv, (cv || {}).valeur, mois);
+                        return (cv || {}).periode === 'semaine' ? v * semainesDuCycle(mois, an) : v;
+                    };
+                    //  Le cycle en cours et le suivant, pour la section Charges variables.
+                    const _MOIS_CAP = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                    const cyclesSemaines = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        return [0, 1].map(k => {
+                            const m = ((mb.mois - 1 + k) % 12) + 1, a = mb.an + (mb.mois + k > 12 ? 1 : 0);
+                            return { cle: m + '-' + a, mois: m, an: a, n: semainesDuCycle(m, a), label: _MOIS_CAP[m - 1] };
+                        });
+                    });
+
                     //  Le second paramètre reste l'ANNÉE pour ne pas casser les 40 points
                     //  d'appel existants ; le mois budgétaire se passe en troisième.
                     const getDueFixe = (item, aNum, moisBudget) =>
@@ -14056,10 +14104,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const r = v - (getPaidAmount(item, v, _cyc) || 0);
                                 return r > 0 ? Math.round(r * 100) / 100 : 0;
                             };
-                            // montant mensuel d'une catégorie de charge variable (conversion hebdo → mensuel ×4.3)
+                            // montant d'une catégorie de charge variable sur le cycle (hebdo × semaines réelles du cycle, v37.29)
                             const _varAmt = (cv) => {
                                 const effValeur = _effVal(cv, cv.valeur, m);
-                                let monthly = (cv.periode === 'semaine') ? effValeur * 4.3 : effValeur;
+                                let monthly = (cv.periode === 'semaine') ? effValeur * semainesDuCycle(m, a) : effValeur;
                                 monthly = Math.round(monthly * 100) / 100;
                                 if (monthly <= 0) return 0;
                                 if (mode === 'full') return monthly;
@@ -14457,7 +14505,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return '26 ' + (_mn[m] || '');
                     });
 
-                    const getMonthlyVariableValue = (item) => { const v = Number((item || {}).valeur) || 0; return item?.periode === 'semaine' ? v * 4.3 : v; };
+                    //  v37.29 : × les semaines RÉELLES du cycle (celui du mois budgétaire courant
+                    //  par défaut), plus × 4,3.
+                    const getMonthlyVariableValue = (item, mois, an) => {
+                        const v = Number((item || {}).valeur) || 0;
+                        if (item?.periode !== 'semaine') return v;
+                        const mb = moisBudgetaire.value;
+                        return v * (mois ? semainesDuCycle(mois, an || mb.an) : semainesDuCycle(mb.mois, mb.an));
+                    };
 
                     const totalRevenusBase = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.revenus || {}).reduce((sum, item) => sum + Number((item || {}).base||0), 0) : 0; });
                     const totalFixes = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.chargesFixes || {}).reduce((sum, item) => sum + Number((item || {}).valeur||0), 0) : 0; });
@@ -14549,7 +14604,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!_courantOnly || _varSrc === courantKey) {
                             Object.values(dA.chargesVariables || {}).forEach(cv => {
                                 const effV = _effVal(cv, cv.valeur);
-                                let monthly = (cv.periode === 'semaine') ? effV * 4.3 : effV;
+                                let monthly = (cv.periode === 'semaine') ? effV * semainesDuCycle(mNum, annee) : effV;
                                 monthly = Math.round(monthly * 100) / 100;
                                 if (monthly <= 0) return;
                                 if (mode === 'full') { sortants += monthly; return; }
@@ -15389,7 +15444,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
 
                     // ── v23.10 : Computeds Prorata-T0 ──────────────────────────────────────
-                    // v31.30 FIX BUG2+BUG3 : base = budgetVariableProrataBase (HORS factures, hebdo × 4.3 inclus)
+                    // v31.30 FIX BUG2+BUG3 : base = budgetVariableProrataBase (HORS factures, hebdo × semaines du cycle inclus — v37.29)
                     //   Avant : budgetConsoTheoriqueMois (période=mois seulement = Factures seules = 2 247 DH)
                     //            × progressCyclePaie (entier ex. 39) → 2 247 × 39 = 87 633 DH ❌
                     //   Après : budgetVariableProrataBase × (progressCyclePaie / 100) → ratio décimal ✓
@@ -16076,7 +16131,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                        Pour un mois budgétaire donné : ce qui rentre, et où ça part.
                        Mêmes conventions que le moteur du simulateur
                        (surplusBudgetaireAnnuel) : exceptions au mois, catégories
-                       hebdomadaires × 4,3, flux exceptionnels du mois nets
+                       hebdomadaires × les semaines du cycle (v37.29), flux exceptionnels du mois nets
                        (une injection de cash est une ressource).
                        ═══════════════════════════════════════════════════════════════ */
                     const SEGMENTS_RESPIRATION = [
@@ -16102,7 +16157,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const v = valeurEffective(c, c.valeur, m);
                             if (v <= 0) return;
                             if (c.periode === 'semaine') {
-                                lignes.conso.push({ nom: c.label || '?', montant: Math.round(v * 4.3 * 100) / 100, parSemaine: v, compte: compteDeFlux('variable', c), nature: 'variable' });
+                                lignes.conso.push({ nom: c.label || '?', montant: Math.round(v * semainesDuCycle(m, an) * 100) / 100, parSemaine: v, compte: compteDeFlux('variable', c), nature: 'variable' });
                             } else {
                                 const det = (c.details || []).filter(x => Number(x.montant) > 0).map(x => x.nom + ' ' + formatNombre(x.montant));
                                 lignes.mensuelles.push({ nom: c.label || '?', montant: v, jourPrevu: c.jourPrevu || null, detail: det.join(' · '), compte: compteDeFlux('variable', c), nature: 'variable' });
@@ -16138,6 +16193,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             partDeficit: marge < 0 ? -marge / echelle * 100 : 0,
                             segments, lignes,
                             consoParSemaine: Math.round(lignes.conso.reduce((s, x) => s + x.parSemaine, 0)),
+                            semaines: semainesDuCycle(m, an),
                         };
                     };
                     //  La Météo lit TOUJOURS le budget entier ; l'écran du Prévisionnel
@@ -16257,6 +16313,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const lundiSel = _ymd(_decaler(_lundiISO(auj), 7 * decal));
                         const dimSel = _ymd(_decaler(lundiSel, 6));
                         const frac = decal < 0 ? 1 : (decal > 0 ? 0 : (idxAuj + 1) / 7);   // part de la semaine écoulée
+                        const nSem = semainesDuCycle(mb.mois, mb.an);                       // v37.29 : 4 ou 5, jamais 4,3
                         const TS = _lireTickets(lundiSel, dimSel);
                         const valsSem = _valeursSemaine(lundiSel);
                         const baseCycle = consoT0SaisiesCycle.value;
@@ -16268,7 +16325,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  (semaine ou mois), ramenée au budget du moteur (exception du
                             //  mois, mode voyage) ; le remplissage d'un poste compare ses
                             //  tickets du cycle à SA part du budget du cycle.
-                            const v = cv.periode === 'semaine' ? c.budget / 4.3 : c.budget;
+                            const v = cv.periode === 'semaine' ? c.budget / nSem : c.budget;
                             const dets = (cv.details || []).filter(x => x && Number(x.montant) > 0);
                             const S = dets.reduce((s, x) => s + Number(x.montant), 0);
                             const parId = {};
@@ -16303,9 +16360,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  reste l'affaire du moteur (grand chiffre, ⓘ), jamais d'une case.
                             const reelCat = c.declare ? engageCat : 0;                            //  ── v37.27 : la même catégorie, vue SEMAINE ──
                             const gS = TS.parCle[c.key] || { total: 0, tx: [], parPoste: {} };
-                            const semBudget = Math.round(c.budget / 4.3);
+                            const semBudget = Math.round(c.budget / nSem);
                             const postesSem = prevu.map(p => {
-                                const bud = Math.round(p.partCycle / 4.3);
+                                const bud = Math.round(p.partCycle / nSem);
                                 const sai = Math.max(0, Math.round(Number(valsSem[p.cle] || 0)));
                                 const tk = Math.round(gS.parPoste[p.categorieId] || 0);
                                 const eng = Math.max(sai, tk);
@@ -16359,7 +16416,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             pct: budget > 0 ? Math.round(engage / budget * 100) : 0,
                             pctAttendu: budget > 0 ? Math.min(100, Math.round(attendu / budget * 100)) : 0,
                             rythme, depassement: Math.max(0, engage - budget),
-                            paie: prochainePaieLabel.value, jourCycle: joursCycleEcoules.value, joursCycle: joursCycleTotal.value,
+                            paie: prochainePaieLabel.value, jourCycle: joursCycleEcoules.value, joursCycle: joursCycleTotal.value, nbSemaines: nSem,
                             compte: infoCompte(cleVar),
                             horsBudget: Math.round(T.horsTotal), horsBudgetTx: T.hors.slice().sort(_parDateDesc),
                             categories,
@@ -16371,6 +16428,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                          statut: decal === 0 ? 'en_cours' : (decal < 0 ? 'passee' : 'avenir'),
                                          idxJour: decal === 0 ? idxAuj : null, frac, dansCycle: _semaineDansCycle(lundiSel),
                                          cycleRel: th < _ymd(debut) ? 'precedent' : (th > _ymd(fin) ? 'suivant' : null),
+                                         //  v37.29 : « semaine 2 sur 4 » du cycle
+                                         nb: nSem, rang: _semaineDansCycle(lundiSel) ? Math.round((_decaler(th, 0) - new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7))) / 6048e5) + 1 : null,
                                          budget: sb, engage: se, reste: sb - se, pct: sb > 0 ? Math.min(100, Math.round(se / sb * 100)) : 0 };
                             })(),
                         };
@@ -16584,7 +16643,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const joursCycleRestants = computed(() =>
                         isCyclePasse.value ? 0 : _cyclePaieInfo.value.joursAvant
                     );
-                    // Budget variable mensuel total (mois + hebdo converti ×4.3) du cycle courant
+                    // Budget variable du cycle courant (mois + hebdo × semaines réelles du cycle, v37.29)
                     const budgetVariableMensuelTotal = computed(() => {
                         calculationTick.value;
                         const mb = moisBudgetaire.value;
@@ -17241,7 +17300,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             .filter(([k]) => !k.startsWith('credit'))
                             .reduce((s, [, f]) => s + N(f.valeur), 0);
                         const variables = Object.values(d.chargesVariables || {})
-                            .reduce((s, c) => s + (c.periode === 'semaine' ? N(c.valeur) * 4.3 : N(c.valeur)), 0);
+                            .reduce((s, c) => s + (c.periode === 'semaine' ? N(c.valeur) * semainesDeLAnnee(anneeAffichage.value) / 12 : N(c.valeur)), 0);   // v37.29 : mois MOYEN de l'année
                         return Math.round((fixesHorsCredit + variables) * 100) / 100;
                     });
                     const mensualitesCreditsMensuel = computed(() => {
@@ -17876,9 +17935,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             let varCourant = 0;
                             const varParCompte = {};
                             Object.values(dataAnnee.chargesVariables || {}).forEach(curr => {
-                                let effVal = getMonthlyVariableValue(curr || {});
-                                // v17.99 : Exceptions périodes variables
-                                (curr?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) effVal = Number(e.nouvelleValeur || 0); });
+                                //  v17.99 : exceptions du mois — v37.29 : appliquées AVANT la conversion,
+                                //  × les semaines réelles du cycle (une exception « / sem » est hebdo).
+                                let effVal = valeurVariableDuCycle(curr || {}, mNum, aNum);
                                 // v24.80 : routing macro-compte (ignore sourceCompte par ligne)
                                 const _svar = _normKey(soldesInitiaux.value.compteChargesVariables || 'courant');
                                 if (_svar === courantCptKey || _svar === 'courant') { varCourant += effVal; }
@@ -18021,7 +18080,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                                 // v17.36 : ═══ CHARGES VARIABLES — Prorata Pilotage avec routage ═══
                                 const semRest = Number((soldesInitiaux.value || {}).semainesRestantes || 0);
-                                const rConso = semRest / 4.3;
+                                const rConso = semRest / semainesDuCycle(mNum, aNum);
                                 let vRestCourant = 0;
                                 const vRestParCompte = {};
                                 Object.values(dataAnnee.chargesVariables || {}).forEach(curr => {
@@ -18796,7 +18855,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 const itms=[...epArr].sort((a,b)=>b.valeur-a.valeur); lbs=itms.map(i=>i.nom||i.label); dt=itms.map(i=>i.valeur); } 
                         } else { 
                             const cat=(dAnnee.chargesVariables || {})[key]; if(!cat?.details?.length) return null; 
-                            lbs=cat.details.map(d=>d.nom); dt=cat.details.map(d=>cat.periode==='semaine'?d.montant*4.3:d.montant); 
+                            lbs=cat.details.map(d=>d.nom); dt=cat.details.map(d=>getMonthlyVariableValue({ periode: cat.periode, valeur: d.montant })); 
                         } return { type: 'bar', data: { labels: lbs, datasets: [{ data: dt, backgroundColor: color+'CC', borderColor: color, borderWidth: 1, borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } }; 
                     });
 
@@ -19035,6 +19094,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         mecaniqueCompte, tachesPilotageToutes, kpiAtterrissageGlobal, respirationGlobale,
                         // v37.20 : pulse hebdomadaire
                         liberteCycle, sanctuaireHebdo, consoCompteurRenseigne, saisirCompteurConso,
+                        // v37.29 : semaines réelles du cycle
+                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines,
                         semaineDecalage, changerSemaine, saisirSemaineConso, retirerSaisiesCycle,
                         // v37.7 — retour d'écriture
                         serveurDivergent, rafraichissementEnCours, rafraichirDepuisServeur, forcerRechargementServeur, imposerMaVersion,

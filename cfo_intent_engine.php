@@ -272,6 +272,26 @@ function cfo_snapshot($fd, $yr) {
    4. CALCULS MÉTIER (reliquat, net mensuel isolé du compte courant)
    ══════════════════════════════════════════════════════════════════════════ */
 
+/*  v37.29 — Les semaines RÉELLES d'un cycle (miroir de semainesDuCycle, index.html).
+    Le cycle du mois budgétaire M court du jour de paie de M−1 à la veille du jour de
+    paie de M ; une semaine lui appartient si son JEUDI y tombe. 4 ou 5, jamais 4,3. */
+function cfo_semaines_cycle(int $m, int $an, int $jdp): int {
+    if ($jdp < 1) $jdp = 27;
+    $debut = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->setDate($an, $m - 1, $jdp)->setTime(12, 0);
+    $fin   = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->setDate($an, $m, $jdp - 1)->setTime(12, 0);
+    $jeudi = $debut->modify('+' . ((4 - (int)$debut->format('w') + 7) % 7) . ' days');
+    $n = 0;
+    while ($jeudi <= $fin && $n < 6) { $n++; $jeudi = $jeudi->modify('+7 days'); }
+    return $n ?: 4;
+}
+function cfo_semaines_annee(int $an, int $jdp): int {
+    $s = 0; for ($m = 1; $m <= 12; $m++) $s += cfo_semaines_cycle($m, $an, $jdp);
+    return $s;
+}
+function cfo_jour_de_paie($fd): int {
+    return (int)(oget(oget($fd, 'soldesInitiaux', onew()), 'jourDePaie') ?: 27) ?: 27;
+}
+
 function cfo_compute_reliquat($fd, $yr) {
     $da = oget($fd, 'donneesAnnuelles');
     $y  = is_object($da) ? oget($da, (string)$yr) : null;
@@ -281,7 +301,8 @@ function cfo_compute_reliquat($fd, $yr) {
     foreach (ovals(oget($y, 'chargesFixes', onew())) as $o) $sumFix += (float)(oget($o, 'valeur', 0) ?: 0);
     foreach (ovals(oget($y, 'chargesVariables', onew())) as $o) {
         $v = (float)(oget($o, 'valeur', 0) ?: 0);
-        $sumVar += (oget($o, 'periode') === 'semaine') ? $v * 4.3 : $v;
+        // v37.29 : un mois MOYEN de l'année = ses semaines réelles ÷ 12 (plus × 4,3)
+        $sumVar += (oget($o, 'periode') === 'semaine') ? $v * cfo_semaines_annee((int)$yr, cfo_jour_de_paie($fd)) / 12 : $v;
     }
     return round($sumRev - $sumFix - $sumVar, 2);
 }
@@ -316,6 +337,7 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
     $varSrc = cfo_norm_key_c(oget($si, 'compteChargesVariables', 'courant'), $courantKey, $idsComptes);
     $curA   = (int)(oget($si, 'anneeActuelle') ?: (int)date('Y'));
     $curM   = (int)(oget($si, 'moisActuel') ?: (((int)$year === $curA) ? (int)date('n') : 1));
+    $jdp    = cfo_jour_de_paie($fd);   // v37.29
 
     $eff = function ($item, $base, int $m) {
         $v = (float)($base ?: 0);
@@ -351,7 +373,7 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
         if ($varSrc === $courantKey) {
             foreach (ovals(oget($y, 'chargesVariables', onew())) as $cv) {
                 $v = $eff($cv, oget($cv, 'valeur'), $m);
-                if (oget($cv, 'periode') === 'semaine') $v *= 4.3;
+                if (oget($cv, 'periode') === 'semaine') $v *= cfo_semaines_cycle($m, (int)$year, $jdp);   // v37.29
                 if ($v > 0) $sortants += $v;
             }
         }

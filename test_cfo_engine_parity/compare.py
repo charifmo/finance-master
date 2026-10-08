@@ -90,6 +90,19 @@ _RE_EPARGNE_NOM = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\.epargne\[\d+\]\.n
 # valeurs métier, elles, restent comparées à l'identique.
 _RE_TRACKER = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\..*\.trackerRealise$')
 
+# v37.29 — LES SEMAINES RÉELLES DU CYCLE.
+# Le JS de référence convertit une charge « / sem » en mensuel par × 4,3. Un cycle
+# réel compte 4 ou 5 semaines (les jeudis entre deux jours de paie) : l'application
+# et le PHP comptent désormais ces semaines. Seul le recalcul de SECOURS du net
+# mensuel (épargne en % du reliquat, quand l'application n'a pas fourni son net) en
+# dépend : les montants de ses exceptions mensuelles divergent PAR CONSTRUCTION, et
+# seulement eux. Ils ne sont pas ignorés à l'aveugle : test_semaines_cycle.php
+# vérifie ce net mois par mois avec la nouvelle règle. La structure du cas (mois,
+# nombre d'exceptions, libellés, comptes) reste comparée au caractère près.
+CAS_SEMAINES_REELLES = {'set_recurring_savings % du reliquat'}
+_RE_SEMAINES_REELLES = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\.epargne\[\d+\]\.exceptions\[\d+\]\.nouvelleValeur$')
+cas_courant = None
+
 def diff(a, b, p=""):
     out = []
     if isinstance(a, dict) and isinstance(b, dict):
@@ -110,13 +123,17 @@ def diff(a, b, p=""):
         if len(a) != len(b): out.append("%s: longueur %d vs %d" % (p, len(a), len(b)))
         else:
             for i, (x, y) in enumerate(zip(a, b)): out += diff(x, y, "%s[%d]" % (p, i))
-    elif a != b: out.append("%s: JS=%r PHP=%r" % (p, a, b))
+    elif a != b:
+        # v37.29 : montant d'une exception mensuelle du cas « % du reliquat » (voir plus haut)
+        if not (cas_courant in CAS_SEMAINES_REELLES and _RE_SEMAINES_REELLES.match(p)):
+            out.append("%s: JS=%r PHP=%r" % (p, a, b))
     return out
 
 ok = 0; ko = []
 print("%-46s%-11s%s" % ('CAS', 'RÉSULTAT', 'ÉTAT MUTÉ'))
 print("-" * 76)
 for nom in js:
+    cas_courant = nom
     dr = diff(canon(js[nom]['resultat']), canon(ph[nom]['resultat']), "res")
     de = diff(canon(js[nom]['etat']),      canon(ph[nom]['etat']),      "etat")
     print("%-46s%-11s%s" % (nom[:45], '✅' if not dr else '❌', '✅' if not de else '❌'))
