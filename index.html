@@ -2218,6 +2218,8 @@
                                                         <p class="font-black uppercase tracking-widest text-[11px]">🧠 Intelligence marché — {{ asset.name }}</p>
                                                         <div class="flex items-center gap-2">
                                                             <span v-if="mi.at" class="text-[9px] opacity-60">recherche du {{ mi.at }}</span>
+                                                            <button @click="ouvrirSourcesVeille()" data-mi-sources title="Choisir les journaux interrogés"
+                                                                    class="text-[9px] font-black uppercase tracking-widest bg-white/10 hover:bg-white/25 px-2 py-1 rounded-lg transition-colors">📰 Sources</button>
                                                             <button @click="rafraichirMarketIntel(asset)" :disabled="mi.loading"
                                                                     class="text-[9px] font-black uppercase tracking-widest bg-white/15 hover:bg-white/25 disabled:opacity-40 px-2 py-1 rounded-lg transition-colors">↻ Actualiser</button>
                                                         </div>
@@ -3120,6 +3122,7 @@
                     <div class="flex items-center justify-between border-b pb-4 flex-wrap gap-3">
                         <h2 class="text-2xl font-bold text-gray-800">🧠 Supervision IA</h2>
                         <div class="flex items-center gap-2">
+                            <button @click="ouvrirSourcesVeille()" data-sup-sources class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-black text-xs uppercase tracking-widest transition-colors">📰 Sources presse</button>
                             <input v-model="aiMemoryFiltre" @keyup.enter="chargerAiMemory" type="search" placeholder="Filtrer…" class="w-44 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400"/>
                             <button @click="chargerAiMemory" :disabled="aiMemoryChargement" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-black text-xs uppercase tracking-widest transition-colors">
                                 {{ aiMemoryChargement ? '⏳ Lecture…' : '🔄 Rafraîchir' }}
@@ -6072,6 +6075,126 @@
 
 
         <!-- ━━ MODALE CRUD UNIFIÉE — Master Asset Engine v17.0 ━━ -->
+        <!-- v37.40 : les médias de la revue de presse, réglables depuis l'écran -->
+        <div v-if="veilleSources.ouvert" @click.self="fermerSourcesVeille" data-vs-modale
+             class="fixed inset-0 z-[70] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-4xl overflow-hidden">
+                <div class="px-5 py-4 flex items-center justify-between bg-gradient-to-r from-slate-900 to-sky-900 text-white">
+                    <div>
+                        <h3 class="font-black uppercase tracking-widest text-sm">📰 Sources de la revue de presse</h3>
+                        <p class="text-[10px] text-slate-300 font-bold mt-0.5">Interrogées avant chaque « Actualiser » d'une carte Intelligence marché</p>
+                    </div>
+                    <button @click="fermerSourcesVeille" class="text-slate-300 hover:text-white text-xl font-black">✕</button>
+                </div>
+                <div class="p-5 space-y-4 max-h-[72vh] overflow-y-auto">
+                    <p v-if="veilleSources.chargement" class="text-sm text-slate-500 font-bold">⏳ Lecture des sources…</p>
+                    <div v-if="veilleSources.stockage === 'indisponible' && !veilleSources.chargement" data-vs-lecture-seule
+                         class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-bold">
+                        ⚠️ Base de données injoignable ({{ veilleSources.raison }}) : la liste d'origine s'applique, vos modifications ne peuvent pas être enregistrées pour l'instant.
+                    </div>
+                    <div v-if="veilleSources.erreur" data-vs-erreur class="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-bold">⛔ {{ veilleSources.erreur }}</div>
+                    <div v-if="veilleSources.message" data-vs-message class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800 font-bold">{{ veilleSources.message }}</div>
+
+                    <div v-if="veilleSources.form" data-vs-form class="border-2 border-sky-200 bg-sky-50 rounded-xl p-4 space-y-3">
+                        <p class="text-[11px] font-black uppercase tracking-widest text-sky-800">{{ veilleSources.form.index >= 0 ? '✏️ Modifier la source' : '➕ Nouvelle source' }}</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-500">Nom du média
+                                <input v-model="veilleSources.form.nom" data-vs-nom type="text" placeholder="ex. Marrakech Today"
+                                       class="mt-1 w-full p-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 normal-case tracking-normal bg-white outline-none focus:ring-2 focus:ring-sky-400"/>
+                            </label>
+                            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-500">Site (domaine ou adresse copiée)
+                                <input v-model="veilleSources.form.domaine" data-vs-domaine type="text" placeholder="ex. almarrakchia.net"
+                                       class="mt-1 w-full p-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 normal-case tracking-normal bg-white outline-none focus:ring-2 focus:ring-sky-400"/>
+                            </label>
+                            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-500">Portée
+                                <select v-model="veilleSources.form.portee" data-vs-portee class="mt-1 w-full p-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 normal-case tracking-normal bg-white">
+                                    <option value="locale">Presse locale (Marrakech)</option>
+                                    <option value="nationale">Presse nationale</option>
+                                </select>
+                            </label>
+                            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-500">Langue des articles
+                                <select v-model="veilleSources.form.langue" data-vs-langue class="mt-1 w-full p-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 normal-case tracking-normal bg-white">
+                                    <option value="ar">Arabe</option>
+                                    <option value="fr">Français</option>
+                                </select>
+                            </label>
+                        </div>
+                        <label class="flex items-start gap-2 text-xs text-slate-700 font-bold">
+                            <input type="checkbox" v-model="veilleSources.form.wordpress" data-vs-wordpress class="mt-0.5"/>
+                            <span>Le site a une recherche RSS de type WordPress (<code>/?s=…&amp;feed=rss2</code>) — l'interroger aussi directement</span>
+                        </label>
+                        <label v-if="!veilleSources.form.wordpress" class="block text-[10px] font-black uppercase tracking-widest text-slate-500">Flux RSS de recherche (facultatif — {q} = les mots cherchés)
+                            <input v-model="veilleSources.form.flux" data-vs-flux type="text" placeholder="ex. https://www.exemple.ma/recherche?q={q}&amp;format=rss"
+                                   class="mt-1 w-full p-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 normal-case tracking-normal bg-white outline-none focus:ring-2 focus:ring-sky-400"/>
+                        </label>
+                        <p class="text-[10px] text-slate-500 font-bold">Avec ou sans flux, le média est interrogé via Google Actualités, restreint à son site.</p>
+                        <div class="flex gap-2 justify-end">
+                            <button @click="annulerSourceVeille" class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 font-black text-xs uppercase tracking-widest">Annuler</button>
+                            <button @click="validerSourceVeille" data-vs-valider :disabled="veilleSources.enregistrement"
+                                    class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:bg-slate-300 text-white font-black text-xs uppercase tracking-widest">{{ veilleSources.enregistrement ? '⏳ Enregistrement…' : 'Enregistrer' }}</button>
+                        </div>
+                    </div>
+
+                    <template v-for="groupe in [{ cle: 'locale', titre: '📍 Presse locale (Marrakech)' }, { cle: 'nationale', titre: '🇲🇦 Presse nationale' }]" :key="groupe.cle">
+                        <div v-if="!veilleSources.chargement" :data-vs-groupe="groupe.cle">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{{ groupe.titre }} · {{ veilleSources.liste.filter(x => x.portee === groupe.cle).length }}</p>
+                            <div class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                                <template v-for="(s, i) in veilleSources.liste" :key="s.domaine">
+                                    <div v-if="s.portee === groupe.cle" data-vs-source :data-domaine="s.domaine"
+                                         :class="['px-3 py-2.5 flex flex-wrap items-center gap-2', s.actif === false ? 'bg-slate-50' : 'bg-white']">
+                                        <input type="checkbox" :checked="s.actif !== false" @change="basculerSourceVeille(i)" data-vs-actif
+                                               :disabled="veilleSources.enregistrement || veilleSources.stockage !== 'postgres'"
+                                               :title="s.actif === false ? 'En pause — cocher pour réactiver' : 'Interrogé — décocher pour mettre en pause'"/>
+                                        <div :class="['min-w-0 flex-1', s.actif === false ? 'opacity-50' : '']">
+                                            <p class="text-sm font-black text-slate-800">{{ s.nom }} <span class="text-[10px] font-bold text-slate-400">{{ s.domaine }}</span></p>
+                                            <p class="text-[10px] font-bold text-slate-500 flex flex-wrap gap-1.5 mt-0.5">
+                                                <span class="px-1.5 rounded bg-slate-100">{{ s.langue === 'ar' ? 'arabe' : 'français' }}</span>
+                                                <span v-if="s.flux" class="px-1.5 rounded bg-emerald-100 text-emerald-700">RSS du site</span>
+                                                <span v-if="s.origine === 'ajoutee'" data-vs-badge="ajoutee" class="px-1.5 rounded bg-sky-100 text-sky-700">ajoutée par vous</span>
+                                                <span v-else-if="s.origine === 'modifiee'" data-vs-badge="modifiee" class="px-1.5 rounded bg-amber-100 text-amber-700">modifiée</span>
+                                                <span v-else-if="s.origine === 'nouvelle'" data-vs-badge="nouvelle" class="px-1.5 rounded bg-violet-100 text-violet-700">nouvelle</span>
+                                                <span v-if="s.actif === false" data-vs-badge="pause" class="px-1.5 rounded bg-slate-200 text-slate-600">en pause</span>
+                                            </p>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <button @click="testerSourceVeille(s)" data-vs-tester title="Tester maintenant" class="p-1.5 rounded-lg hover:bg-sky-100 text-xs">🧪</button>
+                                            <button @click="modifierSourceVeille(i)" data-vs-modifier :disabled="veilleSources.stockage !== 'postgres' || !!veilleSources.form" title="Modifier" class="p-1.5 rounded-lg hover:bg-blue-100 disabled:opacity-30">✏️</button>
+                                            <button @click="supprimerSourceVeille(i)" data-vs-supprimer :disabled="veilleSources.stockage !== 'postgres' || veilleSources.enregistrement" title="Retirer" class="p-1.5 rounded-lg hover:bg-red-100 disabled:opacity-30">🗑️</button>
+                                        </div>
+                                        <div v-if="veilleSources.tests[s.domaine]" data-vs-test class="w-full pl-6 text-[10px] font-bold space-y-0.5">
+                                            <p v-if="veilleSources.tests[s.domaine].enCours" class="text-slate-500">⏳ Test en cours…</p>
+                                            <p v-else-if="veilleSources.tests[s.domaine].erreur" class="text-red-600">⛔ {{ veilleSources.tests[s.domaine].erreur }}</p>
+                                            <template v-else>
+                                                <p v-for="c in [veilleSources.tests[s.domaine].google, veilleSources.tests[s.domaine].flux].filter(Boolean)" :key="c.canal" :data-vs-canal="c.canal"
+                                                   :class="c.statut === 'ok' ? 'text-emerald-700' : (c.statut === 'vide' ? 'text-slate-500' : 'text-red-600')">
+                                                    {{ c.statut === 'ok' ? '✅' : (c.statut === 'vide' ? '⚪' : '❌') }} {{ c.canal === 'flux' ? 'RSS du site' : 'Google Actualités' }} :
+                                                    {{ c.statut === 'ok' ? c.n + ' article' + (c.n > 1 ? 's' : '') + (c.exemple ? ' — dernier : « ' + c.exemple.titre + ' »' + (c.exemple.date ? ' (' + c.exemple.date + ')' : '') : '')
+                                                       : (c.statut === 'vide' ? 'aucun article trouvé sur ce site' : (c.statut === 'illisible' ? 'le site ne répond pas en RSS' : c.erreur)) }}
+                                                </p>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div v-if="veilleSources.supprimees.length && !veilleSources.chargement" data-vs-supprimees class="text-[11px] text-slate-500 font-bold">
+                        Médias d'origine retirés :
+                        <button v-for="s in veilleSources.supprimees" :key="s.domaine" @click="restaurerSourceVeille(s)" data-vs-restaurer
+                                :disabled="veilleSources.stockage !== 'postgres' || veilleSources.enregistrement"
+                                class="ml-1 px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700">↩️ {{ s.nom }}</button>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50">
+                    <button @click="reinitialiserSourcesVeille" data-vs-reinitialiser :disabled="veilleSources.stockage !== 'postgres' || veilleSources.enregistrement"
+                            class="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 disabled:opacity-30">↩️ Revenir à la liste d'origine</button>
+                    <button @click="nouvelleSourceVeille" data-vs-ajouter :disabled="veilleSources.stockage !== 'postgres' || !!veilleSources.form"
+                            class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:bg-slate-300 text-white font-black text-xs uppercase tracking-widest">＋ Ajouter une source</button>
+                </div>
+            </div>
+        </div>
+
         <div v-if="showMasterAssetModal" @click.self="closeMasterAssetModal"
              class="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-3xl overflow-hidden">
@@ -7587,8 +7710,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.39 Veille-Presse-Locale";
+                    const CURRENT_VERSION = "37.40 Sources-Presse-Reglables";
                     const CHANGELOG = [
+        { version: "37.40 Sources-Presse-Reglables", date: "2026-10-09", changes: [
+            "LES JOURNAUX DE LA VEILLE SE GÈRENT DEPUIS L'ÉCRAN — fenêtre « 📰 Sources de la revue de presse », ouverte depuis la Supervision IA (« 📰 Sources presse ») ou depuis chaque carte Intelligence marché (« 📰 Sources »). Ajouter un média (nom, site — une adresse copiée suffit —, presse locale ou nationale, arabe ou français, recherche RSS WordPress en une case), le modifier, le mettre en pause, le retirer, le rétablir, revenir à la liste d'origine. Chaque action est enregistrée aussitôt.",
+            "TESTER UN MÉDIA — 🧪 interroge le média tout de suite : nombre d'articles trouvés par Google Actualités sur son site, le dernier titre et sa date, et le résultat de son flux RSS. On sait avant le prochain « Actualiser » si la source répond.",
+            "VOS RÉGLAGES NE BLOQUENT JAMAIS LE git pull — ils sont enregistrés dans PostgreSQL (table cfo_veille_sources), pas dans veille_sources.json, qui reste la liste d'origine. Un média livré plus tard par une mise à jour apparaît, marqué « nouvelle » ; un média que vous avez retiré le reste. Sans base joignable, la liste d'origine s'applique et la fenêtre le dit.",
+            "CONTRÔLES — un vrai site (ni adresse IP, ni localhost, ni identifiants), un flux RSS situé SUR le site du média et marquant {q} : le serveur ne va chercher que chez les médias que vous avez déclarés. Une saisie refusée dit pourquoi, et rien n'est écrit.",
+            "PREUVE — deux suites nouvelles : « Médias de la veille » (45 contrôles) et « Médias réglables depuis l'écran » (33 contrôles : vraie base PostgreSQL, vrai PHP, clics dans la fenêtre, puis la revue de presse qui suit vos réglages). Rejouées sur la v37.39 : la fonction n'existe pas. Dix-sept défauts réintroduits exprès : tous attrapés.",
+        ] },
         { version: "37.39 Veille-Presse-Locale", date: "2026-10-09", changes: [
             "« ACTUALISER » LIT LA PRESSE MARRAKCHIE AVANT DE RÉPONDRE — jusqu'ici, la recherche passait par l'outil web_search du CFO : une requête Tavily « basic », généraliste, qui ne rendait qu'un résumé tout fait, sans date ni source. Désormais le serveur (cfo_veille_presse.php) interroge d'abord Google Actualités restreint à la presse locale (Al Marrakchia, Marrakech Alaan, Kech24, Marrakech 7) puis nationale (Le Desk, Médias24, Le360, Hespress, Le Matin, L'Economiste…), ainsi que la recherche des sites marrakchis. La liste des médias est dans veille_sources.json : en ajouter un, c'est ajouter une ligne.",
             "EN FRANÇAIS ET EN ARABE — les lieux du bien sont tirés de son nom et de sa fiche mémorisée (Ouahat Sidi Brahim / واحة سيدي ابراهيم, le douar, la commune), avec les sujets qui font sa valeur (SDAU, plan d'aménagement, RN9, LGV, Grand Stade, contournement…), traduits pour la presse arabophone. Les articles sont triés pour CE bien : lieu nommé d'abord, presse locale, fraîcheur ; hors zone, trop vieux et doublons écartés.",
@@ -10831,6 +10961,96 @@
                         if (open && !cur.html && !cur.loading) chargerMarketIntel(asset);
                     };
                     const rafraichirMarketIntel = (asset) => chargerMarketIntel(asset);
+
+                    // ── v37.40 : LES MÉDIAS DE LA REVUE DE PRESSE, DEPUIS L'ÉCRAN ────────
+                    //   Vos réglages vont en base (cfo_veille_sources.php), jamais dans
+                    //   veille_sources.json : modifié sur le VPS, ce fichier suivi par git
+                    //   ferait échouer le prochain `git pull`. Chaque action enregistre la
+                    //   liste complète aussitôt : rien à oublier de sauver.
+                    const VEILLE_SOURCES_PATH = '/finance/cfo_veille_sources.php';
+                    const veilleSources = reactive({ ouvert: false, chargement: false, enregistrement: false, erreur: '', message: '',
+                                                     stockage: '', raison: '', maj: '', liste: [], supprimees: [], form: null, tests: {} });
+                    const _vsDomaine = (v) => String(v || '').trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+                        .replace(/[\/?#].*$/, '').replace(/:\d+$/, '').replace(/^www\./, '');
+                    const _vsFluxWordpress = (dom) => 'https://' + dom + '/?s={q}&feed=rss2';
+                    const _vsAppel = async (corps) => {
+                        const res = await fetch(VEILLE_SOURCES_PATH + (corps ? '' : '?t=' + Date.now()), corps
+                            ? { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(corps) }
+                            : { cache: 'no-store' });
+                        let d = null; try { d = JSON.parse(await res.text()); } catch (_) { d = null; }
+                        if (!d || d.status !== 'ok') throw new Error((d && (d.message || d.error)) || ('HTTP ' + res.status));
+                        return d;
+                    };
+                    const _vsAppliquer = (d) => Object.assign(veilleSources, { liste: d.sources || [], supprimees: d.supprimees || [],
+                                                                               stockage: d.stockage || '', raison: d.raison || '', maj: d.maj || '' });
+                    const _vsSansOrigine = (s) => { const { origine, ...x } = s; return x; };
+                    const ouvrirSourcesVeille = async () => {
+                        Object.assign(veilleSources, { ouvert: true, chargement: true, erreur: '', message: '', form: null });
+                        try { _vsAppliquer(await _vsAppel(null)); } catch (e) { veilleSources.erreur = 'Lecture impossible — ' + e.message; }
+                        finally { veilleSources.chargement = false; }
+                    };
+                    const fermerSourcesVeille = () => { veilleSources.ouvert = false; veilleSources.form = null; };
+                    const _vsEnregistrer = async (liste, message) => {
+                        Object.assign(veilleSources, { enregistrement: true, erreur: '', message: '' });
+                        try {
+                            _vsAppliquer(await _vsAppel({ action: 'enregistrer', sources: liste.map(_vsSansOrigine) }));
+                            veilleSources.message = message;
+                            return true;
+                        } catch (e) { veilleSources.erreur = e.message; return false; }
+                        finally { veilleSources.enregistrement = false; }
+                    };
+                    const nouvelleSourceVeille = () => {
+                        veilleSources.form = { index: -1, nom: '', domaine: '', portee: 'locale', langue: 'ar', wordpress: false, flux: '' };
+                        Object.assign(veilleSources, { erreur: '', message: '' });
+                    };
+                    const modifierSourceVeille = (i) => {
+                        const s = veilleSources.liste[i]; if (!s) return;
+                        veilleSources.form = { index: i, nom: s.nom, domaine: s.domaine, portee: s.portee, langue: s.langue,
+                                               wordpress: !!s.flux && s.flux === _vsFluxWordpress(s.domaine), flux: s.flux || '' };
+                        Object.assign(veilleSources, { erreur: '', message: '' });
+                    };
+                    const annulerSourceVeille = () => { veilleSources.form = null; veilleSources.erreur = ''; };
+                    const validerSourceVeille = async () => {
+                        const f = veilleSources.form; if (!f) return;
+                        const dom = _vsDomaine(f.domaine);
+                        const s = { nom: String(f.nom || '').trim(), domaine: dom, portee: f.portee, langue: f.langue };
+                        const flux = f.wordpress ? _vsFluxWordpress(dom) : String(f.flux || '').trim();
+                        if (flux) s.flux = flux;
+                        if (f.index >= 0 && veilleSources.liste[f.index].actif === false) s.actif = false;
+                        const liste = veilleSources.liste.slice();
+                        if (f.index >= 0) liste.splice(f.index, 1, s); else liste.push(s);
+                        const ok = await _vsEnregistrer(liste, f.index >= 0 ? '✅ ' + s.nom + ' modifié.'
+                                                                           : '✅ ' + s.nom + ' ajouté : il sera interrogé au prochain « Actualiser ».');
+                        if (ok) veilleSources.form = null;
+                    };
+                    const basculerSourceVeille = (i) => {
+                        const liste = veilleSources.liste.slice(), s = { ...liste[i] };
+                        if (s.actif === false) delete s.actif; else s.actif = false;
+                        liste[i] = s;
+                        _vsEnregistrer(liste, s.actif === false ? '⏸️ ' + s.nom + ' mis en pause : il ne sera plus interrogé.' : '▶️ ' + s.nom + ' réactivé.');
+                    };
+                    const supprimerSourceVeille = (i) => {
+                        const s = veilleSources.liste[i];
+                        if (!s || !confirm('Retirer « ' + s.nom + ' » de la revue de presse ?')) return;
+                        const liste = veilleSources.liste.slice(); liste.splice(i, 1);
+                        _vsEnregistrer(liste, '🗑️ ' + s.nom + ' retiré.');
+                    };
+                    const restaurerSourceVeille = (s) => _vsEnregistrer([...veilleSources.liste, s], '↩️ ' + s.nom + ' rétabli.');
+                    const reinitialiserSourcesVeille = async () => {
+                        if (!confirm("Revenir à la liste d'origine des médias ? Vos ajouts, modifications et retraits seront effacés.")) return;
+                        Object.assign(veilleSources, { enregistrement: true, erreur: '', message: '', form: null });
+                        try { _vsAppliquer(await _vsAppel({ action: 'reinitialiser' })); veilleSources.message = "↩️ Liste d'origine rétablie."; }
+                        catch (e) { veilleSources.erreur = e.message; }
+                        finally { veilleSources.enregistrement = false; }
+                    };
+                    // Tester un média MAINTENANT : Google Actualités sur son domaine, et son flux RSS
+                    const testerSourceVeille = async (s) => {
+                        veilleSources.tests = Object.assign({}, veilleSources.tests, { [s.domaine]: { enCours: true } });
+                        let r;
+                        try { const d = await _vsAppel({ action: 'tester', source: _vsSansOrigine(s) }); r = { google: d.google, flux: d.flux }; }
+                        catch (e) { r = { erreur: e.message }; }
+                        veilleSources.tests = Object.assign({}, veilleSources.tests, { [s.domaine]: r });
+                    };
 
                     // ── v33.96 : DETTE AU SENS DE LA BANQUE ────────────────────────────
                     //   Classique  → capital restant dû
@@ -19837,6 +20057,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         creditParams, creditRestantCalcule, moisEcoulesCredit, moisPayesEffectifs,
                         detteBancaire, globalDetteBancaire,
                         marketIntel, toggleMarketIntel, chargerMarketIntel, rafraichirMarketIntel,
+                        veilleSources, ouvrirSourcesVeille, fermerSourcesVeille, nouvelleSourceVeille, modifierSourceVeille, annulerSourceVeille,
+                        validerSourceVeille, basculerSourceVeille, supprimerSourceVeille, restaurerSourceVeille, reinitialiserSourcesVeille, testerSourceVeille,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
                         migrateGoalV19, migrateGoalsV19, wealthGoalsCalc, addWealthGoal, syncGoalLegacy, lierObjectifCompte,

@@ -19,7 +19,7 @@ declare(strict_types=1);
  *  (« diagnostic ») — jamais remplacée par du contenu inventé.
  * ============================================================================
  */
-require_once __DIR__ . '/cfo_veille_lib.php';
+require_once __DIR__ . '/cfo_veille_serveur.php';   // v37.40 : vos réglages (PostgreSQL) + réseau
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -43,7 +43,9 @@ if ($origine !== '') {
 $corps = json_decode((string)file_get_contents('php://input'), true) ?: [];
 if (($corps['action'] ?? '') !== 'revue') vp_sortie(['status' => 'error', 'error' => 'ACTION_INCONNUE', 'message' => 'Action attendue : {action:"revue"}.'], 400);
 
-$cfg = json_decode((string)@file_get_contents(__DIR__ . '/veille_sources.json'), true);
+// v37.40 : la liste d'origine, à laquelle s'appliquent vos réglages faits depuis l'écran
+$conf = cfo_vp_config();
+$cfg = $conf['cfg'] ?? null;
 if (!is_array($cfg)) vp_sortie(['status' => 'error', 'error' => 'SOURCES_ABSENTES', 'message' => 'veille_sources.json absent ou illisible.'], 503);
 if (!function_exists('curl_multi_init')) vp_sortie(['status' => 'error', 'error' => 'CURL_ABSENT', 'message' => "L'extension curl de PHP est requise (apt install php-curl)."], 503);
 
@@ -54,25 +56,11 @@ $delai = max(2, min(20, (int)($cfg['delai_s'] ?? 8)));
 $debut = microtime(true);
 
 /* ── Toutes les requêtes en parallèle : le délai total est celui de la plus lente ── */
-$mh = curl_multi_init(); $poignees = [];
-foreach ($requetes as $i => $r) {
-    $ch = curl_init($r['url']);
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
-        CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_TIMEOUT => $delai, CURLOPT_CONNECTTIMEOUT => min(5, $delai), CURLOPT_ENCODING => '',
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; FinanceMaster-Veille/1.0)',
-        CURLOPT_HTTPHEADER => ['Accept: application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5']]);
-    curl_multi_add_handle($mh, $ch); $poignees[$i] = $ch;
-}
-do { $st = curl_multi_exec($mh, $actifs); if ($actifs) curl_multi_select($mh, 1.0); } while ($actifs && $st === CURLM_OK);
+$reponses = cfo_vp_telecharger($requetes, $delai);
 
 $articles = []; $diag = [];
-foreach ($poignees as $i => $ch) {
-    $r = $requetes[$i];
-    $corpsR = (string)curl_multi_getcontent($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err = curl_error($ch);
-    curl_multi_remove_handle($mh, $ch); curl_close($ch);
+foreach ($requetes as $i => $r) {
+    $corpsR = $reponses[$i]['corps']; $code = $reponses[$i]['http']; $err = $reponses[$i]['erreur'];
     $d = ['source' => $r['nom'], 'libelle' => $r['libelle'], 'q' => $r['q'], 'http' => $code];
     if ($code < 200 || $code >= 300) { $d['statut'] = 'erreur'; $d['erreur'] = $err ?: ('HTTP ' . $code); $diag[] = $d; continue; }
     $lus = cfo_vp_lire_rss($corpsR, $r, $cfg);
@@ -81,7 +69,6 @@ foreach ($poignees as $i => $ch) {
     $diag[] = $d;
     array_push($articles, ...$lus);
 }
-curl_multi_close($mh);
 
 $retenus = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], $cfg);
 vp_sortie([

@@ -81,7 +81,8 @@ function cfo_vp_url(string $gabarit, string $q): string { return str_replace('{q
  */
 function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
     $moteurs = []; foreach ($cfg['moteurs'] ?? [] as $m) $moteurs[$m['langue'] ?? 'fr'] = $m;
-    $sources = $cfg['sources'] ?? [];
+    // v37.40 : un média mis en pause depuis l'écran n'est pas interrogé
+    $sources = array_values(array_filter($cfg['sources'] ?? [], fn($s) => ($s['actif'] ?? true) !== false));
     $locales = cfo_vp_sites($sources, 'locale'); $nationales = cfo_vp_sites($sources, 'nationale');
     $suj = ['fr' => array_slice(array_values(array_filter($sujets, fn($s) => !cfo_vp_arabe($s))), 0, 5),
             'ar' => array_slice(array_values(array_filter($sujets, fn($s) => cfo_vp_arabe($s))), 0, 5)];
@@ -183,4 +184,113 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
     usort($garde, fn($x, $y) => [$y['score'], $y['ts'] ?? 0] <=> [$x['score'], $x['ts'] ?? 0]);
     return array_map(function ($a) { unset($a['ts'], $a['specifique']); return $a; },
                      array_slice($garde, 0, (int)($cfg['max_articles'] ?? 15)));
+}
+
+/* ══ v37.40 — LES MÉDIAS, RÉGLABLES DEPUIS L'ÉCRAN ══════════════════════════ */
+
+const CFO_VP_MAX_SOURCES = 60;
+
+/** « https://www.Le360.ma/fr/economie » → « le360.ma ». null si ce n'est pas un nom de domaine public. */
+function cfo_vp_domaine($v): ?string {
+    if (!is_string($v)) return null;
+    $d = strtolower(trim($v));
+    $d = (string)preg_replace('#^[a-z][a-z0-9+.\-]*://#', '', $d);
+    $d = (string)preg_replace('#[/?\#].*$#s', '', $d);
+    $d = (string)preg_replace('/:\d+$/', '', $d);
+    $d = (string)preg_replace('/^www\./', '', $d);
+    if (strlen($d) > 253) return null;
+    // des étiquettes, un point, une extension en lettres : ni IP, ni localhost, ni « user@hôte »
+    return preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,24}|xn--[a-z0-9-]{2,59})$/', $d) ? $d : null;
+}
+
+/** Une source saisie → ['source' => propre] ou ['erreur' => message lisible]. */
+function cfo_vp_valider_source($s): array {
+    if (!is_array($s)) return ['erreur' => 'Source illisible.'];
+    $nom = trim((string)preg_replace('/\s+/u', ' ', (string)preg_replace('/[\x00-\x1F\x7F<>]/u', '', strip_tags((string)($s['nom'] ?? '')))));
+    if (mb_strlen($nom) < 2 || mb_strlen($nom) > 60) return ['erreur' => 'Nom du média : 2 à 60 caractères.'];
+    $dom = cfo_vp_domaine($s['domaine'] ?? '');
+    if ($dom === null) return ['erreur' => "« " . mb_substr(trim((string)($s['domaine'] ?? '')), 0, 60) . " » n'est pas l'adresse d'un site (attendu : almarrakchia.net)."];
+    $portee = $s['portee'] ?? '';
+    if (!in_array($portee, ['locale', 'nationale'], true)) return ['erreur' => 'Portée : presse locale ou nationale.'];
+    $langue = $s['langue'] ?? '';
+    if (!in_array($langue, ['fr', 'ar'], true)) return ['erreur' => 'Langue : français ou arabe.'];
+    $out = ['nom' => $nom, 'domaine' => $dom, 'portee' => $portee, 'langue' => $langue];
+    $flux = trim((string)($s['flux'] ?? ''));
+    if ($flux !== '') {
+        if (strlen($flux) > 300 || preg_match('/\s/', $flux) || !preg_match('#^https?://#i', $flux)) return ['erreur' => 'Flux RSS : une adresse http(s), sans espace.'];
+        if (substr_count($flux, '{q}') !== 1) return ['erreur' => 'Flux RSS : {q} doit marquer, une fois, la place des mots cherchés.'];
+        $p = parse_url(str_replace('{q}', 'x', $flux));
+        if (!is_array($p) || isset($p['user']) || isset($p['pass']) || isset($p['port'])) return ['erreur' => 'Flux RSS : adresse non acceptée (ni identifiants, ni port).'];
+        $h = (string)preg_replace('/^www\./', '', strtolower((string)($p['host'] ?? '')));
+        if ($h !== $dom && substr($h, -strlen($dom) - 1) !== '.' . $dom) return ['erreur' => "Flux RSS : il doit être sur le site du média ($dom), pas sur « $h »."];
+        $out['flux'] = $flux;
+    }
+    if (($s['actif'] ?? true) === false) $out['actif'] = false;
+    return ['source' => $out];
+}
+
+/** La liste complète envoyée par l'écran. Erreurs par position, lisibles. */
+function cfo_vp_valider_liste($liste): array {
+    if (!is_array($liste)) return ['sources' => [], 'erreurs' => ['liste' => 'Liste de sources attendue.']];
+    if (count($liste) > CFO_VP_MAX_SOURCES) return ['sources' => [], 'erreurs' => ['liste' => 'Au plus ' . CFO_VP_MAX_SOURCES . ' sources.']];
+    $out = []; $err = []; $vus = [];
+    foreach (array_values($liste) as $i => $s) {
+        $v = cfo_vp_valider_source($s);
+        if (isset($v['erreur'])) { $err['s' . $i] = 'Source ' . ($i + 1) . ' : ' . $v['erreur']; continue; }
+        if (isset($vus[$v['source']['domaine']])) { $err['s' . $i] = $v['source']['domaine'] . ' figure déjà dans la liste.'; continue; }
+        $vus[$v['source']['domaine']] = true; $out[] = $v['source'];
+    }
+    return ['sources' => $out, 'erreurs' => $err];
+}
+
+function cfo_vp_meme_source(array $a, array $b): bool {
+    $k = fn($s) => [$s['nom'] ?? '', $s['portee'] ?? '', $s['langue'] ?? '', $s['flux'] ?? '', ($s['actif'] ?? true) !== false];
+    return $k($a) === $k($b);
+}
+
+/**
+ * Vos réglages superposés à la liste d'origine. Chaque média porte son
+ * « origine » : origine | modifiee | ajoutee | nouvelle (livré depuis vos
+ * réglages). Un média d'origine que vous avez retiré reste retiré.
+ */
+function cfo_vp_fusion(array $defauts, ?array $perso): array {
+    $parDef = [];
+    foreach ($defauts as $d) if (!empty($d['domaine'])) $parDef[$d['domaine']] = $d;
+    if (!$perso || !is_array($perso['sources'] ?? null)) {
+        return ['sources' => array_map(fn($d) => $d + ['origine' => 'origine'], array_values($parDef)), 'supprimees' => []];
+    }
+    $connus = array_flip(array_filter((array)($perso['defauts_connus'] ?? []), 'is_string'));
+    $out = []; $vus = [];
+    foreach ($perso['sources'] as $s) {
+        $v = cfo_vp_valider_source($s);
+        if (isset($v['erreur'])) continue;                    // une ligne abîmée en base ne casse pas la veille
+        $s = $v['source'];
+        if (isset($vus[$s['domaine']])) continue;
+        $vus[$s['domaine']] = true;
+        $d = $parDef[$s['domaine']] ?? null;
+        $s['origine'] = $d === null ? 'ajoutee' : (cfo_vp_meme_source($s, $d) ? 'origine' : 'modifiee');
+        $out[] = $s;
+    }
+    $supprimees = [];
+    foreach ($parDef as $dom => $d) {
+        if (isset($vus[$dom])) continue;
+        if (isset($connus[$dom])) $supprimees[] = $d + ['origine' => 'origine'];
+        else $out[] = $d + ['origine' => 'nouvelle'];
+    }
+    return ['sources' => $out, 'supprimees' => $supprimees];
+}
+
+/** Tester UN média : Google Actualités sur son domaine, et son flux s'il en a un. */
+function cfo_vp_requetes_test(array $cfg, array $s): array {
+    $lg = ($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr';
+    $mot = $lg === 'ar' ? 'مراكش' : 'Marrakech';
+    $req = [];
+    foreach ($cfg['moteurs'] ?? [] as $m) if (($m['langue'] ?? 'fr') === $lg) {
+        $q = 'site:' . $s['domaine'] . ' ' . $mot;
+        $req[] = ['type' => 'moteur', 'nom' => $m['nom'], 'libelle' => 'test', 'q' => $q, 'langue' => $lg, 'specifique' => true, 'url' => cfo_vp_url($m['gabarit'], $q)];
+        break;
+    }
+    if (!empty($s['flux'])) $req[] = ['type' => 'flux', 'nom' => $s['nom'], 'libelle' => 'test', 'q' => $mot, 'langue' => $lg,
+                                      'specifique' => true, 'url' => cfo_vp_url($s['flux'], $mot), 'domaine' => $s['domaine']];
+    return $req;
 }

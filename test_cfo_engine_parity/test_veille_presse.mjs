@@ -128,7 +128,7 @@ const doc = fs.mkdtempSync(path.join(os.tmpdir(), 'veille-'));
 const F = path.join(doc, 'finance');
 fs.mkdirSync(F);
 fs.writeFileSync(path.join(F, 'index.html'), html);
-for (const f of ['save_data.php', 'cfo_veille_presse.php', 'cfo_veille_lib.php'])
+for (const f of ['save_data.php', 'cfo_veille_presse.php', 'cfo_veille_lib.php', 'cfo_veille_serveur.php', 'cfo_veille_sources.php'])
     if (fs.existsSync(path.join(RACINE, f))) fs.copyFileSync(path.join(RACINE, f), path.join(F, f));   // absents sur une version antérieure
 fs.writeFileSync(path.join(F, 'finance_data.json'), JSON.stringify(fx));
 // Les VRAIES sources, redirigées vers la presse simulée
@@ -179,7 +179,8 @@ try {
     v('en tête : la presse locale qui nomme le bien', a0.source === 'Al Marrakchia' && a0.portee === 'locale' && a0.date, JSON.stringify(a0));
     const diag = r.d?.requetes || [];
     v('la source qui ne parle pas RSS est DITE (Marrakech Alaan : illisible)', diag.some(x => x.source === 'Marrakech Alaan' && x.statut === 'illisible'), JSON.stringify(diag.filter(x => x.statut !== 'ok' && x.statut !== 'vide')));
-    v('la source trop lente est DITE (Kech24 : erreur)', diag.some(x => x.source === 'Kech24' && x.statut === 'erreur'));
+    v('la source trop lente est DITE, en clair (Kech24 : pas de réponse en 2 s)', diag.some(x => x.source === 'Kech24' && x.statut === 'erreur' && x.erreur === 'pas de réponse en 2 s'),
+      JSON.stringify(diag.find(x => x.source === 'Kech24')));
     v('sources injoignables comptées : 2', r.d?.sources_ko === 2, String(r.d?.sources_ko));
     v('appels en PARALLÈLE : le tout tient dans le délai d\'une source (< 3,4 s)', r.d?.duree_ms < 3400, String(r.d?.duree_ms) + ' ms');
 
