@@ -69,5 +69,6 @@ suite "Un rythme par ligne — serveur (PHP)"                    php test_cfo_en
 suite "Semaine écoulée sans saisie = son prévu"               node test_cfo_engine_parity/test_prevu_par_defaut.mjs
 suite "L'interface se souvient · le découvert d'abord"          node test_cfo_engine_parity/test_memoire_alerte.mjs
 suite "La Météo montre où finit chaque compte"                 node test_cfo_engine_parity/test_atterrissage_comptes.mjs
+suite "Un flux pointé n'est plus projeté · tiroirs"         node test_cfo_engine_parity/test_pointage_tiroirs.mjs
 
 echo "✅ Toutes les suites passent."

@@ -136,15 +136,15 @@ try {
     const bs = () => page.evaluate(() => ({ details: [...document.querySelectorAll('button')].filter(b => /Fermer Détails/.test(b.textContent)).length,
                                             periodes: [...document.querySelectorAll('button')].filter(b => /Masquer options/.test(b.textContent)).length }));
     const bs0 = await bs();
-    //  Pilotage : l'accordéon « Entrées d'Argent » ; la Météo : les postes de COURSES
+    //  Pilotage : le tiroir « 🏢 Charges fixes » de la file (v37.34) ; la Météo : les postes de COURSES
     await aller(page, 'reel', 'pilotage');
-    await page.locator('summary', { hasText: "Entrées d'Argent" }).first().click(); await page.waitForTimeout(150);
+    await page.locator('#pilotage-inbox [data-tiroir="fixe"] > summary').click(); await page.waitForTimeout(150);
     await page.click('[data-pulse-ouvrir][data-cat="alimentation"]'); await page.waitForTimeout(200);
     const apres = await donnees(page);
     const stocke = await page.evaluate(() => JSON.parse(localStorage.getItem('finance_ui_v1') || '{}'));
     v('C. ouvrir / fermer des tiroirs n\'écrit RIEN dans les données financières', avant === apres, 'données modifiées');
     v('  → tout est dans le localStorage (finance_ui_v1)', JSON.stringify(stocke['calendrier.moisOuverts']) === JSON.stringify([4, 6, 7, 8, 9, 10, 12, 2])
-      && stocke['budget.variables.alimentation.details'] === true && stocke['pilotage.entrees'] === true && stocke['meteo.postes'] && stocke['meteo.postes'].alimentation === true,
+      && stocke['budget.variables.alimentation.details'] === true && stocke['pilotage.tiroir.fixe'] === true && stocke['meteo.postes'] && stocke['meteo.postes'].alimentation === true,
       JSON.stringify(stocke));
     await recharger(page);
     await aller(page, 'previsionnel', 'irregulieres');
@@ -156,9 +156,9 @@ try {
     const bs1 = await bs();
     v('  → le Budget Structurel : les lignes de calcul et les périodes restent ouvertes', bs0.details === 1 && bs0.periodes === 1 && bs1.details === 1 && bs1.periodes === 1, JSON.stringify([bs0, bs1]));
     await aller(page, 'reel', 'pilotage');
-    const pil = await page.evaluate(() => ({ entrees: [...document.querySelectorAll('details')].find(d => d.querySelector('summary')?.textContent.includes("Entrées d'Argent"))?.open,
+    const pil = await page.evaluate(() => ({ entrees: document.querySelector('#pilotage-inbox [data-tiroir="fixe"]')?.open,
                                              postes: !!document.querySelector('[data-pulse-postes][data-cat="alimentation"]') }));
-    v('  → le Pilotage (« Entrées d\'Argent ») et la Météo (postes de COURSES) aussi', pil.entrees === true && pil.postes, JSON.stringify(pil));
+    v('  → le Pilotage (tiroir « Charges fixes ») et la Météo (postes de COURSES) aussi', pil.entrees === true && pil.postes, JSON.stringify(pil));
     //  Sans choix enregistré : le comportement d'avant (le CFO ouvre le panneau qu'il remplit)
     await page.evaluate(async (ST) => { const st = eval(ST); st.donneesAnnuelles[st.moisBudgetaire.an].chargesVariables.sorties.showExceptions = true; await new Promise(r => setTimeout(r, 100)); }, ST);
     await aller(page, 'previsionnel', 'parametres');

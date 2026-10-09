@@ -289,26 +289,29 @@ try {
       JSON.stringify({ releve, carte: k.atterr.montant, couverture: k.couverture }));
     v('  → et pour l\'autre compte, carte = Relevé', Math.round(releve.annexe) === ATTENDU.annexe, JSON.stringify(releve));
 
-    /* ── D. La file : badges de nature, ordre, paquets ─────────────────────── */
-    const file = await page.evaluate(() => {
-        const lignes = [...document.querySelectorAll('#pilotage-inbox [data-tache]')].map(row => {
-            const b = row.querySelector('[data-badge-nature]'), n = row.querySelector('[data-tache-nom]');
-            return { nom: n ? n.innerText.trim() : null, badge: b ? b.innerText.trim() : null, nature: b ? b.dataset.nature : null,
-                     badgeAvantNom: !!(b && n && (b.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING)) };
-        });
-        //  textContent, pas innerText : la classe « uppercase » transformerait le texte lu.
-        const titres = [...document.querySelectorAll('#pilotage-inbox [data-paquet-titre]')].map(e => e.textContent.trim());
-        return { lignes, titres };
-    });
-    const attenduBadge = { 'FIXE EN RETARD': '🏢 Fixe', 'FIXE AVANCE PARTIELLE': '🏢 Fixe', 'FIXE DU JOUR': '🏢 Fixe',
-        'FIXE DANS 3 JOURS': '🏢 Fixe', 'FIXE LOINTAINE': '🏢 Fixe', 'FIXE SANS DATE': '🏢 Fixe',
-        'VARIABLE SEMAINE': '🛒 Variable', 'EPARGNE EN RETARD': '💎 Épargne', 'EXCEPTIONNEL SANS DATE': '⚠️ Exceptionnel' };
-    v('les trois paquets, dans l\'ordre où on les traite',
-      JSON.stringify(file.titres) === JSON.stringify(['⚠️ En retard', '⏳ Cette semaine', '📅 Reste du mois']), JSON.stringify(file.titres));
-    v('chaque ligne porte son badge de nature, le bon',
-      file.lignes.length === 9 && file.lignes.every(l => attenduBadge[l.nom] === l.badge),
-      JSON.stringify(file.lignes.map(l => [l.nom, l.badge])));
-    v('  → et le badge précède le nom', file.lignes.every(l => l.badgeAvantNom), JSON.stringify(file.lignes));
+    /* ── D. La file : v37.34, un tiroir par nature, chaque tiroir par date ─── */
+    const file = await page.evaluate((ST) => {
+        const st = eval(ST);
+        const rang = Object.fromEntries(st.tachesATraiter.map(t => [t.libelle, t.rang]));
+        //  textContent, pas innerText : la ligne d'un tiroir fermé n'est pas rendue.
+        const tiroirs = [...document.querySelectorAll('#pilotage-inbox [data-tiroir]')].map(d => ({
+            cle: d.dataset.tiroir, titre: d.querySelector('[data-tiroir-titre]').textContent.trim(),
+            lignes: [...d.querySelectorAll('[data-tache]')].map(r => ({ nom: r.querySelector('[data-tache-nom]').textContent.trim(), nature: r.dataset.natureLigne,
+                                                                     rang: rang[r.querySelector('[data-tache-nom]').textContent.trim()] })) }));
+        return { tiroirs, n: document.querySelectorAll('#pilotage-inbox [data-tache]').length };
+    }, ST);
+    const attenduNature = { 'FIXE EN RETARD': 'fixe', 'FIXE AVANCE PARTIELLE': 'fixe', 'FIXE DU JOUR': 'fixe',
+        'FIXE DANS 3 JOURS': 'fixe', 'FIXE LOINTAINE': 'fixe', 'FIXE SANS DATE': 'fixe',
+        'VARIABLE SEMAINE': 'variable', 'EPARGNE EN RETARD': 'epargne', 'EXCEPTIONNEL SANS DATE': 'exceptionnel' };
+    const ORDRE = ['entrees', 'fixe', 'variable', 'epargne', 'exceptionnel'];
+    v('la file en tiroirs par nature, dans l\'ordre fixe (Entrées, Fixes, Variables, Épargne, Exceptionnels)',
+      file.tiroirs.length >= 4 && file.tiroirs.every((t, i) => i === 0 || ORDRE.indexOf(file.tiroirs[i - 1].cle) < ORDRE.indexOf(t.cle))
+      && ['fixe', 'variable', 'epargne', 'exceptionnel'].every(c => file.tiroirs.some(t => t.cle === c)), JSON.stringify(file.tiroirs.map(t => [t.cle, t.titre])));
+    v('chaque ligne est rangée dans le tiroir de sa nature, la bonne',
+      file.n === 9 && file.tiroirs.every(t => t.lignes.every(l => attenduNature[l.nom] === t.cle && l.nature === t.cle)),
+      JSON.stringify(file.tiroirs.map(t => [t.cle, t.lignes.map(l => l.nom)])));
+    v('  → et dans chaque tiroir, par date (retard d\'abord, sans date en dernier)',
+      file.tiroirs.every(t => t.lignes.every((l, i) => i === 0 || t.lignes[i - 1].rang <= l.rang)), JSON.stringify(file.tiroirs.map(t => t.lignes.map(l => [l.nom, l.rang]))));
 
     /* ── E. Validation en un clic : les fixes ÉCHUES, rien d'autre ───────── */
     v(`le bouton propose les ${ATTENDU.nbEchues} fixes échues (${ATTENDU.echues} DH)`,
@@ -516,17 +519,20 @@ try {
     /* ── I. Au pouce, sur un écran de S24+ ───────────────────────────────── */
     if (MISE_EN_PAGE) {
         const m = await ouvrir({ viewport: { width: 384, height: 832 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+        //  v37.34 : les tiroirs sont fermés d'office — on les ouvre pour mesurer les lignes.
+        await m.page.evaluate(() => document.querySelectorAll('#pilotage-inbox [data-tiroir]').forEach(d => { d.open = true; }));
+        await m.page.waitForTimeout(200);
         const mob = await m.page.evaluate(() => {
             const r = (s) => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
             const u = r('[data-kpi="urgence"]'), p = r('[data-kpi="progression"]'), a = r('[data-kpi="atterrissage"]');
             const bouton = r('[data-valider-echues]'), inbox = r('#pilotage-inbox');
-            const lignes = [...document.querySelectorAll('#pilotage-inbox [data-tache]')].map(e => e.getBoundingClientRect());
+            const lignes = [...document.querySelectorAll('#pilotage-inbox [data-tache]')].map(e => e.getBoundingClientRect()).filter(r => r.height > 0);
             return {
                 debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                 empile: !!(u && p && a && u.bottom <= p.top + 1 && p.bottom <= a.top + 1),
                 urgencePremier: !!(u && p && u.top < p.top),
                 bouton: bouton && inbox ? { l: Math.round(bouton.width), inbox: Math.round(inbox.width), h: Math.round(bouton.height) } : null,
-                lignesDansEcran: lignes.every(l => l.left >= 0 && l.right <= window.innerWidth + 0.5),
+                lignesDansEcran: lignes.length === 9 && lignes.every(l => l.left >= 0 && l.right <= window.innerWidth + 0.5),
             };
         });
         v('S24+ : aucun défilement horizontal', mob.debord <= 0, JSON.stringify(mob));

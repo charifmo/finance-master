@@ -198,6 +198,9 @@ try {
       !!meteo && meteo.includes('Compte Assafa Test') && meteo.includes(new Intl.NumberFormat('fr-FR').format(A.aVirer)), String(meteo));
 
     /* ── 3. Pastilles et bulle ───────────────────────────────────────────── */
+    //  v37.34 : la file est en tiroirs fermés d'office — on les ouvre.
+    await page.evaluate(() => document.querySelectorAll('#pilotage-inbox [data-tiroir]').forEach(d => { d.open = true; }));
+    await page.waitForTimeout(200);
     const pastilles = await page.evaluate((ST) => {
         const st = eval(ST);
         const rows = [...document.querySelectorAll('#pilotage-inbox [data-tache]')];
@@ -263,6 +266,8 @@ try {
         const m = await ouvrir({ viewport: { width: 384, height: 832 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
         const debord = await m.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         v('S24+ : barre de focus et pastilles sans débordement', debord <= 0, String(debord));
+        await m.page.evaluate(() => document.querySelectorAll('#pilotage-inbox [data-tiroir]').forEach(d => { d.open = true; }));
+        await m.page.waitForTimeout(200);
         await m.page.tap('#pilotage-inbox [data-tache] [data-route]');
         await m.page.waitForTimeout(200);
         const t = await m.page.evaluate(() => { const b = document.querySelector('[data-bulle] > span'); if (!b) return null; const r = b.getBoundingClientRect(); return { g: r.left, d: r.right, w: window.innerWidth }; });

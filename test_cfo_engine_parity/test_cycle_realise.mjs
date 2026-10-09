@@ -305,6 +305,13 @@ try {
             yVue: sumVue ? Math.round(sumVue.getBoundingClientRect().top + window.scrollY) : null,
             entreesFermee: sumEntrees ? !sumEntrees.parentElement.open : null,
             vueFermee: sumVue ? !sumVue.parentElement.open : null,
+            //  v37.34 : « Entrées d'Argent » est devenu un tiroir DE la file ; tous les tiroirs fermés d'office
+            entreesDansFile: sumEntrees ? !!sumEntrees.closest('#pilotage-inbox') : null,
+            tiroirsFermes: [...document.querySelectorAll('#pilotage-inbox [data-tiroir]')].map(d => !d.open),
+            //  Une ligne de la file (tâche ou entrée) = UN badge de date, daté ou « sans date »
+            lignesSansUnBadge: [...document.querySelectorAll('#pilotage-inbox [data-tache], #pilotage-inbox [data-entree]')]
+                .filter(r => [...r.querySelectorAll('span')].filter(e => /^📅\s*(j\.\d+|sans date)$/.test((e.textContent || '').trim())).length !== 1).length,
+            nbLignes: document.querySelectorAll('#pilotage-inbox [data-tache], #pilotage-inbox [data-entree]').length,
             sansDate: st.tachesSansDate,
             // Compté DANS la section « À traiter » : ailleurs, d'autres badges
             //   commencent aussi par 📅 et masquaient l'absence de celui-ci.
@@ -322,16 +329,14 @@ try {
             })(),
         };
     });
-    v('« À traiter » passe devant les listes de référence',
-      layout.yATraiter !== null && layout.yEntrees !== null && layout.yATraiter < layout.yEntrees,
-      JSON.stringify(layout));
-    v('  → et devant la vue par catégorie',
-      layout.yVue !== null && layout.yATraiter < layout.yVue, JSON.stringify(layout));
-    v('  → « Entrées d\'Argent » est repliée à l\'ouverture', layout.entreesFermee === true, JSON.stringify(layout));
-    v('  → « Vue par catégorie » aussi', layout.vueFermee === true, JSON.stringify(layout));
-    v('chaque tâche porte un badge de date, daté ou « sans date »',
-      layout.nbTachesRendues > 0 && layout.badgesDate === layout.nbTachesRendues,
-      JSON.stringify({ badges: layout.badgesDate, taches: layout.nbTachesRendues }));
+    //  v37.34 : plus de listes de référence SOUS la file — chaque ligne n'existe qu'à un endroit.
+    v('« Entrées d\'Argent » est un tiroir de « À traiter », plus une liste en dessous',
+      layout.yATraiter !== null && (layout.entreesDansFile === null || layout.entreesDansFile === true), JSON.stringify(layout));
+    v('  → plus de « Vue par catégorie » en doublon', layout.yVue === null, JSON.stringify(layout));
+    v('  → les tiroirs sont repliés à l\'ouverture', layout.tiroirsFermes.length > 0 && layout.tiroirsFermes.every(Boolean), JSON.stringify(layout.tiroirsFermes));
+    v('chaque ligne de la file porte UN badge de date, daté ou « sans date »',
+      layout.nbLignes > 0 && layout.lignesSansUnBadge === 0,
+      JSON.stringify({ lignes: layout.nbLignes, sansUnBadge: layout.lignesSansUnBadge }));
 
     const dates = await S(() => {
         const st = document.querySelector('#app').__vue_app__._instance.setupState;
