@@ -1,5 +1,7 @@
 /**
  * v37.40 — AJOUTER, MODIFIER, METTRE EN PAUSE, RETIRER UN JOURNAL, DEPUIS L'ÉCRAN.
+ * v37.42 — le 🧪 essaie chaque porte du média (Google, Bing, sa page de recherche, sa page
+ *          d'accueil), toutes lues sans RSS ; GET dit ce qui manque au PHP du serveur.
  *
  *   La scène, jouée pour de vrai : PostgreSQL jetable, les VRAIS
  *   cfo_veille_sources.php et cfo_veille_presse.php sous `php -S`, une presse
@@ -71,8 +73,13 @@ const presse = http.createServer((req, res) => {
     // v37.41 : ce serveur sert aussi de PROXY HTTP à PHP — il joue le site marrakechtoday.ma, SANS RSS :
     //   sa recherche rend une page HTML WordPress (« نتائج البحث عن … » / « Résultats pour … »).
     if (u.host === 'marrakechtoday.ma') {
-        const terme = u.searchParams.get('s') || '';
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        // v37.42 : sa page d'accueil — un bloc de une (« widget ») et un <article>
+        if (u.searchParams.get('s') === null) return res.end(`<!DOCTYPE html><html><head><title>Marrakech Today — l'actualité de Marrakech</title></head><body>
+            <nav class="menu"><a href="http://marrakechtoday.ma/category/immobilier/">Immobilier et foncier à Marrakech</a></nav>
+            <article><h3><a href="http://marrakechtoday.ma/2026/10/07/kawkab/">Le Kawkab s'impose dans le derby régional face au MAS</a></h3></article>
+            <div class="widget une"><h2><a href="http://marrakechtoday.ma/2026/10/08/agence-urbaine-rn9/">L'Agence urbaine ouvre la bande RN9 aux activités logistiques</a></h2></div></body></html>`);
+        const terme = u.searchParams.get('s') || '';
         const resultats = terme === 'Marrakech' ? `
             <article><h2><a href="http://marrakechtoday.ma/2026/10/05/tamansourt-lotissement/">Tamansourt : un nouveau lotissement autorisé par la commune</a></h2><time datetime="2026-10-05">5 oct.</time></article>
             <article><h2><a href="http://marrakechtoday.ma/2026/09/21/rocade-nord/">Marrakech : la rocade nord avance vers la RN9</a></h2><time datetime="2026-09-21">21 sept.</time></article>` : '<p>Aucun résultat.</p>';
@@ -82,6 +89,10 @@ const presse = http.createServer((req, res) => {
             <aside class="sidebar"><h3><a href="http://marrakechtoday.ma/2026/10/08/foot/">Le Kawkab s'impose dans le derby régional</a></h3></aside></body></html>`);
     }
     res.writeHead(200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
+    // v37.42 : Bing Actualités enrobe le lien de l'article (apiclick.aspx?…&url=…)
+    if (u.pathname === '/bing') return res.end(!q.startsWith('site:marrakechtoday.ma') ? rss([]) : '<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel><title>Bing</title>'
+        + '<item><title>Tamansourt : la commune lance la révision du plan d\'aménagement</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;aid=&amp;tid=T9&amp;'
+        + 'url=https%3a%2f%2fmarrakechtoday.ma%2f2026%2f09%2f30%2fplan-tamansourt%2f&amp;c=1&amp;mkt=fr-ma</link><pubDate>Wed, 30 Sep 2026 08:00:00 GMT</pubDate></item></channel></rss>');
     if (q.startsWith('site:marrakechtoday.ma')) return res.end(rss([
         ['Tamansourt : un nouveau lotissement autorisé - Marrakech Today', 'https://news.google.com/rss/articles/T1', 'Mon, 05 Oct 2026 08:00:00 GMT', 'marrakechtoday.ma', 'Marrakech Today'],
         ['Marrakech : la rocade nord avance - Marrakech Today', 'https://news.google.com/rss/articles/T2', 'Mon, 21 Sep 2026 08:00:00 GMT', 'marrakechtoday.ma', 'Marrakech Today']]));
@@ -124,7 +135,7 @@ fs.writeFileSync(path.join(F, 'finance_data.json'), JSON.stringify(fx));
 // retirés ici : sur le VPS ils sont sur le site du média, ici ils pointeraient sur 127.0.0.1.
 const SRC = JSON.parse(fs.readFileSync(path.join(RACINE, 'veille_sources.json'), 'utf8'));
 const ecrireSources = (sources) => fs.writeFileSync(path.join(F, 'veille_sources.json'), JSON.stringify({ ...SRC, delai_s: 2,
-    moteurs: SRC.moteurs.map(m => ({ ...m, gabarit: `http://127.0.0.1:${pPresse}/gnews?q={q}&hl=${m.langue}` })),
+    moteurs: SRC.moteurs.map(m => ({ ...m, gabarit: m.role === 'site' ? `http://127.0.0.1:${pPresse}/bing?q={q}` : `http://127.0.0.1:${pPresse}/gnews?q={q}&hl=${m.langue}` })),
     sources: sources.map(({ flux, ...s }) => s) }));
 ecrireSources(SRC.sources);
 const NB = SRC.sources.length;
@@ -154,6 +165,8 @@ try {
     v(`GET : la liste d'origine (${NB} médias), stockage PostgreSQL`, g.code === 200 && g.d?.sources?.length === NB && g.d.stockage === 'postgres'
       && g.d.sources.every(s => s.origine === 'origine'), g.t.slice(0, 200));
     const liste = g.d?.sources || [];
+    v('GET : ce que le PHP du serveur sait faire — ici curl présent, mode parallèle, rien à installer',
+      g.d?.prerequis?.mode_reseau === 'parallele' && Array.isArray(g.d.prerequis.manquants) && g.d.prerequis.manquants.length === 0 && g.d.prerequis.commande === '', JSON.stringify(g.d?.prerequis));
     v('POST sans X-Requested-With → 400', (await appel({ action: 'enregistrer', sources: liste }, {})).code === 400);
     v('POST d\'une autre origine → 403', (await appel({ action: 'enregistrer', sources: liste }, { 'X-Requested-With': 'XMLHttpRequest', Origin: 'https://evil.example' })).code === 403);
     const loc = await appel({ action: 'enregistrer', sources: [...liste, { nom: 'Interne', domaine: 'localhost', portee: 'locale', langue: 'fr' }] });
@@ -191,6 +204,7 @@ try {
     await page.click('[data-sup-sources]');
     await page.waitForSelector('[data-vs-modale] [data-vs-source]', { timeout: 10000 });
     v('Supervision IA → « 📰 Sources presse » ouvre la fenêtre', !!(await page.$('[data-vs-modale]')));
+    v('  → rien ne manque au PHP du serveur : pas de bandeau de prérequis', !(await page.$('[data-vs-prerequis]')));
     const nbLoc = SRC.sources.filter(s => s.portee === 'locale').length;
     v(`les ${NB} médias, groupés : presse locale (${nbLoc}) et nationale (${NB - nbLoc})`,
       (await page.$$('[data-vs-source]')).length === NB && (await page.$$('[data-vs-groupe="locale"] [data-vs-source]')).length === nbLoc);
@@ -243,11 +257,16 @@ try {
     await (await ligne('marrakechtoday.ma')).$('[data-vs-tester]').then(b => b.click());
     await page.waitForFunction(() => { const t = document.querySelector('[data-domaine="marrakechtoday.ma"] [data-vs-test]'); return t && !/Test en cours/.test(t.textContent); }, null, { timeout: 15000 });
     const test = (await page.textContent('[data-domaine="marrakechtoday.ma"] [data-vs-test]')).replace(/\s+/g, ' ');
-    v('tester : Google Actualités sur ce site — 2 articles, le dernier cité', /✅ Google Actualités : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé » \(2026-10-05\)/.test(test), test);
-    v('  → la recherche du site est essayée aussi, son résultat dit en clair (jamais « HTTP 0 »)', /Recherche du site[^:]* : \S/.test(test) && !/HTTP 0/.test(test), test);
-    v('  → site SANS RSS : sa page de résultats est lue — 2 articles, le menu et la barre latérale écartés',
-      /✅ Recherche du site \(page web, sans RSS\) : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé par la commune » \(2026-10-05\)/.test(test), test);
-    v('  → le site a bien été interrogé avec « Marrakech »', recues.some(x => x.hote === 'marrakechtoday.ma' && x.s === 'Marrakech'));
+    v('tester : Google Actualités sur ce site — 2 articles, le dernier cité', /✅ Google Actualités \(FR\) : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé » \(2026-10-05\)/.test(test), test);
+    v('  → chaque porte est dite en clair, dans l\'ordre (jamais « HTTP 0 »)', (await page.$$eval('[data-domaine="marrakechtoday.ma"] [data-vs-canal]', els => els.map(e => e.dataset.vsCanal))).join() === 'moteur,bing,recherche,accueil'
+      && !/HTTP 0/.test(test), test);
+    v('  → Bing Actualités : 1 article, le lien du journal extrait de l\'enrobage de Bing',
+      /✅ Bing Actualités : 1 article — dernier : « Tamansourt : la commune lance la révision du plan d'aménagement » \(2026-09-30\)/.test(test), test);
+    v('  → site SANS RSS : sa page de recherche est lue en HTML — 2 articles, le menu et la barre latérale écartés',
+      /✅ Page de recherche du site \(lue en HTML\) : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé par la commune » \(2026-10-05\)/.test(test), test);
+    v('  → sa page d\'accueil aussi : 2 titres à la une (le menu écarté)', /✅ Page d'accueil \(lue en HTML\) : 2 titres à la une — en tête : « /.test(test), test);
+    v('  → le site a bien été interrogé avec « Marrakech », et sur son accueil', recues.some(x => x.hote === 'marrakechtoday.ma' && x.s === 'Marrakech')
+      && recues.some(x => x.hote === 'marrakechtoday.ma' && x.chemin === '/' && x.s === null));
     v('  → la presse a reçu « site:marrakechtoday.ma Marrakech »', recues.some(x => x.q === 'site:marrakechtoday.ma Marrakech'));
     if (CAPTURES) await page.screenshot({ path: path.join(CAPTURES, 'sources_presse.png') });
 

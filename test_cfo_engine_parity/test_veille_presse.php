@@ -2,6 +2,8 @@
 declare(strict_types=1);
 /**
  * v37.39 — LA REVUE DE PRESSE LOCALE : REQUÊTES, FLUX, TRI.
+ * v37.42 — aucun flux RSS de journal : quatre portes par média local (Google et
+ *          Bing restreints au site, sa page de recherche et sa page d'accueil en HTML).
  *
  *   « Je veux qu'il cherche dans les journaux locaux — Al Marrakchia, Marrakech
  *   Alaan, Le Desk… — avant de me répondre, pas une recherche généraliste. »
@@ -50,16 +52,48 @@ v('le lieu avec les sujets fonciers (RN9, SDAU, plan d\'aménagement…)', in_ar
 v('la presse nationale (Le Desk, Médias24, Hespress…)', (bool)array_filter($qs, fn($q) => str_starts_with($q, '"Ouahat Sidi Brahim" (site:ledesk.ma OR site:medias24.com')));
 v('le lieu en ARABE, sur Google Actualités en arabe', (bool)array_filter($R, fn($r) => str_starts_with($r['q'], '"واحة سيدي ابراهيم"') && str_contains($r['url'], 'hl=ar')));
 v('les sujets en arabe vont avec le lieu en arabe', in_array('"واحة سيدي ابراهيم" ("الطريق الوطنية رقم 9" OR "المخطط المديري" OR "تصميم التهيئة")', $qs, true));
-v('la recherche des sites locaux reçoit le lieu dans LEUR langue (arabe)',
-  count(array_filter($R, fn($r) => $r['type'] === 'flux' && $r['q'] === 'واحة سيدي ابراهيم')) === 4, $j(array_values(array_filter($R, fn($r) => $r['type'] === 'flux'))));
+v('la recherche des sites locaux reçoit le lieu dans LEUR langue (arabe), lue comme une PAGE',
+  count(array_filter($R, fn($r) => $r['canal'] === 'recherche' && $r['type'] === 'page' && $r['q'] === 'واحة سيدي ابراهيم')) === 4, $j(array_values(array_filter($R, fn($r) => $r['canal'] === 'recherche'))));
 v('la zone : Marrakech + sujets, presse locale', in_array('Marrakech (RN9 OR SDAU OR "plan d\'aménagement" OR "Grand Stade") ' . $locales, $qs, true));
 v('au plus ' . CFO_VP_MAX_REQUETES . ' requêtes', count($R) <= CFO_VP_MAX_REQUETES && count($R) >= 10, (string)count($R));
-$gabarits = array_merge(array_column($cfg['moteurs'], 'gabarit'), array_filter(array_column($cfg['sources'], 'flux')));
+$gabarits = array_merge(array_column($cfg['moteurs'], 'gabarit'), array_map('cfo_vp_sans_flux', array_filter(array_column($cfg['sources'], 'flux'))));
 $prefixes = array_map(fn($g) => substr($g, 0, strpos($g, '{q}')), $gabarits);
-v('chaque URL vient d\'un gabarit de veille_sources.json', !array_filter($R, fn($r) => !array_filter($prefixes, fn($p) => str_starts_with($r['url'], $p))));
+$accueils = array_map('cfo_vp_accueil', $cfg['sources']);
+v('chaque URL vient de veille_sources.json (gabarit, ou accueil d\'un média)', !array_filter($R, fn($r) => $r['canal'] === 'accueil'
+  ? !in_array($r['url'], $accueils, true) : !array_filter($prefixes, fn($p) => str_starts_with($r['url'], $p))));
 v('les termes sont encodés (guillemets, arabe, espaces)', str_contains($R[0]['url'], '%22Ouahat%20Sidi%20Brahim%22') && !preg_match('/[\s"]/', implode('', array_column($R, 'url'))), $R[0]['url']);
-v('les requêtes « lieu » exigent le lieu exact (spécifiques), la zone non',
-  !array_filter($R, fn($r) => str_starts_with($r['libelle'], 'zone') ? $r['specifique'] : !$r['specifique']));
+v('les requêtes « lieu » exigent le lieu exact (spécifiques) ; la zone et les pages d\'accueil non',
+  !array_filter($R, fn($r) => (str_starts_with($r['libelle'], 'zone') || $r['canal'] === 'accueil') ? $r['specifique'] : !$r['specifique']));
+
+/* ── 2bis. v37.42 : aucun flux RSS de journal — quatre portes par média local ── */
+$portes = [];
+foreach ($R as $r) if (!empty($r['domaine'])) $portes[$r['domaine']][] = $r['canal'];
+foreach (['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'] as $dom)
+    v("$dom : Google (site:), sa page de recherche, Bing (site:), sa page d'accueil", ($portes[$dom] ?? []) === ['moteur', 'recherche', 'bing', 'accueil'], $j($portes[$dom] ?? null));
+$bing = array_values(array_filter($R, fn($r) => $r['canal'] === 'bing'));
+v('Bing Actualités : même requête stricte, sur son gabarit RSS de RÉSULTATS', count($bing) === 4 && $bing[2]['q'] === $strict('kech24.com')
+  && str_starts_with($bing[2]['url'], 'https://www.bing.com/news/search?q=site%3Akech24.com%20') && $bing[2]['type'] === 'moteur' && $bing[2]['specifique'], $j($bing[2] ?? null));
+$acc = array_values(array_filter($R, fn($r) => $r['canal'] === 'accueil'));
+v("page d'accueil : l'hôte de sa recherche (www.kech24.com), lue comme une page, sans terme", ($acc[2]['url'] ?? '') === 'https://www.kech24.com/' && $acc[2]['type'] === 'page' && $acc[2]['q'] === '', $j($acc[2] ?? null));
+v("  → un média sans adresse de recherche : https://domaine/", cfo_vp_accueil(['domaine' => 'ledesk.ma', 'nom' => 'Le Desk']) === 'https://ledesk.ma/');
+v('aucune page de journal n\'est demandée en RSS', !array_filter($R, fn($r) => $r['type'] === 'page' && preg_match('/feed=|format=rss|\/feed\//i', $r['url'])));
+$cfgAncien = $cfg;
+$cfgAncien['sources'][0]['flux'] = 'https://www.almarrakchia.net/?s={q}&feed=rss2';            // réglage enregistré avant la v37.41
+$ra = array_values(array_filter(cfo_vp_requetes($cfgAncien, $lieux, $sujets), fn($r) => $r['canal'] === 'recherche' && $r['domaine'] === 'almarrakchia.net'));
+v('  → un ancien réglage « &feed=rss2 » : retiré, c\'est la PAGE qui est demandée', ($ra[0]['url'] ?? '') === 'https://www.almarrakchia.net/?s=' . rawurlencode('واحة سيدي ابراهيم'), $ra[0]['url'] ?? '');
+foreach ([['https://x.ma/?s={q}&feed=rss2', 'https://x.ma/?s={q}'], ['https://x.ma/?feed=rss2&s={q}', 'https://x.ma/?s={q}'], ['https://x.ma/search/{q}/feed/rss2/', 'https://x.ma/search/{q}/'],
+          ['https://x.ma/recherche?q={q}&format=rss', 'https://x.ma/recherche?q={q}'], ['https://x.ma/?s={q}', 'https://x.ma/?s={q}']] as [$avant, $apres])
+    v("sans flux : $avant → $apres", cfo_vp_sans_flux($avant) === $apres, cfo_vp_sans_flux($avant));
+$ordre = array_column($R, 'canal');
+v('ordre d\'importance : Google site: d\'abord, puis lieu/presse nationale, pages de recherche, Bing, accueils, zone en dernier',
+  array_slice($ordre, 0, 4) === ['moteur', 'moteur', 'moteur', 'moteur'] && $R[4]['libelle'] === 'lieu + urbanisme' && max(array_keys($ordre, 'recherche')) < min(array_keys($ordre, 'bing'))
+  && max(array_keys($ordre, 'bing')) < min(array_keys($ordre, 'accueil')) && str_starts_with(end($R)['libelle'], 'zone'), $j(array_column($R, 'libelle')));
+$cfg8 = $cfg;
+foreach (range(1, 4) as $k) $cfg8['sources'][] = ['nom' => "Local $k", 'domaine' => "local$k.ma", 'portee' => 'locale', 'langue' => 'ar', 'flux' => "https://local$k.ma/?s={q}"];
+$R8 = cfo_vp_requetes($cfg8, $lieux, $sujets);
+v('8 médias locaux : plafonné à ' . CFO_VP_MAX_REQUETES . ', la presse nationale et toutes les requêtes Google site: restent',
+  count($R8) === CFO_VP_MAX_REQUETES && (bool)array_filter($R8, fn($r) => $r['libelle'] === 'presse nationale')
+  && count(array_filter($R8, fn($r) => $r['canal'] === 'moteur' && str_starts_with($r['libelle'], 'site:'))) === 8, (string)count($R8));
 
 /* ── 3. Les flux ───────────────────────────────────────────────────────── */
 $gnews = <<<XML
@@ -79,10 +113,21 @@ v('  → date lue', $a && $a[0]['date'] === '2026-09-14');
 v('  → un lien javascript: est écarté', $a && count($a) === 1);
 $wp = '<?xml version="1.0"?><rss version="2.0"><channel><item><title>واحة سيدي إبراهيم: تصميم التهيئة الجديد</title><link>https://marrakechalaan.com/2026/08/123</link>'
     . '<pubDate>Tue, 18 Aug 2026 10:00:00 +0100</pubDate><description><![CDATA[<p>صادق المجلس على تصميم التهيئة&#8230;</p>]]></description></item></channel></rss>';
-$b = cfo_vp_lire_rss($wp, ['type' => 'flux', 'nom' => 'Marrakech Alaan', 'domaine' => 'marrakechalaan.com', 'specifique' => true, 'langue' => 'ar'], $cfg);
-v('flux WordPress d\'un site local : source et portée tirées du fichier', $b && $b[0]['source'] === 'Marrakech Alaan' && $b[0]['portee'] === 'locale' && $b[0]['extrait'] === 'صادق المجلس على تصميم التهيئة…', $j($b));
-v('une page HTML (site sans recherche RSS) n\'est pas un flux : null, dit, pas inventé', cfo_vp_lire_rss('<!DOCTYPE html><html><body>Recherche</body></html>', ['type' => 'flux', 'specifique' => true], $cfg) === null);
+// v37.42 : Bing Actualités enrobe le lien de l'article ; le média se lit dans le lien rendu
+$bingRss = '<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:News="https://www.bing.com:443/news/search?q=x&amp;format=rss"><channel><title>Bing</title>'
+    . '<item><title>واحة سيدي إبراهيم: تصميم التهيئة الجديد</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;aid=&amp;tid=AB12&amp;url=https%3a%2f%2fwww.kech24.com%2f2026%2f08%2f18%2foasis-plan%2f&amp;c=1234&amp;mkt=fr-ma</link>'
+    . '<description><![CDATA[<p>صادق المجلس على تصميم التهيئة&#8230;</p>]]></description><pubDate>Tue, 18 Aug 2026 10:00:00 GMT</pubDate><News:Source>Kech24</News:Source></item></channel></rss>';
+$b = cfo_vp_lire_rss($bingRss, ['type' => 'moteur', 'canal' => 'bing', 'nom' => 'Bing Actualités', 'domaine' => 'kech24.com', 'specifique' => true, 'langue' => 'ar'], $cfg);
+v('Bing Actualités : le lien de l\'article est extrait de l\'enrobage de Bing', ($b[0]['url'] ?? '') === 'https://www.kech24.com/2026/08/18/oasis-plan/', $j($b));
+v('  → média reconnu par ce lien (Kech24, presse locale), chapô nettoyé, date', ($b[0]['source'] ?? '') === 'Kech24' && $b[0]['portee'] === 'locale'
+  && $b[0]['extrait'] === 'صادق المجلس على تصميم التهيئة…' && $b[0]['date'] === '2026-08-18', $j($b));
+v('un lien Bing sans adresse d\'article reste tel quel', cfo_vp_lien_moteur('https://www.bing.com/news/apiclick.aspx?url=javascript%3aalert(1)') === 'https://www.bing.com/news/apiclick.aspx?url=javascript%3aalert(1)'
+  && cfo_vp_lien_moteur('https://news.google.com/rss/articles/A1?url=https://evil.example') === 'https://news.google.com/rss/articles/A1?url=https://evil.example');
+v('une page HTML renvoyée par un moteur n\'est pas une liste de résultats : null, dit, pas inventé', cfo_vp_lire_rss('<!DOCTYPE html><html><body>Recherche</body></html>', ['type' => 'moteur', 'specifique' => true], $cfg) === null);
 v('un XML cassé non plus', cfo_vp_lire_rss('<?xml version="1.0"?><rss><channel><item><title>x', ['type' => 'moteur', 'specifique' => true], $cfg) === null);
+v('sans SimpleXML (php-xml absent) : la lecture de secours rend les mêmes champs', cfo_vp_items_rss_brut($gnews) === cfo_vp_items_rss($gnews) && cfo_vp_items_rss_brut($bingRss) === cfo_vp_items_rss($bingRss)
+  && cfo_vp_items_rss_brut($wp) === cfo_vp_items_rss($wp), $j([cfo_vp_items_rss_brut($wp), cfo_vp_items_rss($wp)]));
+v('  → et refuse aussi le XML cassé', cfo_vp_items_rss_brut('<?xml version="1.0"?><rss><channel><item><title>x') === null);
 
 /* ── 3bis. v37.41 : la page de résultats, quand le site n'a pas de RSS ── */
 $page = <<<'H'
@@ -99,10 +144,10 @@ $page = <<<'H'
 <div class="ad"><h3><a href="https://pub.example.com/promo">عرض خاص على الشقق الفاخرة في مراكش</a></h3></div>
 <footer><a href="https://www.kech24.com/page/2/">الصفحة التالية الصفحة التالية</a></footer></body></html>
 H;
-$reqK = ['type' => 'flux', 'nom' => 'Kech24', 'q' => 'واحة سيدي ابراهيم', 'langue' => 'ar', 'url' => 'https://www.kech24.com/?s=x', 'domaine' => 'kech24.com', 'specifique' => true];
+$reqK = ['type' => 'page', 'canal' => 'recherche', 'nom' => 'Kech24', 'q' => 'واحة سيدي ابراهيم', 'langue' => 'ar', 'url' => 'https://www.kech24.com/?s=x', 'domaine' => 'kech24.com', 'specifique' => true];
 $lu = cfo_vp_lire_reponse($page, $reqK, $cfg);
 $tk = array_column($lu['articles'] ?? [], 'titre');
-v('RSS fermé : la page de résultats est lue (mode « page »)', $lu['mode'] === 'page' && count($tk) === 2, $j($lu));
+v('pas de RSS : la page de résultats est lue (mode « page »)', $lu['mode'] === 'page' && count($tk) === 2, $j($lu));
 v('  → titre, lien absolu (lien relatif résolu), date <time>, chapô', ($lu['articles'][0]['date'] ?? '') === '2026-09-12' && str_starts_with($lu['articles'][0]['extrait'] ?? '', 'صادقت اللجنة')
   && ($lu['articles'][1]['url'] ?? '') === 'https://www.kech24.com/2026/08/03/rocade/' && ($lu['articles'][0]['source'] ?? '') === 'Kech24' && ($lu['articles'][0]['portee'] ?? '') === 'locale', $j($lu['articles'] ?? []));
 v('  → écartés : menu, barre latérale « les plus lus », publicité externe, étiquette, pagination, javascript:',
@@ -129,7 +174,8 @@ v('page lue sans aucun article : vide, mode « page » (dit, pas un échec muet)
 v('réponse ni RSS ni HTML (JSON) : illisible', cfo_vp_lire_reponse('{"error":"blocked"}', $reqK, $cfg)['articles'] === null);
 v('une page HTML renvoyée par GOOGLE (consentement…) n\'est jamais lue comme des articles',
   cfo_vp_lire_reponse($page, ['type' => 'moteur', 'nom' => 'Google', 'q' => 'x', 'specifique' => true], $cfg)['articles'] === null);
-v('un RSS ouvert reste lu comme RSS', cfo_vp_lire_reponse($wp, ['type' => 'flux', 'nom' => 'Marrakech Alaan', 'domaine' => 'marrakechalaan.com', 'specifique' => true, 'langue' => 'ar', 'url' => 'https://marrakechalaan.com/?s=x'], $cfg)['mode'] === 'rss');
+$lf = cfo_vp_lire_reponse($wp, ['type' => 'page', 'canal' => 'recherche', 'nom' => 'Marrakech Alaan', 'domaine' => 'marrakechalaan.com', 'q' => 'x', 'specifique' => true, 'langue' => 'ar', 'url' => 'https://marrakechalaan.com/?s=x'], $cfg);
+v('v37.42 : une page de journal qui renvoie un flux RSS n\'est JAMAIS lue comme RSS — illisible, et dit', $lf['articles'] === null && ($lf['raison'] ?? '') === 'flux', $j($lf));
 
 /* ── 4. Le tri ─────────────────────────────────────────────────────────── */
 $now = strtotime('2026-10-09 12:00:00 UTC');

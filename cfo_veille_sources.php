@@ -7,11 +7,13 @@ declare(strict_types=1);
  *  GET                                   → la liste effective, l'origine de chaque média
  *  POST {action:"enregistrer", sources}  → remplace VOS réglages (liste complète)
  *  POST {action:"reinitialiser"}         → revient à la liste d'origine
- *  POST {action:"tester", source}        → interroge ce média maintenant (Google + flux)
+ *  POST {action:"tester", source}        → interroge ce média maintenant, par toutes ses
+ *                                          portes : Google, Bing, sa page de recherche, sa page d'accueil
  *  Les POST exigent X-Requested-With et la même origine.
  *
  *  Chaque média est CONTRÔLÉ : un vrai nom de domaine public (ni IP, ni
- *  localhost), un flux RSS éventuel situé SUR ce domaine et marquant {q}.
+ *  localhost), une adresse de recherche éventuelle située SUR ce domaine et
+ *  marquant {q}. v37.42 : curl facultatif — GET dit ce qui manque au PHP.
  *  Le serveur ne va donc chercher que chez les médias que vous avez déclarés.
  * ============================================================================
  */
@@ -29,7 +31,7 @@ function vs_etat(): array {
     $c = cfo_vp_config();
     if (!$c) vs_sortie(['status' => 'error', 'error' => 'SOURCES_ABSENTES', 'message' => 'veille_sources.json absent ou illisible.'], 503);
     return ['status' => 'ok', 'sources' => $c['cfg']['sources'], 'supprimees' => $c['supprimees'], 'stockage' => $c['stockage'],
-            'raison' => $c['raison'], 'maj' => $c['maj'], 'max' => CFO_VP_MAX_SOURCES];
+            'raison' => $c['raison'], 'maj' => $c['maj'], 'max' => CFO_VP_MAX_SOURCES, 'prerequis' => cfo_vp_prerequis()];
 }
 
 $methode = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -52,29 +54,23 @@ if (!$def) vs_sortie(['status' => 'error', 'error' => 'SOURCES_ABSENTES', 'messa
 if ($action === 'tester') {
     $v = cfo_vp_valider_source($corps['source'] ?? null);
     if (isset($v['erreur'])) vs_sortie(['status' => 'error', 'error' => 'SOURCE_INVALIDE', 'message' => $v['erreur']], 400);
-    if (!function_exists('curl_multi_init')) vs_sortie(['status' => 'error', 'error' => 'CURL_ABSENT', 'message' => "L'extension curl de PHP est requise."], 503);
+    // v37.42 : curl facultatif ; chaque porte du média est essayée et son résultat dit en clair
+    $pre = cfo_vp_prerequis();
+    if ($pre['mode_reseau'] === 'impossible') vs_sortie(['status' => 'error', 'error' => 'RESEAU_IMPOSSIBLE', 'commande' => $pre['commande'],
+        'message' => 'Le PHP du serveur ne peut pas joindre le web (ni curl, ni allow_url_fopen).'], 503);
     $s = $v['source'];
     $cfg = $def; $cfg['sources'] = [$s];
     $req = cfo_vp_requetes_test($cfg, $s);
-    $rep = cfo_vp_telecharger($req, max(2, min(20, (int)($def['delai_s'] ?? 8))));
-    $res = [];
+    $rep = cfo_vp_telecharger($req, max(2, min(20, (int)($def['delai_s'] ?? 8))), max(5, min(25, (int)($def['budget_s'] ?? 20))));
+    $canaux = [];
     foreach ($req as $i => $r) {
-        $x = $rep[$i];
-        $d = ['canal' => $r['type'] === 'flux' ? 'flux' : 'google', 'q' => $r['q']];
-        if ($x['http'] < 200 || $x['http'] >= 300) { $d += ['statut' => 'erreur', 'erreur' => $x['erreur'] ?: ('HTTP ' . $x['http'])]; }
-        else {
-            $lu = cfo_vp_lire_reponse($x['corps'], $r, $cfg);     // v37.41 : RSS, sinon la page de résultats
-            $lus = $lu['articles'];
-            if ($lus === null) $d += ['statut' => 'illisible', 'erreur' => $r['type'] === 'flux' ? 'ni RSS, ni page de résultats lisible' : 'pas un flux RSS'];
-            else {
-                usort($lus, fn($a, $b) => ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0));
-                $d += ['statut' => $lus ? 'ok' : 'vide', 'n' => count($lus), 'mode' => $lu['mode'],
-                       'exemple' => $lus ? ['titre' => $lus[0]['titre'], 'date' => $lus[0]['date']] : null];
-            }
-        }
-        $res[$d['canal']] = $d;
+        $b = cfo_vp_bilan($r, $rep[$i], $cfg);
+        $lus = $b['articles']; unset($b['articles']);
+        usort($lus, fn($x, $y) => ($y['ts'] ?? 0) <=> ($x['ts'] ?? 0));
+        $canaux[] = ['canal' => $r['canal'], 'nom' => cfo_vp_nom_canal($r), 'q' => $r['q']] + $b
+                  + ['exemple' => $lus ? ['titre' => $lus[0]['titre'], 'date' => $lus[0]['date']] : null];
     }
-    vs_sortie(['status' => 'ok', 'domaine' => $s['domaine'], 'google' => $res['google'] ?? null, 'flux' => $res['flux'] ?? null]);
+    vs_sortie(['status' => 'ok', 'domaine' => $s['domaine'], 'canaux' => $canaux, 'mode_reseau' => $pre['mode_reseau']]);
 }
 
 if ($action !== 'enregistrer' && $action !== 'reinitialiser') {

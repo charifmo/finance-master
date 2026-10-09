@@ -3,16 +3,18 @@
 #  Finance Master v13.0 - Installation du Super-Agent CFO Unifie (Contabo)
 # ------------------------------------------------------------------------------
 #  Ce script met en place tout ce qui est necessaire cote VPS :
+#    0. Extensions PHP (curl, xml, mbstring, pgsql) - v37.42
 #    1. Permissions correctes sur /var/www/finance
 #    2. Preparation de la base PostgreSQL (chat_history + finance_vectors)
 #    3. Relance / creation du container Docker n8n avec les variables requises
 #    4. Affichage des etapes manuelles minimales (2 : Import + URL Webhook)
 #
 #  Ce script est idempotent : vous pouvez le relancer autant de fois que
-#  necessaire. Aucune valeur n'est demandee interactivement, tout est en dur
-#  (credentials pre-existants sur votre n8n), strict respect du brief.
+#  necessaire. Aucune valeur n'est demandee interactivement. Le mot de passe
+#  PostgreSQL vient de l'environnement ou de db_config.php (v37.42).
 #
-#  Usage :  sudo bash install.sh
+#  Usage :  sudo bash install.sh        (tout)
+#           sudo bash install.sh php    (extensions PHP seulement)
 # ==============================================================================
 set -euo pipefail
 
@@ -27,7 +29,10 @@ PG_HOST="127.0.0.1"
 PG_PORT="5432"
 PG_DB="charif_finance_db"
 PG_USER="admin"
-PG_PASS="20002000"
+# v37.42 : le mot de passe n'est plus ecrit dans ce fichier suivi par git. Il est lu
+# dans l'environnement (sudo PG_PASS='...' bash install.sh) ou, a defaut, dans
+# db_config.php (non versionne) au moment de preparer la base.
+PG_PASS="${PG_PASS:-}"
 
 N8N_CONTAINER="n8n"
 N8N_PORT="5678"
@@ -49,6 +54,52 @@ require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
     die "Ce script doit etre lance en root (sudo bash install.sh)."
   fi
+}
+
+# -----------------------------------------------------------------------------
+# 0. Extensions PHP de l'application (v37.42)
+#    curl     : la revue de presse interroge les journaux EN PARALLELE
+#               (sans curl elle marche quand meme, une source apres l'autre)
+#    xml      : DOM + SimpleXML - lecture des pages des journaux et des
+#               resultats Google / Bing Actualites
+#    mbstring : textes arabes et accents
+#    pgsql    : vos reglages (medias de la veille, garde-memoire) en base
+#  Seul :  sudo bash install.sh php   (ne touche ni a la base, ni a n8n)
+# -----------------------------------------------------------------------------
+install_php_extensions() {
+  if ! command -v php >/dev/null 2>&1; then
+    warn "php introuvable sur l'hote : extensions non verifiees."
+    return 0
+  fi
+  local v modules
+  v="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+  modules="$(php -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  a_module() { grep -qx "$1" <<<"${modules}"; }
+  local manquants=()
+  a_module curl || manquants+=("php${v}-curl")
+  { a_module dom && a_module simplexml; } || manquants+=("php${v}-xml")
+  a_module mbstring || manquants+=("php${v}-mbstring")
+  a_module pdo_pgsql || manquants+=("php${v}-pgsql")
+  if (( ${#manquants[@]} == 0 )); then
+    ok "Extensions PHP ${v} presentes (curl, xml, mbstring, pgsql)."
+    return 0
+  fi
+  log "Installation des extensions PHP ${v} : ${manquants[*]}..."
+  if ! command -v apt-get >/dev/null 2>&1; then
+    warn "apt-get absent : installe ${manquants[*]} avec le gestionnaire de paquets du systeme."
+    return 0
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq || warn "apt-get update a echoue : on tente l'installation quand meme."
+  if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${manquants[@]}"; then
+    warn "Installation impossible. A la main : sudo apt-get install -y ${manquants[*]} && sudo systemctl restart php${v}-fpm"
+    return 0
+  fi
+  if command -v systemctl >/dev/null 2>&1 && systemctl cat "php${v}-fpm" >/dev/null 2>&1; then
+    systemctl restart "php${v}-fpm" && ok "php${v}-fpm redemarre."
+  fi
+  modules="$(php -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  if a_module curl; then ok "curl actif : la revue de presse interroge les journaux en parallele."
+  else warn "curl toujours absent : la revue de presse reste en mode lent."; fi
 }
 
 # -----------------------------------------------------------------------------
@@ -88,6 +139,13 @@ prepare_postgres() {
     warn "psql introuvable sur l'hote. On tente via docker si un container pg est expose."
   fi
 
+  if [[ -z "${PG_PASS}" && -f "${FINANCE_DIR}/db_config.php" ]] && command -v php >/dev/null 2>&1; then
+    PG_PASS="$(php -r '$c = @include $argv[1]; echo is_array($c) ? (string)($c["password"] ?? "") : "";' "${FINANCE_DIR}/db_config.php" 2>/dev/null || true)"
+  fi
+  if [[ -z "${PG_PASS}" ]]; then
+    warn "Mot de passe PostgreSQL introuvable (ni PG_PASS, ni db_config.php) : etape PostgreSQL sautee."
+    return 0
+  fi
   export PGPASSWORD="${PG_PASS}"
   PSQL="psql -h ${PG_HOST} -p ${PG_PORT} -U ${PG_USER} -d ${PG_DB} -v ON_ERROR_STOP=1"
 
@@ -218,6 +276,11 @@ EOF
 # -----------------------------------------------------------------------------
 main() {
   require_root
+  if [[ "${1:-}" == "php" ]]; then
+    install_php_extensions
+    return 0
+  fi
+  install_php_extensions
   fix_permissions
   prepare_postgres
   setup_n8n

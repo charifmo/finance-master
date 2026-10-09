@@ -91,9 +91,12 @@ v('le média modifié en « locale » a désormais la sienne', (bool)array_filte
 v('le média en pause n\'est plus interrogé', !str_contains($tout, 'hespress'));
 v('le média retiré non plus', !str_contains($tout, 'kech24'));
 $t = cfo_vp_requetes_test($cfg, ['nom' => 'Al Marrakchia', 'domaine' => 'almarrakchia.net', 'portee' => 'locale', 'langue' => 'ar', 'flux' => 'https://www.almarrakchia.net/?s={q}&feed=rss2']);
-v('tester un média arabe : Google Actualités (AR) sur son site, puis son flux', count($t) === 2 && $t[0]['q'] === 'site:almarrakchia.net مراكش' && str_contains($t[0]['url'], 'hl=ar')
-  && $t[1]['type'] === 'flux' && $t[1]['url'] === 'https://www.almarrakchia.net/?s=' . rawurlencode('مراكش') . '&feed=rss2', $j($t));
-v('tester un média sans flux : Google seul', count(cfo_vp_requetes_test($cfg, ['nom' => 'Le Desk', 'domaine' => 'ledesk.ma', 'portee' => 'nationale', 'langue' => 'fr'])) === 1);
+// v37.42 : toutes les portes du média — aucune n'est un flux RSS du journal
+v('tester un média arabe : Google (AR) puis Bing sur son site, sa page de recherche, sa page d\'accueil', array_column($t, 'canal') === ['moteur', 'bing', 'recherche', 'accueil']
+  && $t[0]['q'] === 'site:almarrakchia.net مراكش' && str_contains($t[0]['url'], 'hl=ar') && $t[1]['q'] === 'site:almarrakchia.net مراكش', $j($t));
+v('  → sa recherche est demandée comme une PAGE (l\'ancien « &feed=rss2 » retiré)', $t[2]['type'] === 'page' && $t[2]['url'] === 'https://www.almarrakchia.net/?s=' . rawurlencode('مراكش'), $t[2]['url']);
+v('  → sa page d\'accueil, sur l\'hôte de sa recherche', $t[3]['type'] === 'page' && $t[3]['url'] === 'https://www.almarrakchia.net/', $t[3]['url']);
+v('tester un média sans adresse de recherche : Google, Bing, sa page d\'accueil', array_column(cfo_vp_requetes_test($cfg, ['nom' => 'Le Desk', 'domaine' => 'ledesk.ma', 'portee' => 'nationale', 'langue' => 'fr']), 'canal') === ['moteur', 'bing', 'accueil']);
 
 echo "  " . str_repeat('─', 86) . "\n";
 echo $ko === 0 ? "  ✅ TOUT PASSE — $n contrôles\n" : "  ❌ $ko contrôle(s) en échec sur $n\n";

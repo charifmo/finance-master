@@ -17,6 +17,11 @@ declare(strict_types=1);
  *
  *  Une source qui ne répond pas, ou qui ne parle pas RSS, est comptée et dite
  *  (« diagnostic ») — jamais remplacée par du contenu inventé.
+ *
+ *  v37.42 : aucun flux RSS de journal n'est lu (ils n'en ont pas d'ouvert) :
+ *  Google et Bing Actualités restreints au site, sa page de recherche et sa
+ *  page d'accueil lues en HTML. curl n'est plus requis : sans lui, les
+ *  sources passent une à une, dans un budget de temps (budget_s).
  * ============================================================================
  */
 require_once __DIR__ . '/cfo_veille_serveur.php';   // v37.40 : vos réglages (PostgreSQL) + réseau
@@ -47,34 +52,33 @@ if (($corps['action'] ?? '') !== 'revue') vp_sortie(['status' => 'error', 'error
 $conf = cfo_vp_config();
 $cfg = $conf['cfg'] ?? null;
 if (!is_array($cfg)) vp_sortie(['status' => 'error', 'error' => 'SOURCES_ABSENTES', 'message' => 'veille_sources.json absent ou illisible.'], 503);
-if (!function_exists('curl_multi_init')) vp_sortie(['status' => 'error', 'error' => 'CURL_ABSENT', 'message' => "L'extension curl de PHP est requise (apt install php-curl)."], 503);
+// v37.42 : curl n'est plus requis — sans lui, les sources sont lues une à une (plus lent, même résultat)
+$reseau = cfo_vp_prerequis();
+if ($reseau['mode_reseau'] === 'impossible') vp_sortie(['status' => 'error', 'error' => 'RESEAU_IMPOSSIBLE', 'commande' => $reseau['commande'],
+    'message' => 'Le PHP du serveur ne peut pas joindre le web (ni curl, ni allow_url_fopen). Sur le VPS : ' . ($reseau['commande'] ?: 'activer allow_url_fopen')], 503);
 
 $t = cfo_vp_valider($corps);
 if (!$t['lieux'] && !$t['sujets']) vp_sortie(['status' => 'error', 'error' => 'TERMES_VIDES', 'message' => 'Aucun lieu ni sujet exploitable.'], 400);
 $requetes = cfo_vp_requetes($cfg, $t['lieux'], $t['sujets']);
 $delai = max(2, min(20, (int)($cfg['delai_s'] ?? 8)));
+$budget = max(5, min(25, (int)($cfg['budget_s'] ?? 20)));
 $debut = microtime(true);
 
-/* ── Toutes les requêtes en parallèle : le délai total est celui de la plus lente ── */
-$reponses = cfo_vp_telecharger($requetes, $delai);
+/* ── Avec curl, toutes en parallèle (le délai total est celui de la plus lente) ; sans curl, une à une ── */
+$reponses = cfo_vp_telecharger($requetes, $delai, $budget);
 
 $articles = []; $diag = []; $couverture = [];
 foreach ($requetes as $i => $r) {
-    $corpsR = $reponses[$i]['corps']; $code = $reponses[$i]['http']; $err = $reponses[$i]['erreur'];
-    $d = ['source' => $r['nom'], 'libelle' => $r['libelle'], 'q' => $r['q'], 'http' => $code];
-    if ($code < 200 || $code >= 300) { $d['statut'] = 'erreur'; $d['erreur'] = $err ?: ('HTTP ' . $code); }
-    else {
-        // v37.41 : RSS s'il y en a un ; sinon, pour la recherche d'un site, sa page HTML de résultats
-        $lu = cfo_vp_lire_reponse($corpsR, $r, $cfg);
-        if ($lu['articles'] === null) { $d['statut'] = 'illisible'; $d['erreur'] = $r['type'] === 'flux' ? 'ni RSS, ni page de résultats lisible' : 'pas un flux RSS'; }
-        else { $d['statut'] = $lu['articles'] ? 'ok' : 'vide'; $d['n'] = count($lu['articles']); $d['mode'] = $lu['mode']; array_push($articles, ...$lu['articles']); }
-    }
+    // v37.42 : un moteur est lu comme sa liste de résultats, une page de journal en HTML — jamais un RSS de journal
+    $b = cfo_vp_bilan($r, $reponses[$i], $cfg);
+    array_push($articles, ...$b['articles']); unset($b['articles']);
+    $d = ['source' => $r['nom'], 'canal' => $r['canal'], 'libelle' => $r['libelle'], 'q' => $r['q'], 'http' => $reponses[$i]['http']] + $b;
     $diag[] = $d;
-    // v37.41 : le bilan de chaque média local — jamais d'échec silencieux
+    // v37.41-42 : le bilan de chaque média local, porte par porte — jamais d'échec silencieux
     if (!empty($r['domaine'])) {
         $couverture[$r['domaine']]['nom'] = $r['media'] ?? $r['nom'];
         $couverture[$r['domaine']]['domaine'] = $r['domaine'];
-        $couverture[$r['domaine']][$r['type'] === 'flux' ? 'site' : 'google'] = array_intersect_key($d, array_flip(['statut', 'n', 'mode', 'erreur']));
+        $couverture[$r['domaine']]['canaux'][] = ['canal' => $r['canal'], 'nom' => cfo_vp_nom_canal($r)] + array_intersect_key($b, array_flip(['statut', 'n', 'mode', 'erreur']));
     }
 }
 
@@ -90,7 +94,9 @@ vp_sortie([
     'requetes' => $diag,
     'couverture' => array_values($couverture),
     'sources_ok' => count(array_filter($diag, fn($d) => in_array($d['statut'], ['ok', 'vide'], true))),
-    'sources_ko' => count(array_filter($diag, fn($d) => !in_array($d['statut'], ['ok', 'vide'], true))),
+    'sources_ko' => count(array_filter($diag, fn($d) => in_array($d['statut'], ['erreur', 'illisible'], true))),
+    'sources_sautees' => count(array_filter($diag, fn($d) => $d['statut'] === 'saute')),
+    'reseau' => array_intersect_key($reseau, array_flip(['mode_reseau', 'manquants', 'commande'])),
     'duree_ms' => (int)round((microtime(true) - $debut) * 1000),
     'termes' => $t,
 ]);

@@ -77,6 +77,7 @@ suite "Le virement sort du net du Courant — serveur (PHP)"    php test_cfo_eng
 suite "Garde-mémoire : demandes, entités, recouvrement"        php test_cfo_engine_parity/test_garde_memoire.php
 suite "Mémorisation garantie · Recherche Éclair ciblée"       node test_cfo_engine_parity/test_garde_memoire.mjs
 suite "Revue de presse locale : requêtes, flux, tri"          php test_cfo_engine_parity/test_veille_presse.php
+suite "Presse sans flux ni curl : pages, secours, réseau"   php test_cfo_engine_parity/test_veille_sans_flux.php
 suite "La presse marrakchie lue avant la réponse"             node test_cfo_engine_parity/test_veille_presse.mjs
 suite "Médias de la veille : saisie, contrôles, superposition" php test_cfo_engine_parity/test_veille_sources.php
 suite "Médias réglables depuis l'écran (vraie base)"         node test_cfo_engine_parity/test_veille_sources.mjs
