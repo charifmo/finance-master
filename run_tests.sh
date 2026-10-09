@@ -71,5 +71,6 @@ suite "L'interface se souvient · le découvert d'abord"          node test_cfo_
 suite "La Météo montre où finit chaque compte"                 node test_cfo_engine_parity/test_atterrissage_comptes.mjs
 suite "Un flux pointé n'est plus projeté · tiroirs"         node test_cfo_engine_parity/test_pointage_tiroirs.mjs
 suite "Les virements internes bougent les soldes"             node test_cfo_engine_parity/test_virements_internes.mjs
+suite "L'épargne du mois, même déjà versée"                  node test_cfo_engine_parity/test_epargne_du_mois.mjs
 
 echo "✅ Toutes les suites passent."

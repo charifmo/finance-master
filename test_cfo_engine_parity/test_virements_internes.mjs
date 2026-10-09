@@ -205,14 +205,14 @@ try {
 
     /* ══ E. LE VIREMENT D'OCTOBRE SE POINTE : fait, il n'est plus projeté ══ */
     const ligne = await page.evaluate(() => {
-        const r = [...document.querySelectorAll('#pilotage-inbox [data-tiroir="epargne"] [data-tache]')].find(x => /Virement/.test(x.textContent));
+        const r = [...document.querySelectorAll('#pilotage-inbox [data-tiroir="virement"] [data-tache]')].find(x => /Virement/.test(x.textContent));
         return r ? { nom: r.querySelector('[data-tache-nom]').textContent.trim(), compte: r.querySelector('[data-route]')?.dataset.compteRoute,
                      date: [...r.querySelectorAll('span')].map(s => s.textContent.trim()).find(t => /^📅/.test(t)) } : null;
     });
-    v('E. la checklist le propose dans « 💎 Épargne & virements » : « Virement Courant → Dépenses annuelles », prélevé sur le Courant',
+    v('E. la checklist le propose dans « 🔄 Virements internes » (pas dans l\'épargne) : « Virement Courant → Dépenses annuelles », prélevé sur le Courant',
       !!ligne && ligne.nom === 'Virement Courant → Dépenses annuelles' && ligne.compte === 'cpt_1' && ligne.date === '📅 sans date', JSON.stringify(ligne));
-    await page.click('#pilotage-inbox [data-tiroir="epargne"] > summary'); await attendre(page, 200);
-    await page.locator('#pilotage-inbox [data-tiroir="epargne"] [data-tache]').filter({ hasText: 'Virement' }).locator('input[type=checkbox]').click();
+    await page.click('#pilotage-inbox [data-tiroir="virement"] > summary'); await attendre(page, 200);
+    await page.locator('#pilotage-inbox [data-tiroir="virement"] [data-tache]').filter({ hasText: 'Virement' }).locator('input[type=checkbox]').click();
     await attendre(page, 650);
     await page.evaluate(async (ST) => { const st = eval(ST);   // la banque l'a exécuté : les deux soldes ont bougé
         st.comptes.find(c => c.id === 1).solde = 8500; st.comptes.find(c => c.id === 3).solde = 3500;

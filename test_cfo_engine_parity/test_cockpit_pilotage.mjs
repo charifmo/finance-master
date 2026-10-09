@@ -303,7 +303,7 @@ try {
     const attenduNature = { 'FIXE EN RETARD': 'fixe', 'FIXE AVANCE PARTIELLE': 'fixe', 'FIXE DU JOUR': 'fixe',
         'FIXE DANS 3 JOURS': 'fixe', 'FIXE LOINTAINE': 'fixe', 'FIXE SANS DATE': 'fixe',
         'VARIABLE SEMAINE': 'variable', 'EPARGNE EN RETARD': 'epargne', 'EXCEPTIONNEL SANS DATE': 'exceptionnel' };
-    const ORDRE = ['entrees', 'fixe', 'variable', 'epargne', 'exceptionnel'];
+    const ORDRE = ['entrees', 'fixe', 'variable', 'epargne', 'virement', 'exceptionnel'];
     v('la file en tiroirs par nature, dans l\'ordre fixe (Entrées, Fixes, Variables, Épargne, Exceptionnels)',
       file.tiroirs.length >= 4 && file.tiroirs.every((t, i) => i === 0 || ORDRE.indexOf(file.tiroirs[i - 1].cle) < ORDRE.indexOf(t.cle))
       && ['fixe', 'variable', 'epargne', 'exceptionnel'].every(c => file.tiroirs.some(t => t.cle === c)), JSON.stringify(file.tiroirs.map(t => [t.cle, t.titre])));
