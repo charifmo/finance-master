@@ -1609,9 +1609,15 @@
 
                     <div class="space-y-4">
                         <div v-for="moisNum in 12" :key="moisNum" class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                            <div @click="toggleMois(moisNum)" class="bg-gray-50 px-6 py-4 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors border-b border-gray-100">
+                            <div @click="toggleMois(moisNum)" class="bg-gray-50 px-6 py-4 flex justify-between items-center gap-3 cursor-pointer hover:bg-gray-100 transition-colors border-b border-gray-100">
                                 <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm">Mois {{ moisNum }} - {{ nomDuMois(moisNum) }} {{ anneeAffichage }}</h3>
-                                <span v-if="totalMoisAffichage(moisNum) > 0" class="text-sm font-black text-red-600 bg-red-100 px-4 py-1.5 rounded-full shadow-inner">{{ formatMAD(totalMoisAffichage(moisNum)) }}</span>
+                                <!-- v37.35 : ce que contient le mois, même fermé — sorties, entrées, virements -->
+                                <span class="flex flex-wrap items-center justify-end gap-1.5" data-mois-resume :data-mois="moisNum">
+                                    <span v-if="resumesMois[moisNum].sorties > 0" data-mois-sorties class="text-sm font-black text-red-600 bg-red-100 px-4 py-1.5 rounded-full shadow-inner whitespace-nowrap">{{ formatMAD(resumesMois[moisNum].sorties) }}</span>
+                                    <span v-if="resumesMois[moisNum].entrees > 0" data-mois-entrees class="text-sm font-black text-green-700 bg-green-100 px-3 py-1.5 rounded-full shadow-inner whitespace-nowrap">+ {{ formatMAD(resumesMois[moisNum].entrees) }}</span>
+                                    <span v-if="resumesMois[moisNum].virements > 0" data-mois-virements :title="formatMAD(resumesMois[moisNum].montantVirements) + ' transférés entre vos comptes'"
+                                          class="text-sm font-black text-indigo-700 bg-indigo-100 px-3 py-1.5 rounded-full shadow-inner whitespace-nowrap">🔄 {{ resumesMois[moisNum].virements }} Virement{{ resumesMois[moisNum].virements > 1 ? 's' : '' }}</span>
+                                </span>
                             </div>
                             <div v-show="moisOuverts.includes(moisNum)" class="p-4 md:p-6 bg-white space-y-3">
                                 <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" class="bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
@@ -7543,8 +7549,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.34 Pointage-Sans-Double";
+                    const CURRENT_VERSION = "37.35 Virements-Visibles";
                     const CHANGELOG = [
+        { version: "37.35 Virements-Visibles", date: "2026-10-09", changes: [
+            "LES VIREMENTS INTERNES BOUGENT LES SOLDES — le Calendrier pluriannuel les saisissait, mais le moteur du Relevé ne les lisait pas : 60 000 DH de l'Épargne Long Terme vers les Dépenses annuelles, en novembre, n'apparaissaient nulle part, et les Dépenses annuelles semblaient finir à découvert (le radar réclamait même un virement de sauvetage). Chaque virement du cycle génère désormais DEUX lignes, le même jour : « 🔄 Virement → Dépenses annuelles » en sortie sur la source, « 🔄 Virement reçu ← Épargne Long Terme » en entrée sur la destination. Relevé, atterrissage du cycle, radar jusqu'en décembre, Météo et KPI « Dépenses annuelles » en tiennent compte.",
+            "LA RÈGLE DU CALENDRIER — un virement du mois M appartient au cycle M, comme un flux exceptionnel sans jour ; il se place le 20, et AVANT les dépenses du même jour : il finance ce qu'on paie avec.",
+            "FAIT = PLUS PROJETÉ — chaque virement du cycle rejoint la checklist, tiroir « 💎 Épargne & virements » (« Virement Courant → Dépenses annuelles », badge « 🔄 Virement »). Coché, il est déjà dans les deux soldes : le Relevé ne le projette plus (même règle que les flux exceptionnels, v37.34).",
+            "UN MOIS FERMÉ DIT CE QU'IL CONTIENT — l'en-tête d'un mois du Calendrier n'affichait que le total NET des flux exceptionnels, et seulement s'il était positif : un mois avec un seul virement, ou avec plus d'entrées que de sorties, restait muet. Il affiche désormais les sorties (« 7 150 DH », rouge), les entrées (« + 5 000 DH », vert) et les virements (« 🔄 1 Virement », montant au survol) — chacun seulement s'il existe.",
+            "PREUVE — suite nouvelle « Les virements internes bougent les soldes » (19 contrôles, montants à la main) : octobre (deux jambes), novembre (60 000, avant l'assurance qu'ils financent), fin d'année, radar, KPI Dépenses annuelles, pointage, en-têtes d'octobre, novembre, décembre et d'un mois vide. Rejouée sur la v37.34, elle retrouve le virement absent et le faux découvert de − 5 150. Douze défauts réintroduits exprès : onze attrapés, le douzième ne change rien au résultat (le reste dû est déjà nul).",
+        ] },
         { version: "37.34 Pointage-Sans-Double", date: "2026-10-09", changes: [
             "DOUBLE COMPTAGE CORRIGÉ — une entrée exceptionnelle (prime de 23 781 DH) cochée dans le Réalisé apparaissait à 47 562 DH dans le Relevé. La case enregistrait le montant SIGNÉ (− 23 781) ; le moteur, qui raisonne en valeur absolue, lisait « − 23 781 réglés sur 23 781 » : pas réglée, reste 23 781 − (− 23 781) = 47 562, projetés en plus du solde où la prime était déjà. Un pointage se lit désormais en MONTANT, quel que soit l'écran qui pose la question ; les primes déjà cochées avec la version précédente se lisent juste, sans migration.",
             "UN FLUX POINTÉ SORT DES CHOCS À VENIR — même prévu pour un cycle futur (reçu ou payé en avance) : le Relevé, le radar jusqu'en décembre et le tableau des flux ne le reprojettent plus. Reçu en partie : seul le reste est projeté.",
@@ -13190,6 +13203,32 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const supprimerDepense = (id) => { if(donneesAnnuelles.value[anneeAffichage.value]) donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres = donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres.filter(d => d.id !== id); handleDataChange(); };
                     // v17.96 : Virements internes CRUD
                     const getVirementsMois = (m, a) => (donneesAnnuelles.value[a]?.virementsInternes || []).filter(v => v.mois === m);
+                    //  v37.35 : les virements d'un CYCLE, avec la règle des flux exceptionnels —
+                    //  sans jour, un virement du mois M appartient au cycle M ; avec un jour au
+                    //  moins égal au jour de paie, au cycle suivant (il tombe après la paie).
+                    const getVirementsCycle = (cycleM, cycleA) => {
+                        const jdp = jourDePaie.value;
+                        const mPrev = cycleM === 1 ? 12 : cycleM - 1, aPrev = cycleM === 1 ? cycleA - 1 : cycleA;
+                        const de = (a) => (donneesAnnuelles.value[a]?.virementsInternes || []);
+                        return de(cycleA).filter(v => Number(v.mois) === cycleM && (!v.jourPrevu || Number(v.jourPrevu) < jdp))
+                            .concat(de(aPrev).filter(v => Number(v.mois) === mPrev && v.jourPrevu && Number(v.jourPrevu) >= jdp));
+                    };
+                    //  v37.35 : ce que contient un mois du Calendrier, lisible mois FERMÉ —
+                    //  les sorties, les entrées, et les virements (qui ne sont ni l'un ni l'autre).
+                    const resumesMois = computed(() => {
+                        calculationTick.value;
+                        const an = anneeAffichage.value, out = {};
+                        for (let m = 1; m <= 12; m++) {
+                            const deps = getDepensesMois(m, an), virs = getVirementsMois(m, an);
+                            out[m] = {
+                                sorties: Math.round(deps.reduce((s, d) => s + Math.max(0, Number(d.montant) || 0), 0)),
+                                entrees: Math.round(deps.reduce((s, d) => s + Math.max(0, -(Number(d.montant) || 0)), 0)),
+                                virements: virs.length,
+                                montantVirements: Math.round(virs.reduce((s, v) => s + Math.abs(Number(v.montant) || 0), 0)),
+                            };
+                        }
+                        return out;
+                    });
                     const ajouterVirementInterne = (m, a) => {
                         if (!donneesAnnuelles.value[a]) return;
                         if (!Array.isArray(donneesAnnuelles.value[a].virementsInternes)) donneesAnnuelles.value[a].virementsInternes = [];
@@ -14249,6 +14288,25 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 }, {});
                                 Object.keys(_varByAcc).forEach(k => { if (_varByAcc[k] > 0) out.push({ account: k, libelle: '🛒 Total Charges Variables', montant: _varByAcc[k], type: 'debit', jourPrevu: 15, internal: false }); });
                             }
+
+                            // ===== v37.35 VIREMENTS INTERNES : DEUX jambes, le même jour — une sortie sur la
+                            //   source, une entrée sur la destination. Jusqu'ici le Relevé les ignorait : un
+                            //   virement de 60 000 de l'Épargne LT vers les Dépenses annuelles ne bougeait
+                            //   aucun solde. Pointé (fait), il est déjà dans les deux soldes : plus projeté.
+                            //   Sans jour : le 20, comme un flux exceptionnel sans jour — et AVANT les chocs
+                            //   du même jour, puisqu'il finance ce qu'on paie avec.
+                            getVirementsCycle(m, a).forEach(vir => {
+                                const due = Math.abs(Number(vir.montant) || 0); if (!due) return;
+                                const _vs = _normKey(vir.sourceCompte || 'courant'), _vd = _normKey(vir.destinationCompte || 'courant');
+                                if (_vs === _vd) return;
+                                let amt;
+                                if (isItemPaid(vir, due, _cyc)) amt = 0; else { const r = due - (getPaidAmount(vir, due, _cyc) || 0); amt = r > 0 ? r : 0; }
+                                amt = Math.round(amt * 100) / 100;
+                                if (amt <= 0) return;
+                                const _vj = Number(vir.jourPrevu || 20);
+                                out.push({ account: _vs, libelle: '🔄 Virement → ' + getNomCompte(vir.destinationCompte || 'courant'), montant: amt, type: 'debit', jourPrevu: _vj, internal: true });
+                                out.push({ account: _vd, libelle: '🔄 Virement reçu ← ' + getNomCompte(vir.sourceCompte || 'courant'), montant: amt, type: 'credit', jourPrevu: _vj, internal: true });
+                            });
 
                             // ===== CHOCS EXCEPTIONNELS : DÉTAILLÉS ligne par ligne (créances via assurances_tracker) =====
                             getDepensesCycle(m, a).forEach(dep => {
@@ -15908,6 +15966,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
                         epargneBudgetairePilotage.value.forEach(ep =>
                             pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an, moisBud), 'Épargne', '💎', 'purple', ep.jourPrevu, 'epargne'));
+                        //  v37.35 : les virements internes du cycle se pointent avec l'épargne — faits,
+                        //  ils sont dans les deux soldes et le Relevé ne les projette plus.
+                        getVirementsCycle(pilotageViewedMois.value, pilotageViewedAn.value).forEach(vir => {
+                            const s = cleDeCompte(vir.sourceCompte || 'courant'), d = cleDeCompte(vir.destinationCompte || 'courant');
+                            if (s === d) return;
+                            const n = out.length;
+                            pousser(vir, 'Virement ' + infoCompte(s).tag + ' → ' + infoCompte(d).tag, Math.abs(Number(vir.montant) || 0),
+                                    'Virement', '🔄', 'purple', vir.jourPrevu, 'epargne');
+                            if (out.length > n) out[n].badge = '🔄 Virement';
+                        });
                         getDepensesCycle(pilotageViewedMois.value, pilotageViewedAn.value).forEach(dep =>
                             pousser(dep, dep.nom, Number(dep.montant || 0), 'Flux exceptionnel', '⚠️', 'rose', dep.jourPrevu, 'exceptionnel'));
                         return out.sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle));
@@ -19402,7 +19470,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         addObjectifEpargne, deleteObjectifEpargne,
                         comptesSelectOptions,
                         detailsComptesFinal, soldesProjetesJournal, getCompteLabel, getCompteIcone, getNomCompte,
-                        getVirementsMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
+                        getVirementsMois, getVirementsCycle, resumesMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
                         canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
                         // v37.12 — suivi d'exécution par cycle
                         cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, dateReelleCycle,
