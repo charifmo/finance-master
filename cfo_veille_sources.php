@@ -63,11 +63,12 @@ if ($action === 'tester') {
         $d = ['canal' => $r['type'] === 'flux' ? 'flux' : 'google', 'q' => $r['q']];
         if ($x['http'] < 200 || $x['http'] >= 300) { $d += ['statut' => 'erreur', 'erreur' => $x['erreur'] ?: ('HTTP ' . $x['http'])]; }
         else {
-            $lus = cfo_vp_lire_rss($x['corps'], $r, $cfg);
-            if ($lus === null) $d += ['statut' => 'illisible', 'erreur' => 'pas un flux RSS'];
+            $lu = cfo_vp_lire_reponse($x['corps'], $r, $cfg);     // v37.41 : RSS, sinon la page de résultats
+            $lus = $lu['articles'];
+            if ($lus === null) $d += ['statut' => 'illisible', 'erreur' => $r['type'] === 'flux' ? 'ni RSS, ni page de résultats lisible' : 'pas un flux RSS'];
             else {
                 usort($lus, fn($a, $b) => ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0));
-                $d += ['statut' => $lus ? 'ok' : 'vide', 'n' => count($lus),
+                $d += ['statut' => $lus ? 'ok' : 'vide', 'n' => count($lus), 'mode' => $lu['mode'],
                        'exemple' => $lus ? ['titre' => $lus[0]['titre'], 'date' => $lus[0]['date']] : null];
             }
         }

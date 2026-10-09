@@ -86,8 +86,8 @@ v('une ligne abîmée en base est ignorée, pas fatale', !isset($o['localhost'])
 $cfgF = $cfg; $cfgF['sources'] = $f['sources'];
 $R = cfo_vp_requetes($cfgF, ['Ouahat Sidi Brahim', 'واحة سيدي ابراهيم'], ['RN9', 'تصميم التهيئة']);
 $tout = implode("\n", array_column($R, 'q')) . "\n" . implode("\n", array_column($R, 'url'));
-v('le média ajouté est interrogé avec la presse locale', (bool)array_filter($R, fn($r) => $r['libelle'] === 'presse locale' && str_contains($r['q'], 'site:marrakechtoday.ma')));
-v('le média modifié en « locale » rejoint la presse locale', (bool)array_filter($R, fn($r) => $r['libelle'] === 'presse locale' && str_contains($r['q'], 'site:ledesk.ma')));
+v('le média ajouté a sa requête stricte de presse locale', (bool)array_filter($R, fn($r) => str_starts_with($r['q'], 'site:marrakechtoday.ma ')));
+v('le média modifié en « locale » a désormais la sienne', (bool)array_filter($R, fn($r) => str_starts_with($r['q'], 'site:ledesk.ma ')));
 v('le média en pause n\'est plus interrogé', !str_contains($tout, 'hespress'));
 v('le média retiré non plus', !str_contains($tout, 'kech24'));
 $t = cfo_vp_requetes_test($cfg, ['nom' => 'Al Marrakchia', 'domaine' => 'almarrakchia.net', 'portee' => 'locale', 'langue' => 'ar', 'flux' => 'https://www.almarrakchia.net/?s={q}&feed=rss2']);

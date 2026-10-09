@@ -58,24 +58,37 @@ $debut = microtime(true);
 /* ── Toutes les requêtes en parallèle : le délai total est celui de la plus lente ── */
 $reponses = cfo_vp_telecharger($requetes, $delai);
 
-$articles = []; $diag = [];
+$articles = []; $diag = []; $couverture = [];
 foreach ($requetes as $i => $r) {
     $corpsR = $reponses[$i]['corps']; $code = $reponses[$i]['http']; $err = $reponses[$i]['erreur'];
     $d = ['source' => $r['nom'], 'libelle' => $r['libelle'], 'q' => $r['q'], 'http' => $code];
-    if ($code < 200 || $code >= 300) { $d['statut'] = 'erreur'; $d['erreur'] = $err ?: ('HTTP ' . $code); $diag[] = $d; continue; }
-    $lus = cfo_vp_lire_rss($corpsR, $r, $cfg);
-    if ($lus === null) { $d['statut'] = 'illisible'; $d['erreur'] = "pas un flux RSS"; $diag[] = $d; continue; }
-    $d['statut'] = $lus ? 'ok' : 'vide'; $d['n'] = count($lus);
+    if ($code < 200 || $code >= 300) { $d['statut'] = 'erreur'; $d['erreur'] = $err ?: ('HTTP ' . $code); }
+    else {
+        // v37.41 : RSS s'il y en a un ; sinon, pour la recherche d'un site, sa page HTML de résultats
+        $lu = cfo_vp_lire_reponse($corpsR, $r, $cfg);
+        if ($lu['articles'] === null) { $d['statut'] = 'illisible'; $d['erreur'] = $r['type'] === 'flux' ? 'ni RSS, ni page de résultats lisible' : 'pas un flux RSS'; }
+        else { $d['statut'] = $lu['articles'] ? 'ok' : 'vide'; $d['n'] = count($lu['articles']); $d['mode'] = $lu['mode']; array_push($articles, ...$lu['articles']); }
+    }
     $diag[] = $d;
-    array_push($articles, ...$lus);
+    // v37.41 : le bilan de chaque média local — jamais d'échec silencieux
+    if (!empty($r['domaine'])) {
+        $couverture[$r['domaine']]['nom'] = $r['media'] ?? $r['nom'];
+        $couverture[$r['domaine']]['domaine'] = $r['domaine'];
+        $couverture[$r['domaine']][$r['type'] === 'flux' ? 'site' : 'google'] = array_intersect_key($d, array_flip(['statut', 'n', 'mode', 'erreur']));
+    }
 }
 
 $retenus = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], $cfg);
+foreach ($couverture as $dom => &$c) {
+    $c['retenus'] = count(array_filter($retenus, fn($a) => $a['domaine'] === $dom || substr($a['domaine'], -strlen($dom) - 1) === '.' . $dom));
+}
+unset($c);
 vp_sortie([
     'status' => 'ok',
     'articles' => $retenus,
     'lus' => count($articles),
     'requetes' => $diag,
+    'couverture' => array_values($couverture),
     'sources_ok' => count(array_filter($diag, fn($d) => in_array($d['statut'], ['ok', 'vide'], true))),
     'sources_ko' => count(array_filter($diag, fn($d) => !in_array($d['statut'], ['ok', 'vide'], true))),
     'duree_ms' => (int)round((microtime(true) - $debut) * 1000),

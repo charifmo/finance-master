@@ -2237,6 +2237,16 @@
                                                         <span v-if="mi.contexte.presse" data-mi-presse :class="['w-full font-bold', mi.contexte.presse.ok && mi.contexte.presse.articles.length ? 'text-sky-300' : 'text-amber-300']">
                                                             📰 {{ mi.contexte.presse.ok ? (mi.contexte.presse.articles.length ? mi.contexte.presse.articles.length + ' article' + (mi.contexte.presse.articles.length > 1 ? 's' : '') + ' de presse lu' + (mi.contexte.presse.articles.length > 1 ? 's' : '') + ' avant la réponse — ' + mi.contexte.presse.medias.join(', ') : 'Aucun article de presse sur ' + mi.contexte.presse.lieux.join(' · ') + ' — ' + mi.contexte.presse.requetes + ' requêtes') : 'Revue de presse indisponible — ' + mi.contexte.presse.erreur }}<span v-if="mi.contexte.presse.ko" data-mi-presse-ko class="text-slate-400 font-normal"> · {{ mi.contexte.presse.ko }} source{{ mi.contexte.presse.ko > 1 ? 's' : '' }} injoignable{{ mi.contexte.presse.ko > 1 ? 's' : '' }}</span>
                                                         </span>
+                                                        <!-- v37.41 : le bilan de chaque média local — un RSS fermé n'est jamais un échec muet -->
+                                                        <details v-if="mi.contexte.presse && mi.contexte.presse.couverture && mi.contexte.presse.couverture.length" data-mi-couverture
+                                                                 :open="uiOuvert('intel.couverture', false)" @toggle="uiFixer('intel.couverture', $event.target.open)" class="w-full">
+                                                            <summary class="cursor-pointer select-none text-slate-400 font-bold">Détail par média local ({{ mi.contexte.presse.couverture.filter(c => c.retenus).length }}/{{ mi.contexte.presse.couverture.length }} avec des articles retenus)</summary>
+                                                            <ul class="mt-1 space-y-0.5">
+                                                                <li v-for="c in mi.contexte.presse.couverture" :key="c.domaine" data-mi-media :class="c.retenus ? 'text-slate-200' : 'text-amber-300'">
+                                                                    <b>{{ c.nom }}</b> — {{ c.retenus }} retenu{{ c.retenus > 1 ? 's' : '' }} · {{ c.texte }}
+                                                                </li>
+                                                            </ul>
+                                                        </details>
                                                     </div>
                                                     <div class="p-5 bg-slate-100">
                                                         <!-- Chargement -->
@@ -6121,9 +6131,9 @@
                         </div>
                         <label class="flex items-start gap-2 text-xs text-slate-700 font-bold">
                             <input type="checkbox" v-model="veilleSources.form.wordpress" data-vs-wordpress class="mt-0.5"/>
-                            <span>Le site a une recherche RSS de type WordPress (<code>/?s=…&amp;feed=rss2</code>) — l'interroger aussi directement</span>
+                            <span>Le site a une recherche WordPress (<code>/?s=…</code>) — la lire directement : son RSS s'il est ouvert, sinon sa page de résultats</span>
                         </label>
-                        <label v-if="!veilleSources.form.wordpress" class="block text-[10px] font-black uppercase tracking-widest text-slate-500">Flux RSS de recherche (facultatif — {q} = les mots cherchés)
+                        <label v-if="!veilleSources.form.wordpress" class="block text-[10px] font-black uppercase tracking-widest text-slate-500">Adresse de recherche du site (facultatif — RSS ou page de résultats ; {q} = les mots cherchés)
                             <input v-model="veilleSources.form.flux" data-vs-flux type="text" placeholder="ex. https://www.exemple.ma/recherche?q={q}&amp;format=rss"
                                    class="mt-1 w-full p-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 normal-case tracking-normal bg-white outline-none focus:ring-2 focus:ring-sky-400"/>
                         </label>
@@ -6149,7 +6159,7 @@
                                             <p class="text-sm font-black text-slate-800">{{ s.nom }} <span class="text-[10px] font-bold text-slate-400">{{ s.domaine }}</span></p>
                                             <p class="text-[10px] font-bold text-slate-500 flex flex-wrap gap-1.5 mt-0.5">
                                                 <span class="px-1.5 rounded bg-slate-100">{{ s.langue === 'ar' ? 'arabe' : 'français' }}</span>
-                                                <span v-if="s.flux" class="px-1.5 rounded bg-emerald-100 text-emerald-700">RSS du site</span>
+                                                <span v-if="s.flux" class="px-1.5 rounded bg-emerald-100 text-emerald-700">recherche du site</span>
                                                 <span v-if="s.origine === 'ajoutee'" data-vs-badge="ajoutee" class="px-1.5 rounded bg-sky-100 text-sky-700">ajoutée par vous</span>
                                                 <span v-else-if="s.origine === 'modifiee'" data-vs-badge="modifiee" class="px-1.5 rounded bg-amber-100 text-amber-700">modifiée</span>
                                                 <span v-else-if="s.origine === 'nouvelle'" data-vs-badge="nouvelle" class="px-1.5 rounded bg-violet-100 text-violet-700">nouvelle</span>
@@ -6167,9 +6177,9 @@
                                             <template v-else>
                                                 <p v-for="c in [veilleSources.tests[s.domaine].google, veilleSources.tests[s.domaine].flux].filter(Boolean)" :key="c.canal" :data-vs-canal="c.canal"
                                                    :class="c.statut === 'ok' ? 'text-emerald-700' : (c.statut === 'vide' ? 'text-slate-500' : 'text-red-600')">
-                                                    {{ c.statut === 'ok' ? '✅' : (c.statut === 'vide' ? '⚪' : '❌') }} {{ c.canal === 'flux' ? 'RSS du site' : 'Google Actualités' }} :
+                                                    {{ c.statut === 'ok' ? '✅' : (c.statut === 'vide' ? '⚪' : '❌') }} {{ c.canal === 'flux' ? 'Recherche du site' + (c.mode === 'page' ? ' (page web, sans RSS)' : (c.mode === 'rss' ? ' (RSS)' : '')) : 'Google Actualités' }} :
                                                     {{ c.statut === 'ok' ? c.n + ' article' + (c.n > 1 ? 's' : '') + (c.exemple ? ' — dernier : « ' + c.exemple.titre + ' »' + (c.exemple.date ? ' (' + c.exemple.date + ')' : '') : '')
-                                                       : (c.statut === 'vide' ? 'aucun article trouvé sur ce site' : (c.statut === 'illisible' ? 'le site ne répond pas en RSS' : c.erreur)) }}
+                                                       : (c.statut === 'vide' ? 'aucun article trouvé sur ce site' : (c.statut === 'illisible' ? 'ni RSS, ni page de résultats lisible' : c.erreur)) }}
                                                 </p>
                                             </template>
                                         </div>
@@ -7710,8 +7720,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.40 Sources-Presse-Reglables";
+                    const CURRENT_VERSION = "37.41 Presse-Sans-RSS";
                     const CHANGELOG = [
+        { version: "37.41 Presse-Sans-RSS", date: "2026-10-09", changes: [
+            "LA PLUPART DES SITES MARRAKCHIS N'ONT PAS DE RSS OUVERT (constat sur Kech24, Marrakech Alaan) — la revue de presse ne dépend plus d'eux, et n'échoue plus en silence.",
+            "UNE REQUÊTE GOOGLE ACTUALITÉS STRICTE PAR MÉDIA LOCAL — site:kech24.com (\"واحة سيدي ابراهيم\" OR \"Ouahat Sidi Brahim\"), et de même pour chaque média local, avec les lieux du bien dans les deux langues. Jusqu'ici un seul OR regroupait les quatre sites : les petits médias y étaient noyés.",
+            "LA PAGE DE RÉSULTATS DU SITE, LUE QUAND IL N'Y A PAS DE RSS — la recherche du site (/?s=… pour WordPress) est lue en RSS si le site en sert un, sinon en HTML : titres, liens, dates, chapôs des résultats. Menus, barres latérales « les plus lus », publicités, catégories et pagination sont écartés. Une page qui n'est pas une page de résultats (accueil par redirection) ne fournit que les titres qui nomment le lieu.",
+            "UN BILAN PAR MÉDIA LOCAL — sur la carte : ce que Google a trouvé sur son site, ce que sa propre recherche a donné (RSS lu, page web lue, ou fermée / injoignable avec la cause), et le nombre d'articles retenus. Les médias restés muets sont nommés à l'agent, qui doit les cibler un par un. Le bouton 🧪 de la fenêtre Sources lit aussi la page de résultats d'un site sans RSS.",
+            "PREUVE — « La presse marrakchie lue avant la réponse » passe à 58 contrôles (Kech24 sans RSS avec sa page de résultats, Marrakech Alaan renvoyé sur son accueil, Al Marrakchia en RSS, Marrakech 7 muet), « Revue de presse locale » à 51, « Médias réglables depuis l'écran » à 37 (🧪 sur un site sans RSS, via un proxy local). Rejouées sur la v37.40 : 21 échecs. Seize défauts réintroduits exprès : tous attrapés.",
+        ] },
         { version: "37.40 Sources-Presse-Reglables", date: "2026-10-09", changes: [
             "LES JOURNAUX DE LA VEILLE SE GÈRENT DEPUIS L'ÉCRAN — fenêtre « 📰 Sources de la revue de presse », ouverte depuis la Supervision IA (« 📰 Sources presse ») ou depuis chaque carte Intelligence marché (« 📰 Sources »). Ajouter un média (nom, site — une adresse copiée suffit —, presse locale ou nationale, arabe ou français, recherche RSS WordPress en une case), le modifier, le mettre en pause, le retirer, le rétablir, revenir à la liste d'origine. Chaque action est enregistrée aussitôt.",
             "TESTER UN MÉDIA — 🧪 interroge le média tout de suite : nombre d'articles trouvés par Google Actualités sur son site, le dernier titre et sa date, et le résultat de son flux RSS. On sait avant le prochain « Actualiser » si la source répond.",
@@ -10815,7 +10832,7 @@
                     };
                     const chargerPresseLocale = async (asset, fiches) => {
                         const { lieux, sujets } = _lieuxEtSujets(asset, fiches);
-                        const p = { ok: false, articles: [], lieux, requetes: 0, ko: 0, medias: [], erreur: '' };
+                        const p = { ok: false, articles: [], lieux, requetes: 0, ko: 0, medias: [], couverture: [], erreur: '' };
                         try {
                             const r = await fetch(VEILLE_PRESSE_PATH, {
                                 method: 'POST', cache: 'no-store',
@@ -10830,6 +10847,17 @@
                                 extrait: String(x.extrait || ''), langue: x.langue || 'fr', url: String(x.url || ''),
                                 lien: /^https?:\/\//i.test(String(x.url || '')) ? String(x.url) : null }));
                             p.requetes = (d.requetes || []).length; p.ko = d.sources_ko || 0;
+                            // v37.41 : le bilan de chaque média local, en clair — jamais d'échec silencieux
+                            p.couverture = (d.couverture || []).map(c => {
+                                const g = c.google, s = c.site, n = (x) => x.n + ' article' + (x.n > 1 ? 's' : '');
+                                const tg = !g ? '—' : (g.statut === 'ok' ? n(g) : (g.statut === 'vide' ? 'aucun article' : 'échec (' + (g.erreur || g.statut) + ')'));
+                                const ts = !s ? 'pas de recherche configurée'
+                                    : (s.statut === 'ok' ? (s.mode === 'page' ? 'page de résultats lue, sans RSS' : 'RSS lu') + ' — ' + n(s)
+                                    : (s.statut === 'vide' ? (s.mode === 'page' ? 'page lue, rien sur ce lieu' : 'RSS lu, rien sur ce lieu')
+                                    : 'fermée ou injoignable (' + (s.erreur || s.statut) + ')'));
+                                return { nom: String(c.nom || c.domaine || ''), domaine: String(c.domaine || ''), retenus: Number(c.retenus) || 0,
+                                         texte: 'Google « site:' + c.domaine + ' » : ' + tg + ' · recherche du site : ' + ts };
+                            });
                             p.medias = [...new Set(p.articles.map(x => x.source))].slice(0, 6);
                         } catch (e) { p.erreur = e.message || String(e); }
                         return p;
@@ -10879,6 +10907,10 @@
                             L.push("REVUE DE PRESSE LOCALE : indisponible (" + p.erreur + "). Cherche toi-même dans la presse locale (Al Marrakchia, Marrakech Alaan, "
                                  + "Kech24, Le Desk, Médias24, Hespress).");
                         }
+                        // v37.41 : les médias locaux qui n'ont rien donné sont nommés — l'agent doit les cibler un par un
+                        const muets = (p.couverture || []).filter(c => !c.retenus);
+                        if (p.ok && muets.length) L.push("Médias locaux sans article retenu ici : " + muets.map(c => c.nom + ' (' + c.domaine + ')').join(', ')
+                            + ". Si tu cherches toi-même, cible-les un par un, par exemple « site:" + muets[0].domaine + ' ' + (p.lieux[0] || '[lieu]') + " ».");
                         L.push('', 'MÉTHODE OBLIGATOIRE :',
                             "1. Lis d'abord la revue de presse : ne garde que ce qui touche CE bien — sa commune, son douar, son axe, son zonage. Un article hors "
                             + "zone est ignoré, pas résumé.",
@@ -10972,7 +11004,8 @@
                                                      stockage: '', raison: '', maj: '', liste: [], supprimees: [], form: null, tests: {} });
                     const _vsDomaine = (v) => String(v || '').trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
                         .replace(/[\/?#].*$/, '').replace(/:\d+$/, '').replace(/^www\./, '');
-                    const _vsFluxWordpress = (dom) => 'https://' + dom + '/?s={q}&feed=rss2';
+                    //  v37.41 : la page de recherche WordPress — lue en RSS si le site en sert un, en HTML sinon
+                    const _vsFluxWordpress = (dom) => 'https://' + dom + '/?s={q}';
                     const _vsAppel = async (corps) => {
                         const res = await fetch(VEILLE_SOURCES_PATH + (corps ? '' : '?t=' + Date.now()), corps
                             ? { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(corps) }

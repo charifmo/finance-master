@@ -40,19 +40,24 @@ $sujets = ['RN9', 'SDAU', "plan d'aménagement", 'Grand Stade', 'الطريق ا
 $R = cfo_vp_requetes($cfg, $lieux, $sujets);
 $qs = array_column($R, 'q');
 $locales = '(site:almarrakchia.net OR site:marrakechalaan.com OR site:kech24.com OR site:marrakech7.com)';
-v('la presse marrakchie, par son nom de domaine, pour le lieu exact', in_array('"Ouahat Sidi Brahim" ' . $locales, $qs, true), $j($qs));
+// v37.41 : une requête STRICTE par média local, avec les lieux des deux langues
+$strict = fn($dom) => 'site:' . $dom . ' ("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim" OR "Oulad Belaagid")';
+foreach (['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'] as $dom)
+    v("requête stricte pour $dom : site:$dom (lieux AR OR FR), Google en arabe",
+      (bool)array_filter($R, fn($r) => $r['q'] === $strict($dom) && str_contains($r['url'], 'hl=ar') && $r['domaine'] === $dom && $r['specifique']), $j($qs));
+v('plus de OR groupé des sites locaux pour un lieu (les petits médias y étaient noyés)', !in_array('"Ouahat Sidi Brahim" ' . $locales, $qs, true) && !in_array('"واحة سيدي ابراهيم" ' . $locales, $qs, true));
 v('le lieu avec les sujets fonciers (RN9, SDAU, plan d\'aménagement…)', in_array('"Ouahat Sidi Brahim" (RN9 OR SDAU OR "plan d\'aménagement" OR "Grand Stade")', $qs, true));
 v('la presse nationale (Le Desk, Médias24, Hespress…)', (bool)array_filter($qs, fn($q) => str_starts_with($q, '"Ouahat Sidi Brahim" (site:ledesk.ma OR site:medias24.com')));
-v('le lieu en ARABE, sur Google Actualités en arabe', (bool)array_filter($R, fn($r) => $r['q'] === '"واحة سيدي ابراهيم" ' . $locales && str_contains($r['url'], 'hl=ar')));
+v('le lieu en ARABE, sur Google Actualités en arabe', (bool)array_filter($R, fn($r) => str_starts_with($r['q'], '"واحة سيدي ابراهيم"') && str_contains($r['url'], 'hl=ar')));
 v('les sujets en arabe vont avec le lieu en arabe', in_array('"واحة سيدي ابراهيم" ("الطريق الوطنية رقم 9" OR "المخطط المديري" OR "تصميم التهيئة")', $qs, true));
 v('la recherche des sites locaux reçoit le lieu dans LEUR langue (arabe)',
-  count(array_filter($R, fn($r) => $r['type'] === 'flux' && $r['q'] === 'واحة سيدي ابراهيم')) === 3, $j(array_values(array_filter($R, fn($r) => $r['type'] === 'flux'))));
+  count(array_filter($R, fn($r) => $r['type'] === 'flux' && $r['q'] === 'واحة سيدي ابراهيم')) === 4, $j(array_values(array_filter($R, fn($r) => $r['type'] === 'flux'))));
 v('la zone : Marrakech + sujets, presse locale', in_array('Marrakech (RN9 OR SDAU OR "plan d\'aménagement" OR "Grand Stade") ' . $locales, $qs, true));
 v('au plus ' . CFO_VP_MAX_REQUETES . ' requêtes', count($R) <= CFO_VP_MAX_REQUETES && count($R) >= 10, (string)count($R));
 $gabarits = array_merge(array_column($cfg['moteurs'], 'gabarit'), array_filter(array_column($cfg['sources'], 'flux')));
 $prefixes = array_map(fn($g) => substr($g, 0, strpos($g, '{q}')), $gabarits);
 v('chaque URL vient d\'un gabarit de veille_sources.json', !array_filter($R, fn($r) => !array_filter($prefixes, fn($p) => str_starts_with($r['url'], $p))));
-v('les termes sont encodés (guillemets, arabe, espaces)', str_contains($R[0]['url'], '%22Ouahat%20Sidi%20Brahim%22') && !preg_match('/[\s"]/', implode('', array_column($R, 'url'))));
+v('les termes sont encodés (guillemets, arabe, espaces)', str_contains($R[0]['url'], '%22Ouahat%20Sidi%20Brahim%22') && !preg_match('/[\s"]/', implode('', array_column($R, 'url'))), $R[0]['url']);
 v('les requêtes « lieu » exigent le lieu exact (spécifiques), la zone non',
   !array_filter($R, fn($r) => str_starts_with($r['libelle'], 'zone') ? $r['specifique'] : !$r['specifique']));
 
@@ -78,6 +83,53 @@ $b = cfo_vp_lire_rss($wp, ['type' => 'flux', 'nom' => 'Marrakech Alaan', 'domain
 v('flux WordPress d\'un site local : source et portée tirées du fichier', $b && $b[0]['source'] === 'Marrakech Alaan' && $b[0]['portee'] === 'locale' && $b[0]['extrait'] === 'صادق المجلس على تصميم التهيئة…', $j($b));
 v('une page HTML (site sans recherche RSS) n\'est pas un flux : null, dit, pas inventé', cfo_vp_lire_rss('<!DOCTYPE html><html><body>Recherche</body></html>', ['type' => 'flux', 'specifique' => true], $cfg) === null);
 v('un XML cassé non plus', cfo_vp_lire_rss('<?xml version="1.0"?><rss><channel><item><title>x', ['type' => 'moteur', 'specifique' => true], $cfg) === null);
+
+/* ── 3bis. v37.41 : la page de résultats, quand le site n'a pas de RSS ── */
+$page = <<<'H'
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><title>نتائج البحث عن واحة سيدي ابراهيم - كش 24</title></head><body>
+<header><nav class="main-menu"><a href="https://www.kech24.com/category/marrakech/">مراكش جهة جهة جهة</a><a href="/">الرئيسية</a></nav></header>
+<main id="content"><h1 class="page-title">نتائج البحث عن: واحة سيدي ابراهيم</h1>
+<article class="post"><h2 class="entry-title"><a href="https://www.kech24.com/2026/09/12/oasis-plan/">واحة سيدي ابراهيم: الوكالة الحضرية تفتح شريط الطريق الوطنية رقم 9</a></h2>
+ <time datetime="2026-09-12T09:30:00+01:00">12 سبتمبر 2026</time><p>صادقت اللجنة على تعديل تصميم التهيئة لفائدة الأنشطة اللوجستيكية على طول الطريق الوطنية رقم 9...</p></article>
+<article class="post"><h2 class="entry-title"><a href="/2026/08/03/rocade/">الطريق المداري الكبير لمراكش يمر قرب الدواوير الشمالية</a></h2><time datetime="2026-08-03">3 غشت</time></article>
+<article class="post"><h3><a href="javascript:alert(1)">رابط مشبوه رابط مشبوه رابط مشبوه</a></h3></article>
+<article class="post"><h2><a href="https://www.kech24.com/tag/oasis/">وسم واحة سيدي ابراهيم وسم وسم</a></h2></article>
+</main>
+<aside class="sidebar"><div class="widget popular"><h3><a href="https://www.kech24.com/2026/10/01/football/">الكوكب المراكشي يفوز في مباراة مثيرة</a></h3></div></aside>
+<div class="ad"><h3><a href="https://pub.example.com/promo">عرض خاص على الشقق الفاخرة في مراكش</a></h3></div>
+<footer><a href="https://www.kech24.com/page/2/">الصفحة التالية الصفحة التالية</a></footer></body></html>
+H;
+$reqK = ['type' => 'flux', 'nom' => 'Kech24', 'q' => 'واحة سيدي ابراهيم', 'langue' => 'ar', 'url' => 'https://www.kech24.com/?s=x', 'domaine' => 'kech24.com', 'specifique' => true];
+$lu = cfo_vp_lire_reponse($page, $reqK, $cfg);
+$tk = array_column($lu['articles'] ?? [], 'titre');
+v('RSS fermé : la page de résultats est lue (mode « page »)', $lu['mode'] === 'page' && count($tk) === 2, $j($lu));
+v('  → titre, lien absolu (lien relatif résolu), date <time>, chapô', ($lu['articles'][0]['date'] ?? '') === '2026-09-12' && str_starts_with($lu['articles'][0]['extrait'] ?? '', 'صادقت اللجنة')
+  && ($lu['articles'][1]['url'] ?? '') === 'https://www.kech24.com/2026/08/03/rocade/' && ($lu['articles'][0]['source'] ?? '') === 'Kech24' && ($lu['articles'][0]['portee'] ?? '') === 'locale', $j($lu['articles'] ?? []));
+v('  → écartés : menu, barre latérale « les plus lus », publicité externe, étiquette, pagination, javascript:',
+  !array_filter($tk, fn($t) => str_contains($t, 'الكوكب') || str_contains($t, 'عرض خاص') || str_contains($t, 'وسم') || str_contains($t, 'مشبوه') || str_contains($t, 'الصفحة')), $j($tk));
+v('  → page de résultats (le terme y figure) : ses articles sont « spécifiques »', !array_filter($lu['articles'], fn($a) => !$a['specifique']));
+// Un thème SANS <article> pour ses résultats, une publicité parmi eux, et un widget « article » dans la barre latérale
+$sansArticle = '<!DOCTYPE html><html><head><title>بحث: واحة سيدي ابراهيم</title></head><body>'
+    . '<div class="menu"><h3><a href="https://www.kech24.com/2026/01/01/menu-item/">رابط من القائمة الرئيسية للموقع</a></h3></div>'
+    . '<div id="results"><div class="item"><h3><a href="https://www.kech24.com/2026/09/20/r1/">واحة سيدي ابراهيم: مشروع تجزئة سكنية جديدة قرب الطريق</a></h3></div>'
+    . '<div class="item"><h3><a href="https://pub.example.com/promo">إعلان: شقق فاخرة بأثمنة مغرية في مراكش</a></h3></div></div>'
+    . '<div class="sidebar"><article class="mini"><h4><a href="https://www.kech24.com/2026/10/01/foot/">الكوكب المراكشي يفوز في مباراة مثيرة جدا</a></h4></article></div>'
+    . '</body></html>';
+$ls = cfo_vp_lire_reponse($sansArticle, $reqK, $cfg);
+v('thème sans <article> : les titres des résultats sont lus, le menu écarté', $ls['mode'] === 'page' && array_column($ls['articles'], 'url') === ['https://www.kech24.com/2026/09/20/r1/'], $j($ls['articles'] ?? null));
+v('  → le widget « article » de la barre latérale ne passe pas pour un résultat', !in_array('https://www.kech24.com/2026/10/01/foot/', array_column($ls['articles'] ?? [], 'url'), true));
+v('  → la publicité (autre site) parmi les résultats est écartée', !in_array('https://pub.example.com/promo', array_column($ls['articles'] ?? [], 'url'), true));
+$accueil = '<!DOCTYPE html><html><body><article><h2><a href="/2026/10/01/a/">Marrakech : nouvelle saison touristique record</a></h2></article>'
+         . '<article><h2><a href="/2026/10/02/b/">واحة سيدي ابراهيم: انطلاق أشغال الطريق المداري</a></h2></article></body></html>';
+$la = cfo_vp_lire_reponse($accueil, $reqK, $cfg);
+v('page qui ne contient pas le terme (accueil par redirection) : rien n\'est « spécifique »', $la['mode'] === 'page' && count($la['articles']) === 2 && !array_filter($la['articles'], fn($a) => $a['specifique']));
+$sel = cfo_vp_selection($la['articles'], ['واحة سيدي ابراهيم'], [], $cfg, strtotime('2026-10-09'));
+v('  → au tri, seul le titre qui nomme le lieu reste', array_column($sel, 'titre') === ['واحة سيدي ابراهيم: انطلاق أشغال الطريق المداري'], $j(array_column($sel, 'titre')));
+v('page lue sans aucun article : vide, mode « page » (dit, pas un échec muet)', ($v = cfo_vp_lire_reponse('<!DOCTYPE html><html><body><p>لا توجد نتائج</p></body></html>', $reqK, $cfg)) && $v['mode'] === 'page' && $v['articles'] === []);
+v('réponse ni RSS ni HTML (JSON) : illisible', cfo_vp_lire_reponse('{"error":"blocked"}', $reqK, $cfg)['articles'] === null);
+v('une page HTML renvoyée par GOOGLE (consentement…) n\'est jamais lue comme des articles',
+  cfo_vp_lire_reponse($page, ['type' => 'moteur', 'nom' => 'Google', 'q' => 'x', 'specifique' => true], $cfg)['articles'] === null);
+v('un RSS ouvert reste lu comme RSS', cfo_vp_lire_reponse($wp, ['type' => 'flux', 'nom' => 'Marrakech Alaan', 'domaine' => 'marrakechalaan.com', 'specifique' => true, 'langue' => 'ar', 'url' => 'https://marrakechalaan.com/?s=x'], $cfg)['mode'] === 'rss');
 
 /* ── 4. Le tri ─────────────────────────────────────────────────────────── */
 $now = strtotime('2026-10-09 12:00:00 UTC');

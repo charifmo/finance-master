@@ -22,7 +22,7 @@ declare(strict_types=1);
 
 const CFO_VP_MAX_LIEUX = 6;
 const CFO_VP_MAX_SUJETS = 12;
-const CFO_VP_MAX_REQUETES = 16;
+const CFO_VP_MAX_REQUETES = 22;   // v37.41 : une requête stricte par média local
 
 function cfo_vp_arabe(string $t): bool { return (bool)preg_match('/\p{Arabic}/u', $t); }
 
@@ -94,18 +94,32 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
         $req[] = ['type' => 'moteur', 'nom' => $moteurs[$langue]['nom'], 'libelle' => $libelle, 'q' => $q, 'langue' => $langue,
                   'specifique' => $specifique, 'url' => cfo_vp_url($moteurs[$langue]['gabarit'], $q)];
     };
-    foreach (['fr', 'ar'] as $lg) foreach (array_slice($parLangue[$lg], 0, 3) as $i => $l) {
-        $g = cfo_vp_guillemets($l);
-        if ($locales) $ajouter($lg, $g . ' ' . $locales, true, 'presse locale');
-        $ajouter($lg, trim($g . ' ' . cfo_vp_ou($suj[$lg])), true, $suj[$lg] ? 'lieu + urbanisme' : 'lieu');
-        if ($i === 0 && $nationales) $ajouter($lg, $g . ' ' . $nationales, true, 'presse nationale');
+    // v37.41 : CHAQUE média local a sa requête stricte — site:kech24.com ("واحة سيدي ابراهيم" OR "Ouahat
+    //   Sidi Brahim"). Un OR de quatre site: noyait les petits médias, et la plupart n'ont pas de RSS
+    //   ouvert : Google Actualités est souvent leur seule porte. Les lieux des DEUX langues.
+    $tousLieux = array_merge(array_slice($parLangue['ar'], 0, 2), array_slice($parLangue['fr'], 0, 2));
+    foreach ($sources as $s) {
+        if (($s['portee'] ?? '') !== 'locale' || empty($s['domaine']) || !$tousLieux) continue;
+        $lg = ($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr';
+        if (!isset($moteurs[$lg])) $lg = $lg === 'ar' ? 'fr' : 'ar';
+        if (!isset($moteurs[$lg])) continue;
+        $q = 'site:' . $s['domaine'] . ' ' . cfo_vp_ou($tousLieux);
+        $req[] = ['type' => 'moteur', 'nom' => $moteurs[$lg]['nom'], 'libelle' => 'site:' . $s['domaine'], 'q' => $q, 'langue' => $lg,
+                  'specifique' => true, 'url' => cfo_vp_url($moteurs[$lg]['gabarit'], $q), 'domaine' => $s['domaine'], 'media' => $s['nom']];
     }
+    // La recherche du site lui-même : son RSS s'il est ouvert, sinon sa page de résultats (lue en HTML).
     foreach ($sources as $s) {
         if (empty($s['flux'])) continue;
         $lg = ($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr';
-        $termes = array_slice($parLangue[$lg] ?: $parLangue[$lg === 'ar' ? 'fr' : 'ar'], 0, 2);
-        foreach ($termes as $l) $req[] = ['type' => 'flux', 'nom' => $s['nom'], 'libelle' => 'recherche du site', 'q' => $l, 'langue' => $lg,
-                                         'specifique' => true, 'url' => cfo_vp_url($s['flux'], $l), 'domaine' => $s['domaine']];
+        $l = ($parLangue[$lg] ?: $parLangue[$lg === 'ar' ? 'fr' : 'ar'])[0] ?? null;
+        if ($l === null) continue;
+        $req[] = ['type' => 'flux', 'nom' => $s['nom'], 'libelle' => 'recherche du site', 'q' => $l, 'langue' => $lg,
+                  'specifique' => true, 'url' => cfo_vp_url($s['flux'], $l), 'domaine' => $s['domaine'], 'media' => $s['nom']];
+    }
+    foreach (['fr', 'ar'] as $lg) foreach (array_slice($parLangue[$lg], 0, 2) as $i => $l) {
+        $g = cfo_vp_guillemets($l);
+        $ajouter($lg, trim($g . ' ' . cfo_vp_ou($suj[$lg])), true, $suj[$lg] ? 'lieu + urbanisme' : 'lieu');
+        if ($i === 0 && $nationales) $ajouter($lg, $g . ' ' . $nationales, true, 'presse nationale');
     }
     if ($suj['fr']) $ajouter('fr', 'Marrakech ' . cfo_vp_ou($suj['fr']) . ($locales ? ' ' . $locales : ''), false, 'zone (Marrakech)');
     if ($suj['ar']) $ajouter('ar', 'مراكش ' . cfo_vp_ou($suj['ar']), false, 'zone (مراكش)');
@@ -184,6 +198,104 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
     usort($garde, fn($x, $y) => [$y['score'], $y['ts'] ?? 0] <=> [$x['score'], $x['ts'] ?? 0]);
     return array_map(function ($a) { unset($a['ts'], $a['specifique']); return $a; },
                      array_slice($garde, 0, (int)($cfg['max_articles'] ?? 15)));
+}
+
+
+/* ══ v37.41 — LA PAGE DE RÉSULTATS, QUAND LE SITE N'A PAS DE RSS ═════════════ */
+
+/** Un lien de la page → adresse absolue http(s), ou null (javascript:, mailto:, ancre…). */
+function cfo_vp_absolu(string $href, string $base): ?string {
+    $href = trim(html_entity_decode($href, ENT_QUOTES, 'UTF-8'));
+    if ($href === '' || $href[0] === '#') return null;
+    if (preg_match('#^https?://#i', $href)) return $href;
+    if (preg_match('#^[a-z][a-z0-9+.\-]*:#i', $href)) return null;
+    $b = parse_url($base);
+    if (!is_array($b) || empty($b['host'])) return null;
+    $schema = strtolower($b['scheme'] ?? 'https');
+    if (substr($href, 0, 2) === '//') return $schema . ':' . $href;
+    $racine = $schema . '://' . $b['host'] . (isset($b['port']) ? ':' . $b['port'] : '');
+    if ($href[0] === '/') return $racine . $href;
+    return $racine . preg_replace('#/[^/]*$#', '/', $b['path'] ?? '/') . $href;
+}
+
+/**
+ * La page HTML de résultats d'un site → articles. null si ce n'est pas du HTML.
+ * Les résultats sont les <article> (WordPress et la plupart des thèmes), à
+ * défaut les liens des titres (h1-h4). Menus, en-têtes, pieds, barres
+ * latérales et widgets sont retirés AVANT la lecture ; ne restent que les
+ * liens vers le site du média lui-même, hors pages de catégorie, d'étiquette,
+ * d'auteur ou de pagination. « specifique » : seulement pour un <article> d'une
+ * page de résultats (le terme est dans son titre, son h1 ou sa boîte de
+ * recherche) — sinon le titre devra nommer le lieu pour être gardé.
+ */
+function cfo_vp_lire_html(string $html, array $req, array $cfg, string $urlPage): ?array {
+    if (!class_exists('DOMDocument') || !preg_match('/<(?:!doctype|html|body|div|article|h[1-4])[\s>]/i', substr($html, 0, 20000))) return null;
+    $doc = new DOMDocument();
+    $prec = libxml_use_internal_errors(true);
+    $ok = $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+    libxml_clear_errors(); libxml_use_internal_errors($prec);
+    if (!$ok) return null;
+    $xp = new DOMXPath($doc);
+    // Une PAGE DE RÉSULTATS répète le terme cherché dans son titre, son h1 ou sa boîte de recherche.
+    // Le corps ne prouve rien : une page d'accueil peut citer le lieu dans un article récent.
+    $terme = cfo_vp_norm((string)($req['q'] ?? ''));
+    $signal = '';
+    foreach ($xp->query('//title|//h1|//input[@name="s" or @type="search" or @name="q"]/@value') as $n) $signal .= ' ' . $n->textContent;
+    $pageDeResultats = $terme !== '' && mb_strpos(cfo_vp_norm($signal), $terme) !== false;
+    $bruit = '//script|//style|//noscript|//nav|//header|//footer|//aside|//form|//iframe'
+           . '|//*[contains(@class,"sidebar") or contains(@id,"sidebar") or contains(@class,"widget") or contains(@class,"menu")'
+           . ' or contains(@class,"related") or contains(@class,"popular") or contains(@class,"breadcrumb") or contains(@class,"footer")'
+           . ' or contains(@class,"ticker") or contains(@class,"trending") or contains(@id,"footer") or contains(@id,"menu")]';
+    foreach ($xp->query($bruit) as $n) if ($n->parentNode) $n->parentNode->removeChild($n);
+
+    $dom = strtolower((string)($req['domaine'] ?? ''));
+    $media = cfo_vp_media($cfg, $dom) ?? [];
+    $propre = fn($t) => trim((string)preg_replace('/\s+/u', ' ', (string)$t));
+    $items = []; $vus = [];
+    $prendre = function ($a, $bloc, bool $dansArticle) use (&$items, &$vus, $xp, $dom, $media, $urlPage, $req, $pageDeResultats, $propre) {
+        $url = cfo_vp_absolu($a->getAttribute('href'), $urlPage);
+        if ($url === null) return;
+        $hote = (string)preg_replace('/^www\./', '', strtolower((string)parse_url($url, PHP_URL_HOST)));
+        if ($dom === '' || ($hote !== $dom && substr($hote, -strlen($dom) - 1) !== '.' . $dom)) return;    // lien externe, publicité
+        $chemin = (string)parse_url($url, PHP_URL_PATH);
+        if ($chemin === '' || $chemin === '/' || preg_match('#/(category|categorie|tag|tags|author|auteur|page|feed|wp-content|wp-admin|search)(/|$)#i', $chemin)
+            || preg_match('/(^|&)(s|cat|tag|paged)=/', (string)parse_url($url, PHP_URL_QUERY))) return;
+        $titre = $propre($a->textContent);
+        if ($titre === '' && $bloc) { $h = $xp->query('.//h1|.//h2|.//h3|.//h4', $bloc)->item(0); $titre = $h ? $propre($h->textContent) : ''; }
+        if (mb_strlen($titre) < 15 || mb_strlen($titre) > 300 || isset($vus[$url])) return;
+        $vus[$url] = true;
+        $ts = null; $extrait = '';
+        if ($bloc) {
+            $t = $xp->query('.//time', $bloc)->item(0);
+            if ($t) $ts = strtotime($t->getAttribute('datetime') ?: $propre($t->textContent)) ?: null;
+            foreach ($xp->query('.//p', $bloc) as $p) { $x = $propre($p->textContent); if (mb_strlen($x) >= 30 && $x !== $titre) { $extrait = $x; break; } }
+        }
+        $items[] = ['titre' => $titre, 'url' => $url, 'source' => $media['nom'] ?? ($req['nom'] ?? $dom), 'domaine' => $hote,
+                    'portee' => $media['portee'] ?? 'autre', 'ts' => $ts, 'date' => $ts ? gmdate('Y-m-d', $ts) : null,
+                    'extrait' => mb_strlen($extrait) > 280 ? rtrim(mb_substr($extrait, 0, 277)) . '…' : $extrait,
+                    'specifique' => $dansArticle && $pageDeResultats, 'langue' => $req['langue'] ?? 'fr'];
+    };
+    foreach ($xp->query('//article') as $art) {
+        $a = $xp->query('.//h1//a[@href]|.//h2//a[@href]|.//h3//a[@href]|.//h4//a[@href]', $art)->item(0);
+        if (!$a) foreach ($xp->query('.//a[@href]', $art) as $x) if (mb_strlen($propre($x->textContent)) >= 15) { $a = $x; break; }
+        if ($a) $prendre($a, $art, true);
+    }
+    if (!$items) foreach ($xp->query('//h1//a[@href]|//h2//a[@href]|//h3//a[@href]|//h4//a[@href]') as $a) {
+        $bloc = $a; for ($k = 0; $k < 3 && $bloc->parentNode instanceof DOMElement && $bloc->parentNode->nodeName !== 'body'; $k++) $bloc = $bloc->parentNode;
+        $prendre($a, $bloc, false);
+    }
+    return array_slice($items, 0, 20);
+}
+
+/** La réponse d'une source : RSS si c'en est un, sinon — pour la recherche d'un site — sa page HTML. */
+function cfo_vp_lire_reponse(string $corps, array $req, array $cfg): array {
+    $rss = cfo_vp_lire_rss($corps, $req, $cfg);
+    if ($rss !== null) return ['mode' => 'rss', 'articles' => $rss];
+    if (($req['type'] ?? '') === 'flux') {
+        $html = cfo_vp_lire_html($corps, $req, $cfg, (string)($req['url'] ?? ''));
+        if ($html !== null) return ['mode' => 'page', 'articles' => $html];
+    }
+    return ['mode' => null, 'articles' => null];
 }
 
 /* ══ v37.40 — LES MÉDIAS, RÉGLABLES DEPUIS L'ÉCRAN ══════════════════════════ */

@@ -67,7 +67,20 @@ const rss = (items) => '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
     `<item><title>${i[0]}</title><link>${i[1]}</link><pubDate>${i[2]}</pubDate><source url="https://${i[3]}">${i[4]}</source></item>`).join('') + '</channel></rss>';
 const presse = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x'); const q = u.searchParams.get('q') || '';
-    recues.push({ chemin: u.pathname, q });
+    recues.push({ chemin: u.pathname, q, hote: u.host, s: u.searchParams.get('s') });
+    // v37.41 : ce serveur sert aussi de PROXY HTTP à PHP — il joue le site marrakechtoday.ma, SANS RSS :
+    //   sa recherche rend une page HTML WordPress (« نتائج البحث عن … » / « Résultats pour … »).
+    if (u.host === 'marrakechtoday.ma') {
+        const terme = u.searchParams.get('s') || '';
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        const resultats = terme === 'Marrakech' ? `
+            <article><h2><a href="http://marrakechtoday.ma/2026/10/05/tamansourt-lotissement/">Tamansourt : un nouveau lotissement autorisé par la commune</a></h2><time datetime="2026-10-05">5 oct.</time></article>
+            <article><h2><a href="http://marrakechtoday.ma/2026/09/21/rocade-nord/">Marrakech : la rocade nord avance vers la RN9</a></h2><time datetime="2026-09-21">21 sept.</time></article>` : '<p>Aucun résultat.</p>';
+        return res.end(`<!DOCTYPE html><html><head><title>Résultats pour ${terme} - Marrakech Today</title></head><body>
+            <nav class="menu"><a href="http://marrakechtoday.ma/category/immobilier/">Immobilier et foncier à Marrakech</a></nav>
+            <main><h1>Résultats pour : ${terme}</h1>${resultats}</main>
+            <aside class="sidebar"><h3><a href="http://marrakechtoday.ma/2026/10/08/foot/">Le Kawkab s'impose dans le derby régional</a></h3></aside></body></html>`);
+    }
     res.writeHead(200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
     if (q.startsWith('site:marrakechtoday.ma')) return res.end(rss([
         ['Tamansourt : un nouveau lotissement autorisé - Marrakech Today', 'https://news.google.com/rss/articles/T1', 'Mon, 05 Oct 2026 08:00:00 GMT', 'marrakechtoday.ma', 'Marrakech Today'],
@@ -121,7 +134,9 @@ fs.copyFileSync(vueJs, path.join(doc, 'vue.js'));
 fs.copyFileSync(chartJs, path.join(doc, 'chart.js'));
 if (CAPTURES) fs.writeFileSync(path.join(doc, 'tailwind.css'), tw);
 const port = await portLibre();
-const srv = spawn(php, ['-S', '127.0.0.1:' + port, '-t', doc], { stdio: 'ignore' });
+// PHP (curl) passe par la presse simulée pour les sites en http:// — 127.0.0.1 reste direct (no_proxy)
+const srv = spawn(php, ['-S', '127.0.0.1:' + port, '-t', doc], { stdio: 'ignore', env: { ...process.env,
+    http_proxy: `http://127.0.0.1:${pPresse}`, HTTP_PROXY: `http://127.0.0.1:${pPresse}`, no_proxy: '127.0.0.1,localhost', NO_PROXY: '127.0.0.1,localhost' } });
 await attendrePort(port);
 const BASE = `http://127.0.0.1:${port}/finance/`;
 const appel = async (corps, entetes = { 'X-Requested-With': 'XMLHttpRequest' }) => {
@@ -189,10 +204,10 @@ try {
     await page.check('[data-vs-wordpress]');
     await page.click('[data-vs-valider]'); await calme();
     v('ajouter : le message le confirme', /Marrakech Today ajouté/.test(await page.textContent('[data-vs-message]').catch(() => '')));
-    v('  → la ligne apparaît, « ajoutée par vous », « RSS du site »', /ajoutée par vous/.test(await texteLigne('marrakechtoday.ma')) && /RSS du site/.test(await texteLigne('marrakechtoday.ma')));
+    v('  → la ligne apparaît, « ajoutée par vous », « recherche du site »', /ajoutée par vous/.test(await texteLigne('marrakechtoday.ma')) && /recherche du site/.test(await texteLigne('marrakechtoday.ma')));
     const b1 = enBase();
     const mt = (b1?.sources || []).find(s => s.domaine === 'marrakechtoday.ma');
-    v('  → en base : domaine extrait de l\'adresse collée, flux WordPress sur son site', mt && mt.flux === 'https://marrakechtoday.ma/?s={q}&feed=rss2' && !('origine' in mt), JSON.stringify(mt));
+    v('  → en base : domaine extrait de l\'adresse collée, recherche WordPress (RSS ou page) sur son site', mt && mt.flux === 'https://marrakechtoday.ma/?s={q}' && !('origine' in mt), JSON.stringify(mt));
 
     // ── une saisie refusée : rien ne change
     await page.click('[data-vs-ajouter]');
@@ -218,11 +233,21 @@ try {
     v('retirer : Kech24 disparaît, proposé au rétablissement', !(await ligne('kech24.com')) && /Kech24/.test(await page.textContent('[data-vs-supprimees]').catch(() => '')));
 
     // ── tester
+    // ── modifier sa recherche : adresse saisie à la main (le site n'a pas de RSS)
+    await (await ligne('marrakechtoday.ma')).$('[data-vs-modifier]').then(b => b.click());
+    v('modifier : la case WordPress est reconnue cochée', await page.isChecked('[data-vs-wordpress]'));
+    await page.uncheck('[data-vs-wordpress]');
+    await page.fill('[data-vs-flux]', 'http://marrakechtoday.ma/?s={q}');
+    await page.click('[data-vs-valider]'); await calme();
+    v('  → adresse de recherche enregistrée', enBase().sources.find(s => s.domaine === 'marrakechtoday.ma')?.flux === 'http://marrakechtoday.ma/?s={q}');
     await (await ligne('marrakechtoday.ma')).$('[data-vs-tester]').then(b => b.click());
     await page.waitForFunction(() => { const t = document.querySelector('[data-domaine="marrakechtoday.ma"] [data-vs-test]'); return t && !/Test en cours/.test(t.textContent); }, null, { timeout: 15000 });
     const test = (await page.textContent('[data-domaine="marrakechtoday.ma"] [data-vs-test]')).replace(/\s+/g, ' ');
     v('tester : Google Actualités sur ce site — 2 articles, le dernier cité', /✅ Google Actualités : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé » \(2026-10-05\)/.test(test), test);
-    v('  → le flux RSS est essayé aussi, son résultat dit en clair (jamais « HTTP 0 »)', /RSS du site : \S/.test(test) && !/HTTP 0/.test(test), test);
+    v('  → la recherche du site est essayée aussi, son résultat dit en clair (jamais « HTTP 0 »)', /Recherche du site[^:]* : \S/.test(test) && !/HTTP 0/.test(test), test);
+    v('  → site SANS RSS : sa page de résultats est lue — 2 articles, le menu et la barre latérale écartés',
+      /✅ Recherche du site \(page web, sans RSS\) : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé par la commune » \(2026-10-05\)/.test(test), test);
+    v('  → le site a bien été interrogé avec « Marrakech »', recues.some(x => x.hote === 'marrakechtoday.ma' && x.s === 'Marrakech'));
     v('  → la presse a reçu « site:marrakechtoday.ma Marrakech »', recues.some(x => x.q === 'site:marrakechtoday.ma Marrakech'));
     if (CAPTURES) await page.screenshot({ path: path.join(CAPTURES, 'sources_presse.png') });
 
@@ -230,10 +255,11 @@ try {
     recues.length = 0;
     await page.evaluate((ST) => { const S = eval(ST); S.fermerSourcesVeille(); S.activeTab = 'wealth';
         S.marketIntel = Object.assign({}, S.marketIntel, { ma_5: { open: true } }); return S.chargerMarketIntel(S.masterAssets[0]); }, ST);
-    const locales = recues.find(x => x.chemin === '/gnews' && x.q.includes('"Ouahat Sidi Brahim"') && x.q.includes('site:almarrakchia.net'))?.q || '';
+    // v37.41 : une requête STRICTE par média local
+    const locales = recues.filter(x => x.chemin === '/gnews' && /^site:\S+ /.test(x.q)).map(x => x.q).join('\n');
     const tout = recues.map(x => x.q).join('\n');
-    v('« Actualiser » : Marrakech Today interrogé avec la presse locale', locales.includes('site:marrakechtoday.ma'), locales);
-    v('  → Le Desk aussi, désormais local', locales.includes('site:ledesk.ma'));
+    v('« Actualiser » : Marrakech Today a sa requête stricte de presse locale', /^site:marrakechtoday\.ma \S/m.test(locales), locales);
+    v('  → Le Desk aussi, désormais local', /^site:ledesk\.ma \S/m.test(locales));
     v('  → Hespress (en pause) n\'est plus interrogé', !tout.includes('hespress'));
     v('  → Kech24 (retiré) non plus', !tout.includes('kech24'));
     v('la carte offre le même accès : « 📰 Sources »', await page.$('tr [data-mi-sources]').then(async b => { await b.click(); await page.waitForSelector('[data-vs-modale] [data-vs-source]'); return true; }).catch(() => false));
