@@ -260,7 +260,7 @@ try {
     v('tester : Google Actualités sur ce site — 2 articles, le dernier cité', /✅ Google Actualités \(FR\) : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé » \(2026-10-05\)/.test(test), test);
     v('  → chaque porte est dite en clair, dans l\'ordre (jamais « HTTP 0 »)', (await page.$$eval('[data-domaine="marrakechtoday.ma"] [data-vs-canal]', els => els.map(e => e.dataset.vsCanal))).join() === 'moteur,bing,recherche,accueil'
       && !/HTTP 0/.test(test), test);
-    v('  → Bing Actualités : 1 article, le lien du journal extrait de l\'enrobage de Bing',
+    v('  → Bing Actualités restreint au site : 1 article, daté',
       /✅ Bing Actualités : 1 article — dernier : « Tamansourt : la commune lance la révision du plan d'aménagement » \(2026-09-30\)/.test(test), test);
     v('  → site SANS RSS : sa page de recherche est lue en HTML — 2 articles, le menu et la barre latérale écartés',
       /✅ Page de recherche du site \(lue en HTML\) : 2 articles — dernier : « Tamansourt : un nouveau lotissement autorisé par la commune » \(2026-10-05\)/.test(test), test);
