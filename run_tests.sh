@@ -33,7 +33,7 @@ suite() {
 }
 
 echo "▸ Syntaxe PHP"
-for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php; do
+for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php; do
     [ -f "$f" ] && php -l "$f" > /dev/null && echo "  ✅ $f"
 done
 
@@ -74,5 +74,7 @@ suite "Les virements internes bougent les soldes"             node test_cfo_engi
 suite "L'épargne du mois, même déjà versée"                  node test_cfo_engine_parity/test_epargne_du_mois.mjs
 suite "Le virement vers le compte des charges sort du surplus" node test_cfo_engine_parity/test_surplus_virements.mjs
 suite "Le virement sort du net du Courant — serveur (PHP)"    php test_cfo_engine_parity/test_surplus_virements.php
+suite "Garde-mémoire : demandes, entités, recouvrement"        php test_cfo_engine_parity/test_garde_memoire.php
+suite "Mémorisation garantie · Recherche Éclair ciblée"       node test_cfo_engine_parity/test_garde_memoire.mjs
 
 echo "✅ Toutes les suites passent."

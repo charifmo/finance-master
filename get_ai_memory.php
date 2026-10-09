@@ -28,6 +28,7 @@
  * ============================================================================
  */
 require_once __DIR__ . '/cfo_rag_ids.php';   // v37.10 : reconnaissance des identifiants
+require_once __DIR__ . '/cfo_memoire_lib.php';  // v37.38 : la consigne du garde-mémoire n'est pas à afficher
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -402,7 +403,7 @@ if ($table === 'all' || $table === 'chat') {
             $auteur = (strpos($t, 'human') !== false || strpos($t, 'user') !== false) ? 'Vous'
                     : ((strpos($t, 'ai') !== false || strpos($t, 'assistant') !== false) ? 'CFO'
                     : ($t !== '' ? $type : 'inconnu'));
-            return ['auteur' => $auteur, 'contenu' => (string)$contenu];
+            return ['auteur' => $auteur, 'contenu' => cfo_gm_sans_consigne((string)$contenu)];
         };
 
         $messages = [];
