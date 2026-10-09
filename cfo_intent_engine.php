@@ -440,6 +440,17 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
             if ($raw === 0.0) continue;
             if ($raw < 0) $entrants += abs($raw); else $sortants += $raw;
         }
+        // v37.37 : virements internes — une sortie s'ils QUITTENT le Courant (le virement qui
+        //   alimente le compte des charges fixes), une entrée s'ils y ARRIVENT. Pas de l'épargne.
+        foreach ((oget($y, 'virementsInternes') ?: []) as $vi) {
+            if (!is_object($vi) || (int)oget($vi, 'mois') !== $m) continue;
+            $mt = abs((float)(oget($vi, 'montant', 0) ?: 0));
+            if ($mt <= 0) continue;
+            $sort = $isC(oget($vi, 'sourceCompte') ?: 'courant');
+            $arrive = $isC(oget($vi, 'destinationCompte') ?: 'courant');
+            if ($sort === $arrive) continue;
+            if ($sort) $sortants += $mt; else $entrants += $mt;
+        }
         $ep = 0.0;
         foreach ($epArr as $o) $ep += $eff($o, oget($o, 'valeur'), $m);
 

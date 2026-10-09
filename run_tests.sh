@@ -72,5 +72,7 @@ suite "La Météo montre où finit chaque compte"                 node test_cfo_
 suite "Un flux pointé n'est plus projeté · tiroirs"         node test_cfo_engine_parity/test_pointage_tiroirs.mjs
 suite "Les virements internes bougent les soldes"             node test_cfo_engine_parity/test_virements_internes.mjs
 suite "L'épargne du mois, même déjà versée"                  node test_cfo_engine_parity/test_epargne_du_mois.mjs
+suite "Le virement vers le compte des charges sort du surplus" node test_cfo_engine_parity/test_surplus_virements.mjs
+suite "Le virement sort du net du Courant — serveur (PHP)"    php test_cfo_engine_parity/test_surplus_virements.php
 
 echo "✅ Toutes les suites passent."

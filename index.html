@@ -7562,8 +7562,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.36 Epargne-Du-Mois";
+                    const CURRENT_VERSION = "37.37 Surplus-Courant-Reel";
                     const CHANGELOG = [
+        { version: "37.37 Surplus-Courant-Reel", date: "2026-10-09", changes: [
+            "LE VIREMENT QUI FINANCE LES CHARGES FIXES SORT DU SURPLUS — « Pourquoi + 22 966 DH en novembre ? » Le surplus est calculé au périmètre Compte Courant : il retirait les charges fixes (payées par Assafa) mais ignorait le virement Courant → Assafa qui les finance (15 000 / mois). Ces 15 000 disparaissaient, et le surplus gonflait d'autant, chaque mois. Un virement interne qui QUITTE le Courant est désormais une sortie du brut, un virement qui y ARRIVE une entrée — ce n'est pas de l'épargne : la colonne Épargne ne bouge pas.",
+            "UNE SEULE VÉRITÉ — le net d'un mois futur de la modale « Surplus Détaillé » égale désormais le mouvement du Courant au Relevé, ligne pour ligne. « Surplus » et « Reste à vivre moyen » suivent. Un virement déjà fait (pointé) est dans le solde réel : il ne sort qu'une fois. Tous comptes confondus (KPI annuels Entrées / Sorties), un virement interne s'annule : il reste ignoré.",
+            "LE CFO AUSSI — son net mensuel de secours (cfo_compute_monthly_net_courant, utilisé pour l'épargne « % du reliquat ») applique la même règle.",
+            "PREUVE — suite nouvelle « Le virement vers le compte des charges sort du surplus » (10 contrôles, montants à la main : novembre, décembre, octobre pointé, KPI moyen, égalité avec le Relevé, KPI annuels inchangés) et sa jumelle serveur (4 contrôles). Rejouées sur la v37.36, elles retrouvent les 15 000 manquants (net 21 000 contre 6 000 au Relevé). Neuf défauts réintroduits exprès : tous attrapés.",
+        ] },
         { version: "37.36 Epargne-Du-Mois", date: "2026-10-09", changes: [
             "L'ÉPARGNE D'OCTOBRE N'EST PLUS À 0 — deux objectifs (2 000 + 5 000), une exception de novembre à décembre : la modale « Surplus Détaillé » affichait 0 pour octobre. Le repli sur le montant de base fonctionnait (rien coché : 7 000) ; le 0 venait des virements d'octobre déjà POINTÉS dans le Pilotage — la colonne ne montrait, pour le mois en cours, que l'épargne restant à verser, alors que le brut part du solde réel d'où l'épargne versée est déjà sortie. Elle montre désormais l'épargne DU MOIS (exception si une règle couvre le mois, sinon montant de base, par l'évaluateur unique), marquée ✓ pour la part déjà versée, avec une ligne d'explication ; le brut du mois en cours y remet l'épargne versée : Brut − Épargne = Net sur chaque ligne.",
             "LE NET NE CHANGE PAS — sauf une avance partielle sur un objectif, jusque-là retirée deux fois (sortie du solde réel, puis soustraite encore en entier).",
@@ -14779,12 +14785,30 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (isItemPaid(dep, due)) a = 0; else { const r = due - (getPaidAmount(dep, due)||0); a = r > 0 ? r : 0; }
                             if (a > 0) { if (isCreance) entrants += a; else sortants += a; }
                         });
+                        //  v37.37 : VIREMENTS INTERNES, au périmètre Courant. Un virement qui QUITTE le
+                        //  Courant (vers Assafa, qui paie les charges fixes) est une sortie ; un virement
+                        //  qui y ARRIVE, une entrée. Ils étaient ignorés : le périmètre retirait les charges
+                        //  payées par un autre compte SANS retirer le virement qui les finance, et le
+                        //  surplus gonflait d'autant. Ce n'est pas de l'épargne : il reste dans le brut.
+                        //  Pointé (fait), il est déjà dans le solde réel. Tous comptes confondus, un
+                        //  virement interne s'annule : ignoré.
+                        if (_courantOnly) getVirementsCycle(mNum, annee).forEach(vir => {
+                            const due = Math.abs(Number(vir.montant) || 0); if (!due) return;
+                            const sort = _isCourant(vir.sourceCompte || 'courant'), arrive = _isCourant(vir.destinationCompte || 'courant');
+                            if (sort === arrive) return;          // ne touche pas le Courant, ou Courant → Courant
+                            const cle = _cleCycle(mNum, annee);
+                            let a;
+                            if (isItemPaid(vir, due, cle)) a = 0; else { const r = due - (getPaidAmount(vir, due, cle) || 0); a = r > 0 ? r : 0; }
+                            if (a > 0) { if (sort) sortants += a; else entrants += a; }
+                        });
                         return { entrants: Math.round(entrants * 100) / 100, sortants: Math.round(sortants * 100) / 100 };
                     };
 
                     // v18.40 / v20.95 : Surplus BRUT mois par mois (exceptions incluses, épargne exclue)
                     // L'épargne est une réallocation patrimoniale, pas une charge consommée.
                     // Formule : Revenus - Charges fixes - Charges variables (hors épargne)
+                    // v37.37 : au périmètre Courant, ± les virements internes qui quittent / rejoignent
+                    //   le Courant (celui qui alimente le compte des charges fixes en est un).
                     const surplusParMois = computed(() => {
                         // v27.80 Mixed-Surplus-Logic : surplus mensuel isolé, Compte Courant strict
                         //   brut (Surplus avant épargne) = entrants - sortants ; PLUS le solde réel du
