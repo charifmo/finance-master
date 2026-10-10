@@ -173,6 +173,22 @@ try {
     const titreSource = (html.match(/<title>([^<]*)<\/title>/) || [])[1];
     v('titre de l\'onglet : « Finance Master — espace privé » (plus « v32.60 Auto-Categorisation »)', titreSource === 'Finance Master — espace privé' && !/v\d+\.\d+/.test(head.titre), titreSource + ' / ' + head.titre);
     v('la page se déclare non indexable (robots noindex) : elle n\'a rien à faire dans un moteur', /noindex/.test(head.robots) && /nofollow/.test(head.robots), head.robots);
+    // La règle de contraste, sondée directement : la surface la PLUS PROCHE décide.
+    const sondes = await page.evaluate(() => {
+        const cas = [
+            ['blanc → gris foncé', '<div class="bg-white"><span class="text-gray-400">s</span></div>', 'rgb(107, 114, 128)'],
+            ['sombre → gris d\'origine', '<div class="bg-slate-900"><span class="text-gray-400">s</span></div>', 'rgb(156, 163, 175)'],
+            ['voile blanc 10 % sur sombre → d\'origine', '<div class="bg-slate-900"><div class="bg-white/10"><span class="text-gray-400">s</span></div></div>', 'rgb(156, 163, 175)'],
+            ['carte blanche dans un bloc sombre → foncé', '<div class="bg-slate-900"><div class="bg-indigo-50"><span class="text-indigo-400">s</span></div></div>', 'rgb(79, 70, 229)'],
+            ['bloc sombre dans une carte blanche → d\'origine', '<div class="bg-white"><div class="bg-slate-800"><span class="text-slate-400">s</span></div></div>', 'rgb(148, 163, 184)'],
+            ['teinte légère à 40 % sur blanc → foncé', '<div class="bg-white"><div class="bg-emerald-50/40"><span class="text-red-500">s</span></div></div>', 'rgb(220, 38, 38)'],
+            ['survol blanc sur bouton sombre → d\'origine', '<div class="bg-slate-900"><button class="hover:bg-white text-sky-400">s</button></div>', 'rgb(56, 189, 248)'],
+        ];
+        const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(box);
+        const out = cas.map(([nom, html, attendu]) => { box.innerHTML = html; const c = getComputedStyle(box.querySelector('span, button')).color; return { nom, ok: c === attendu, c, attendu }; });
+        box.remove(); return out;
+    });
+    v(`règle de contraste : la surface la plus proche décide (${sondes.length} sondes)`, sondes.every(x => x.ok), sondes.filter(x => !x.ok).map(x => x.nom + ' : ' + x.c + ' ≠ ' + x.attendu).join(' | '));
 
     await aller(page, 'reel', 'pilotage');
     await page.click('button:has-text("Changelog")');
@@ -219,7 +235,7 @@ try {
         const ctl = { ...st.controleTotaux };
         const ligne = st.syntheseAnnee.mois.find(x => x.m === m);
         const cumul = st.syntheseAnnee.mois.filter(x => x.m <= m).reduce((s, x) => s + x.budget, 0);
-        return { lignes, ctl, ligne, cumul, synCumul: st.syntheseAnnee.cumul, construction: /En construction/.test(document.body.textContent) };
+        return { lignes, ctl, ligne, cumul, synCumul: st.syntheseAnnee.cumul, construction: !document.querySelector('[data-synthese]') || /En construction/.test(document.querySelector('[data-synthese]').textContent) };
     }, ST);
     v('Synthèse Réelle : plus « en construction » — douze mois', !syn.construction && syn.lignes.length === 12, JSON.stringify(syn.lignes.length));
     v('  → le mois en cours : les MÊMES prévu et réalisé que le Contrôle Budget vs Réel', syn.ligne && Math.round(syn.ligne.budget) === Math.round(syn.ctl.budget) && Math.round(syn.ligne.realise) === Math.round(syn.ctl.realise)
