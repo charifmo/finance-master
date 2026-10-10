@@ -84,5 +84,6 @@ suite "Médias de la veille : saisie, contrôles, superposition" php test_cfo_en
 suite "Médias réglables depuis l'écran (vraie base)"         node test_cfo_engine_parity/test_veille_sources.mjs
 suite "Interface de bureau : lisibilité, menus, synthèse"     node test_cfo_engine_parity/test_gui_desktop.mjs
 suite "Contrôle anti-hameçonnage (install.sh securite)"      php test_cfo_engine_parity/test_install_securite.php
+suite "Bilan métier & barre latérale (pied toujours visible)" node test_cfo_engine_parity/test_bilan_metier.mjs
 
 echo "✅ Toutes les suites passent."

@@ -419,30 +419,33 @@
         </transition>
 
         <div v-if="!isMobile"
-             class="bg-slate-900 text-white flex flex-col justify-between shrink-0 shadow-2xl z-30 md:h-full md:overflow-y-auto custom-scroll border-r border-slate-800 transition-[width] duration-300 ease-in-out"
+             class="bg-slate-900 text-white flex flex-col shrink-0 shadow-2xl z-30 md:h-full border-r border-slate-800 transition-[width] duration-300 ease-in-out relative" data-barre
              :style="{ width: isSidebarCollapsed ? '72px' : '16rem' }">
-            <div>
-                <!-- ═══ v32.80 : en-tête + toggle de rétractation ═══ -->
-                <div :class="['border-b border-slate-800 bg-slate-950/40', isSidebarCollapsed ? 'px-2 py-3' : 'p-4 text-center']">
-                    <div :class="['flex items-center gap-2', isSidebarCollapsed ? 'justify-center' : 'justify-center mb-1']">
+            <div class="flex-1 min-h-0 flex flex-col">
+                <!-- ═══ v32.80 : en-tête + toggle de rétractation ═══
+                     v37.45 : deux lignes — le nom et « replier », puis la version, qui ouvre
+                     les nouveautés (le changelog n'est plus un faux onglet du menu). -->
+                <div :class="['shrink-0 border-b border-slate-800 bg-slate-950/40', isSidebarCollapsed ? 'px-2 py-3 flex flex-col items-center gap-2' : 'px-3 pt-3 pb-2.5']">
+                    <div :class="['flex items-center', isSidebarCollapsed ? 'justify-center' : 'gap-2']">
                         <img v-if="parametres.branding.logoUrl" :src="parametres.branding.logoUrl" class="w-8 h-8 object-contain rounded-lg shadow shrink-0"/>
                         <span v-else class="text-2xl shrink-0">📈</span>
-                        <h1 v-if="!isSidebarCollapsed" class="text-lg font-black text-blue-400 italic uppercase tracking-tighter truncate">{{ parametres.branding.appName || 'Finance App' }}</h1>
+                        <h1 v-if="!isSidebarCollapsed" class="flex-1 min-w-0 text-lg font-black text-blue-400 italic uppercase tracking-tighter truncate">{{ parametres.branding.appName || 'Finance App' }}</h1>
                     </div>
-                    <p v-if="!isSidebarCollapsed" class="text-slate-400 text-[9px] mt-1 font-bold uppercase tracking-widest">
-                        <span class="bg-blue-600/30 text-blue-300 px-2 py-0.5 rounded border border-blue-500/30">v{{ CURRENT_VERSION }}</span>
-                    </p>
-                    <button @click="toggleSidebar"
-                            :title="isSidebarCollapsed ? 'Déplier le menu' : 'Replier le menu'"
-                            :class="['mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors', isSidebarCollapsed ? 'py-1.5' : 'py-1']">
-                        <span class="text-xs font-black leading-none">{{ isSidebarCollapsed ? '»' : '«' }}</span>
-                        <span v-if="!isSidebarCollapsed" class="text-[9px] font-black uppercase tracking-widest">Replier</span>
-                    </button>
+                    <div v-if="!isSidebarCollapsed" class="mt-2 flex items-center gap-2">
+                        <button type="button" @click="showChangelog = true" data-version-nouveautes
+                                title="Nouveautés de chaque version (changelog)" aria-label="Nouveautés de la version (changelog)"
+                                class="flex-1 min-w-0 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 px-2 py-1 rounded border border-blue-500/30 transition-colors">
+                            <span class="truncate">v{{ CURRENT_VERSION }}</span><span aria-hidden="true" class="shrink-0">📖</span>
+                        </button>
+                        <button @click="toggleSidebar" title="Replier le menu" aria-label="Replier le menu"
+                                class="shrink-0 w-8 h-7 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-black leading-none">«</button>
+                    </div>
+                    <button v-else @click="toggleSidebar" title="Déplier le menu" aria-label="Déplier le menu"
+                            class="w-10 h-8 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-black leading-none">»</button>
                 </div>
                 <!-- ═══ v22.00 P2 — MASTER SWITCH DUAL-MODE ═══ -->
-                <div :class="['border-b border-slate-800 bg-slate-950/40', isSidebarCollapsed ? 'px-2 py-2' : 'px-3 py-3']">
-                    <p v-if="!isSidebarCollapsed" class="text-[9px] text-slate-400 font-black uppercase tracking-widest text-center mb-2">Mode application</p>
-                    <div :class="['rounded-xl border border-slate-700 bg-slate-900 p-1', isSidebarCollapsed ? 'flex flex-col gap-1' : 'inline-flex w-full']">
+                <div :class="['shrink-0 border-b border-slate-800 bg-slate-950/40', isSidebarCollapsed ? 'px-2 py-2' : 'px-3 py-2.5']">
+                    <div role="group" aria-label="Mode de l'application" :class="['rounded-xl border border-slate-700 bg-slate-900 p-1', isSidebarCollapsed ? 'flex flex-col gap-1' : 'inline-flex w-full']">
                         <button @click="appMode = 'previsionnel'; activeTab = 'dashboard'" title="Mode Prévisionnel"
                                 :class="[appMode === 'previsionnel' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white', isSidebarCollapsed ? 'px-0 py-1.5' : 'px-2 py-1.5']"
                                 class="flex-1 rounded-lg text-[11px] font-bold transition">
@@ -455,124 +458,79 @@
                         </button>
                     </div>
                 </div>
-                <nav :class="['space-y-2', isSidebarCollapsed ? 'px-2 py-3' : 'px-4 py-4']">
+                <nav aria-label="Onglets" :class="['flex-1 min-h-0 overflow-y-auto custom-scroll space-y-1.5', isSidebarCollapsed ? 'px-2 py-3' : 'px-3 py-3']">
                     <!-- ─── Onglets mode PRÉVISIONNEL ─── -->
                     <template v-if="appMode === 'previsionnel'">
-                    <button @click="activeTab = 'pilotageTheo'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'pilotageTheo' ? 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-lg shadow-indigo-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Pilotage Théorique' : null"><span class="text-base leading-none shrink-0">🔮</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Pilotage Théorique</span></button>
-                    <button @click="activeTab = 'dashboard'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'dashboard' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Bilan & Simulation' : null"><span class="text-base leading-none shrink-0">📊</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Bilan & Simulation</span></button>
-                    <button @click="activeTab = 'parametres'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'parametres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Budget Structurel' : null"><span class="text-base leading-none shrink-0">⚙️</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Budget Structurel</span></button>
-                    <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Calendrier Pluriannuel' : null"><span class="text-base leading-none shrink-0">📅</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Calendrier Pluriannuel</span></button>
-                    <button @click="activeTab = 'studio'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Projet Studio' : null"><span class="text-base leading-none shrink-0">🏢</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Projet Studio</span></button>
-                    <button @click="activeTab = 'wealth'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'wealth' ? 'bg-gradient-to-r from-emerald-600 to-teal-700 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Patrimoine & Objectifs' : null"><span class="text-base leading-none shrink-0">💎</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Patrimoine & Objectifs</span></button>
+                    <button @click="activeTab = 'pilotageTheo'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'pilotageTheo' ? 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-lg shadow-indigo-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Pilotage Théorique' : null"><span class="text-base leading-none shrink-0">🔮</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Pilotage Théorique</span></button>
+                    <button @click="activeTab = 'dashboard'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'dashboard' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Bilan & Simulation' : null"><span class="text-base leading-none shrink-0">📊</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Bilan & Simulation</span></button>
+                    <button @click="activeTab = 'parametres'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'parametres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Budget Structurel' : null"><span class="text-base leading-none shrink-0">⚙️</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Budget Structurel</span></button>
+                    <button @click="activeTab = 'irregulieres'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'irregulieres' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Calendrier Pluriannuel' : null"><span class="text-base leading-none shrink-0">📅</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Calendrier Pluriannuel</span></button>
+                    <button @click="activeTab = 'studio'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'studio' ? 'bg-blue-600 shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Projet Studio' : null"><span class="text-base leading-none shrink-0">🏢</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Projet Studio</span></button>
+                    <button @click="activeTab = 'wealth'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'wealth' ? 'bg-gradient-to-r from-emerald-600 to-teal-700 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Patrimoine & Objectifs' : null"><span class="text-base leading-none shrink-0">💎</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Patrimoine & Objectifs</span></button>
                     <!-- v26.80 : bouton CFO supprimé de la sidebar — accès via FAB flottant 🧠 -->
-                    <button @click="activeTab = 'supervision'; if (!aiMemoryChargee) chargerAiMemory()" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'supervision' ? 'bg-gradient-to-r from-indigo-600 to-violet-700 shadow-lg shadow-indigo-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Supervision IA' : null"><span class="text-base leading-none shrink-0">🧠</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Supervision IA</span></button>
-                    <button @click="activeTab = 'settings'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'settings' ? 'bg-slate-700 shadow-lg' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Paramètres' : null"><span class="text-base leading-none shrink-0">🛠️</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Paramètres</span></button>
+                    <button @click="activeTab = 'supervision'; if (!aiMemoryChargee) chargerAiMemory()" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'supervision' ? 'bg-gradient-to-r from-indigo-600 to-violet-700 shadow-lg shadow-indigo-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Supervision IA' : null"><span class="text-base leading-none shrink-0">🧠</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Supervision IA</span></button>
+                    <button @click="activeTab = 'settings'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'settings' ? 'bg-slate-700 shadow-lg' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Paramètres' : null"><span class="text-base leading-none shrink-0">🛠️</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Paramètres</span></button>
                     </template>
                     <!-- ─── Onglets mode RÉALISÉ (Phase 3) ─── -->
                     <template v-if="appMode === 'reel'">
-                    <button @click="activeTab = 'pilotage'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'pilotage' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Pilotage Mensuel' : null"><span class="text-base leading-none shrink-0">🎯</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Pilotage Mensuel</span></button>
-                    <button @click="activeTab = 'saisie'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'saisie' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Saisie' : null"><span class="text-base leading-none shrink-0">✍️</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Saisie</span></button>
-                    <button @click="activeTab = 'controle'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'controle' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Contrôle Budget vs Réel' : null"><span class="text-base leading-none shrink-0">🔍</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Contrôle Budget vs Réel</span></button>
-                    <button @click="activeTab = 'tresorerie'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'tresorerie' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Trésorerie' : null"><span class="text-base leading-none shrink-0">💰</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Trésorerie</span></button>
-                    <button @click="activeTab = 'syntheseReel'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left', activeTab === 'syntheseReel' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Synthèse Réel' : null"><span class="text-base leading-none shrink-0">📈</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Synthèse Réel</span></button>
+                    <button @click="activeTab = 'pilotage'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'pilotage' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Pilotage Mensuel' : null"><span class="text-base leading-none shrink-0">🎯</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Pilotage Mensuel</span></button>
+                    <button @click="activeTab = 'saisie'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'saisie' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Saisie' : null"><span class="text-base leading-none shrink-0">✍️</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Saisie</span></button>
+                    <button @click="activeTab = 'controle'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'controle' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Contrôle Budget vs Réel' : null"><span class="text-base leading-none shrink-0">🔍</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Contrôle Budget vs Réel</span></button>
+                    <button @click="activeTab = 'tresorerie'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'tresorerie' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Trésorerie' : null"><span class="text-base leading-none shrink-0">💰</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Trésorerie</span></button>
+                    <button @click="activeTab = 'syntheseReel'" :class="['w-full flex items-center rounded-lg transition-colors text-sm font-bold', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5 text-left', activeTab === 'syntheseReel' ? 'bg-emerald-600 shadow-lg shadow-emerald-900/50' : 'hover:bg-slate-800 text-slate-300']" :title="isSidebarCollapsed ? 'Synthèse Réel' : null"><span class="text-base leading-none shrink-0">📈</span><span v-if="!isSidebarCollapsed" class="leading-tight" data-nav-libelle>Synthèse Réel</span></button>
                     </template>
-                    <button @click="showChangelog = true" :title="isSidebarCollapsed ? 'Changelog' : null"
-                            :class="['w-full flex items-center rounded-lg transition-colors text-slate-400 hover:bg-slate-800 mt-4 border-t border-slate-800 text-xs font-medium uppercase tracking-widest', isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-4 py-3 text-left']">
-                        <span class="text-base leading-none shrink-0">📖</span><span v-if="!isSidebarCollapsed" class="truncate">Changelog</span>
-                    </button>
-                    <!-- v17.45 : Undo / Redo -->
-                    <div :class="['mt-2 px-1 flex gap-2', isSidebarCollapsed ? 'flex-col' : '']">
-                        <button @click="undo" :disabled="!canUndo" :title="'Annuler (' + undoCount + ' disponible' + (undoCount > 1 ? 's' : '') + ')'" :class="['flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all border', canUndo ? 'bg-slate-700 hover:bg-amber-600 text-white border-slate-600' : 'bg-slate-900 text-slate-500 cursor-not-allowed border-slate-800']">↩<span v-if="!isSidebarCollapsed"> Undo</span></button>
-                        <button @click="redo" :disabled="!canRedo" :title="'Refaire (' + redoCount + ' disponible' + (redoCount > 1 ? 's' : '') + ')'" :class="['flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all border', canRedo ? 'bg-slate-700 hover:bg-blue-600 text-white border-slate-600' : 'bg-slate-900 text-slate-500 cursor-not-allowed border-slate-800']">↪<span v-if="!isSidebarCollapsed"> Redo</span></button>
-                    </div>
-                    <!-- v34.08 : Actions IA — anciennement 3 FAB flottants qui recouvraient
-                         ce menu sur desktop (position: fixed + md:left-6, exactement la
-                         largeur de la sidebar). Intégrées au pied du menu, dans le même
-                         langage visuel que le footer VPS/Export juste en dessous : elles
-                         ne flottent plus jamais par-dessus rien. -->
-                    <div :class="['mt-3 pt-3 border-t border-slate-800', isSidebarCollapsed ? '' : 'px-1']">
-                        <p v-if="!isSidebarCollapsed" class="text-[9px] text-slate-400 font-black uppercase tracking-widest text-center mb-2">Actions IA</p>
-                        <div :class="isSidebarCollapsed ? 'flex flex-col items-center gap-2' : 'flex items-center gap-2'">
-                            <button @click="showCfoModal = true" title="CFO & Audit"
-                                :class="['rounded-lg flex items-center justify-center border-2 transition-all hover:scale-105',
-                                         isSidebarCollapsed ? 'w-10 h-10 text-lg' : 'flex-1 h-11 text-xl',
-                                         showCfoModal ? 'bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-fuchsia-500/40 hover:border-fuchsia-400']">
-                                🧠
-                            </button>
-                            <button @click="ouvrirReleve()" title="Journal / Relevé"
-                                :class="['rounded-lg flex items-center justify-center border-2 transition-all hover:scale-105 bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-indigo-400/60',
-                                         isSidebarCollapsed ? 'w-10 h-10 text-lg' : 'flex-1 h-11 text-xl']">
-                                📑
-                            </button>
-                            <button @click="toggleMerlin"
-                                :title="merlinActive ? 'Désactiver Merlin (Echap)' : 'Activer Merlin — Audit IA d\'un champ'"
-                                :class="['merlin-wand-btn rounded-lg flex items-center justify-center border-2 transition-all hover:scale-105',
-                                         isSidebarCollapsed ? 'w-10 h-10 text-lg' : 'flex-1 h-11 text-xl',
-                                         merlinActive ? 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-purple-500/40 hover:border-purple-400']">
-                                🪄
-                            </button>
-                        </div>
-                    </div>
                 </nav>
             </div>
             
-            <!-- v32.80 : pied replié → une colonne d'actions essentielles -->
-            <div v-if="isSidebarCollapsed" class="flex flex-col items-center gap-2 border-t border-slate-800 py-3">
-                <button @click="saveToServer" :disabled="serverSyncStatus === 'saving'" title="Sauver sur VPS"
-                        :class="['w-10 h-10 rounded-lg text-base transition-all border', serverSyncStatus === 'modified' ? 'bg-purple-600 border-purple-500 animate-pulse' : (serverSyncStatus === 'error' ? 'bg-red-600 border-red-500' : 'bg-slate-800 border-slate-700 hover:bg-slate-700')]">💾</button>
-                <button @click="exporterDonnees" title="Exporter les données" class="w-10 h-10 rounded-lg text-base bg-green-900/20 border border-green-800/50 hover:bg-green-900/40 transition-colors">📤</button>
-                <button @click="exporterPDF" title="Exporter en PDF" class="w-10 h-10 rounded-lg text-base bg-sky-900/20 border border-sky-800/50 hover:bg-sky-900/40 transition-colors">📄</button>
-            </div>
-
-            <div v-else class="flex flex-col border-t border-slate-800">
-                <div class="p-4 bg-slate-950/80 border-b border-slate-800">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-[9px] font-black uppercase text-blue-400 tracking-widest">🖥️ Serveur VPS</span>
-                        <div class="flex items-center gap-1">
-                            <button @click="testConnection" class="px-1.5 py-0.5 bg-slate-800 rounded hover:bg-blue-600 transition-colors text-xs" title="Ping Serveur">⚡</button>
-                            <span :class="['text-[8px] font-black uppercase px-2 py-0.5 rounded-full', serverSyncStatus === 'synced' ? 'bg-green-500/20 text-green-400' : (serverSyncStatus === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400')]">
-                                {{ serverSyncStatus === 'synced' ? 'À Jour' : (serverSyncStatus === 'error' ? 'Erreur' : 'Modifié') }}
-                            </span>
-                        </div>
-                    </div>
-                    <button @click="saveToServer" :disabled="serverSyncStatus === 'saving'" :class="['w-full py-2.5 rounded text-[10px] font-black text-white transition-all uppercase tracking-widest shadow-md', serverSyncStatus === 'modified' ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/50 animate-pulse' : (serverSyncStatus === 'saving' ? 'bg-slate-700 cursor-wait' : (serverSyncStatus === 'error' ? 'bg-red-600 hover:bg-red-500' : 'bg-slate-800 border border-slate-700'))]">
-                        {{ serverSyncStatus === 'saving' ? '⏳ Écriture...' : '💾 Sauver sur VPS' }}
+            <!-- ═══ v37.45 — LE PIED DU MENU, TOUJOURS VISIBLE ═══
+                 Les outils nommés (ce n'étaient que trois émojis), l'état de la sauvegarde en une
+                 ligne (elle est automatique : plus de gros bouton), annuler / rétablir et le menu
+                 « ⋯ Données ». Journal technique, test de connexion, Google Drive et la
+                 restauration V10 sont rangés dans Paramètres › Sauvegarde & données. -->
+            <input type="file" ref="fileInput" @change="importerDonnees" accept=".json" class="hidden" />
+            <div data-barre-pied :class="['shrink-0 border-t border-slate-800 bg-slate-950/60 relative', isSidebarCollapsed ? 'px-2 py-2 flex flex-col items-center gap-1.5' : 'p-3 space-y-2']">
+                <div data-barre-outils :class="isSidebarCollapsed ? 'flex flex-col items-center gap-1.5' : 'grid grid-cols-3 gap-1.5'">
+                    <button @click="showCfoModal = true" data-outil="cfo" title="Conseiller CFO : poser une question, lancer un audit" aria-label="Conseiller CFO"
+                            :class="['rounded-lg border transition-colors flex items-center justify-center gap-1.5', isSidebarCollapsed ? 'w-10 h-9 text-base' : 'h-9 text-sm', showCfoModal ? 'bg-fuchsia-600 border-fuchsia-400 text-white' : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-100']">
+                        <span aria-hidden="true">🧠</span><span v-if="!isSidebarCollapsed" class="text-[11px] font-bold">CFO</span>
                     </button>
-                    <div class="mt-2 bg-black/90 rounded p-1.5 font-mono text-[8px] h-20 overflow-y-auto custom-scroll border border-white/5 relative">
-                        <div v-for="(log, i) in serverLogs" :key="i" :class="['log-entry mb-0.5 p-1 leading-tight rounded', log.type === 'error' ? 'log-error text-red-300' : (log.type === 'success' ? 'log-success text-emerald-300' : (log.type === 'warn' ? 'log-warn text-orange-200' : 'text-slate-400'))]">
-                            <span class="opacity-50">[{{ log.time }}]</span> {{ log.msg }}
-                        </div>
-                    </div>
+                    <button @click="ouvrirReleve()" data-outil="releve" title="Relevé de comptes : tous les flux, passés et à venir, compte par compte" aria-label="Relevé de comptes"
+                            :class="['rounded-lg border transition-colors flex items-center justify-center gap-1.5 bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-100', isSidebarCollapsed ? 'w-10 h-9 text-base' : 'h-9 text-sm']">
+                        <span aria-hidden="true">📑</span><span v-if="!isSidebarCollapsed" class="text-[11px] font-bold">Relevé</span>
+                    </button>
+                    <button @click="toggleMerlin" data-outil="merlin" :title="merlinActive ? 'Désactiver Merlin (Échap)' : 'Merlin : cliquez ensuite un chiffre, l\'IA vous l\'explique'" aria-label="Merlin"
+                            :class="['merlin-wand-btn rounded-lg border transition-colors flex items-center justify-center gap-1.5', isSidebarCollapsed ? 'w-10 h-9 text-base' : 'h-9 text-sm', merlinActive ? 'bg-fuchsia-600 border-fuchsia-400 text-white' : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-100']">
+                        <span aria-hidden="true">🪄</span><span v-if="!isSidebarCollapsed" class="text-[11px] font-bold">Merlin</span>
+                    </button>
                 </div>
-
-                <div class="p-4 bg-slate-900/80 border-b border-slate-800">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest">☁️ Cloud Drive</span>
-                        <button v-if="syncStatus !== 'disconnected'" @click="disconnectDrive" class="text-[8px] text-red-400 hover:text-red-300 uppercase font-bold">Sortir</button>
+                <div :class="isSidebarCollapsed ? 'flex flex-col items-center gap-1.5' : 'flex items-center gap-1.5'">
+                    <button @click="saveToServer()" data-sauvegarde :data-etat="serverSyncStatus" :disabled="serverSyncStatus === 'saving'" :title="etatSauvegarde.aide" :aria-label="etatSauvegarde.titre + ' — ' + etatSauvegarde.detail"
+                            :class="['rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-800 transition-colors', isSidebarCollapsed ? 'w-10 h-9 flex items-center justify-center' : 'flex-1 min-w-0 h-9 flex items-center gap-2 px-2.5 text-left']">
+                        <span :class="['w-2.5 h-2.5 rounded-full shrink-0', etatSauvegarde.point]" aria-hidden="true"></span>
+                        <span v-if="!isSidebarCollapsed" class="min-w-0 leading-tight">
+                            <span class="block text-[11px] font-bold text-slate-100 truncate">{{ etatSauvegarde.titre }}</span>
+                            <span class="block text-[10px] text-slate-400 truncate">{{ etatSauvegarde.detail }}</span>
+                        </span>
+                    </button>
+                    <div :class="isSidebarCollapsed ? 'flex gap-1' : 'contents'">
+                        <button @click="undo" :disabled="!canUndo" :title="'Annuler (' + undoCount + ' disponible' + (undoCount > 1 ? 's' : '') + ')'" aria-label="Annuler"
+                                :class="[isSidebarCollapsed ? 'w-8 h-8 shrink-0 rounded-lg border text-sm font-black flex items-center justify-center transition-colors' : 'w-9 h-9 shrink-0 rounded-lg border text-sm font-black flex items-center justify-center transition-colors', canUndo ? 'bg-slate-700 hover:bg-amber-600 text-white border-slate-600' : 'bg-slate-900 text-slate-500 cursor-not-allowed border-slate-800']">↩</button>
+                        <button @click="redo" :disabled="!canRedo" :title="'Rétablir (' + redoCount + ' disponible' + (redoCount > 1 ? 's' : '') + ')'" aria-label="Rétablir"
+                                :class="[isSidebarCollapsed ? 'w-8 h-8 shrink-0 rounded-lg border text-sm font-black flex items-center justify-center transition-colors' : 'w-9 h-9 shrink-0 rounded-lg border text-sm font-black flex items-center justify-center transition-colors', canRedo ? 'bg-slate-700 hover:bg-blue-600 text-white border-slate-600' : 'bg-slate-900 text-slate-500 cursor-not-allowed border-slate-800']">↪</button>
                     </div>
-                    <div v-if="syncStatus === 'disconnected'" class="space-y-2">
-                        <button @click="authDrive" class="w-full py-2 bg-slate-800 text-slate-300 border border-slate-700 rounded font-bold text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-colors">Connecter Drive</button>
-                        <div class="text-center"><button @click="showDriveHelp = true" class="text-[8px] text-slate-500 underline uppercase">Configurer Client ID</button></div>
-                    </div>
-                    <div v-else>
-                        <button @click="saveToDrive" :class="['w-full py-2.5 rounded font-black text-[10px] text-white transition-all uppercase tracking-widest', syncStatus === 'modified' ? 'bg-orange-500 shadow-lg shadow-orange-900/30 animate-pulse' : 'bg-blue-600']">
-                            {{ syncStatus === 'saving' ? 'Sync...' : (syncStatus === 'modified' ? '☁️ Sauver Modifs' : '✅ Drive Sync OK') }}
-                        </button>
-                    </div>
+                    <button @click="menuDonnees = !menuDonnees" data-menu-donnees-bouton :aria-expanded="menuDonnees ? 'true' : 'false'" title="Données : exporter, importer, PDF, Google Drive, nouveautés" aria-label="Données"
+                            :class="['w-9 h-9 shrink-0 rounded-lg border text-sm font-black flex items-center justify-center transition-colors', menuDonnees ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-100']">⋯</button>
                 </div>
-
-                <div class="p-4 bg-slate-950/20">
-                    <div class="flex gap-2">
-                        <button @click="exporterDonnees" class="flex-1 py-2 rounded text-[9px] font-bold text-green-400 bg-green-900/20 hover:bg-green-900/40 border border-green-800/50 transition-colors uppercase tracking-widest">💾 Exporter</button>
-                        <button @click="triggerImport" class="flex-1 py-2 rounded text-[9px] font-bold text-yellow-400 bg-yellow-900/20 hover:bg-yellow-900/40 border border-yellow-800/50 transition-colors uppercase tracking-widest">📂 Importer</button>
-                        <input type="file" ref="fileInput" @change="importerDonnees" accept=".json" class="hidden" />
-                    </div>
-                    <button @click="exporterPDF" class="w-full mt-2 py-2 rounded text-[9px] font-bold text-sky-400 bg-sky-900/20 hover:bg-sky-900/40 border border-sky-800/50 transition-colors uppercase tracking-widest">
-                        📄 Exporter PDF
-                    </button>
-                    <button @click="restaurerDefaut" class="w-full mt-2 py-2 rounded text-[9px] font-bold text-red-400 bg-red-900/20 hover:bg-red-900/40 border border-red-800/50 transition-colors uppercase tracking-widest">
-                        🔄 Restaurer Data V10
-                    </button>
+                <div v-if="menuDonnees" class="fixed inset-0 z-40" @click="menuDonnees = false" aria-hidden="true"></div>
+                <div v-if="menuDonnees" data-menu-donnees role="menu" :class="['absolute z-50 rounded-xl bg-slate-800 border border-slate-600 shadow-2xl p-1.5', isSidebarCollapsed ? 'left-full bottom-2 ml-2 w-64' : 'left-3 right-3 bottom-full mb-2']">
+                    <button role="menuitem" @click="menuDonnees = false; exporterDonnees()" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-100 hover:bg-slate-700 flex items-center gap-2"><span aria-hidden="true">💾</span>Exporter les données (.json)</button>
+                    <button role="menuitem" @click="menuDonnees = false; triggerImport()" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-100 hover:bg-slate-700 flex items-center gap-2"><span aria-hidden="true">📂</span>Importer un fichier…</button>
+                    <button role="menuitem" @click="menuDonnees = false; exporterPDF()" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-100 hover:bg-slate-700 flex items-center gap-2"><span aria-hidden="true">📄</span>Exporter en PDF</button>
+                    <button role="menuitem" v-if="syncStatus === 'disconnected'" @click="menuDonnees = false; authDrive()" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-100 hover:bg-slate-700 flex items-center gap-2"><span aria-hidden="true">☁️</span>Connecter Google Drive</button>
+                    <button role="menuitem" v-else @click="menuDonnees = false; saveToDrive()" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-100 hover:bg-slate-700 flex items-center gap-2"><span aria-hidden="true">☁️</span>{{ syncStatus === 'saving' ? 'Synchronisation…' : (syncStatus === 'modified' ? 'Sauver sur Google Drive' : 'Google Drive à jour') }}</button>
+                    <div class="my-1 border-t border-slate-700"></div>
+                    <button role="menuitem" @click="menuDonnees = false; showChangelog = true" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-100 hover:bg-slate-700 flex items-center gap-2"><span aria-hidden="true">📖</span>Nouveautés (changelog)</button>
+                    <button role="menuitem" data-vers-reglages-donnees @click="menuDonnees = false; appMode = 'previsionnel'; activeTab = 'settings'" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-100 hover:bg-slate-700 flex items-center gap-2"><span aria-hidden="true">🛠️</span>Sauvegarde & données…</button>
                 </div>
             </div>
         </div>
@@ -948,118 +906,96 @@
                     </div>
                 </div>
 
-                <div v-if="activeTab === 'dashboard'" class="max-w-6xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4">Tableau de bord & KPIs (Année {{anneeAffichage}})</h2>
+                <div v-if="activeTab === 'dashboard'" class="max-w-6xl mx-auto space-y-6" data-bilan>
+                    <!-- ═══ v37.45 — LE BILAN, LU PAR UN DIRECTEUR FINANCIER ═══
+                         Remplace cinq cartes qui répétaient le bandeau, deux anneaux qui cachaient
+                         le déficit, une courbe d'un autre moteur et un panneau d'audit vide. -->
+                    <div class="border-b pb-4">
+                        <h2 class="text-2xl font-bold text-gray-800">Bilan {{ anneeAffichage }}</h2>
+                        <p class="text-sm text-gray-500 mt-1">Votre santé financière en quatre signaux, la trajectoire de vos comptes et ce que coûte chaque poste — d'après le budget prévu.</p>
+                    </div>
 
-                    <div data-cfo-collapse="dash-kpis" class="cfo-section-wrap">
-                        <div class="cfo-section-header cfo-collapse-header">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">📊 Indicateurs Clés de Performance</span>
-                            <span class="cfo-chevron text-gray-400 text-xs">▼</span>
-                        </div>
-                        <div class="cfo-collapsible-body">
-                    <!-- v37.44 : autant de colonnes que la place en permet (5 à 1440 px, 4 à 1280 px) — plus de chiffre qui déborde de sa carte -->
-                    <div data-kpi-grille class="grid grid-cols-1 gap-4 xl:gap-6 md:[grid-template-columns:repeat(auto-fit,minmax(12.5rem,1fr))]">
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Reste à vivre moyen</p>
-                            <h3 :class="['text-2xl 2xl:text-3xl font-black mt-2 tabular-nums whitespace-nowrap', surplusMensuelBase >= 0 ? 'text-green-600' : 'text-red-600']">{{ formatMAD(surplusMensuelBase) }}</h3>
-                        </div>
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center relative" @mouseenter="showCreditsTooltip = true" @mouseleave="showCreditsTooltip = false">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Mensualités Crédits ⓘ</p>
-                            <h3 class="text-2xl 2xl:text-3xl font-black mt-2 tabular-nums whitespace-nowrap text-gray-800">{{ formatMAD(totalCreditsMensuels) }}</h3>
-                            <p :class="['text-[10px] mt-1 font-bold uppercase', tauxEndettement > 40 ? 'text-red-500' : (tauxEndettement > 30 ? 'text-orange-500' : 'text-green-500')]">Endettement : {{ tauxEndettement.toFixed(1) }} %</p>
-                            <div v-if="creditsPaliersData.length" class="mt-2 space-y-0.5">
-                                <div v-for="p in creditsPaliersData" :key="p.range" class="flex items-center gap-1.5 text-[9px] font-bold">
-                                    <span class="text-gray-400 flex-1 min-w-0 leading-tight">{{ p.range }} : {{ formatMAD(p.montant) }}</span>
-                                    <span :class="['px-1 py-0.5 rounded text-[8px] font-black', p.taux > 40 ? 'bg-red-100 text-red-600' : (p.taux > 30 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600')]">{{ p.taux }}%</span>
-                                </div>
+                    <div v-if="!bilanAnnee" class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">Aucun budget saisi pour {{ anneeAffichage }}.</div>
+                    <template v-else>
+                    <!-- 1. Le verdict -->
+                    <section data-bilan-verdict :data-niveau="bilanVerdict.niveau"
+                             :class="['rounded-2xl border-2 p-5', bilanVerdict.niveau === 'alerte' ? 'bg-rose-50 border-rose-200' : (bilanVerdict.niveau === 'attention' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200')]">
+                        <p :class="['text-lg font-black', bilanVerdict.niveau === 'alerte' ? 'text-rose-800' : (bilanVerdict.niveau === 'attention' ? 'text-amber-800' : 'text-emerald-800')]">{{ bilanVerdict.titre }}</p>
+                        <ul class="mt-2 space-y-1.5">
+                            <li v-for="(p, i) in bilanVerdict.points" :key="i" data-bilan-point :data-niveau="p.niveau" class="flex gap-2 text-sm text-gray-800 leading-snug">
+                                <span aria-hidden="true" class="shrink-0">{{ p.niveau === 'alerte' ? '🔴' : (p.niveau === 'attention' ? '🟠' : '🟢') }}</span><span>{{ p.texte }}</span>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <!-- 2. Les quatre signaux vitaux, chacun avec son repère -->
+                    <div data-bilan-signaux class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div v-for="s in bilanSignaux" :key="s.cle" :data-signal="s.cle" :data-niveau="s.niveau" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="text-xs font-black uppercase tracking-widest text-gray-600 leading-tight">{{ s.titre }}</p>
+                                <span :class="['shrink-0 text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full', s.pastille]">{{ s.etiquette }}</span>
                             </div>
-                            <div v-if="showCreditsTooltip" class="absolute left-0 top-full mt-1 z-[200] w-64 bg-gray-950 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
-                                <div class="px-3 py-2 border-b border-gray-800">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">🏦 Crédits — {{ nomDuMois(soldesInitiaux.moisActuel) }}</p>
-                                </div>
-                                <div class="p-2">
-                                    <div v-for="c in creditsDetailMois" :key="c.label" class="flex justify-between items-center px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors">
-                                        <span class="text-[10px] font-bold" :class="c.actif ? 'text-gray-300' : 'text-gray-500'">{{ c.label }}</span>
-                                        <span class="text-[11px] font-black tabular-nums" :class="c.actif ? 'text-blue-400' : 'text-gray-600 line-through'">{{ c.actif ? formatMAD(c.montant) : '0 DH' }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center relative group">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                                <span>Patrimoine Global</span>
-                                <span class="normal-case font-medium tracking-normal text-gray-400">(Fin {{ anneeAffichage }})</span>
-                            </p>
-                            <h3 :class="['text-2xl 2xl:text-3xl font-black mt-2 tabular-nums whitespace-nowrap', patrimoineProjeteGlobal >= 0 ? 'text-emerald-700' : 'text-rose-700']">{{ formatMAD(patrimoineProjeteGlobal) }}</h3>
-                            <p class="text-[10px] mt-1 font-bold uppercase text-gray-400">Comptes : {{ formatMAD(soldeFinal) }} · Épargne : {{ formatMAD(epargneTotaleFinal) }}</p>
-                        </div>
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Épargne Générée ({{ anneeAffichage }})</p><!-- v17.14 -->
-                            <h3 class="text-2xl 2xl:text-3xl font-black mt-2 tabular-nums whitespace-nowrap text-purple-600">{{ formatMAD(epargneTotaleFinal) }}</h3>
-                        </div>
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-200 flex flex-col justify-center cursor-pointer hover:border-emerald-400 transition-colors" @click="activeTab = 'settings'" title="Configurer dans Paramètres">
-                            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">Patrimoine Net</p>
-                            <h3 :class="['text-2xl 2xl:text-3xl font-black mt-2 tabular-nums whitespace-nowrap', patrimoineNet >= 0 ? 'text-emerald-600' : 'text-red-600']">{{ formatMAD(patrimoineNet) }}</h3>
-                            <p class="text-[10px] mt-1 font-bold uppercase text-gray-400" v-if="comptes.length === 0">↗ Configurer les comptes</p>
-                            <p class="text-[10px] mt-1 font-bold uppercase text-emerald-500" v-else>{{ comptes.length }} compte{{ comptes.length > 1 ? 's' : '' }}</p>
+                            <p :class="['text-2xl 2xl:text-3xl font-black mt-2 tabular-nums whitespace-nowrap', s.valeurClasse]" :data-signal-valeur="s.cle">{{ s.valeur }}</p>
+                            <div class="mt-3 h-2 rounded-full bg-gray-100 overflow-hidden" aria-hidden="true"><div :class="['h-full rounded-full', s.barre]" :style="{ width: s.jauge + '%' }"></div></div>
+                            <p class="text-xs text-gray-700 mt-2 leading-snug">{{ s.explication }}</p>
+                            <p class="text-[11px] text-gray-500 mt-auto pt-2 leading-snug">{{ s.repere }}
+                                <button v-if="s.cle === 'precaution'" type="button" @click="activeTab = 'settings'" class="text-blue-700 font-bold hover:underline">Régler →</button></p>
                         </div>
                     </div>
-                        </div><!-- /cfo-collapsible-body kpi -->
-                    </div><!-- /dash-kpis -->
 
-                    <div data-cfo-collapse="dash-charts" class="cfo-section-wrap">
-                        <div class="cfo-section-header cfo-collapse-header">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">📈 Graphiques de Répartition</span>
-                            <span class="cfo-chevron text-gray-400 text-xs">▼</span>
+                    <!-- 3. La trajectoire des comptes : le Relevé, 12 mois -->
+                    <section v-if="bilanTrajectoire" data-bilan-trajectoire class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                        <div class="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Trajectoire de vos comptes — 12 prochains mois</h3>
+                                <p class="text-xs text-gray-500 mt-0.5">Solde en fin de mois, tel que le Relevé de comptes le projette (même calcul que le bandeau et la Météo).</p>
+                            </div>
+                            <div v-if="bilanTrajectoire.pointBas" class="text-right">
+                                <p class="text-[11px] font-black uppercase tracking-widest text-gray-500">Point bas du compte courant</p>
+                                <p data-bilan-point-bas :class="['text-xl font-black tabular-nums', bilanTrajectoire.pointBas.montant < 0 ? 'text-rose-700' : 'text-gray-900']">{{ formatMAD(bilanTrajectoire.pointBas.montant) }}</p>
+                                <p class="text-xs text-gray-500">{{ bilanTrajectoire.pointBas.date }}</p>
+                            </div>
                         </div>
-                        <div class="cfo-collapsible-body">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                            <h3 class="text-lg font-bold text-gray-800 mb-1">Où va votre argent en {{anneeAffichage}} ?</h3>
-                            <p class="text-[10px] text-gray-500 mb-2 uppercase font-bold">Répartition globale (Base Mensuelle)</p>
-                            <p class="text-xs text-blue-500 font-bold mb-4 animate-pulse">👆 Cliquez sur une section pour voir le détail</p>
-                            <div class="h-64 relative"><base-chart v-if="budgetChartConfig" :config="budgetChartConfig"></base-chart></div>
-                        </div>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                            <h3 class="text-lg font-bold text-gray-800 mb-1">Détail Consommation {{anneeAffichage}}</h3>
-                            <p class="text-[10px] text-gray-500 mb-2 uppercase font-bold">Sous-catégories</p>
-                            <p class="text-xs text-blue-500 font-bold mb-4 animate-pulse">👆 Cliquez pour auditer</p>
-                            <div class="h-64 relative"><base-chart v-if="consoChartConfig" :config="consoChartConfig"></base-chart></div>
-                        </div>
-                    </div>
-                        </div><!-- /cfo-collapsible-body charts -->
-                    </div><!-- /dash-charts -->
+                        <div class="h-72 mt-4 relative"><base-chart v-if="bilanTrajectoireChart" :config="bilanTrajectoireChart"></base-chart></div>
+                        <p data-bilan-fin class="text-xs text-gray-600 mt-3">Fin {{ bilanTrajectoire.fin.label }} : compte courant <span class="font-black tabular-nums" :class="bilanTrajectoire.fin.courant < 0 ? 'text-rose-700' : 'text-gray-900'">{{ formatMAD(bilanTrajectoire.fin.courant) }}</span> · tous comptes <span class="font-black tabular-nums text-gray-900">{{ formatMAD(bilanTrajectoire.fin.total) }}</span>.
+                            <button type="button" @click="ouvrirReleve()" class="ml-1 text-blue-700 font-bold hover:underline">Voir le Relevé →</button></p>
+                    </section>
 
-                    <div data-cfo-collapse="dash-evolution" class="cfo-section-wrap">
-                        <div class="cfo-section-header cfo-collapse-header">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">📉 Évolution Pluriannuelle & Audit Détaillé</span>
-                            <span class="cfo-chevron text-gray-400 text-xs">▼</span>
-                        </div>
-                        <div class="cfo-collapsible-body">
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-80 flex flex-col">
-                            <h3 class="text-lg font-bold text-gray-800 mb-1">Évolution Pluriannuelle</h3>
-                            <p class="text-[10px] text-gray-500 mb-4 font-bold uppercase">Solde courant estimé</p>
-                            <div class="flex-1 relative w-full h-full min-h-[200px]"><base-chart v-if="lineChartConfig" :config="lineChartConfig"></base-chart></div>
-                        </div>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-80 flex flex-col relative overflow-hidden">
-                            <div v-if="!activeDrilldown" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/90 z-10 p-6 text-center backdrop-blur-sm">
-                                <div class="text-4xl mb-3">🔍</div>
-                                <h3 class="font-bold text-gray-700 text-lg">Audit détaillé {{anneeAffichage}}</h3>
-                                <p class="text-xs text-gray-500 mt-2 font-medium">Cliquez sur un graphique au-dessus pour disséquer les chiffres.</p>
+                        <!-- 4. Où part l'argent -->
+                        <section data-bilan-postes class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                            <h3 class="text-lg font-bold text-gray-800">Où part l'argent</h3>
+                            <p class="text-xs text-gray-500 mt-0.5">Moyenne par mois sur {{ bilanAnnee.an }}, pour {{ formatMAD(bilanAnnee.moy.ressources) }} de ressources. Cliquez un poste pour son détail.</p>
+                            <div class="mt-4 space-y-2.5">
+                                <details v-for="p in bilanAnnee.postes" :key="p.cle" :data-poste="p.cle" class="group">
+                                    <summary class="list-none cursor-pointer rounded-lg px-1 -mx-1 hover:bg-gray-50">
+                                        <div class="flex items-baseline justify-between gap-3 text-sm">
+                                            <span class="font-bold text-gray-800"><span aria-hidden="true">{{ p.icone }}</span> {{ p.label }} <span class="text-gray-500 text-xs group-open:hidden">▸</span><span class="text-gray-500 text-xs hidden group-open:inline">▾</span></span>
+                                            <span class="tabular-nums whitespace-nowrap"><span class="font-black text-gray-900" :data-poste-montant="p.cle">{{ formatMAD(p.moyenne) }}</span> <span class="text-xs font-bold text-gray-500">· {{ p.pct }} %</span></span>
+                                        </div>
+                                        <div class="mt-1 h-2.5 rounded-full bg-gray-100 overflow-hidden" aria-hidden="true"><div :class="['h-full rounded-full', p.classe]" :style="{ width: p.largeur + '%' }"></div></div>
+                                    </summary>
+                                    <ul class="mt-2 ml-6 mb-1 space-y-1 text-xs text-gray-700">
+                                        <li v-for="l in p.lignes" :key="l.nom" class="flex justify-between gap-3"><span class="min-w-0">{{ l.nom }}</span><span class="tabular-nums font-bold whitespace-nowrap">{{ formatMAD(l.moyenne) }}</span></li>
+                                    </ul>
+                                </details>
                             </div>
-                            <div class="flex justify-between items-start mb-4">
-                                <div>
-                                    <h3 class="text-lg font-black uppercase tracking-tighter" :style="{ color: activeDrilldown ? activeDrilldown.color : '#000' }">{{ activeDrilldown ? activeDrilldown.label : 'Détails' }}</h3>
-                                    <p class="text-[10px] text-gray-500 font-bold uppercase">Valeurs mensuelles</p>
-                                </div>
-                                <button v-if="activeDrilldown" @click="activeDrilldown = null" class="text-gray-500 hover:text-gray-800 text-xs font-bold bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors uppercase">Fermer ✕</button>
+                            <div class="mt-4 pt-3 border-t border-gray-200 flex items-baseline justify-between gap-3 text-sm">
+                                <span class="font-bold text-gray-800">Total engagé</span>
+                                <span class="tabular-nums"><span class="font-black text-gray-900" data-bilan-total>{{ formatMAD(bilanAnnee.moy.sorties) }}</span> <span :class="['text-xs font-black', bilanAnnee.pctEngage > 100 ? 'text-rose-700' : 'text-gray-600']">· {{ bilanAnnee.pctEngage }} % des ressources</span></span>
                             </div>
-                            <div class="flex-1 relative w-full h-full min-h-[200px]"><base-chart v-if="detailChartConfig" :config="detailChartConfig"></base-chart></div>
-                        </div>
+                            <p data-bilan-marge :class="['text-sm font-bold mt-1 text-right', bilanAnnee.moy.marge < 0 ? 'text-rose-700' : 'text-emerald-700']">{{ bilanAnnee.moy.marge < 0 ? 'Il manque ' + formatMAD(-bilanAnnee.moy.marge) + ' par mois.' : 'Il reste ' + formatMAD(bilanAnnee.moy.marge) + ' par mois.' }}</p>
+                        </section>
+
+                        <!-- 5. L'année mois par mois -->
+                        <section data-bilan-mois class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+                            <h3 class="text-lg font-bold text-gray-800">L'année {{ bilanAnnee.an }} mois par mois</h3>
+                            <p class="text-xs text-gray-500 mt-0.5">Les ressources (ligne verte) face aux sorties, poste par poste.</p>
+                            <div class="h-72 mt-4 relative flex-1 min-h-[18rem]"><base-chart v-if="bilanMoisChart" :config="bilanMoisChart"></base-chart></div>
+                            <p data-bilan-mois-deficit :class="['text-xs mt-3 font-bold', bilanAnnee.deficitaires.length ? 'text-rose-700' : 'text-emerald-700']">{{ bilanAnnee.texteDeficit }}</p>
+                        </section>
                     </div>
-                        </div><!-- /cfo-collapsible-body evolution -->
-                    </div><!-- /dash-evolution -->
+                    </template>
 
                     <!-- ── v21.20 : JOURNAL DES FLUX INLINE (remplace la simulation) ── -->
                     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8">
@@ -3353,7 +3289,7 @@
 
                     <!-- ── SAUVEGARDE ── -->
                     <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                        <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5">💾 Sauvegarde Automatique</h3>
+                        <h3 class="font-black uppercase tracking-widest text-gray-700 text-sm mb-5" data-reglages-sauvegarde>💾 Sauvegarde & données</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div>
                                 <label class="text-xs font-black uppercase tracking-widest text-gray-500 block mb-3">Délai entre chaque backup <span class="text-emerald-600">({{ parametres.backupIntervalMinutes }} min)</span></label>
@@ -3366,6 +3302,46 @@
                                 </select>
                                 <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">Le backup JSON est envoyé automatiquement au VPS selon cet intervalle</p>
                             </div>
+                        </div>
+                        <!-- v37.45 : ce qui encombrait le bas du menu, rangé ici -->
+                        <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8" data-reglages-donnees>
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Serveur (VPS)</p>
+                                <p class="text-sm text-gray-800 flex items-center gap-2"><span :class="['w-2.5 h-2.5 rounded-full shrink-0', etatSauvegarde.point]" aria-hidden="true"></span><span class="font-bold">{{ etatSauvegarde.titre }}</span></p>
+                                <p class="text-xs text-gray-600 mt-1">{{ etatSauvegarde.aide }} Chaque modification part d'elle-même au serveur après 2 secondes.</p>
+                                <div class="flex flex-wrap gap-2 mt-3">
+                                    <button @click="saveToServer()" :disabled="serverSyncStatus === 'saving'" class="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">💾 Enregistrer maintenant</button>
+                                    <button @click="testConnection" class="px-4 py-2 rounded-xl border-2 border-gray-200 text-gray-800 text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">⚡ Tester la connexion</button>
+                                </div>
+                                <details class="mt-3" data-journal-technique>
+                                    <summary class="cursor-pointer text-xs font-bold text-gray-600">Journal technique ({{ serverLogs.length }} lignes)</summary>
+                                    <div class="mt-2 bg-slate-950 rounded-lg p-2 font-mono text-[11px] max-h-48 overflow-y-auto custom-scroll">
+                                        <div v-for="(log, i) in serverLogs" :key="i" :class="['leading-snug py-0.5', log.type === 'error' ? 'text-red-300' : (log.type === 'success' ? 'text-emerald-300' : (log.type === 'warn' ? 'text-orange-200' : 'text-slate-300'))]"><span class="text-slate-500">[{{ log.time }}]</span> {{ log.msg }}</div>
+                                    </div>
+                                </details>
+                            </div>
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Google Drive</p>
+                                <div v-if="syncStatus === 'disconnected'" class="flex flex-wrap items-center gap-3">
+                                    <button @click="authDrive" class="px-4 py-2 rounded-xl border-2 border-gray-200 text-gray-800 text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">☁️ Connecter Google Drive</button>
+                                    <button @click="showDriveHelp = true" class="text-xs text-blue-700 font-bold hover:underline">Configurer l'ID client</button>
+                                </div>
+                                <div v-else class="flex flex-wrap items-center gap-3">
+                                    <button @click="saveToDrive" class="px-4 py-2 rounded-xl border-2 border-gray-200 text-gray-800 text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">☁️ {{ syncStatus === 'saving' ? 'Synchronisation…' : (syncStatus === 'modified' ? 'Sauver sur Google Drive' : 'Google Drive à jour') }}</button>
+                                    <button @click="disconnectDrive" class="text-xs text-red-700 font-bold hover:underline">Déconnecter</button>
+                                </div>
+                                <p class="text-xs font-black uppercase tracking-widest text-gray-500 mt-6 mb-3">Fichiers</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <button @click="exporterDonnees" class="px-4 py-2 rounded-xl border-2 border-gray-200 text-gray-800 text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">💾 Exporter (.json)</button>
+                                    <button @click="triggerImport" class="px-4 py-2 rounded-xl border-2 border-gray-200 text-gray-800 text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">📂 Importer…</button>
+                                    <button @click="exporterPDF" class="px-4 py-2 rounded-xl border-2 border-gray-200 text-gray-800 text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">📄 Exporter en PDF</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-8 rounded-xl border-2 border-red-200 bg-red-50 p-4" data-zone-sensible>
+                            <p class="text-sm font-black text-red-800">⚠️ Zone sensible</p>
+                            <p class="text-xs text-red-800 mt-1">Remplace toutes vos données, ici et sur le serveur, par la sauvegarde historique du 7 avril (V10). Exportez d'abord vos données.</p>
+                            <button @click="restaurerDefaut" data-restaurer-v10 class="mt-3 px-4 py-2 rounded-xl bg-white border-2 border-red-300 text-red-700 text-xs font-black uppercase tracking-widest hover:bg-red-100 transition-colors">🔄 Restaurer les données du 7 avril (V10)</button>
                         </div>
                     </section>
 
@@ -13360,6 +13336,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         } catch (e) { addLog("Coupure réseau ou CORS.", 'error'); }
                     };
 
+                    //  v37.45 — l'état de la sauvegarde en une ligne, pour le pied du menu.
+                    const menuDonnees = ref(false);
+                    const etatSauvegarde = computed(() => {
+                        const s = serverSyncStatus.value;
+                        const h = String(serverLastSync.value || '').replace(/:\d{2}(?=\D*$)/, '');
+                        if (s === 'saving') return { titre: 'Envoi…', detail: 'au serveur', point: 'bg-sky-400 animate-pulse', aide: 'Enregistrement en cours sur le serveur.' };
+                        if (s === 'error') return { titre: 'Échec', detail: 'réessayer', point: 'bg-rose-500', aide: 'La dernière sauvegarde a échoué : cliquez pour réessayer (le journal technique est dans Paramètres › Sauvegarde & données).' };
+                        if (s === 'modified') return serveurDivergent.value
+                            ? { titre: 'Bloqué', detail: 'conflit', point: 'bg-rose-500 animate-pulse', aide: 'Un autre appareil a enregistré depuis votre chargement : rien n’a été écrasé, choisissez dans le bandeau.' }
+                            : { titre: 'Modifié', detail: 'envoi auto', point: 'bg-amber-400 animate-pulse', aide: 'Vos changements partent d’eux-mêmes au serveur dans quelques secondes ; cliquez pour enregistrer tout de suite.' };
+                        if (s === 'synced') return { titre: 'Enregistré', detail: h || 'serveur', point: 'bg-emerald-400', aide: 'Tout est enregistré sur le serveur' + (h ? ' (' + h + ')' : '') + ' ; cliquez pour réenregistrer.' };
+                        return { titre: 'Connexion…', detail: 'serveur', point: 'bg-slate-400 animate-pulse', aide: 'Chargement des données du serveur.' };
+                    });
                     const saveToServer = async (forcer = false) => {
                         serverSyncStatus.value = 'saving';
                         addLog("Écriture vers VPS...", 'info');
@@ -20068,6 +20057,222 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         }
                     };
 
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.45 — LE BILAN, LU PAR UN DIRECTEUR FINANCIER
+                       Quatre signaux vitaux avec leur repère, la trajectoire des comptes
+                       (moteur du Relevé), ce que coûte chaque poste et l'année mois par
+                       mois (modèle de la Météo, respirationDuMois, crédits à part).
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _MOIS_BILAN = ['', 'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+                    const POSTES_BILAN = [
+                        { cle: 'credits',      label: 'Mensualités de crédit',  icone: '🏦', classe: 'bg-blue-900',   couleur: '#1e3a8a' },
+                        { cle: 'fixes',        label: 'Charges fixes',          icone: '🏢', classe: 'bg-orange-500', couleur: '#f97316' },
+                        { cle: 'mensuelles',   label: 'Factures & mensuel',     icone: '🧾', classe: 'bg-sky-500',    couleur: '#0ea5e9' },
+                        { cle: 'conso',        label: 'Conso courante',         icone: '🛒', classe: 'bg-teal-500',   couleur: '#14b8a6' },
+                        { cle: 'exceptionnel', label: 'Dépenses ponctuelles',   icone: '⚠️', classe: 'bg-rose-500',   couleur: '#f43f5e' },
+                        { cle: 'epargne',      label: 'Épargne programmée',     icone: '💎', classe: 'bg-violet-500', couleur: '#8b5cf6' },
+                    ];
+                    //  L'année du budget affiché, mois par mois. Une charge fixe dont la clé
+                    //  commence par « credit » est une mensualité (même règle que le bandeau).
+                    const bilanAnnee = computed(() => {
+                        calculationTick.value;
+                        const an = Number(anneeAffichage.value);
+                        const d = (donneesAnnuelles.value || {})[an];
+                        if (!d) return null;
+                        const mb = moisBudgetaire.value;
+                        const cumul = {};                       // poste → nom → total annuel
+                        const ajoute = (poste, nom, v) => { const p = cumul[poste] || (cumul[poste] = {}); p[nom] = (p[nom] || 0) + v; };
+                        const mois = Array.from({ length: 12 }, (_, i) => {
+                            const m = i + 1, r = respirationDuMois(an, m);
+                            const val = { credits: 0, fixes: 0 };
+                            Object.entries(d.chargesFixes || {}).forEach(([k, f]) => {
+                                const v = valeurEffective(f, (f || {}).valeur, m);
+                                if (!(v > 0)) return;
+                                const poste = String(k).startsWith('credit') ? 'credits' : 'fixes';
+                                val[poste] += v; ajoute(poste, (f || {}).label || k, v);
+                            });
+                            ['mensuelles', 'conso', 'exceptionnel', 'epargne'].forEach(cle => {
+                                val[cle] = 0;
+                                (r.lignes[cle] || []).forEach(l => { val[cle] += l.montant; ajoute(cle, l.nom + (cle === 'exceptionnel' ? ' (' + _MOIS_BILAN[m] + ')' : ''), l.montant); });
+                            });
+                            Object.keys(val).forEach(k => { val[k] = Math.round(val[k]); });
+                            return { m, nom: _MOIS_BILAN[m], ressources: r.ressources, sorties: r.sorties, marge: r.marge, ...val,
+                                     courant: an === mb.an && m === mb.mois };
+                        });
+                        const moy = (k) => mois.reduce((s, x) => s + x[k], 0) / 12;
+                        const ressources = moy('ressources'), sorties = moy('sorties'), marge = moy('marge');
+                        const postes = POSTES_BILAN.map(p => {
+                            const moyenne = moy(p.cle);
+                            const lignes = Object.entries(cumul[p.cle] || {}).map(([nom, t]) => ({ nom, moyenne: Math.round(t / 12) }))
+                                .filter(l => l.moyenne > 0).sort((a, b) => b.moyenne - a.moyenne);
+                            return { ...p, moyenne: Math.round(moyenne), lignes,
+                                     pct: ressources > 0 ? Math.round(moyenne / ressources * 100) : 0,
+                                     largeur: Math.min(100, moyenne / Math.max(1, ressources > 0 ? ressources : sorties) * 100) };
+                        }).filter(p => p.moyenne > 0).sort((a, b) => b.moyenne - a.moyenne);
+                        const deficitaires = mois.filter(x => x.marge < 0);
+                        const pire = deficitaires.reduce((p, x) => (!p || x.marge < p.marge ? x : p), null);
+                        const moindre = deficitaires.reduce((p, x) => (!p || x.marge > p.marge ? x : p), null);
+                        const texteDeficit = !deficitaires.length ? 'Chaque mois, les ressources couvrent les sorties.'
+                            : (deficitaires.length === 12 ? 'Les 12 mois dépensent plus qu’ils ne rentrent : de ' + formatMAD(moindre.marge) + ' (' + moindre.nom + ') à ' + formatMAD(pire.marge) + ' (' + pire.nom + ').'
+                            : deficitaires.length + ' mois où les sorties dépassent les ressources : ' + deficitaires.map(x => x.nom + ' ' + formatMAD(x.marge)).join(', ') + '.');
+                        return { an, mois, postes, deficitaires, texteDeficit,
+                                 moy: { ressources: Math.round(ressources), sorties: Math.round(sorties), marge: Math.round(marge), epargne: Math.round(moy('epargne')), credits: Math.round(moy('credits')) },
+                                 pctEngage: ressources > 0 ? Math.round(sorties / ressources * 100) : 0,
+                                 moisCourant: mois.find(x => x.courant) || null };
+                    });
+
+                    //  La trajectoire : le Relevé déroulé sur les 12 cycles à venir. Fin de
+                    //  mois du compte courant, de tous les comptes (comptes + épargne non liée,
+                    //  comme le bandeau), point bas daté du courant.
+                    const bilanTrajectoire = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value, jdp = jourDePaie.value;
+                        const cycles = [];
+                        for (let i = 0, m = mb.mois, a = mb.an; i < 12; i++) { cycles.push(m + '-' + a); if (++m > 12) { m = 1; a++; } }
+                        let j;
+                        try { j = _buildJournalReleve([], cycles); } catch (e) { return null; }
+                        if (!j) return null;
+                        const ck = j.courantKey, lies = _epargneLinkedKeys.value;
+                        const dateDe = (jour, cycle) => {
+                            const [cm, ca] = String(cycle).split('-').map(Number);
+                            let m = cm, a = ca;
+                            if (jdp > 1 && Number(jour) >= jdp) { m--; if (m < 1) { m = 12; a--; } }
+                            return Math.min(Math.max(1, Number(jour) || 1), new Date(a, m, 0).getDate()) + ' ' + _MOIS_BILAN[m] + ' ' + a;
+                        };
+                        const solde = {}, fins = [];
+                        let ci = 0, bas = null, decouvert = null;
+                        const fige = (jusqua) => { while (ci < jusqua) { fins.push({ ...solde }); ci++; } };
+                        (j.entries || []).forEach(e => {
+                            const k = e.compteKey;
+                            if (!k) return;
+                            if (e.type === 'initial') {
+                                if (!(k in solde)) solde[k] = Number(e.montant) || 0;
+                                if (k === ck && !bas) bas = { montant: solde[k], date: 'aujourd’hui' };
+                                return;
+                            }
+                            const idx = cycles.indexOf(e.cycle);
+                            if (idx > ci) fige(idx);
+                            solde[k] = Number(e.soldeCompteApres) || 0;
+                            if (k === ck) {
+                                if (!bas || solde[k] < bas.montant) bas = { montant: solde[k], date: dateDe(e.jourPrevu, e.cycle), libelle: e.libelle };
+                                if (!decouvert && solde[k] < -0.5) decouvert = { montant: solde[k], date: dateDe(e.jourPrevu, e.cycle), libelle: e.libelle };
+                            }
+                        });
+                        fige(cycles.length);
+                        const points = cycles.map((c, i) => {
+                            const [m, a] = c.split('-').map(Number), f = fins[i] || {};
+                            return { cycle: c, label: _MOIS_BILAN[m] + ' ' + String(a).slice(-2),
+                                     courant: Math.round(Number(f[ck]) || 0),
+                                     total: Math.round(Object.keys(f).filter(k => !lies.has(k)).reduce((s, k) => s + (Number(f[k]) || 0), 0)) };
+                        });
+                        return { points, courantKey: ck, pointBas: bas ? { ...bas, montant: Math.round(bas.montant) } : null,
+                                 decouvert: decouvert ? { ...decouvert, montant: Math.round(decouvert.montant) } : null,
+                                 fin: points[points.length - 1] };
+                    });
+
+                    const _NIVEAUX_BILAN = {
+                        ok:        { etiquette: 'Sain',         valeurClasse: 'text-emerald-700', pastille: 'bg-emerald-100 text-emerald-800', barre: 'bg-emerald-500' },
+                        attention: { etiquette: 'À surveiller', valeurClasse: 'text-amber-700',   pastille: 'bg-amber-100 text-amber-800',     barre: 'bg-amber-500' },
+                        alerte:    { etiquette: 'Alerte',       valeurClasse: 'text-rose-700',    pastille: 'bg-rose-100 text-rose-800',       barre: 'bg-rose-500' },
+                        neutre:    { etiquette: 'À définir',    valeurClasse: 'text-gray-800',    pastille: 'bg-gray-100 text-gray-700',       barre: 'bg-gray-400' },
+                    };
+                    const _pct = (x) => (Math.round(x * 10) / 10).toLocaleString('fr-FR') + ' %';
+                    const bilanSignaux = computed(() => {
+                        const A = bilanAnnee.value;
+                        if (!A) return [];
+                        const R = A.moy.ressources, M = A.moy.marge, E = A.moy.epargne;
+                        const pctMarge = R > 0 ? M / R * 100 : (M < 0 ? -100 : 0);
+                        const mc = A.moisCourant;
+                        const out = [];
+                        //  1. Le solde du budget
+                        out.push({ cle: 'solde', titre: 'Solde mensuel', valeur: formatMAD(M),
+                            niveau: M < 0 ? 'alerte' : (pctMarge < 5 ? 'attention' : 'ok'),
+                            jauge: Math.min(100, A.pctEngage),
+                            explication: M < 0 ? 'Le budget dépense ' + formatMAD(-M) + ' de plus qu’il ne rentre chaque mois : l’écart sort de vos réserves.'
+                                               : 'Il reste ' + formatMAD(M) + ' par mois après dépenses et épargne (' + Math.round(pctMarge) + ' % des ressources).',
+                            resume: M < 0 ? 'Le budget dépense ' + formatMAD(-M) + ' de plus qu’il ne rentre, chaque mois en moyenne.' : 'Le budget dégage ' + formatMAD(M) + ' par mois (' + Math.round(pctMarge) + ' % des ressources).',
+                            repere: 'Moyenne des 12 mois de ' + A.an + (mc ? ' · ce mois-ci : ' + formatMAD(mc.marge) : '') + ' · repère : ≥ 5 % des ressources' });
+                        //  2. Le taux d'épargne RÉEL : l'épargne programmée, moins le déficit qui la ronge
+                        const tx = R > 0 ? (E + M) / R * 100 : null;
+                        out.push({ cle: 'epargne', titre: 'Taux d’épargne', valeur: tx === null ? '—' : _pct(tx),
+                            niveau: tx === null ? 'neutre' : (tx < 0 ? 'alerte' : (tx < 10 ? 'attention' : 'ok')),
+                            jauge: tx === null ? 0 : Math.max(0, Math.min(100, tx / 20 * 100)),
+                            explication: tx === null ? 'Aucun revenu saisi pour ' + A.an + '.'
+                                : (E + M >= 0 ? 'Vous mettez de côté ' + formatMAD(E + M) + ' par mois' + (M < 0 ? ' : l’épargne programmée (' + formatMAD(E) + ') moins le déficit.' : ' (épargne programmée ' + formatMAD(E) + (M > 0 ? ' + reste ' + formatMAD(M) : '') + ').')
+                                              : 'Le déficit (' + formatMAD(-M) + ') dépasse l’épargne programmée (' + formatMAD(E) + ') : vous puisez ' + formatMAD(-(E + M)) + ' par mois dans vos réserves.'),
+                            resume: tx === null ? '' : (tx < 0 ? 'Taux d’épargne réel négatif (' + _pct(tx) + ') : vous puisez ' + formatMAD(-(E + M)) + ' par mois dans vos réserves.' : 'Taux d’épargne réel : ' + _pct(tx) + ' des ressources (repère : 10 % au minimum).'),
+                            repere: 'Repère : 10 % au minimum, 20 % c’est très bien' });
+                        //  3. Le taux d'endettement — celui du bandeau (mensualités du mois / revenus)
+                        const te = Number(tauxEndettement.value) || 0;
+                        const paliers = (creditsPaliersData.value || []).map(p => p.range + ' : ' + p.taux + ' %').join(' · ');
+                        out.push({ cle: 'endettement', titre: 'Endettement', valeur: _pct(te),
+                            niveau: te > 40 ? 'alerte' : (te > 33 ? 'attention' : 'ok'),
+                            jauge: Math.min(100, te / 60 * 100),
+                            explication: 'Crédits : ' + formatMAD(totalCreditsMensuels.value) + ' par mois pour ' + formatMAD(totalRevenusBase.value) + ' de revenus.' + (paliers ? ' ' + paliers + '.' : ''),
+                            resume: 'Les crédits prennent ' + _pct(te) + ' des revenus (repère : 33 %, zone rouge au-delà de 40 %).',
+                            repere: 'Repère : un tiers des revenus (33 %) · au-delà de 40 %, zone rouge pour les banques' });
+                        //  4. L'épargne de précaution, en mois de dépenses
+                        const dep = depensesMensuellesBase.value, liq = patrimoineLiquide.value;
+                        const obj = Number((parametres.value || {}).objectifFondsSecuriteMois) || 0;
+                        const nb = dep > 0 ? liq / dep : null;
+                        out.push({ cle: 'precaution', titre: 'Précaution', valeur: nb === null ? '—' : (Math.round(nb * 10) / 10).toLocaleString('fr-FR') + ' mois',
+                            niveau: (nb === null || obj <= 0) ? 'neutre' : (nb >= obj ? 'ok' : (nb >= obj / 2 ? 'attention' : 'alerte')),
+                            jauge: (nb === null || obj <= 0) ? 0 : Math.min(100, nb / obj * 100),
+                            explication: nb === null ? 'Aucune dépense mensuelle saisie.' : 'Vos liquidités (' + formatMAD(liq) + ') couvrent ' + (Math.round(nb * 10) / 10).toLocaleString('fr-FR') + ' mois de dépenses (' + formatMAD(dep) + ' par mois).',
+                            resume: nb === null ? '' : 'Épargne de précaution : ' + (Math.round(nb * 10) / 10).toLocaleString('fr-FR') + ' mois de dépenses' + (obj > 0 ? ', pour un objectif de ' + obj + ' mois.' : '.'),
+                            repere: obj > 0 ? 'Objectif : ' + obj + ' mois = ' + formatMAD(cibleFondsSecurite.value) : 'Objectif à régler dans Paramètres' });
+                        return out.map(s => ({ ...s, ...(_NIVEAUX_BILAN[s.niveau] || _NIVEAUX_BILAN.neutre) }));
+                    });
+
+                    //  Le verdict : une phrase par signal, le pire d'abord.
+                    const bilanVerdict = computed(() => {
+                        const S = bilanSignaux.value, T = bilanTrajectoire.value, A = bilanAnnee.value;
+                        const rang = { alerte: 0, attention: 1, ok: 2, neutre: 3 };
+                        const points = [];
+                        //  La trésorerie d'abord : c'est le seul signal daté.
+                        if (T && T.pointBas) {
+                            if (T.decouvert) points.push({ niveau: 'alerte', texte: 'Le compte courant passe sous zéro le ' + T.decouvert.date + ' ; point bas ' + formatMAD(T.pointBas.montant) + ' le ' + T.pointBas.date + '.'
+                                + (T.fin && T.fin.total >= 0 ? ' Vos autres comptes le couvrent encore (' + formatMAD(T.fin.total) + ' au total fin ' + T.fin.label + ') : prévoyez les virements.' : ' Même tous vos comptes réunis ne le couvrent pas.') });
+                            else points.push({ niveau: 'ok', texte: 'Le compte courant reste positif sur les 12 prochains mois (point bas ' + formatMAD(T.pointBas.montant) + ', ' + T.pointBas.date + ').' });
+                        }
+                        S.filter(s => s.niveau !== 'neutre' && s.resume).forEach(s => points.push({ niveau: s.niveau, texte: s.resume }));
+                        //  Un déficit SAISONNIER (quelques mois seulement) mérite sa ligne ; s'il touche
+                        //  les 12 mois, le solde du budget l'a déjà dit.
+                        if (A && A.deficitaires.length && A.deficitaires.length < 12) points.push({ niveau: A.deficitaires.length >= 6 ? 'alerte' : 'attention',
+                            texte: A.deficitaires.length + ' mois sur 12 dépensent plus qu’ils ne rentrent : ' + A.deficitaires.map(x => x.nom).join(', ').replace(/\.$/, '') + '.' });
+                        points.sort((a, b) => rang[a.niveau] - rang[b.niveau]);
+                        const nA = points.filter(p => p.niveau === 'alerte').length, nW = points.filter(p => p.niveau === 'attention').length;
+                        const niveau = nA ? 'alerte' : (nW ? 'attention' : 'ok');
+                        const titre = nA ? (nA === 1 ? '1 signal en alerte' : nA + ' signaux en alerte') + (nW ? ', ' + nW + ' à surveiller' : '')
+                                    : (nW ? (nW === 1 ? '1 point à surveiller' : nW + ' points à surveiller') : 'Situation saine : budget, dettes et trésorerie au vert');
+                        return { niveau, titre, points };
+                    });
+
+                    const _axeDH = (v) => (Math.abs(v) >= 1000 ? (Math.round(v / 100) / 10).toLocaleString('fr-FR') + ' k' : v);
+                    const bilanTrajectoireChart = computed(() => {
+                        const T = bilanTrajectoire.value;
+                        if (!T) return null;
+                        return { type: 'bar', data: { labels: T.points.map(p => p.label), datasets: [
+                                { type: 'line', label: 'Tous vos comptes', data: T.points.map(p => p.total), borderColor: '#047857', backgroundColor: '#047857', tension: 0.3, pointRadius: 3, order: 1 },
+                                { type: 'bar', label: 'Compte courant', data: T.points.map(p => p.courant), backgroundColor: T.points.map(p => p.courant < 0 ? '#e11d48' : '#3b82f6'), borderRadius: 4, order: 2 },
+                            ] },
+                            options: { responsive: true, maintainAspectRatio: false, animation: false,
+                                plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (c) => c.dataset.label + ' : ' + formatMAD(c.parsed.y) } } },
+                                scales: { y: { ticks: { callback: _axeDH }, grid: { color: (c) => (c.tick && c.tick.value === 0 ? '#334155' : '#e5e7eb') } } } } };
+                    });
+                    const bilanMoisChart = computed(() => {
+                        const A = bilanAnnee.value;
+                        if (!A) return null;
+                        const ordre = ['credits', 'fixes', 'mensuelles', 'conso', 'exceptionnel', 'epargne'];
+                        return { type: 'bar', data: { labels: A.mois.map(x => x.nom), datasets: [
+                                { type: 'line', label: 'Ressources', data: A.mois.map(x => x.ressources), borderColor: '#15803d', backgroundColor: '#15803d', borderWidth: 3, pointRadius: 4, stack: 'ressources', order: 0 },
+                                ...ordre.map(k => { const p = POSTES_BILAN.find(x => x.cle === k); return { label: p.label, data: A.mois.map(x => x[k]), backgroundColor: p.couleur, stack: 'sorties', order: 1 }; }),
+                            ] },
+                            options: { responsive: true, maintainAspectRatio: false, animation: false,
+                                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } }, tooltip: { mode: 'index', intersect: false, callbacks: { label: (c) => c.dataset.label + ' : ' + formatMAD(c.parsed.y) } } },
+                                scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: _axeDH } } } } };
+                    });
+
                     const budgetChartConfig = computed(() => {
                         calculationTick.value;
                         return { type: 'doughnut', data: { labels: ['Fixes', 'Conso', 'Épargne', 'Surplus'], datasets: [{ data: [totalFixes.value, totalVariables.value, totalEpargne.value, Math.max(0, surplusMensuelBase.value)], backgroundColor: ['#f97316', '#ef4444', '#a855f7', '#22c55e'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'right' } }, onClick: (e, el) => { if(el.length>0) { const l = ['Charges Fixes', 'Consommation', 'Épargne', 'Surplus Net'][el[0].index]; if(l!=='Surplus Net') activeDrilldown.value = { source: 'budget', key: l, label: l, color: ['#f97316', '#ef4444', '#a855f7', '#22c55e'][el[0].index] }; } } } };
@@ -20231,6 +20436,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         totalRevenusBase, totalFixes, totalVariables, totalEpargne, nomDuMois, moisOuverts, toggleMois, getDepensesMois, getDepensesCycle, totalMoisAffichage, ajouterDepense, supprimerDepense, supprimerLigneObj, scinderLigneObj, scinderLigneArr, ajouterPart, supprimerPart, partsTotal, ajouterEntree, ajouterChargeFixe, ajouterChargeVariable, bilanLignes, bilanJournal, compteReleve, showReleveModal, ouvrirReleve, ouvrirReleveProjection, fermerReleve, releveCompte, releveCompteGrouped, releveCompteLabel, releveComptesFiltres, isGlobalView, releveShowCompte, toggleReleveCompte, releveOnglets, releveMoisFiltres, releveAnneesFiltres, releveAnneesDisponibles, releveMoisDisponibles, releveModeEvolution, releveEvolution, releveActiveCycle, cyclesDisponibles, historiqueCycles, viewedCycleKey, cloturerCycle,
                         // v23.30 Retro-Clean
                         pilotageViewedCycle, pilotageViewedMois, pilotageViewedAn, isPilotageRetro, pilotageCycleLabel,
+                        bilanAnnee, bilanTrajectoire, bilanSignaux, bilanVerdict, bilanTrajectoireChart, bilanMoisChart,
                         budgetChartConfig, consoChartConfig, lineChartConfig, detailChartConfig, activeDrilldown, studioCalc, totalCreditsMensuels, creditsDetailMois, creditsPaliers, creditsPaliersData, showCreditsTooltip, tauxEndettement, appliquerMensualiteStudio, injecterFluxCashStudio,
                         showPoidsTooltip, showInlineReleve,
                         // v32.80 UI-Compacte
@@ -20260,7 +20466,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, showCfoModal, cfoMaximized, startDragCfoWidget, brieferCFO, consulterCFO, envoyerCFO, garantirMemoire, saveCFOWebhook, resetCFOSession,
                         // v37.11 — barre de prompt
                         cfoChatContainerMobile, grandirChampCFO, toucheCFO,
-                        forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
+                        forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, menuDonnees, etatSauvegarde, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
                         getDueFixe, getDueRevenu, isItemPaid, toggleItemPaid, getPaidAmount,
                         anneeAffichage, anneesDisponibles, ajouterAnnee,
                         anneesProjectionOptions,

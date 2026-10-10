@@ -159,8 +159,9 @@ try {
         v(`la feuille ne fonce jamais un texte sur fond sombre, ni ne baisse un contraste (${recolores} textes recolorés)`, !parEcran('effet') && recolores > 0, parEcran('effet'));
         v('aucun bouton-icône sans nom (✕, ×, ↑, ↓…)', !parEcran('sansNom'), parEcran('sansNom'));
         if (W === 1280) {
-            const kpi = await (async () => { await aller(page, 'previsionnel', 'dashboard'); return page.$$eval('[data-kpi-grille] > div', els => els.map(e => Math.round(e.getBoundingClientRect().width))); })();
-            v('tableau de bord : les cinq cartes, assez larges pour leur chiffre (≥ 200 px)', kpi.length === 5 && kpi.every(x => x >= 200), JSON.stringify(kpi));
+            const kpi = await (async () => { await aller(page, 'previsionnel', 'dashboard'); return page.$$eval('[data-bilan-signaux] > div', els => els.map(e => Math.round(e.getBoundingClientRect().width))); })();
+            //  v37.45 : les cinq cartes KPI sont devenues les quatre signaux vitaux du Bilan
+            v('Bilan : les quatre signaux, assez larges pour leur chiffre (≥ 200 px)', kpi.length === 4 && kpi.every(x => x >= 200), JSON.stringify(kpi));
             if (CAPTURES) await page.screenshot({ path: path.join(CAPTURES, 'gui_tableau_de_bord_1280.png') });
         }
         v(`aucune erreur JavaScript (${W} px)`, erreurs.length === 0, erreurs.slice(0, 2).join(' | '));
@@ -191,7 +192,7 @@ try {
     v(`règle de contraste : la surface la plus proche décide (${sondes.length} sondes)`, sondes.every(x => x.ok), sondes.filter(x => !x.ok).map(x => x.nom + ' : ' + x.c + ' ≠ ' + x.attendu).join(' | '));
 
     await aller(page, 'reel', 'pilotage');
-    await page.click('button:has-text("Changelog")');
+    await page.click('[data-version-nouveautes]');   // v37.45 : la version ouvre les nouveautés
     await page.waitForTimeout(300);
     v('mode Réalisé : « Changelog » ouvre l\'historique des versions (il n\'ouvrait rien)', await page.isVisible('text=Historique des Versions'));
     await page.click('button[aria-label="Fermer"]:near(:text("Historique des Versions"))').catch(() => page.evaluate((ST) => { eval(ST).showChangelog = false; }, ST));
