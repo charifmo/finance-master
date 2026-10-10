@@ -328,7 +328,7 @@ PAGE = """                <div v-if="activeTab === 'dashboard'" class="max-w-6xl
                             <h3 class="text-lg font-bold text-gray-800">Où part l'argent</h3>
                             <p class="text-xs text-gray-500 mt-0.5">Moyenne par mois sur {{ bilanAnnee.an }}, pour {{ formatMAD(bilanAnnee.moy.ressources) }} de ressources. Cliquez un poste pour son détail.</p>
                             <div class="mt-4 space-y-2.5">
-                                <details v-for="p in bilanAnnee.postes" :key="p.cle" :data-poste="p.cle" class="group">
+                                <details v-for="p in bilanAnnee.postes" :key="p.cle" :data-poste="p.cle" :open="uiOuvert('bilan.poste.' + p.cle, false)" @toggle="uiFixer('bilan.poste.' + p.cle, $event.target.open)" class="group">
                                     <summary class="list-none cursor-pointer rounded-lg px-1 -mx-1 hover:bg-gray-50">
                                         <div class="flex items-baseline justify-between gap-3 text-sm">
                                             <span class="font-bold text-gray-800"><span aria-hidden="true">{{ p.icone }}</span> {{ p.label }} <span class="text-gray-500 text-xs group-open:hidden">▸</span><span class="text-gray-500 text-xs hidden group-open:inline">▾</span></span>

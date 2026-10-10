@@ -173,7 +173,7 @@ sub('réglages : ce qui quittait le menu', """                                <p
                                     <button @click="saveToServer()" :disabled="serverSyncStatus === 'saving'" class="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">💾 Enregistrer maintenant</button>
                                     <button @click="testConnection" {BTN}>⚡ Tester la connexion</button>
                                 </div>
-                                <details class="mt-3" data-journal-technique>
+                                <details class="mt-3" data-journal-technique :open="uiOuvert('reglages.journal', false)" @toggle="uiFixer('reglages.journal', $event.target.open)">
                                     <summary class="cursor-pointer text-xs font-bold text-gray-600">Journal technique ({{{{ serverLogs.length }}}} lignes)</summary>
                                     <div class="mt-2 bg-slate-950 rounded-lg p-2 font-mono text-[11px] max-h-48 overflow-y-auto custom-scroll">
                                         <div v-for="(log, i) in serverLogs" :key="i" :class="['leading-snug py-0.5', log.type === 'error' ? 'text-red-300' : (log.type === 'success' ? 'text-emerald-300' : (log.type === 'warn' ? 'text-orange-200' : 'text-slate-300'))]"><span class="text-slate-500">[{{{{ log.time }}}}]</span> {{{{ log.msg }}}}</div>
