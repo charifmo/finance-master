@@ -64,7 +64,12 @@ const twCss = essai(() => {
 //    fixes → Assafa · variables et épargne → Courant · cadeau → CIH
 const maintenant = new Date();
 const T = maintenant.getDate();
-const jourDePaie = T === 1 ? 28 : Math.min(28, Math.max(2, T - 1));
+//  v37.43 : la paie tombe un lundi…jeudi, la veille au plus tard. Règle du jeudi (v37.27) : un cycle
+//  ouvert un vendredi, samedi ou dimanche ne compte ses tickets qu'à partir du lundi SUIVANT — les
+//  tickets d'aujourd'hui, au lendemain de la paie, n'y figuraient pas (le test tombait ces jours-là).
+let ouverture = new Date(maintenant.getFullYear(), maintenant.getMonth(), T - 1);
+while ([5, 6, 0].includes(ouverture.getDay())) ouverture = new Date(ouverture.getFullYear(), ouverture.getMonth(), ouverture.getDate() - 1);
+const jourDePaie = (T === 1 || ouverture.getMonth() !== maintenant.getMonth() || ouverture.getDate() < 2) ? 28 : Math.min(28, ouverture.getDate());
 const Y = maintenant.getFullYear(), MC = maintenant.getMonth() + 1;
 const MOIS_BUDGET = T >= jourDePaie ? (MC === 12 ? 1 : MC + 1) : MC;
 const AN_BUDGET = (T >= jourDePaie && MC === 12) ? Y + 1 : Y;

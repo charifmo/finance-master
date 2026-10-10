@@ -17,6 +17,10 @@
  *   Le jeu de données est bâti autour de la date du jour, jour de paie posé à
  *   hier : le cycle courant enjambe donc deux mois civils, exactement le cas
  *   du ticket.
+ *
+ *   v37.43 — la créance projetée est celle EN ATTENTE (case non cochée) : une
+ *   créance cochée est encaissée, déjà dans le solde, jamais projetée. Une
+ *   créance en attente dont la date est passée reste attendue, « en retard ».
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -75,12 +79,13 @@ dA.epargne = [];
 dA.depensesIrregulieres = [];
 
 /*  LA CRÉANCE DU TICKET : datée d'AUJOURD'HUI, donc APRÈS la paie d'hier.
-    Elle appartient au cycle en cours — celui du mois budgétaire. */
+    Elle appartient au cycle en cours — celui du mois budgétaire. v37.43 : elle
+    est EN ATTENTE (remboursement:false) — c'est celle qu'on attend. */
 const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const MONTANT_CREANCE = 7777;
 fx.soldesInitiaux.assurances_tracker = [
     { id: 'cr1', libelle: 'REMB ASSURANCE', assureur: 'AXA', type: 'sante',
-      remboursement: true, montant: MONTANT_CREANCE, montantRembourse: MONTANT_CREANCE,
+      remboursement: false, montant: MONTANT_CREANCE, montantRembourse: MONTANT_CREANCE,
       compteDepot: 'courant', dateDepot: iso(maintenant), dateRemboursement: iso(maintenant) },
 ];
 
@@ -206,26 +211,26 @@ try {
       && Object.entries(balayage).every(([k, n]) => k === cleBudget ? n === 1 : n === 0),
       JSON.stringify(balayage));
 
-    /*  Le contrôle qui distingue vraiment l'ancien code du nouveau : une
-        créance datée de la VEILLE de la paie reste, elle, sur le cycle
-        précédent — donc invisible depuis le cycle en cours. */
+    /*  v37.43 : une créance EN ATTENTE datée de la VEILLE de la paie (cycle
+        précédent, refermé) n'a pas été encaissée : elle reste attendue, « en
+        retard », dans le cycle en cours — jamais perdue. */
     const veille = await page.evaluate((jdp) => {
         const st = document.querySelector('#app').__vue_app__._instance.setupState;
-        const compter = () => st.journalHybridePourReleve.entries
-            .filter(e => (e.libelle || '').includes('REMB ASSURANCE')).length;
+        const lignes = () => st.journalHybridePourReleve.entries.filter(e => (e.libelle || '').includes('REMB ASSURANCE'));
+        const compter = () => lignes().length;
         const cr = st.soldesInitiaux.assurances_tracker[0];
         const sauv = cr.dateRemboursement;
         //  La veille de la PAIE (et non d'aujourd'hui) : ce jour-là appartient
         //  encore au cycle précédent, déjà refermé.
         const d = new Date(sauv); d.setDate(jdp - 1);
         cr.dateRemboursement = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-        const n = compter();
+        const n = compter(), libelle = (lignes()[0] || {}).libelle || '', jour = (lignes()[0] || {}).jourPrevu;
         cr.dateRemboursement = sauv;                             // remise en état
-        return { veille: n, retour: compter() };
+        return { veille: n, libelle, jour, aujourdhui: new Date().getDate(), retour: compter() };
     }, jourDePaie);
 
-    v('une créance datée AVANT la paie reste sur le cycle précédent',
-      veille.veille === 0, JSON.stringify(veille));
+    v('une créance en attente datée AVANT la paie reste attendue : en retard, dans le cycle en cours',
+      veille.veille === 1 && /en retard \(attendue le \d\d\/\d\d\/\d{4}\)/.test(veille.libelle) && veille.jour === veille.aujourdhui, JSON.stringify(veille));
     v('  → et revenir à la date d\'aujourd\'hui la ramène dans le cycle',
       veille.retour === 1, JSON.stringify(veille));
 
@@ -236,12 +241,12 @@ try {
         st.anneesSelectionnees.splice(0, st.anneesSelectionnees.length);
         const avec = st.journalHybridePourReleve.soldeAtterrissage;
         const cr = st.soldesInitiaux.assurances_tracker[0];
-        cr.remboursement = false;
+        cr.remboursement = true;                                 // encaissée : déjà dans le solde, plus attendue
         const sans = st.journalHybridePourReleve.soldeAtterrissage;
-        cr.remboursement = true;                                 // remise en état
+        cr.remboursement = false;                                // remise en état
         return { avec, sans, delta: Math.round(avec - sans) };
     });
-    v('la créance pèse sur l\'atterrissage du cycle, au dirham près',
+    v('la créance attendue pèse sur l\'atterrissage du cycle, au dirham près',
       solde.delta === MONTANT_CREANCE, JSON.stringify(solde));
 
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');

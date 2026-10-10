@@ -56,6 +56,7 @@ suite "Chat CFO dans le navigateur (ergonomie)"                 node test_cfo_en
 suite "Pilotage Réalisé (suivi par cycle)"                      node test_cfo_engine_parity/test_cycle_realise.mjs
 suite "Mois budgétaire vs mois civil (exceptions)"              node test_cfo_engine_parity/test_mois_budgetaire.mjs
 suite "Relevé : rangement et ordre par cycle de paie"           node test_cfo_engine_parity/test_releve_cycle.mjs
+suite "Créances : encaissées dans le solde, en attente au journal" node test_cfo_engine_parity/test_creances_encaissees.mjs
 suite "Cockpit du Pilotage (KPIs, file, bulles)"                node test_cfo_engine_parity/test_cockpit_pilotage.mjs
 suite "Météo financière & respiration du Prévisionnel"          node test_cfo_engine_parity/test_meteo.mjs
 suite "Logistique bancaire (routage, radar, focus)"             node test_cfo_engine_parity/test_logistique.mjs
