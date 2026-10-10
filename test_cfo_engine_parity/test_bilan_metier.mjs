@@ -211,6 +211,14 @@ try {
     await page.evaluate((ST) => { const st = eval(ST); st.showReleveModal = false; st.showCfoModal = false; st.showChangelog = false; }, ST);
     const geo = async (pg) => pg.evaluate(() => { const b = document.querySelector('[data-barre]'), p = document.querySelector('[data-barre-pied]'), nav = b.querySelector('nav');
         const r = p.getBoundingClientRect(); return { bas: r.bottom, haut: r.top, h: innerHeight, defile: b.scrollHeight > b.clientHeight + 1, navDeborde: nav.scrollHeight > nav.clientHeight + 1, navDefile: getComputedStyle(nav).overflowY }; });
+    //  Faire défiler les onglets jusqu'en bas : le dernier doit sortir au-dessus du pied.
+    const atteignable = (pg) => pg.evaluate(async () => {
+        const nav = document.querySelector('[data-barre] nav'), pied = document.querySelector('[data-barre-pied]');
+        nav.scrollTop = nav.scrollHeight; await new Promise(r => setTimeout(r, 60));
+        const btns = [...nav.querySelectorAll('button')].filter(x => x.getBoundingClientRect().height > 0);
+        const der = btns[btns.length - 1].getBoundingClientRect(), p = pied.getBoundingClientRect();
+        const res = { defile: nav.scrollHeight > nav.clientHeight + 1, derBas: Math.round(der.bottom), piedHaut: Math.round(p.top), piedBas: Math.round(p.bottom), h: innerHeight };
+        nav.scrollTop = 0; return res; });
     await section('Barre : géométrie', async () => {
     console.log('  ── la barre latérale : le pied toujours visible');
     for (const [mode, tab] of [['previsionnel', 'dashboard'], ['reel', 'pilotage']]) {
@@ -218,6 +226,13 @@ try {
         const g = await geo(page);
         v(`1280×720 (${mode === 'reel' ? 'Réalisé' : 'Prévisionnel'}) : le pied est entier à l'écran, le menu ne défile plus d'un bloc`, g.bas <= g.h + 0.5 && g.haut > 0 && !g.defile, JSON.stringify(g));
         v(`  → tous les onglets tiennent sans défiler`, !g.navDeborde && g.navDefile === 'auto', JSON.stringify(g));
+    }
+    {
+        const o = await ouvrir(1280, 600);
+        await aller(o.page, 'previsionnel', 'dashboard', 'st.isSidebarCollapsed = false');
+        const r = await atteignable(o.page);
+        v('1280×600 : les onglets défilent seuls, le dernier sort au-dessus du pied', r.defile && r.derBas <= r.piedHaut + 1 && r.piedBas <= r.h + 0.5, JSON.stringify(r));
+        await o.page.close();
     }
     for (const [w, h] of [[1366, 768], [1440, 900]]) {
         const o = await ouvrir(w, h);
@@ -293,6 +308,8 @@ try {
     v('  → chaque bouton de la barre repliée a un nom', sansNom.length === 0, JSON.stringify(sansNom));
     const g2 = await geo(page);
     v('  → le pied reste entier à l\'écran', g2.bas <= g2.h + 0.5 && !g2.defile, JSON.stringify(g2));
+    const r2 = await atteignable(page);
+    v('  → les icônes d\'onglets défilent, la dernière sort au-dessus du pied', r2.derBas <= r2.piedHaut + 1 && r2.piedBas <= r2.h + 0.5, JSON.stringify(r2));
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs.slice(0, 2).join(' | '));
 } catch (e) {
