@@ -194,7 +194,7 @@ try {
     v('décocher : elle redevient attendue au journal', await page.evaluate((ST) => eval(ST).journalHybridePourReleve.entries.some(e => (e.libelle || '').includes('Créance attendue : ATT PEDIATRE')), ST));
 
     if (CAPTURES) {
-        await page.evaluate((ST) => { const st = eval(ST); st.ouvrirReleve && st.ouvrirReleve('courant'); }, ST);
+        await page.evaluate((ST) => { const st = eval(ST); st.ouvrirReleve && st.ouvrirReleve('cpt_1'); }, ST);
         await page.waitForTimeout(800);
         await page.screenshot({ path: path.join(CAPTURES, 'creances_releve.png') });
     }
