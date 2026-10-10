@@ -82,5 +82,7 @@ suite "Presse sans flux ni curl : pages, secours, réseau"   php test_cfo_engine
 suite "La presse marrakchie lue avant la réponse"             node test_cfo_engine_parity/test_veille_presse.mjs
 suite "Médias de la veille : saisie, contrôles, superposition" php test_cfo_engine_parity/test_veille_sources.php
 suite "Médias réglables depuis l'écran (vraie base)"         node test_cfo_engine_parity/test_veille_sources.mjs
+suite "Interface de bureau : lisibilité, menus, synthèse"     node test_cfo_engine_parity/test_gui_desktop.mjs
+suite "Contrôle anti-hameçonnage (install.sh securite)"      php test_cfo_engine_parity/test_install_securite.php
 
 echo "✅ Toutes les suites passent."
