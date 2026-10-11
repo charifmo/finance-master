@@ -387,10 +387,28 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
     $courantKey = $courantCpt ? 'cpt_' . oget($courantCpt, 'id') : 'courant';
     $idsComptes = [];
     foreach ((oget($fd, 'comptes') ?: []) as $c) { if (is_object($c) && oget($c, 'id') !== null) $idsComptes[] = (string)oget($c, 'id'); }
-    $isC = function ($k) use ($courantKey, $idsComptes) { return cfo_norm_key_c($k, $courantKey, $idsComptes) === $courantKey; };
-
     $fxSrc  = cfo_norm_key_c(oget($si, 'compteChargesFixes', 'courant'), $courantKey, $idsComptes);
     $varSrc = cfo_norm_key_c(oget($si, 'compteChargesVariables', 'courant'), $courantKey, $idsComptes);
+
+    // v37.47 : le PÉRIMÈTRE DE FONCTIONNEMENT (comme l'application) — auto : courant, compte des
+    //   charges fixes, des charges variables, comptes qui reçoivent un revenu ; ou forcé par
+    //   comptes[].fonctionnement (true / false).
+    $auto = [$courantKey => true, $fxSrc => true, $varSrc => true];
+    foreach ((array)(oget($fd, 'donneesAnnuelles') ?: []) as $an) {
+        if (!is_object($an)) continue;
+        foreach (ovals(oget($an, 'revenus', onew())) as $r) $auto[cfo_norm_key_c(oget($r, 'destinationCompte') ?: 'courant', $courantKey, $idsComptes)] = true;
+    }
+    $perimetre = [];
+    $listeComptes = array_filter((oget($fd, 'comptes') ?: []), 'is_object');
+    if (!$listeComptes) $perimetre[$courantKey] = true;
+    foreach ($listeComptes as $c) {
+        $k = 'cpt_' . oget($c, 'id');
+        $f = oget($c, 'fonctionnement');
+        if ($f === true || ($f !== false && isset($auto[$k]))) $perimetre[$k] = true;
+    }
+    $isC = function ($k) use ($courantKey, $idsComptes, $perimetre) { return isset($perimetre[cfo_norm_key_c($k ?: 'courant', $courantKey, $idsComptes)]); };
+    // +1 : quitte le périmètre (épargne) · −1 : y revient (reprise) · 0 : reste dedans ou dehors
+    $sens = function ($src, $dest) use ($isC) { $a = $isC($src ?: 'courant'); $b = $isC($dest ?: 'courant'); return $a === $b ? 0 : ($a ? 1 : -1); };
     $curA   = (int)(oget($si, 'anneeActuelle') ?: (int)date('Y'));
     $curM   = (int)(oget($si, 'moisActuel') ?: (((int)$year === $curA) ? (int)date('n') : 1));
     $jdp    = cfo_jour_de_paie($fd);   // v37.29
@@ -408,7 +426,13 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
     $epRaw = oget($y, 'epargne');
     $epPool = is_array($epRaw) ? array_filter($epRaw) : array_filter(ovals($epRaw ?? onew()));
     $epArr = [];
-    foreach ($epPool as $o) { if (is_object($o) && $isC(oget($o, 'sourceCompte'))) $epArr[] = $o; }
+    foreach ($epPool as $o) {
+        if (!is_object($o)) continue;
+        $lie = oget($o, 'linkedAccountId');
+        $dest = ($lie !== null && $lie !== '') ? $lie : 'ep_' . oget($o, 'id');
+        $s = $sens(oget($o, 'sourceCompte') ?: 'courant', $dest);
+        if ($s !== 0) $epArr[] = [$o, $s];
+    }
 
     $out = [];
     for ($m = 1; $m <= 12; $m++) {
@@ -421,12 +445,12 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
             if (!$isC(oget($r, 'destinationCompte'))) continue;
             $v = $eff($r, oget($r, 'base'), $m); if ($v > 0) $entrants += $v;
         }
-        if ($fxSrc === $courantKey) {
+        if ($isC($fxSrc)) {
             foreach (ovals(oget($y, 'chargesFixes', onew())) as $f) {
                 $v = $eff($f, oget($f, 'valeur'), $m); if ($v > 0) $sortants += $v;
             }
         }
-        if ($varSrc === $courantKey) {
+        if ($isC($varSrc)) {
             foreach (ovals(oget($y, 'chargesVariables', onew())) as $cv) {
                 $v = cfo_cout_variable_cycle($cv, $m, (int)$year, $jdp, true);   // v37.29-30 : semaines réelles, ligne par ligne
                 if ($v > 0) $sortants += $v;
@@ -440,22 +464,22 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
             if ($raw === 0.0) continue;
             if ($raw < 0) $entrants += abs($raw); else $sortants += $raw;
         }
-        // v37.37 : virements internes — une sortie s'ils QUITTENT le Courant (le virement qui
-        //   alimente le compte des charges fixes), une entrée s'ils y ARRIVENT. Pas de l'épargne.
+        // v37.47 : l'épargne = ce qui quitte le périmètre (ligne d'épargne ou virement interne)
+        //   moins ce qui y revient ; entre deux comptes du périmètre (Courant → Assafa), rien.
+        $ep = 0.0;
+        foreach ($epArr as [$o, $s]) { $v = $eff($o, oget($o, 'valeur'), $m); if ($v > 0) $ep += $s * $v; }
         foreach ((oget($y, 'virementsInternes') ?: []) as $vi) {
             if (!is_object($vi) || (int)oget($vi, 'mois') !== $m) continue;
             $mt = abs((float)(oget($vi, 'montant', 0) ?: 0));
             if ($mt <= 0) continue;
-            $sort = $isC(oget($vi, 'sourceCompte') ?: 'courant');
-            $arrive = $isC(oget($vi, 'destinationCompte') ?: 'courant');
-            if ($sort === $arrive) continue;
-            if ($sort) $sortants += $mt; else $entrants += $mt;
+            $ep += $sens(oget($vi, 'sourceCompte') ?: 'courant', oget($vi, 'destinationCompte') ?: 'courant') * $mt;
         }
-        $ep = 0.0;
-        foreach ($epArr as $o) $ep += $eff($o, oget($o, 'valeur'), $m);
 
         $solde = 0.0;
-        if ($isCurrent) $solde = $courantCpt ? (float)(oget($courantCpt, 'solde', 0) ?: 0) : (float)(oget($si, 'courant', 0) ?: 0);
+        if ($isCurrent) {
+            if ($listeComptes) { foreach ($listeComptes as $c) if (isset($perimetre['cpt_' . oget($c, 'id')])) $solde += (float)(oget($c, 'solde', 0) ?: 0); }
+            else $solde = (float)(oget($si, 'courant', 0) ?: 0);
+        }
 
         $out[] = ['mois'=>$m, 'net'=>(int)round($solde + $entrants - $sortants - $ep), 'isPast'=>false, 'isCurrent'=>$isCurrent];
     }

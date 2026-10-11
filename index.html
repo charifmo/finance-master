@@ -605,6 +605,12 @@
                                     <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">💰 Surplus Détaillé — {{ anneeAffichage }}</p>
                                     <button title="Fermer" aria-label="Fermer" @click.stop="showSurplusTooltip = false" class="text-gray-500 hover:text-gray-300 text-xs font-black px-1">✕</button>
                                 </div>
+                                <!-- v37.47 : ce que veulent dire Brut, Épargne et Net -->
+                                <p data-surplus-perimetre class="px-3 py-2 border-b border-gray-800 text-[10px] text-gray-300 leading-snug whitespace-normal">
+                                    <b class="text-emerald-400">Brut</b> : ce qui reste sur <b class="text-white">{{ perimetreSurplus.fonctionnement }}</b> après toutes leurs charges.
+                                    <b class="text-purple-400">Épargne</b> : ce qui part vers {{ perimetreSurplus.epargne }}. <b class="text-blue-300">Net</b> = Brut − Épargne.
+                                    <button type="button" @click.stop="showSurplusTooltip = false; appMode = 'previsionnel'; activeTab = 'parametres'" class="text-blue-300 hover:underline font-bold">Choisir les comptes →</button>
+                                </p>
                                 <div class="grid grid-cols-[52px_1fr_1fr_1fr] px-3 py-1.5 border-b border-gray-800 bg-gray-900">
                                     <span class="text-[8px] font-black uppercase text-gray-500">Mois</span>
                                     <span class="text-[8px] font-black uppercase text-emerald-600 text-right">Brut</span>
@@ -618,7 +624,7 @@
                                         <span class="text-[9px] font-bold whitespace-nowrap" :class="row.isCurrent ? 'text-blue-200' : 'text-gray-400'">{{ nomDuMois(row.mNum).slice(0,4) }}{{ row.isCurrent ? ' ✓' : '' }}</span>
                                         <span class="text-[9px] font-black tabular-nums text-right whitespace-nowrap" :class="row.brut >= 0 ? 'text-emerald-400' : 'text-rose-400'">{{ row.brut >= 0 ? '+' : '' }}{{ formatMAD(row.brut) }}</span>
                                         <span class="text-[9px] font-black tabular-nums text-right text-purple-400 whitespace-nowrap" data-surplus-epargne :data-mois="row.mNum"
-                                              :title="row.epargneVersee > 0 ? formatMAD(row.epargneVersee) + ' déjà versés (pointés dans le Pilotage)' + (row.epargneRestante > 0 ? ' · ' + formatMAD(row.epargneRestante) + ' à verser' : '') : null">{{ row.epargne > 0 ? '-' : '' }}{{ formatMAD(row.epargne) }}<span v-if="row.epargneVersee > 0" class="ml-0.5 text-emerald-400" data-surplus-epargne-versee>✓</span></span>
+                                              :title="row.epargneVersee > 0 ? formatMAD(row.epargneVersee) + ' déjà versés (pointés dans le Pilotage)' + (row.epargneRestante > 0 ? ' · ' + formatMAD(row.epargneRestante) + ' à verser' : '') : null">{{ row.epargne > 0 ? '-' : (row.epargne < 0 ? '+' : '') }}{{ formatMAD(Math.abs(row.epargne)) }}<span v-if="row.epargneVersee > 0" class="ml-0.5 text-emerald-400" data-surplus-epargne-versee>✓</span></span>
                                         <span class="text-[9px] font-black tabular-nums text-right whitespace-nowrap" :class="row.net >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ row.net >= 0 ? '+' : '' }}{{ formatMAD(row.net) }}</span>
                                     </div>
                                     </template>
@@ -633,7 +639,7 @@
                                         Moy.<span v-if="surplusMoyenneHorsMoisCourant" class="normal-case tracking-normal"> (hors mois en cours)</span>
                                     </span>
                                     <span class="text-[9px] font-black tabular-nums text-right text-emerald-500 whitespace-nowrap">+{{ formatMAD(surplusStats.moyBrut) }}</span>
-                                    <span class="text-[9px] font-black tabular-nums text-right text-purple-500 whitespace-nowrap">-{{ formatMAD(surplusStats.moyEpargne) }}</span>
+                                    <span class="text-[9px] font-black tabular-nums text-right text-purple-500 whitespace-nowrap">{{ surplusStats.moyEpargne > 0 ? '-' : (surplusStats.moyEpargne < 0 ? '+' : '') }}{{ formatMAD(Math.abs(surplusStats.moyEpargne)) }}</span>
                                     <span class="text-[9px] font-black tabular-nums text-right whitespace-nowrap" :class="surplusStats.moyNet >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ surplusStats.moyNet >= 0 ? '+' : '' }}{{ formatMAD(surplusStats.moyNet) }}</span>
                                 </div>
                             </div>
@@ -984,6 +990,7 @@
                                 <span class="font-bold text-gray-800">Total engagé</span>
                                 <span class="tabular-nums"><span class="font-black text-gray-900" data-bilan-total>{{ formatMAD(bilanAnnee.moy.sorties) }}</span> <span :class="['text-xs font-black', bilanAnnee.pctEngage > 100 ? 'text-rose-700' : 'text-gray-600']">· {{ bilanAnnee.pctEngage }} % des ressources</span></span>
                             </div>
+                            <p v-if="bilanAnnee.moy.horsPerimetre > 0" data-bilan-hors-perimetre class="text-xs text-gray-600 mt-2 leading-snug">Non compté ci-dessus : {{ formatMAD(bilanAnnee.moy.horsPerimetre) }} par mois en moyenne de dépenses payées directement par vos comptes d'épargne ({{ perimetreSurplus.epargne }}) — l'épargne qui les alimente l'est déjà.</p>
                             <p data-bilan-marge :class="['text-sm font-bold mt-1 text-right', bilanAnnee.moy.marge < 0 ? 'text-rose-700' : 'text-emerald-700']">{{ bilanAnnee.moy.marge < 0 ? 'Il manque ' + formatMAD(-bilanAnnee.moy.marge) + ' par mois.' : 'Il reste ' + formatMAD(bilanAnnee.moy.marge) + ' par mois.' }}</p>
                         </section>
 
@@ -1219,6 +1226,13 @@
                                         <div class="flex items-center gap-2 mt-0.5">
                                             <span :class="['text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full', compte.type === 'liquide' ? 'bg-blue-100 text-blue-700' : compte.type === 'epargne' ? 'bg-green-100 text-green-700' : compte.type === 'investissement' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700']">{{ compte.type }}</span>
                                             <span v-if="compte.inclureLiquidite !== false" class="text-[9px] text-blue-500 font-bold">💧 inclus liquide</span>
+                                            <!-- v37.47 : compte de fonctionnement (surplus) — déduit de sa fonction, ou forcé -->
+                                            <label class="inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer select-none" :class="estFonctionnement('cpt_' + compte.id) ? 'text-emerald-700' : 'text-gray-600'"
+                                                   title="Compte de fonctionnement : ses revenus et ses charges font le surplus BRUT ; un virement vers un compte non coché est de l'ÉPARGNE. Auto : le compte courant, le compte des charges fixes / variables et ceux qui reçoivent un revenu.">
+                                                <input type="checkbox" data-fonctionnement :data-compte="compte.id" class="w-3.5 h-3.5 accent-emerald-600" :checked="estFonctionnement('cpt_' + compte.id)" @change="definirFonctionnement(compte.id, $event.target.checked)"/>
+                                                🔄 Fonctionnement<span v-if="fonctionnementExplicite(compte.id) === null" class="font-medium text-gray-500">(auto)</span>
+                                            </label>
+                                            <button v-if="fonctionnementExplicite(compte.id) !== null" type="button" data-fonctionnement-auto @click="remettreFonctionnementAuto(compte.id)" class="text-[10px] font-bold text-blue-700 hover:underline" title="Revenir à la déduction automatique">↺ auto</button>
                                         </div>
                                     </div>
                                     <div class="text-right shrink-0">
@@ -3508,6 +3522,9 @@
                                 <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">💰 Surplus Détaillé — {{ anneeAffichage }}</p>
                                 <button title="Fermer" aria-label="Fermer" @click.stop="showSurplusTooltip = false" class="text-gray-500 text-xs font-black px-1 min-h-[32px] min-w-[32px]">✕</button>
                             </div>
+                            <p data-surplus-perimetre class="px-2 py-1.5 border-b border-gray-800 text-[9px] text-gray-300 leading-snug whitespace-normal">
+                                <b class="text-emerald-400">Brut</b> : ce qui reste sur <b class="text-white">{{ perimetreSurplus.fonctionnement }}</b> après leurs charges. <b class="text-purple-400">Épargne</b> : vers {{ perimetreSurplus.epargne }}.
+                            </p>
                             <div class="grid grid-cols-[44px_1fr_1fr_1fr] px-2 py-1 border-b border-gray-800 bg-gray-900">
                                 <span class="text-[7px] font-black uppercase text-gray-500">Mois</span>
                                 <span class="text-[7px] font-black uppercase text-emerald-600 text-right">Brut</span>
@@ -3521,7 +3538,7 @@
                                     <span class="text-[8px] font-bold whitespace-nowrap" :class="row.isCurrent ? 'text-blue-200' : 'text-gray-400'">{{ nomDuMois(row.mNum).slice(0,4) }}{{ row.isCurrent ? ' ✓' : '' }}</span>
                                     <span class="text-[8px] font-black tabular-nums text-right whitespace-nowrap" :class="row.brut >= 0 ? 'text-emerald-400' : 'text-rose-400'">{{ row.brut >= 0 ? '+' : '' }}{{ formatMAD(row.brut) }}</span>
                                     <span class="text-[8px] font-black tabular-nums text-right text-purple-400 whitespace-nowrap" data-surplus-epargne :data-mois="row.mNum"
-                                              :title="row.epargneVersee > 0 ? formatMAD(row.epargneVersee) + ' déjà versés (pointés dans le Pilotage)' + (row.epargneRestante > 0 ? ' · ' + formatMAD(row.epargneRestante) + ' à verser' : '') : null">{{ row.epargne > 0 ? '-' : '' }}{{ formatMAD(row.epargne) }}<span v-if="row.epargneVersee > 0" class="ml-0.5 text-emerald-400" data-surplus-epargne-versee>✓</span></span>
+                                              :title="row.epargneVersee > 0 ? formatMAD(row.epargneVersee) + ' déjà versés (pointés dans le Pilotage)' + (row.epargneRestante > 0 ? ' · ' + formatMAD(row.epargneRestante) + ' à verser' : '') : null">{{ row.epargne > 0 ? '-' : (row.epargne < 0 ? '+' : '') }}{{ formatMAD(Math.abs(row.epargne)) }}<span v-if="row.epargneVersee > 0" class="ml-0.5 text-emerald-400" data-surplus-epargne-versee>✓</span></span>
                                     <span class="text-[8px] font-black tabular-nums text-right whitespace-nowrap" :class="row.net >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ row.net >= 0 ? '+' : '' }}{{ formatMAD(row.net) }}</span>
                                 </div>
                                 </template>
@@ -3533,7 +3550,7 @@
                             <div class="grid grid-cols-[44px_1fr_1fr_1fr] px-2 py-1.5 border-t-2 border-gray-700 bg-gray-900/70 items-center">
                                 <span class="text-[7px] font-black uppercase text-gray-400">Moy.<span v-if="surplusMoyenneHorsMoisCourant" class="normal-case"> (futur)</span></span>
                                 <span class="text-[8px] font-black tabular-nums text-right text-emerald-500 whitespace-nowrap">+{{ formatMAD(surplusStats.moyBrut) }}</span>
-                                <span class="text-[8px] font-black tabular-nums text-right text-purple-500 whitespace-nowrap">-{{ formatMAD(surplusStats.moyEpargne) }}</span>
+                                <span class="text-[8px] font-black tabular-nums text-right text-purple-500 whitespace-nowrap">{{ surplusStats.moyEpargne > 0 ? '-' : (surplusStats.moyEpargne < 0 ? '+' : '') }}{{ formatMAD(Math.abs(surplusStats.moyEpargne)) }}</span>
                                 <span class="text-[8px] font-black tabular-nums text-right whitespace-nowrap" :class="surplusStats.moyNet >= 0 ? 'text-blue-300' : 'text-rose-400'">{{ surplusStats.moyNet >= 0 ? '+' : '' }}{{ formatMAD(surplusStats.moyNet) }}</span>
                             </div>
                         </div>
@@ -15550,6 +15567,70 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         };
                     });
 
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.47 — LE PÉRIMÈTRE DE FONCTIONNEMENT
+                       Les comptes qui font tourner le mois : leurs revenus et leurs charges
+                       forment le surplus BRUT ; ce qui les quitte vers un autre compte est
+                       de l'ÉPARGNE. Par défaut, déduit de la fonction du compte : le compte
+                       courant, le compte des charges fixes, celui des charges variables, et
+                       tout compte qui reçoit un revenu. compte.fonctionnement (true / false),
+                       coché dans l'Architecture des comptes, force le choix.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const comptesFonctionnementAuto = computed(() => {
+                        const ck = _cleCourant.value, si = soldesInitiaux.value || {};
+                        const n = (k) => _cleCompte(k, ck);
+                        const auto = new Set([ck, n(si.compteChargesFixes || 'courant'), n(si.compteChargesVariables || 'courant')]);
+                        Object.values(donneesAnnuelles.value || {}).forEach(d =>
+                            Object.values((d || {}).revenus || {}).forEach(r => auto.add(n((r || {}).destinationCompte || 'courant'))));
+                        return auto;
+                    });
+                    const comptesFonctionnement = computed(() => {
+                        const auto = comptesFonctionnementAuto.value, liste = comptes.value || [];
+                        if (!liste.length) return new Set([_cleCourant.value]);
+                        const out = new Set();
+                        liste.forEach(c => {
+                            const k = 'cpt_' + c.id;
+                            if (c.fonctionnement === true || (c.fonctionnement !== false && auto.has(k))) out.add(k);
+                        });
+                        return out;
+                    });
+                    const estFonctionnement = (k) => comptesFonctionnement.value.has(_cleCompte(k, _cleCourant.value));
+                    const fonctionnementExplicite = (id) => {
+                        const c = (comptes.value || []).find(x => String(x.id) === String(id));
+                        return c && (c.fonctionnement === true || c.fonctionnement === false) ? c.fonctionnement : null;
+                    };
+                    const definirFonctionnement = (id, valeur) => {
+                        const c = (comptes.value || []).find(x => String(x.id) === String(id));
+                        if (!c) return;
+                        c.fonctionnement = !!valeur;
+                        handleDataChange();
+                    };
+                    const remettreFonctionnementAuto = (id) => {
+                        const c = (comptes.value || []).find(x => String(x.id) === String(id));
+                        if (!c) return;
+                        delete c.fonctionnement;
+                        handleDataChange();
+                    };
+                    //  Un mouvement entre deux comptes : +1 s'il QUITTE le périmètre (épargne),
+                    //  −1 s'il y REVIENT (reprise d'épargne), 0 s'il reste dedans ou dehors.
+                    const sensEpargne = (src, dest) => {
+                        const a = estFonctionnement(src || 'courant'), b = estFonctionnement(dest || 'courant');
+                        return a === b ? 0 : (a ? 1 : -1);
+                    };
+                    //  Où va une ligne d'épargne : son compte lié, sinon sa poche virtuelle.
+                    const destEpargne = (ep) => {
+                        const l = (ep || {}).linkedAccountId;
+                        return (l !== undefined && l !== null && l !== '') ? l : 'ep_' + (ep || {}).id;
+                    };
+                    //  Pour la bulle : qui compte dans le brut, où va l'épargne.
+                    const perimetreSurplus = computed(() => {
+                        const liste = comptes.value || [];
+                        const nom = (c) => c.label || c.nom || ('Compte ' + c.id);
+                        const f = liste.filter(c => comptesFonctionnement.value.has('cpt_' + c.id)).map(nom);
+                        const e = liste.filter(c => !comptesFonctionnement.value.has('cpt_' + c.id)).map(nom);
+                        return { fonctionnement: f.length ? f.join(' + ') : 'le compte courant', epargne: e.length ? e.join(', ') : 'vos poches d’épargne' };
+                    });
+
                     // ─────────────────────────────────────────────────────────────────────────
                     // v27.60 Rolling-Cashflow-Macro : MOTEUR FLUX — PÉRIMÈTRE COMPTE COURANT STRICT
                     // _getMonthFlux(mNum, annee, mode) → flux du mois imputés UNIQUEMENT au Compte
@@ -15565,11 +15646,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const dA = (donneesAnnuelles.value || {})[annee] || {};
                         const _si = soldesInitiaux.value || {};
                         const _courantOnly = scope === 'courant';
+                        //  v37.47 : 'fonctionnement' → les comptes du périmètre de fonctionnement
+                        //  (le surplus). Les virements internes n'y sont PAS : le surplus les range
+                        //  dans l'épargne (vers l'épargne) ou les annule (entre deux comptes du périmètre).
+                        const _fonct = scope === 'fonctionnement';
+                        const _perim = _courantOnly || _fonct;
                         // ── Clé du Compte Courant (identique au journal) ──
                         const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
                         const courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
                         const _normKey = (k) => _cleCompte(k, courantKey); // v37.8
                         const _isCourant = (k) => _normKey(k) === courantKey;
+                        const _dans = (k) => _fonct ? estFonctionnement(k) : _isCourant(k);
                         const _fxSrc  = _normKey(_si.compteChargesFixes || 'courant');
                         const _varSrc = _normKey(_si.compteChargesVariables || 'courant');
                         //  v37.14 : même évaluateur, mois budgétaire reçu en paramètre.
@@ -15584,15 +15671,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let entrants = 0, sortants = 0;
                         // Revenus → entrants (filtre destinationCompte = Courant si scope courant)
                         Object.values(dA.revenus || {}).forEach(r => {
-                            if (_courantOnly && !_isCourant(r.destinationCompte)) return;
+                            if (_perim && !_dans(r.destinationCompte)) return;
                             const a = _amt(r, r.base); if (a > 0) entrants += a;
                         });
                         // Charges fixes → sortants (filtre compte macro des fixes si scope courant)
-                        if (!_courantOnly || _fxSrc === courantKey) {
+                        if (!_perim || _dans(_fxSrc)) {
                             Object.values(dA.chargesFixes || {}).forEach(f => { const a = _amt(f, f.valeur); if (a > 0) sortants += a; });
                         }
                         // Charges variables → sortants (filtre compte macro des variables si scope courant)
-                        if (!_courantOnly || _varSrc === courantKey) {
+                        if (!_perim || _dans(_varSrc)) {
                             Object.values(dA.chargesVariables || {}).forEach(cv => {
                                 const effV = _effVal(cv, cv.valeur);
                                 let monthly = coutVariableDuCycle(cv, mNum, annee, true);   // v37.30 : ligne par ligne
@@ -15609,7 +15696,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // Dépenses ponctuelles → sortants | créances → entrants (filtre sourceCompte = Courant si scope courant)
                         getDepensesCycle(mNum, annee).forEach(dep => {
                             if (dep.sourceAssurance) return;
-                            if (_courantOnly && !_isCourant(dep.sourceCompte)) return;
+                            if (_perim && !_dans(dep.sourceCompte)) return;
                             const rawDue = Number(dep.montant || 0); if (rawDue === 0) return;
                             const isCreance = rawDue < 0;
                             const due = Math.abs(rawDue);
@@ -15655,37 +15742,52 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const curM = moisBudgetaire.value.mois, curA = moisBudgetaire.value.an;
                         const isViewCurYear  = anneeAffichage.value === curA;
                         const isViewPastYear = anneeAffichage.value < curA;
-                        // Épargne : ne compter que les virements sortant DU Compte Courant
-                        const _courantCpt = (comptes.value || []).find(c => c.type === 'courant' || c.type === 'liquide');
-                        const _courantKey = _courantCpt ? 'cpt_' + _courantCpt.id : 'courant';
-                        const _isCourantSrc = (k) => _cleCompte(k, _courantKey) === _courantKey; // v37.8
+                        //  v37.47 : l'épargne = ce qui QUITTE le périmètre de fonctionnement (ligne
+                        //  d'épargne ou virement interne), moins ce qui y REVIENT. Entre deux comptes
+                        //  du périmètre (Courant → Assafa), ce n'est pas de l'épargne : ça s'annule.
                         const epArr = (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {}))
                             .filter(Boolean)
-                            .filter(obj => _isCourantSrc(obj.sourceCompte));
+                            .map(obj => ({ obj, sens: sensEpargne(obj.sourceCompte || 'courant', destEpargne(obj)) }))
+                            .filter(x => x.sens !== 0);
+                        //  Solde réel des comptes du périmètre (le mois en cours part de là)
+                        const soldePerimetre = (comptes.value || []).length
+                            ? (comptes.value || []).filter(c => estFonctionnement('cpt_' + c.id)).reduce((s, c) => s + (Number(c.solde) || 0), 0)
+                            : (tresoActuelleCourante.value || 0);
                         return Array.from({ length: 12 }, (_, i) => {
                             const mNum = i + 1;
                             const isPast    = isViewPastYear || (isViewCurYear && mNum < curM);
                             const isCurrent = isViewCurYear && mNum === curM;
                             if (isPast) return { mNum, brut: null, epargne: null, epargneVersee: null, epargneRestante: null, surplusMensuel: null, net: null, isPast: true, isCurrent: false };
                             const mode = isCurrent ? 'remaining' : 'full';
-                            const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode);
+                            const { entrants, sortants } = _getMonthFlux(mNum, anneeAffichage.value, mode, 'fonctionnement');
                             /*  v37.36 — L'ÉPARGNE DU MOIS. Chaque objectif vaut, CE mois-là, son
                                 exception si une règle le couvre, sinon son montant de base — par
                                 l'évaluateur unique (valeurEffective). Au mois en cours, ce qui est
                                 déjà POINTÉ (versé, avance comprise) est séparé du reste : la colonne
-                                ne montre plus 0 pour une épargne faite. */
+                                ne montre plus 0 pour une épargne faite.
+                                v37.47 — signée : + ce qui quitte le périmètre, − ce qui y revient. */
                             let ep = 0, epVersee = 0;
-                            epArr.forEach(obj => {
+                            epArr.forEach(({ obj, sens }) => {
                                 const v = valeurEffective(obj, obj.valeur, mNum);
                                 if (!(v > 0)) return;
-                                ep += v;
-                                if (isCurrent) epVersee += isItemPaid(obj, v) ? v : Math.min(v, Math.max(0, Number(getPaidAmount(obj, v)) || 0));
+                                ep += sens * v;
+                                if (isCurrent) epVersee += sens * (isItemPaid(obj, v) ? v : Math.min(v, Math.max(0, Number(getPaidAmount(obj, v)) || 0)));
+                            });
+                            //  v37.47 : un virement interne qui quitte le périmètre est de l'épargne ;
+                            //  qui y revient, une reprise ; entre deux comptes du périmètre, rien.
+                            const _cleM = _cleCycle(mNum, anneeAffichage.value);
+                            getVirementsCycle(mNum, anneeAffichage.value).forEach(vir => {
+                                const sens = sensEpargne(vir.sourceCompte || 'courant', vir.destinationCompte || 'courant');
+                                const due = Math.abs(Number(vir.montant) || 0);
+                                if (!sens || !due) return;
+                                ep += sens * due;
+                                if (isCurrent) epVersee += sens * (isItemPaid(vir, due, _cleM) ? due : Math.min(due, Math.max(0, Number(getPaidAmount(vir, due, _cleM)) || 0)));
                             });
                             const epRestante = ep - epVersee;
-                            //  Brut AVANT épargne. Au mois en cours il part du solde réel du Courant,
-                            //  d'où l'épargne déjà versée est sortie : on l'y remet, pour que
-                            //  Brut − Épargne = Net se lise sur chaque ligne.
-                            const soldeDepart = isCurrent ? (tresoActuelleCourante.value || 0) + epVersee : 0;
+                            //  Brut AVANT épargne. Au mois en cours il part du solde réel des comptes
+                            //  du périmètre, d'où l'épargne déjà versée est sortie : on l'y remet,
+                            //  pour que Brut − Épargne = Net se lise sur chaque ligne.
+                            const soldeDepart = isCurrent ? soldePerimetre + epVersee : 0;
                             const brut = soldeDepart + entrants - sortants;  // mois en cours = atterrissage réel ; futurs = potentiel intrinsèque pur
                             const net  = brut - ep;                          // surplus final après épargne (la versée ne sort qu'une fois)
                             const surplusMensuel = net;                      // pas de cumul entre les mois
@@ -17262,19 +17364,31 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     ];
                     const respirationDuMois = (an, m, compte = null) => {
                         const d = (donneesAnnuelles.value || {})[an] || {};
-                        const lignes = { revenus: [], fixes: [], mensuelles: [], conso: [], epargne: [], exceptionnel: [], injections: [] };
+                        //  v37.47 : le budget du PÉRIMÈTRE DE FONCTIONNEMENT. Ce qui entre ou sort par
+                        //  un compte d'épargne (une dépense payée par les Dépenses annuelles…) va dans
+                        //  horsPerimetre : l'épargne qui l'a provisionnée est déjà comptée.
+                        const lignes = { revenus: [], fixes: [], mensuelles: [], conso: [], epargne: [], exceptionnel: [], injections: [], horsPerimetre: [] };
+                        const _hors = (l) => { lignes.horsPerimetre.push(l); };
                         Object.values(d.revenus || {}).forEach(r => {
                             const v = valeurEffective(r, r.base, m);
-                            if (v > 0) lignes.revenus.push({ nom: r.label || r.nom || '?', montant: v, jourPrevu: r.jourPrevu || null, compte: compteDeFlux('revenu', r), nature: 'revenu' });
+                            if (!(v > 0)) return;
+                            const l = { nom: r.label || r.nom || '?', montant: v, jourPrevu: r.jourPrevu || null, compte: compteDeFlux('revenu', r), nature: 'revenu' };
+                            if (estFonctionnement(l.compte)) lignes.revenus.push(l); else _hors({ ...l, sens: 'entree' });
                         });
-                        Object.values(d.chargesFixes || {}).forEach(f => {
+                        Object.entries(d.chargesFixes || {}).forEach(([cle, f]) => {
                             const v = valeurEffective(f, f.valeur, m);
-                            if (v > 0) lignes.fixes.push({ nom: f.label || '?', montant: v, jourPrevu: f.jourPrevu || null, compte: compteDeFlux('fixe', f), nature: 'fixe' });
+                            if (!(v > 0)) return;
+                            const l = { cle, nom: f.label || '?', montant: v, jourPrevu: f.jourPrevu || null, compte: compteDeFlux('fixe', f), nature: 'fixe' };
+                            if (estFonctionnement(l.compte)) lignes.fixes.push(l); else _hors({ ...l, sens: 'sortie' });
                         });
                         Object.values(d.chargesVariables || {}).forEach(c => {
                             if (!c) return;
                             const v = valeurEffective(c, c.valeur, m);
                             if (v <= 0) return;
+                            if (!estFonctionnement(compteDeFlux('variable', c))) {
+                                _hors({ nom: c.label || '?', montant: Math.round(coutVariableDuCycle(c, m, an, true) * 100) / 100, compte: compteDeFlux('variable', c), nature: 'variable', sens: 'sortie' });
+                                return;
+                            }
                             //  v37.30 : le coût du cycle, ligne par ligne (chacune son rythme)
                             const cout = Math.round(coutVariableDuCycle(c, m, an, true) * 100) / 100;
                             if (c.periode === 'semaine') {
@@ -17285,17 +17399,34 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             }
                         });
                         const epArr = Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {});
+                        //  v37.47 : une épargne ne compte que si elle QUITTE le périmètre ; si elle y
+                        //  revient d'un compte d'épargne, c'est une reprise (une ressource) ; entre
+                        //  deux comptes du périmètre (Courant → Assafa), ce n'est rien.
                         epArr.forEach(ep => {
                             const v = valeurEffective(ep, ep.valeur, m);
-                            if (v > 0) lignes.epargne.push({ nom: ep.nom || ep.label || '?', montant: v, jourPrevu: ep.jourPrevu || null, compte: compteDeFlux('epargne', ep), nature: 'epargne', ref: ep });
+                            if (!(v > 0)) return;
+                            const sens = sensEpargne(ep.sourceCompte || 'courant', destEpargne(ep));
+                            if (sens > 0) lignes.epargne.push({ nom: ep.nom || ep.label || '?', montant: v, jourPrevu: ep.jourPrevu || null, compte: compteDeFlux('epargne', ep), nature: 'epargne', ref: ep });
+                            else if (sens < 0) lignes.injections.push({ nom: '↩ ' + (ep.nom || ep.label || 'Épargne'), montant: v, compte: cleDeCompte(destEpargne(ep)), nature: 'reprise', ref: ep });
+                        });
+                        //  …et de même pour un virement interne entre le périmètre et l'épargne
+                        getVirementsCycle(m, an).forEach(vir => {
+                            const v = Math.abs(Number(vir.montant) || 0);
+                            const sens = sensEpargne(vir.sourceCompte || 'courant', vir.destinationCompte || 'courant');
+                            if (!v || !sens) return;
+                            if (sens > 0) lignes.epargne.push({ nom: 'Virement → ' + getNomCompte(vir.destinationCompte || 'courant'), montant: v, compte: cleDeCompte(vir.sourceCompte || 'courant'), nature: 'epargne', ref: vir });
+                            else lignes.injections.push({ nom: 'Virement ← ' + getNomCompte(vir.sourceCompte || 'courant'), montant: v, compte: cleDeCompte(vir.destinationCompte || 'courant'), nature: 'reprise', ref: vir });
                         });
                         const irr = Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : Object.values(d.depensesIrregulieres || {});
                         irr.filter(x => Number(x.mois) === Number(m)).forEach(x => {
                             const v = Number(x.montant) || 0;
-                            if (v > 0) lignes.exceptionnel.push({ nom: x.nom || x.label || '?', montant: v, compte: compteDeFlux('exceptionnel', x), nature: 'exceptionnel', ref: x });
-                            else if (v < 0) lignes.injections.push({ nom: x.nom || x.label || '?', montant: -v, compte: compteDeFlux('exceptionnel', x), nature: 'injection', ref: x });
+                            const compteX = compteDeFlux('exceptionnel', x);
+                            if (v !== 0 && !estFonctionnement(compteX)) { _hors({ nom: x.nom || x.label || '?', montant: Math.abs(v), compte: compteX, nature: v > 0 ? 'exceptionnel' : 'injection', sens: v > 0 ? 'sortie' : 'entree', ref: x }); return; }
+                            if (v > 0) lignes.exceptionnel.push({ nom: x.nom || x.label || '?', montant: v, compte: compteX, nature: 'exceptionnel', ref: x });
+                            else if (v < 0) lignes.injections.push({ nom: x.nom || x.label || '?', montant: -v, compte: compteX, nature: 'injection', ref: x });
                         });
                         if (compte) Object.keys(lignes).forEach(k => { lignes[k] = lignes[k].filter(x => x.compte === compte); });
+                        const horsPerimetreSorties = Math.round(lignes.horsPerimetre.filter(x => x.sens === 'sortie').reduce((s, x) => s + x.montant, 0));
                         const somme = (a) => Math.round(a.reduce((s, x) => s + x.montant, 0));
                         const revenus = somme(lignes.revenus), injections = somme(lignes.injections);
                         const ressources = revenus + injections;
@@ -17309,7 +17440,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const pct = ressources > 0 ? Math.round(marge / ressources * 100) : (marge < 0 ? -100 : 0);
                         const niveau = marge < 0 ? 'apnee' : (pct < 5 ? 'court' : (pct < 15 ? 'serre' : 'ample'));
                         return {
-                            an, mois: m, revenus, injections, ressources, sorties, marge, pct, niveau,
+                            an, mois: m, revenus, injections, ressources, sorties, marge, pct, niveau, horsPerimetreSorties,
                             partMarge: marge > 0 ? marge / echelle * 100 : 0,
                             partDeficit: marge < 0 ? -marge / echelle * 100 : 0,
                             segments, lignes,
@@ -20148,7 +20279,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             const val = { credits: 0, fixes: 0 };
                             Object.entries(d.chargesFixes || {}).forEach(([k, f]) => {
                                 const v = valeurEffective(f, (f || {}).valeur, m);
-                                if (!(v > 0)) return;
+                                if (!(v > 0) || !estFonctionnement(compteDeFlux('fixe', f))) return;   // v37.47
                                 const poste = String(k).startsWith('credit') ? 'credits' : 'fixes';
                                 val[poste] += v; ajoute(poste, (f || {}).label || k, v);
                             });
@@ -20157,7 +20288,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 (r.lignes[cle] || []).forEach(l => { val[cle] += l.montant; ajoute(cle, l.nom + (cle === 'exceptionnel' ? ' (' + _MOIS_BILAN[m] + ')' : ''), l.montant); });
                             });
                             Object.keys(val).forEach(k => { val[k] = Math.round(val[k]); });
-                            return { m, nom: _MOIS_BILAN[m], ressources: r.ressources, sorties: r.sorties, marge: r.marge, ...val,
+                            return { m, nom: _MOIS_BILAN[m], ressources: r.ressources, sorties: r.sorties, marge: r.marge, ...val, horsPerimetre: r.horsPerimetreSorties || 0,
                                      courant: an === mb.an && m === mb.mois };
                         });
                         const moy = (k) => mois.reduce((s, x) => s + x[k], 0) / 12;
@@ -20177,7 +20308,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             : (deficitaires.length === 12 ? 'Les 12 mois dépensent plus qu’ils ne rentrent : de ' + formatMAD(moindre.marge) + ' (' + moindre.nom + ') à ' + formatMAD(pire.marge) + ' (' + pire.nom + ').'
                             : deficitaires.length + ' mois où les sorties dépassent les ressources : ' + deficitaires.map(x => x.nom + ' ' + formatMAD(x.marge)).join(', ') + '.');
                         return { an, mois, postes, deficitaires, texteDeficit,
-                                 moy: { ressources: Math.round(ressources), sorties: Math.round(sorties), marge: Math.round(marge), epargne: Math.round(moy('epargne')), credits: Math.round(moy('credits')) },
+                                 moy: { ressources: Math.round(ressources), sorties: Math.round(sorties), marge: Math.round(marge), epargne: Math.round(moy('epargne')), credits: Math.round(moy('credits')), horsPerimetre: Math.round(moy('horsPerimetre')) },
                                  pctEngage: ressources > 0 ? Math.round(sorties / ressources * 100) : 0,
                                  moisCourant: mois.find(x => x.courant) || null };
                     });
@@ -20604,6 +20735,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
                         meteoFinanciere, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire
                         compteDeFlux, regleDeRoutage, infoCompte, focusCompte, comptesFocus, radarComptes,
