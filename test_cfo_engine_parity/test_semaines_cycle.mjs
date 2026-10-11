@@ -187,7 +187,12 @@ try {
         const tenu = await page.evaluate(async ({ ST, lundis }) => {
             const st = eval(ST);
             st.resetConsoT0(); await new Promise(r => setTimeout(r, 100));
-            const cats = st.liberteCycle.categories.map(c => [c.key, c.sem.budget]).filter(([, b]) => b > 0);
+            //  v37.48 : le prévu se tient LIGNE PAR LIGNE (Marjane 600, Hri 400) ; « Autre » est hors de
+            //  la liste — y taper le total laisserait les lignes vides, comptées à leur prévu en plus.
+            const cats = st.liberteCycle.categories.filter(c => c.sem.budget > 0).flatMap(c => {
+                const lignes = c.sem.postes.filter(p => p.unite === 'semaine' && p.budget > 0);
+                return lignes.length ? lignes.map(p => [p.cle, p.budget]) : [[c.key, c.sem.budget]];
+            });
             lundis.forEach(l => cats.forEach(([k, b]) => st.saisirSemaineConso(l, k, b)));
             await new Promise(r => setTimeout(r, 200));
             const L = st.liberteCycle;
