@@ -10,8 +10,8 @@
  *     - la frontière : le dimanche soir, la semaine n'est pas encore écoulée ;
  *     - corriger : un montant tapé (même 0) remplace le prévu ; vider la case le
  *       rend ; « +50 » part du prévu ; un ticket daté sur un poste le remplace ;
- *     - pas de double comptage : « Autre » ou un ticket non ventilé (saisie en vrac),
- *       un ancien total de cycle ;
+ *     - pas de double comptage : un ancien total de cycle ; et (v37.48) « Autre », hors de
+ *       la liste, s'ajoute sans vider les lignes de leur prévu ;
  *     - rien n'est écrit : le défaut suit le prévu, survit à « effacer le cycle » ;
  *     - l'affichage : cases, marques « ✓ au prévu », note de semaine, Rayons X, ⓘ.
  */
@@ -214,8 +214,9 @@ try {
         await reset(page);
         await saisir(page, S2, 'alimentation', 900);
         e = await etat(page);
-        v('  → « Autre » 900 la semaine du 12 (saisie en vrac) : pas de prévu ajouté à ses lignes — COURSES = 1 000 + 900',
-          !e.defauts[S2]['alimentation::1'] && cat(e.L, 'alimentation').reel === 1900, JSON.stringify([e.defauts[S2], cat(e.L, 'alimentation').reel]));
+        //  v37.48 : « Autre » est HORS de la liste — ses lignes vides gardent leur prévu (Marjane 600 + L7m 400)
+        v('  → « Autre » 900 la semaine du 12 (hors liste) : ses lignes vides gardent leur prévu — COURSES = 1 000 + 900 + 1 000',
+          e.defauts[S2]['alimentation::1'] === 600 && e.defauts[S2]['alimentation::2'] === 400 && cat(e.L, 'alimentation').reel === 2900, JSON.stringify([e.defauts[S2], cat(e.L, 'alimentation').reel]));
         await reset(page);
         await page.evaluate(async (ST) => { const st = eval(ST); st.saisirCompteurConso('sorties', 1500); await new Promise(r => setTimeout(r, 150)); }, ST);
         e = await etat(page);

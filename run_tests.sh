@@ -87,5 +87,6 @@ suite "Contrôle anti-hameçonnage (install.sh securite)"      php test_cfo_engi
 suite "Bilan métier & barre latérale (pied toujours visible)" node test_cfo_engine_parity/test_bilan_metier.mjs
 suite "Charges variables : une déduction par semaine au Relevé" node test_cfo_engine_parity/test_variables_semaine.mjs
 suite "Surplus : périmètre de fonctionnement (brut, épargne, net)" node test_cfo_engine_parity/test_surplus_fonctionnement.mjs
+suite "Semaine saisie en partie : tapé = compté, vide = prévu" node test_cfo_engine_parity/test_semaine_partielle.mjs
 
 echo "✅ Toutes les suites passent."
