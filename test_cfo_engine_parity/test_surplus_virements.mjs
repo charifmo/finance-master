@@ -1,4 +1,9 @@
 /**
+ * v37.47 — MIS À JOUR : le surplus est celui du PÉRIMÈTRE DE FONCTIONNEMENT (Courant +
+ *   Assafa, qui paie les charges fixes). Le virement Courant → Assafa n'y est plus une
+ *   sortie : il s'annule, et les charges fixes payées par Assafa entrent dans le brut.
+ *   Un virement d'un compte d'épargne vers le périmètre est une reprise d'épargne.
+ *
  * v37.37 — LE VIREMENT QUI FINANCE LES CHARGES FIXES SORT DU SURPLUS DU COURANT.
  *
  *   « Pourquoi + 22 966 DH en novembre ? Le transfert entre comptes n'est pas une
@@ -24,7 +29,7 @@ let ko = 0;
 const v = (t, ok, d = '') => { if (!ok) ko++; console.log(`  ${ok ? '✅' : '❌'} ${t.padEnd(64)} ${ok ? '' : d}`); };
 console.log('\n  LE VIREMENT QUI FINANCE LES CHARGES FIXES SORT DU SURPLUS DU COURANT\n  ' + '─'.repeat(80));
 
-v('le surplus (périmètre Courant) lit les virements internes', /if \(_courantOnly\) getVirementsCycle\(mNum, annee\)\.forEach\(vir =>/.test(html));
+v('le surplus lit les virements internes (épargne s\'ils quittent le périmètre, rien entre deux comptes du périmètre)', /getVirementsCycle\(mNum, anneeAffichage\.value\)\.forEach\(vir =>/.test(html) && /const sensEpargne = /.test(html));
 
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
@@ -59,7 +64,13 @@ const twCss = essai(() => {
        novembre : brut 27 000 − 1 000 − 15 000 = 11 000 · épargne 5 000 · net 6 000
        décembre : brut 27 000 + 500 − 1 000 − 15 000 = 11 500 · épargne 5 000 · net 6 500
        (sans la correction : novembre 26 000 / 21 000, décembre 26 000 / 21 000)
-     Octobre, revenus déjà encaissés : brut 5 000 − 1 000 − 15 000 = − 11 000 · net − 16 000. */
+     Octobre, revenus déjà encaissés : brut 5 000 − 1 000 − 15 000 = − 11 000 · net − 16 000.
+   v37.47 — PÉRIMÈTRE DE FONCTIONNEMENT = Courant + Assafa (compte des charges fixes) :
+       novembre : brut 27 000 − 1 000 − 10 440 (Crédit 8 340 + École 2 100, payés par Assafa) = 15 560 ·
+                  épargne 3 000 + 2 000 − 1 000 (Dépenses annuels → Assafa : reprise) = 4 000 · net 11 560
+       décembre : brut 15 560 · épargne 5 000 (Courant ↔ Assafa : rien) · net 10 560
+       = au Relevé : Courant + 6 000 et Assafa + 5 560 en novembre ; + 6 500 et + 4 060 en décembre.
+       octobre (revenus encaissés) : 5 000 + 1 000 (soldes réels) − 1 000 − 10 440 = − 5 440 · net − 10 440. */
 const JDP = 27;
 const SC = { maintenant: new Date(2026, 9, 9, 10, 0, 0), mois: 10, an: 2026 };
 const fixture = (sc) => {
@@ -155,7 +166,7 @@ const releveCourant = (page) => page.evaluate(async (ST) => {
     st.releveComptesFiltres.splice(0);
     await new Promise(r => setTimeout(r, 80));
     const par = {};
-    (st.journalHybridePourReleve.entries || []).filter(e => e.compteKey === 'cpt_1' && (e.type === 'credit' || e.type === 'debit')).forEach(e => {
+    (st.journalHybridePourReleve.entries || []).filter(e => (e.compteKey === 'cpt_1' || e.compteKey === 'cpt_2') && (e.type === 'credit' || e.type === 'debit')).forEach(e => {
         const m = Number(String(e.cycle).split('-')[0]); par[m] = (par[m] || 0) + (e.type === 'credit' ? 1 : -1) * Math.round(e.montant); });
     st.moisSelectionnes.splice(0); st.anneesSelectionnees.splice(0);
     return par;
@@ -167,20 +178,23 @@ try {
     await page.evaluate(async (ST) => { const st = eval(ST); const r = st.donneesAnnuelles[2026].revenus;
         [r.salaire, r.magasin].forEach(x => st.toggleItemPaid(x, x.base, st.cyclePilotage)); st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 300)); }, ST);
     let m = await lire(page);
-    v('C. novembre : brut 11 000 (27 000 − 1 000 − 15 000 vers Assafa), épargne 5 000, net 6 000 — plus 26 000 / 21 000',
-      m.sp[11] && m.sp[11].brut === 11000 && m.sp[11].ep === 5000 && m.sp[11].net === 6000, JSON.stringify(m.sp[11]));
-    v('  → décembre : + 500 venus d\'Assafa → brut 11 500, net 6 500', m.sp[12] && m.sp[12].brut === 11500 && m.sp[12].net === 6500, JSON.stringify(m.sp[12]));
-    v('  → le virement n\'est PAS de l\'épargne : la colonne reste 5 000 (3 000 + 2 000)', m.sp[11].ep === 5000 && m.sp[12].ep === 5000, JSON.stringify([m.sp[11].ep, m.sp[12].ep]));
-    v('  → « Surplus » et « Reste à vivre moyen » : (6 000 + 6 500) / 2 = 6 250', m.moyen === 6250, String(m.moyen));
+    v('C. novembre (Courant + Assafa) : brut 15 560 (27 000 − 1 000 − 10 440 de charges fixes), épargne 4 000, net 11 560',
+      m.sp[11] && m.sp[11].brut === 15560 && m.sp[11].ep === 4000 && m.sp[11].net === 11560, JSON.stringify(m.sp[11]));
+    v('  → décembre : Courant ↔ Assafa (15 000 et 500) s\'annulent → brut 15 560, épargne 5 000, net 10 560',
+      m.sp[12] && m.sp[12].brut === 15560 && m.sp[12].ep === 5000 && m.sp[12].net === 10560, JSON.stringify(m.sp[12]));
+    v('  → le virement Courant → Assafa n\'est ni une charge ni de l\'épargne ; Dépenses annuels → Assafa (1 000) est une reprise',
+      m.sp[11].ep === 4000 && m.sp[12].ep === 5000, JSON.stringify([m.sp[11].ep, m.sp[12].ep]));
+    v('  → « Surplus » et « Reste à vivre moyen » : (11 560 + 10 560) / 2 = 11 060', m.moyen === 11060, String(m.moyen));
     const rc = await releveCourant(page);
-    v('  → le net de la modale = le mouvement du Courant au Relevé, mois par mois (novembre 6 000, décembre 6 500)',
+    v('  → le net de la modale = le mouvement de Courant + Assafa au Relevé (novembre 11 560, décembre 10 560)',
       rc[11] === m.sp[11].net && rc[12] === m.sp[12].net, JSON.stringify([rc, m.sp[11].net, m.sp[12].net]));
-    v('D. octobre (revenus encaissés) : brut 5 000 − 1 000 − 15 000 = − 11 000, net − 16 000', m.sp[10] && m.sp[10].brut === -11000 && m.sp[10].net === -16000, JSON.stringify(m.sp[10]));
+    v('D. octobre (revenus encaissés) : 5 000 + 1 000 − 1 000 − 10 440 = − 5 440, net − 10 440', m.sp[10] && m.sp[10].brut === -5440 && m.sp[10].net === -10440, JSON.stringify(m.sp[10]));
     await page.evaluate(async (ST) => { const st = eval(ST); const vir = st.donneesAnnuelles[2026].virementsInternes.find(x => x.id === 31);
-        st.toggleItemPaid(vir, 15000, st.cyclePilotage); st.comptes.find(c => c.id === 1).solde = 5000 - 15000; st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 300)); }, ST);
+        st.toggleItemPaid(vir, 15000, st.cyclePilotage); st.comptes.find(c => c.id === 1).solde = 5000 - 15000; st.comptes.find(c => c.id === 2).solde = 1000 + 15000;
+        st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 300)); }, ST);
     m = await lire(page);
-    v('  → le virement d\'octobre fait et pointé (Courant − 10 000) : brut − 11 000, net − 16 000 — il ne sort qu\'une fois',
-      m.sp[10].brut === -11000 && m.sp[10].net === -16000, JSON.stringify(m.sp[10]));
+    v('  → le virement d\'octobre fait et pointé (Courant − 15 000, Assafa + 15 000) : rien ne bouge, − 5 440 / − 10 440',
+      m.sp[10].brut === -5440 && m.sp[10].net === -10440, JSON.stringify(m.sp[10]));
     //  Tous comptes confondus, un virement interne s'annule
     const sans = await page.evaluate(async (ST) => { const st = eval(ST); const d = st.donneesAnnuelles[2026]; const garde = d.virementsInternes; d.virementsInternes = [];
         st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 300));

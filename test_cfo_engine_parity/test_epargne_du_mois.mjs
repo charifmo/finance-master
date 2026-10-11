@@ -220,17 +220,21 @@ try {
       k.kpi === 19000, JSON.stringify(k));
     //  Un virement interne d'octobre (Courant → Épargne LT, 1 500) : son tiroir, pas l'épargne
     const vir = await page.evaluate(async (ST) => { const st = eval(ST);
+        const o0 = st.surplusParMois.find(r => r.mNum === 10), brutAvant = Math.round(o0.brut), netAvant = Math.round(o0.net);
         st.donneesAnnuelles[2026].virementsInternes.push({ id: 871, mois: 10, sourceCompte: 'courant', destinationCompte: 'cpt_2', montant: 1500 });
         st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 400));
         const nat = Object.fromEntries(st.kpiProgression.natures.map(n => [n.cle, [n.badge, n.total]]));
-        return { nat, ep10: st.surplusParMois.find(r => r.mNum === 10).epargne,
+        return { nat, ep10: st.surplusParMois.find(r => r.mNum === 10).epargne, brutAvant, netAvant, brutApres: Math.round(st.surplusParMois.find(r => r.mNum === 10).brut), netApres: Math.round(st.surplusParMois.find(r => r.mNum === 10).net),
                  tiroirs: [...document.querySelectorAll('#pilotage-inbox [data-tiroir]')].map(d => [d.dataset.tiroir, [...d.querySelectorAll('[data-tache-nom]')].map(e => e.textContent.trim())]) }; }, ST);
     const tv = (vir.tiroirs.find(x => x[0] === 'virement') || [null, []])[1], te = (vir.tiroirs.find(x => x[0] === 'epargne') || [null, []])[1];
     v('  → un virement interne a son tiroir « 🔄 Virements internes » ; le tiroir 💎 n\'a que l\'épargne',
       JSON.stringify(tv) === '["Virement Courant → Épargne Long Terme"]' && !te.some(n => /Virement/.test(n)), JSON.stringify(vir.tiroirs));
     v('  → la Progression le compte en « 🔄 Virement » (1 500), « 💎 Épargne » reste 7 000',
       vir.nat.virement && vir.nat.virement[0] === '🔄 Virement' && vir.nat.virement[1] === 1500 && vir.nat.epargne && vir.nat.epargne[1] === 7000, JSON.stringify(vir.nat));
-    v('  → et la colonne Épargne de la modale ne bouge pas (7 000)', vir.ep10 === 7000, String(vir.ep10));
+    //  v37.47 : « le net est celui après le transfert de TOUTES les épargnes » — un virement du
+    //  Courant vers un compte d'épargne EST de l'épargne : la colonne l'inclut, le net ne bouge pas.
+    v('  → la colonne Épargne de la modale l\'inclut (7 000 + 1 500 = 8 500) ; le brut ne bouge pas, le net perd 1 500',
+      vir.ep10 === 8500 && vir.brutApres === vir.brutAvant && vir.netApres === vir.netAvant - 1500, JSON.stringify({ ep10: vir.ep10, brut: [vir.brutAvant, vir.brutApres], net: [vir.netAvant, vir.netApres] }));
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
     await page.close();
 } catch (err) {

@@ -124,12 +124,16 @@ try {
 
     /* ══ A. LE PÉRIMÈTRE, DÉDUIT DE LA FONCTION ═══════════════════════════ */
     console.log('  ── le périmètre de fonctionnement, déduit de la fonction des comptes');
-    const P = await page.evaluate((ST) => { const st = eval(ST); return { F: [...st.comptesFonctionnement].sort(), per: st.perimetreSurplus }; }, ST);
+    page.setDefaultTimeout(5000);
+    let s26 = {}, s27 = {};
+    const section = async (nom, f) => { try { await f(); } catch (e) { v(nom + ' : section complète sans exception', false, String(e && e.message || e).split('\n')[0].slice(0, 160)); } };
+    const P = await page.evaluate((ST) => { const st = eval(ST); return { F: Array.from(st.comptesFonctionnement || []).sort(), per: st.perimetreSurplus }; }, ST);
     v('auto : le Courant (revenus) et Assafa (charges fixes) — pas les autres « liquide »', JSON.stringify(P.F) === JSON.stringify(['cpt_1', 'cpt_2']), JSON.stringify(P.F));
 
     /* ══ B. LES MOIS À VENIR, CALCULÉS À LA MAIN ══════════════════════════ */
+    await section('Mois à venir', async () => {
     console.log('  ── brut, épargne, net : les mois à venir');
-    let s26 = await lire(page, 2026), s27 = await lire(page, 2027);
+    s26 = await lire(page, 2026); s27 = await lire(page, 2027);
     v('novembre : brut 16 300 (charges fixes d\'Assafa comprises, virement Courant → Assafa neutre)', s26[11] && s26[11].brut === 16300, JSON.stringify(s26[11]));
     v('  → épargne 5 500 : « Compte Principale ASSAFA » (9 000) n\'est PAS de l\'épargne', s26[11] && s26[11].ep === 5500, JSON.stringify(s26[11]));
     v('  → la « Vidange » payée par les Dépenses annuels n\'est pas dans le brut ; net 10 800', egal(s26[11], 16300, 5500, 10800), JSON.stringify(s26[11]));
@@ -146,7 +150,9 @@ try {
         return res; }, ST);
     v('  → l\'épargne « Urgence » versée (3 000 sortis du Courant) : brut et net inchangés, ✓ 3 000 versés', versee.brut === 24500 && versee.ep === 5500 && versee.versee === 3000 && versee.net === 19000, JSON.stringify(versee));
 
+    });
     /* ══ C. LE CHOIX FORCÉ, COMPTE PAR COMPTE ═════════════════════════════ */
+    await section('Case « Fonctionnement »', async () => {
     console.log('  ── la case « Fonctionnement », compte par compte');
     await page.evaluate((ST) => { const st = eval(ST); st.appMode = 'previsionnel'; st.activeTab = 'parametres'; st.anneeAffichage = 2026; }, ST);
     await page.waitForTimeout(500);
@@ -174,7 +180,9 @@ try {
     v('  → une épargne négative s\'affiche « + » (une reprise ajoute au net)', /^\+500DH/.test(signe), signe);
     await page.evaluate((ST) => { const st = eval(ST); st.showSurplusTooltip = false; st.remettreFonctionnementAuto(3); }, ST); await page.waitForTimeout(300);
 
+    });
     /* ══ D. LA BULLE, LA MÉTÉO, LE BILAN, LE CFO ══════════════════════════ */
+    await section('Bulle, Météo, Bilan, CFO', async () => {
     console.log('  ── la bulle dit le périmètre ; la Météo, le Bilan et le CFO suivent la même règle');
     await page.evaluate((ST) => { const st = eval(ST); st.activeTab = 'dashboard'; st.showSurplusTooltip = true; }, ST); await page.waitForTimeout(400);
     const bulle = (await page.textContent('[data-surplus-perimetre]')).replace(/\s+/g, ' ');
@@ -196,6 +204,7 @@ try {
     const php = essai(() => execFileSync('php', ['-r', `require '${path.join(RACINE, 'cfo_intent_engine.php').replace(/'/g, "\\'")}'; $fd = json_decode(file_get_contents('${tmpJson}')); cfo_sanitize_finance_data($fd); echo json_encode(array_column(cfo_compute_monthly_net_courant($fd, 2026), 'net', 'mois'));`], { encoding: 'utf8' }));
     const netPhp = php ? JSON.parse(php) : null;
     v('le CFO (serveur PHP) : même net qu\'à l\'écran — novembre 10 800, décembre 16 800', !!netPhp && netPhp[11] === 10800 && netPhp[12] === 16800, String(php));
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs.slice(0, 2).join(' | '));
 } catch (e) {
     v('scène complète sans exception', false, String(e && e.stack || e).slice(0, 600));
