@@ -554,8 +554,9 @@ try {
     await page.click('[data-semaine-prec]');
     await page.waitForTimeout(250);
     const wt1 = await page.evaluate((ST) => { const st = eval(ST); const c = st.liberteCycle.categories.find(x => x.key === 'alimentation'); return { tickets: c.sem.tickets, engage: c.sem.engage, source: c.sem.source }; }, ST);
-    v('un ticket daté de la semaine passée n\'apparaît que dans CETTE semaine-là (275 < 410 saisis → 410 ; ticket non ventilé = saisie en vrac, pas de prévu ajouté)',
-      wt.cetteSemaine === 0 && wt1.tickets === 275 && wt1.engage === 410 && wt1.source === 'compteur', JSON.stringify([wt, wt1]));
+    //  v37.48 : un ticket non rangé sur une ligne ne vide plus les lignes de leur prévu — L7M (vide) garde ses 400
+    v('un ticket daté de la semaine passée n\'apparaît que dans CETTE semaine-là (max(410 saisis, 275) + L7M vide au prévu 400 = 810)',
+      wt.cetteSemaine === 0 && wt1.tickets === 275 && wt1.engage === 810 && wt1.source === 'compteur', JSON.stringify([wt, wt1]));
     await tickets([]);
     await page.click('[data-semaine-aujourdhui]');
     await page.waitForTimeout(200);
