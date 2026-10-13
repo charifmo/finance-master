@@ -64,7 +64,7 @@ MOTEUR = r"""                    // ══════════════�
                     //   « À catégoriser ». Chaque choix fait à la main devient une règle.
                     // ════════════════════════════════════════════════════════════════
                     const _normTxt = (s) => String(s || '').toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae')
-                        .normalize('NFD').replace(/[̀-ًͯ-ْـ]/g, '');
+                        .normalize('NFD').replace(/[̀-ًͯ-ٰٟـ]/g, '');
                     const MOTS_VIDES = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'et', 'en', 'au', 'aux', 'pour', 'par', 'avec', 'chez',
                         'dans', 'sur', 'ma', 'mon', 'mes', 'ta', 'ton', 'ce', 'cet', 'cette', 'achat', 'achats', 'paiement', 'paye', 'payee', 'cb', 'carte',
                         'ticket', 'dh', 'dhs', 'mad', 'dirham', 'dirhams', 'and', 'for', 'of', 'dyal', 'dial', 'fi', 'men', 'mn', '3la', 'ala', 'li', 'lli',
@@ -74,7 +74,7 @@ MOTEUR = r"""                    // ══════════════�
                         const bruts = _normTxt(libelle).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
                         const toks = [];
                         bruts.forEach(w => {
-                            if (w.length < 2 || MOTS_VIDES.has(w) || /^\d+$/.test(w)) return;
+                            if (w.length < 2 || MOTS_VIDES.has(w) || !/\D/.test(w)) return;          // un nombre seul n'est pas un mot
                             if (!toks.includes(w)) toks.push(w);
                             //  l'article arabe : « الخضرة » est aussi « خضرة »
                             if (/^ال[؀-ۿ]{2,}$/.test(w) && !toks.includes(w.slice(2))) toks.push(w.slice(2));
@@ -105,11 +105,11 @@ MOTEUR = r"""                    // ══════════════�
                           m: 'oeuf|oeufs|bid|beid|bayd|bid beldi|بيض' },
                         { t: '🥛 Lait, frais', v: ['lait', 'laitier', 'tqdya', 'alimentation'], f: 80,
                           m: 'lait|7lib|hlib|l7lib|lben|raib|raibi|yaourt|yaourts|yogourt|danone|jaouda|centrale laitiere|jben|fromage|fromages|beurre|zebda|creme|edam|gouda|parmesan|حليب|لبن|رايب|جبن|زبدة' },
-                        { t: '🥖 Pain, boulangerie', v: ['pain', 'boulangerie', 'khobz', 'tqdya', 'alimentation'], f: 80,
+                        { t: '🥖 Pain, boulangerie', v: ['pain', 'boulangerie', 'khobz', 'tqdya', 'alimentation'], f: 84,
                           m: 'pain|khobz|khubz|khbz|boulangerie|boulanger|msemen|msmen|harcha|baghrir|beghrir|batbout|croissant|croissants|viennoiserie|خبز|مسمن|حرشة|بغرير' },
                         { t: '🍰 Dessert, pâtisserie', v: ['dessert', 'patisserie', 'gateau', 'tqdya', 'alimentation'], f: 80,
                           m: 'dessert|desserts|patisserie|patissier|gateau|gateaux|halwa|7alwa|7lwa|chocolat|biscuits|biscuit|bonbons|tarte|حلوة|حلويات|كيك' },
-                        { t: '🫙 Épicerie sèche, eau', v: ['epicerie', 'tqdya', 'courses', 'alimentation'], f: 76,
+                        { t: '🫙 Épicerie sèche, eau', v: ['epicerie', 'tqdya', 'courses', 'alimentation'], f: 80,
                           m: 'huile|zit|sucre|sokar|sokkar|sukkar|the|atay|atai|farine|dqiq|d9i9|smida|semoule|riz|rouz|pates|spaghetti|couscous|lentilles|3dess|adess|loubia|haricots|pois chiches|7mess|hummus|conserve|conserves|sel|epices|eau minerale|sidi ali|ain saiss|oulmes|bahia|sidi harazem|زيت|سكر|أتاي|اتاي|دقيق|سميدة|روز|عدس|لوبيا|حمص|ملحة' },
                         { t: '🍔 Fast-food, livraison', v: ['fast food', 'fastfood', 'snack', 'resto', 'restaurant', 'sorties', 'sortie', 'loisirs'], f: 88,
                           m: 'mcdo|macdo|mcdonald|mcdonalds|kfc|burger|burgers|burger king|quick|pizza|pizzas|pizza hut|dominos|domino|papa johns|tacos|otacos|o tacos|tacos de lyon|subway|popeyes|five guys|sandwich|sandwichs|panini|chawarma|shawarma|chawerma|snack|fast food|glovo|jumia food|kool|yassir food|ماكدونالدز|بيتزا|طاكوس|سناك',
@@ -217,7 +217,7 @@ MOTEUR = r"""                    // ══════════════�
                           m: 'pressing|blanchisserie|teinturerie|بريسينغ' },
                     ];
                     const _DICO = DICO_CATEGORIES.map((r, i) => {
-                        const tous = r.m.split('|').map(x => _analyseLibelle(x).bruts.join(' ')).filter(Boolean);
+                        const tous = [...new Set(r.m.split('|').map(x => _analyseLibelle(x).bruts.join(' ')).filter(Boolean))];
                         return { i, theme: r.t, vers: r.v, force: r.f, tous,
                                  mots: new Set(tous.filter(x => !x.includes(' '))), phrases: tous.filter(x => x.includes(' ')),
                                  enseignes: (r.k || '').split('|').map(x => _analyseLibelle(x).compact).filter(x => x.length >= 5) };
