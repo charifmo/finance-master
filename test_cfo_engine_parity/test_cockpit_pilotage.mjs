@@ -460,6 +460,9 @@ try {
         st.forceUpdateCalculations();
         await new Promise(r => setTimeout(r, 120));
         const b = document.querySelector('[data-kpi="atterrissage"]');
+        //  La carte porte « transition-colors » : on lit la couleur une fois le fondu terminé
+        //  (lue à 120 ms, elle tombait parfois en plein fondu — rgb(164, 34, 39))
+        await Promise.all(b.getAnimations().map(a => a.finished.catch(() => {})));
         return { alerte: b.dataset.alerte, texte: b.innerText, vedette: st.kpiAtterrissage.vedette && st.kpiAtterrissage.vedette.key,
                  fond: getComputedStyle(b).backgroundColor };
     }, { ST, soldeCourant, soldeAnnexe });
