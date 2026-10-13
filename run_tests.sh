@@ -88,5 +88,6 @@ suite "Bilan métier & barre latérale (pied toujours visible)" node test_cfo_en
 suite "Charges variables : une déduction par semaine au Relevé" node test_cfo_engine_parity/test_variables_semaine.mjs
 suite "Surplus : périmètre de fonctionnement (brut, épargne, net)" node test_cfo_engine_parity/test_surplus_fonctionnement.mjs
 suite "Semaine saisie en partie : tapé = compté, vide = prévu" node test_cfo_engine_parity/test_semaine_partielle.mjs
+suite "Catégorisation : règles hors-ligne, IA, doute à vous" node test_cfo_engine_parity/test_categorisation.mjs
 
 echo "✅ Toutes les suites passent."
