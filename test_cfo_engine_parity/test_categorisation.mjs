@@ -75,7 +75,8 @@ const fixture = () => {
             sante: V('Santé', 0, 'semaine', [L('Medicam (reste à charge)', 200, 'cycle'), L('Medecin (reste à charge)', 500, 'cycle'), L('Psy', 500, 'quinzaine'), L('psy charif', 300, 'cycle'), L('complement', 500, 'cycle')]),
             factures: { ...V('Factures', 0, 'mois', [L('elect', 200), L('tel', 99), L('internet', 250), L('eau', 300), L('netflix', 98), L('IA', 500), L('chatgpt', 200)]), categorieId: 'cat_cv_factures' },
         };
-        d.epargne = [{ id: 1, nom: 'Alimentation depenses annuels', valeur: 1000, sourceCompte: 'courant', exceptions: [] }];
+        d.epargne = [{ id: 1, nom: 'Alimentation depenses annuels', valeur: 1000, sourceCompte: 'courant', exceptions: [] },
+                     { id: 2, nom: 'Épargne courses', valeur: 500, sourceCompte: 'courant', exceptions: [] }];
         d.depensesIrregulieres = []; d.virementsInternes = []; d.consoRealiseeT0 = {};
         //  Deux « Marjane » rangés AUTOMATIQUEMENT par l'ancien moteur dans la catégorie mère,
         //  un « café » dans Sorties, et le « mcdonald s » resté Non catégorisé
@@ -154,7 +155,7 @@ try {
           ['mcdonald s', 'McDo', 'burger king', 'glovo'].every(l => r[l].statut === 'sur' && r[l].cat === 'cafe Resto Wknd' && r[l].source === 'règle'), JSON.stringify(r));
         v('  → « Marjane » → VOTRE ligne Marjane (pas Alimentation, ni l\'ancienne « Marjane Lait »)',
           r.Marjane.statut === 'sur' && r.Marjane.cat === 'Marjane' && r.Marjane.source === 'libellé' && !r.Marjane.candidats.includes('Marjane Lait'), JSON.stringify(r.Marjane));
-        v('  → « carrefour », « alimentation » → Alimentation (Tqdya), pas la poche d\'épargne « Alimentation depenses annuels »',
+        v('  → « carrefour », « alimentation » → Alimentation (Tqdya), pas les poches d\'épargne « Épargne courses » ni « Alimentation depenses annuels »',
           r.carrefour.cat === 'Alimentation (Tqdya)' && r.carrefour.statut === 'sur' && r.alimentation.cat === 'Alimentation (Tqdya)' && r.alimentation.statut === 'sur', JSON.stringify([r.carrefour, r.alimentation]));
         const d = await cat(['khodra', 'خضرة', 'légumes', 'lhem', 'لحم', 'kefta', 'djej', '7out', 'bid', 'الخضرة']);
         const att = { khodra: 'khdra', 'خضرة': 'khdra', 'légumes': 'khdra', lhem: 'l7m', 'لحم': 'l7m', kefta: 'kfta', djej: 'djaj', '7out': 'samak', bid: 'Œufs', 'الخضرة': 'khdra' };
@@ -253,7 +254,10 @@ try {
         v('  → un id inventé par l\'IA est refusé ; une panne laisse la transaction en attente — les deux restent « À catégoriser »',
           o.categorieId === 'cat_misc' && /ne voit aucune de vos catégories/.test(msg[o.id] || '') && p.categorieId === 'cat_misc' && /IA injoignable/.test(msg[p.id] || '')
           && !!(await ligne(o.id)) && /IA injoignable/.test(await ligne(p.id) || ''), JSON.stringify([o.categorieId, p.categorieId, msg]));
-        v('  → une demande à la fois (jamais deux en vol)', ia.maxEnVol === 1, String(ia.maxEnVol));
+        //  « 🤖 Demander à l'IA » : toutes les lignes sans piste sûre partent ensemble… une à la fois
+        ia.maxEnVol = 0; const n1 = ia.requetes.length;
+        await page.click('[data-ia-tout]'); await page.waitForTimeout(100); await attendreIA();
+        v('  → « 🤖 Demander à l\'IA » sur plusieurs lignes : une demande à la fois (jamais deux en vol)', ia.requetes.length - n1 >= 2 && ia.maxEnVol === 1, JSON.stringify([ia.requetes.length - n1, ia.maxEnVol]));
     });
 
     /* ── F. À catégoriser et le journal ──────────────────────────────── */

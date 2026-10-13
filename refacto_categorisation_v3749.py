@@ -255,18 +255,20 @@ MOTEUR = r"""                    // ══════════════�
                                                               : cats.filter(c => c.mots.includes(n));         // un mot du libellé
                         if (!hits.length && n.length >= 5 && !n.includes(' '))                            // exceptionnel → exceptionnelle
                             hits = cats.filter(c => c.mots.some(w => w.length >= 5 && (w.startsWith(n) || n.startsWith(w))));
-                        //  Une dépense va d'abord vers une charge ; une poche d'épargne seulement à défaut
-                        if (hits.some(c => c.type !== 'epargne')) hits = hits.filter(c => c.type !== 'epargne');
                         return hits;
                     };
+                    //  Une dépense va vers une CHARGE : toute la liste « vers » est essayée sur vos
+                    //  charges d'abord ; une poche d'épargne (« Épargne courses »…) seulement à défaut.
                     const _resoudreVers = (vers, mot, cats) => {
-                        for (let i = 0; i < vers.length; i++) {
-                            const hits = [];
-                            (Array.isArray(vers[i]) ? vers[i] : [vers[i]]).forEach(x => {
-                                if (x === '$mot' && !mot) return;
-                                _resoudreCible(x === '$mot' ? mot : x, cats).forEach(c => { if (!hits.includes(c)) hits.push(c); });
-                            });
-                            if (hits.length) return { rang: i, hits };
+                        for (const pool of [cats.filter(c => c.type !== 'epargne'), cats.filter(c => c.type === 'epargne')]) {
+                            for (let i = 0; i < vers.length; i++) {
+                                const hits = [];
+                                (Array.isArray(vers[i]) ? vers[i] : [vers[i]]).forEach(x => {
+                                    if (x === '$mot' && !mot) return;
+                                    _resoudreCible(x === '$mot' ? mot : x, pool).forEach(c => { if (!hits.includes(c)) hits.push(c); });
+                                });
+                                if (hits.length) return { rang: i, hits };
+                            }
                         }
                         return null;
                     };
