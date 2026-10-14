@@ -93,5 +93,6 @@ suite "Un compte par ligne · budget sans mode édition"         node test_cfo_e
 suite "Clôturer une case · semaine, 15 j, cycle"               node test_cfo_engine_parity/test_cloture.mjs
 suite "Catégorisation automatique : règles → IA → par défaut"   node test_cfo_engine_parity/test_categorisation_auto.mjs
 suite "Banque : calibrage RIB, lecture locale, réconciliation"  node test_cfo_engine_parity/test_banque.mjs
+suite "Banque : vraies captures, téléphone d'abord"  node test_cfo_engine_parity/test_banque_reel.mjs
 
 echo "✅ Toutes les suites passent."

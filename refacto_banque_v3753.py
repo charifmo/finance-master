@@ -252,7 +252,7 @@ MODULE = r'''                    /* ══════════════�
                     ];
                     const nomBanque = (k) => (BANQUES_CB.find(b => b.cle === k) || {}).nom || 'Banque non reconnue';
                     const _idNorm = (x) => String(x || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
-                    //  « 362780920110100084189738 » → « 362 780 9201101000841897 38 »
+                    //  « 007450000123456789012345 » → « 007 450 0001234567890123 45 »
                     const idLisible = (x) => { const v = _idNorm(x); return v.length === 24 ? v.slice(0, 3) + ' ' + v.slice(3, 6) + ' ' + v.slice(6, 22) + ' ' + v.slice(22) : v; };
                     //  Le même compte : identiques, ou l'un contient l'autre (n° de compte dans le RIB), 7 signes au moins
                     const _memeId = (a, b) => {
@@ -676,7 +676,7 @@ TPL_CALIBRAGE = r'''
                                         </span>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-1.5">
-                                        <input type="text" data-calibrage-saisie :placeholder="'RIB ou n° de compte (ex. 362 780 9201101000841897 38)'" v-model="calibrageBanque.saisie[c.id]"
+                                        <input type="text" data-calibrage-saisie :placeholder="'RIB ou n° de compte (ex. 007 450 0001234567890123 45)'" v-model="calibrageBanque.saisie[c.id]"
                                                @keydown.enter="ajouterIdentifiantCompte(c, calibrageBanque.saisie[c.id]) && (calibrageBanque.saisie[c.id] = '')"
                                                class="flex-1 min-w-[12rem] text-[11px] font-bold px-2 py-1 rounded-lg border border-gray-200 bg-white outline-none focus:border-indigo-400 tabular-nums"/>
                                         <label :class="['shrink-0 cursor-pointer text-[11px] font-black px-2.5 py-1 rounded-lg border border-dashed transition-colors', calibrageBanque.enCours && calibrageBanque.compteId === c.id ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-300 text-gray-600 hover:border-indigo-400 hover:text-indigo-700']"

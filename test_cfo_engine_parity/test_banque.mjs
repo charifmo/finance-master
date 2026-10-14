@@ -185,28 +185,28 @@ try {
               '2026-10-08 | 2026-10-06 | -270 | PAIEMENT CB 06/10/26 LA BONNE P CHE',
               '2026-10-06 | 2026-10-03 | -40.53 | PAIEMENT CB 03/10/26 CARREFOUR EX M',
               '2026-10-06 | 2026-10-04 | -33.73 | PAIEMENT CB 04/10/26 MARJ MENARA G']), JSON.stringify(ops(w)));
-        v('  → le n° de compte de l\'URL (3850096) ; DÉBIT 1 386,76 = la somme des lignes', JSON.stringify(w.identifiants) === '["3850096"]' && w.totaux.debit === 1386.76
+        v('  → le n° de compte de l\'URL (7654321) ; DÉBIT 1 386,76 = la somme des lignes', JSON.stringify(w.identifiants) === '["7654321"]' && w.totaux.debit === 1386.76
           && Math.abs(w.operations.reduce((s, o) => s - o.montant, 0) - 1386.76) < 0.001, JSON.stringify([w.identifiants, w.totaux]));
         //  Le même relevé, collé en tableau (tabulations) et sans l'URL
         const t = await analyser(WEB.replace(/\n(\d{2})\noct\n/g, '\n$1 oct\t').replace(/\n(- [\d ,]+MAD)/g, '\t$1').replace(/https:.*$/m, ''));
         v('  → collé en tableau (tabulations) : les mêmes 5 opérations', JSON.stringify(ops(t)) === JSON.stringify(ops(w)), JSON.stringify(ops(t)));
         //  Saham lu « en colonnes » (les montants tous à la fin) — ce que fait parfois l'OCR
-        const col = await analyser('BONJOUR MOHAMED CHARIF\nCompte chèque dirhams\n5 174,09 DH\nTRANSACTIONS RÉCENTES\nEmission d\'un virement mobile tiers sah…\n05/10/2026\n'
+        const col = await analyser('BONJOUR KARIM TESTEUR\nCompte chèque dirhams\n5 174,09 DH\nTRANSACTIONS RÉCENTES\nEmission d\'un virement mobile tiers sah…\n05/10/2026\n'
             + 'Reception vrt instantane n : 269890 de …\n04/10/2026\nReception vrt instantane n : 268271 de …\n01/10/2026\nEmission vrt instantane n 174182 en fa…\n29/08/2026\n'
             + '-4 900,00 Dh\n+5 000,00 Dh\n+5 000,00 Dh\n-6 000,00 Dh\n');
         v('  → Saham « en colonnes » : chaque montant rendu à sa ligne, le solde 5 174,09, l\'empreinte',
           col.banque === 'saham' && JSON.stringify(col.operations.map(o => [o.dateOp, o.montant])) === '[["2026-10-05",-4900],["2026-10-04",5000],["2026-10-01",5000],["2026-08-29",-6000]]'
           && col.soldes.compteCheque === 5174.09 && col.signature === 'saham|compte cheque dirhams' && col.identifiants.length === 0, JSON.stringify([col.operations, col.soldes, col.signature]));
         //  Bank Assafa, espaces insécables, tiret « − », libellé sur deux lignes
-        const as = await analyser('362 780 9201101000841897 38\nSolde disponible\n9 101,35 Dhs\nVOS DERNIÈRES OPÉRATIONS\n08 Octobre − 17,60 Dhs\nCom - VIR INST #16110487 , box\n'
-            + '08 Octobre - 2 200,00 Dhs\nVIREMENT EMIS EN FAVEUR DE BENABAD Mohamed\nCharif attijari box\n');
+        const as = await analyser('190 780 2100345600071234 52\nSolde disponible\n9 101,35 Dhs\nVOS DERNIÈRES OPÉRATIONS\n08 Octobre − 17,60 Dhs\nCom - VIR INST #16110487 , box\n'
+            + '08 Octobre - 2 200,00 Dhs\nVIREMENT EMIS EN FAVEUR DE TESTEUR\nKarim attijari box\n');
         v('  → Bank Assafa : RIB, solde 9 101,35, « − » et espaces insécables, libellé sur deux lignes',
-          as.banque === 'assafa' && JSON.stringify(as.identifiants) === '["362780920110100084189738"]' && as.soldes.solde === 9101.35
-          && JSON.stringify(ops(as)) === JSON.stringify(['2026-10-08 |  | -17.6 | Com - VIR INST #16110487 , box', '2026-10-08 |  | -2200 | VIREMENT EMIS EN FAVEUR DE BENABAD Mohamed Charif attijari box']), JSON.stringify([as.identifiants, as.soldes, ops(as)]));
+          as.banque === 'assafa' && JSON.stringify(as.identifiants) === '["190780210034560007123452"]' && as.soldes.solde === 9101.35
+          && JSON.stringify(ops(as)) === JSON.stringify(['2026-10-08 |  | -17.6 | Com - VIR INST #16110487 , box', '2026-10-08 |  | -2200 | VIREMENT EMIS EN FAVEUR DE TESTEUR Karim attijari box']), JSON.stringify([as.identifiants, as.soldes, ops(as)]));
         const an = await analyser('VOS DERNIÈRES OPÉRATIONS\n28 Décembre - 50,00 Dhs\nRETRAIT GAB\n08 Octobre - 17,60 Dhs\nCom - VIR INST\n');
         v('  → « 28 Décembre » sans année, lu le 14 oct. 2026 : décembre 2025 (pas 2026, dans le futur)', JSON.stringify(an.operations.map(o => o.dateOp)) === '["2025-12-28","2026-10-08"]', JSON.stringify(an.operations.map(o => o.dateOp)));
         const k = await page.evaluate((ST) => { const st = eval(ST); const c = (l, m) => st.bqClasser({ libelle: l, montant: m });
-            return [c('AWBGAB MARRAKECH E 14 10 09H01', -1000), c('GAB BANK ASSAFA S 13 10', -1500), c('Com - VIR INST #16110487 , box', -17.6), c('VIREMENT EMIS EN FAVEUR DE BENABAD', -2200),
+            return [c('AWBGAB MARRAKECH E 14 10 09H01', -1000), c('GAB BANK ASSAFA S 13 10', -1500), c('Com - VIR INST #16110487 , box', -17.6), c('VIREMENT EMIS EN FAVEUR DE TESTEUR', -2200),
                     c('Reception vrt instantane n : 269890', 5000), c("Emission d'un virement mobile tiers", -4900), c('PAIEMENT CB 11/10/26 CARAMELIO', -42.5), c('Paiement SRM Marrakech-Sa', -377.93),
                     st.bqMarchand({ libelle: 'PAIEMENT CB 11/10/26 CARAMELIO' }), st.bqMarchand({ libelle: 'Paiement SRM Marrakech-Sa' })]; }, ST);
         v('  → la nature : GAB, GAB, frais, virement, virement, virement, achat, achat ; commerçants CARAMELIO, SRM Marrakech-Sa',
@@ -236,17 +236,17 @@ try {
         v('  → RIB / n° inconnus → la question ; Saham reconnu à son empreinte (calibrée en C), sans question',
           q.attijari_web === 'identifiant' && q.attijari_mobile === 'identifiant' && q.assafa_mobile === 'identifiant' && q.saham_mobile === 'auto:empreinte', JSON.stringify(q));
         const qtxt = await page.evaluate(() => [...document.querySelectorAll('[data-import-question]')].map(x => x.textContent.replace(/\s+/g, ' ').trim()));
-        v('  → « 🆕 Nouveau RIB détecté (362 780 9201101000841897 38). À quel compte l\'associer ? »', qtxt.some(x => x.includes('Nouveau RIB détecté (362 780 9201101000841897 38). À quel compte l\'associer ?')), JSON.stringify(qtxt));
+        v('  → « 🆕 Nouveau RIB détecté (190 780 2100345600071234 52). À quel compte l\'associer ? »', qtxt.some(x => x.includes('Nouveau RIB détecté (190 780 2100345600071234 52). À quel compte l\'associer ?')), JSON.stringify(qtxt));
         await repondre('texte', CC);
         c0 = await caps();
         v('  → « Associer pour toujours » : Attijarinet → Compte Courant ; la capture mobile (autre n°) le demande encore',
-          c0[0].compteId === CC && c0[1].question === 'identifiant' && (await compte(CC)).banque === 'attijari' && JSON.stringify((await compte(CC)).identifiants) === '["3850096"]', JSON.stringify(c0.map(c => [c.compteId, c.question])));
+          c0[0].compteId === CC && c0[1].question === 'identifiant' && (await compte(CC)).banque === 'attijari' && JSON.stringify((await compte(CC)).identifiants) === '["7654321"]', JSON.stringify(c0.map(c => [c.compteId, c.question])));
         await repondre(c0[1].id, CC);
         await repondre(c0[2].id, ASSAFA);
         c0 = await caps();
         const [web, mob, as, sa] = c0;
         v('  → Assafa → Compte Principale ASSAFA ; tous les comptes connus', mob.compteId === CC && as.compteId === ASSAFA && sa.compteId === URGENCE
-          && JSON.stringify((await compte(CC)).identifiants) === '["3850096","000205B000306486"]' && JSON.stringify((await compte(ASSAFA)).identifiants) === '["362780920110100084189738"]', JSON.stringify(c0.map(c => c.compteId)));
+          && JSON.stringify((await compte(CC)).identifiants) === '["7654321","000999B000123456"]' && JSON.stringify((await compte(ASSAFA)).identifiants) === '["190780210034560007123452"]', JSON.stringify(c0.map(c => c.compteId)));
         //  Attijarinet
         v('  → AWBGAB : 🚫 ignoré (retrait espèces) ; MARJ MENARA G 33,73 : ✓ déjà dans le journal (Marjane 34 le 5)',
           ligne(web, 'AWBGAB').action === 'ignorer' && ligne(web, 'AWBGAB').type === 'gab' && ligne(web, 'PAIEMENT CB 04/10/26 MARJ').action === 'deja:701', JSON.stringify(web.lignes));
@@ -262,8 +262,8 @@ try {
           /^pointer:/.test(srm.action) && srm.action.includes('elect marrakech villa') && ligne(mob, 'GAB BANK').action === 'ignorer' && mob.solde === 4213.32 && mob.appliquer, JSON.stringify([srm, mob.solde]));
         //  Bank Assafa
         v('  → Assafa : frais 17,60 regroupés ; virement 2 200 pointé (Assafa → Courant du Pilotage) ; 1 200 ignoré ; solde 9 101,35',
-          ligne(as, 'Com - VIR').action === 'frais' && /^pointer:Virement:9001$/.test(ligne(as, 'VIREMENT EMIS EN FAVEUR DE BENABAD Mohamed Charif attijari box').action)
-          && ligne(as, 'VIREMENT EMIS EN FAVEUR DE BENABAD Mohamed Charif attijari ok').action === 'ignorer' && as.solde === 9101.35, JSON.stringify([as.lignes, as.solde]));
+          ligne(as, 'Com - VIR').action === 'frais' && /^pointer:Virement:9001$/.test(ligne(as, 'VIREMENT EMIS EN FAVEUR DE TESTEUR Karim attijari box').action)
+          && ligne(as, 'VIREMENT EMIS EN FAVEUR DE TESTEUR Karim attijari ok').action === 'ignorer' && as.solde === 9101.35, JSON.stringify([as.lignes, as.solde]));
         //  Saham
         const recus = sa.lignes.filter(l => l.m === 5000);
         v('  → Saham : les virements jamais en dépenses — 5 000 reçu le 4 pointé sur « Loyer magasin », le second (même montant) ignoré, 29/08 hors cycle',
@@ -362,10 +362,10 @@ try {
 
     /* ── I. Un RIB n'appartient qu'à un compte ─────────────────────────── */
     await section('I', async () => {
-        await page.evaluate((ST) => eval(ST).calibrerCompte('acc_lt', null, { identifiant: '3850096' }), ST);
+        await page.evaluate((ST) => eval(ST).calibrerCompte('acc_lt', null, { identifiant: '7654321' }), ST);
         const [cc, lt] = [await compte(CC), await compte(LT)];
-        v('I. associer 3850096 à « Épargne Long Terme » le retire du Compte Courant', (lt.identifiants || []).includes('3850096') && !(cc.identifiants || []).includes('3850096'), JSON.stringify([cc.identifiants, lt.identifiants]));
-        await page.evaluate((ST) => eval(ST).calibrerCompte('acc_cc', null, { identifiant: '3850096' }), ST);
+        v('I. associer 7654321 à « Épargne Long Terme » le retire du Compte Courant', (lt.identifiants || []).includes('7654321') && !(cc.identifiants || []).includes('7654321'), JSON.stringify([cc.identifiants, lt.identifiants]));
+        await page.evaluate((ST) => eval(ST).calibrerCompte('acc_cc', null, { identifiant: '7654321' }), ST);
     });
 
     /* ── H. Ctrl+V ────────────────────────────────────────────────────── */

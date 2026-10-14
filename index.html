@@ -189,16 +189,16 @@
         <!-- v34.08 : les 3 actions IA quittent le flottant desktop pour le pied de sidebar
              (voir plus bas, dans le menu). Sur mobile — pas de sidebar — elles restent
              ici, flottantes, débarrassées des classes md:* qui les posaient sur le menu. -->
-        <button v-if="isMobile" @click="toggleMerlin"
+        <button v-if="isMobile && !showSaisieQuickModal && !importBanque.ouvert" @click="toggleMerlin"
             :title="merlinActive ? 'Désactiver Merlin (Echap)' : 'Activer Merlin — Audit IA d\'un champ'"
             :class="['merlin-wand-btn fixed z-[9998] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110',
-                      'bottom-20 right-4 w-12 h-12 text-xl',
+                      'bottom-20 left-4 w-12 h-12 text-xl',     // v37.54 : à gauche — à droite, il couvrait le ➕
                       merlinActive ? 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-purple-500/40']">
             🪄
         </button>
 
         <!-- v26.71 FAB Journal (mobile uniquement depuis v34.08) -->
-        <button v-if="isMobile" @click="ouvrirReleve()"
+        <button v-if="isMobile && !showSaisieQuickModal && !importBanque.ouvert" @click="ouvrirReleve()"
             title="Ouvrir le Journal / Relevé"
             class="fixed z-[9996] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl
                    bottom-[11.5rem] right-4 w-12 h-12 text-xl
@@ -207,7 +207,7 @@
         </button>
 
         <!-- v26.80 FAB CFO Widget (mobile uniquement depuis v34.08) -->
-        <button v-if="isMobile" @click="showCfoModal = true"
+        <button v-if="isMobile && !showSaisieQuickModal && !importBanque.ouvert" @click="showCfoModal = true"
             title="Ouvrir le CFO & Audit"
             :class="['fixed z-[9995] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl',
                      'bottom-60 right-4 w-12 h-12 text-xl',
@@ -378,7 +378,7 @@
                 </Teleport>
 
         <transition name="fade">
-            <div v-if="isMobile && merlinActive && !merlinBubble.open" class="fixed bottom-36 right-4 z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[240px] backdrop-blur">
+            <div v-if="isMobile && merlinActive && !merlinBubble.open" class="fixed bottom-48 left-4 z-[9998] bg-purple-900/95 text-purple-100 px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/40 text-xs font-bold max-w-[240px] backdrop-blur">
                 ✨ <b>Mode Merlin actif</b><br/>
                 <span class="text-purple-200/80 font-normal">Clique un chiffre pour l'auditer.</span>
             </div>
@@ -6066,7 +6066,7 @@
                                         </span>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-1.5">
-                                        <input type="text" data-calibrage-saisie :placeholder="'RIB ou n° de compte (ex. 362 780 9201101000841897 38)'" v-model="calibrageBanque.saisie[c.id]"
+                                        <input type="text" data-calibrage-saisie :placeholder="'RIB ou n° de compte (ex. 007 450 0001234567890123 45)'" v-model="calibrageBanque.saisie[c.id]"
                                                @keydown.enter="ajouterIdentifiantCompte(c, calibrageBanque.saisie[c.id]) && (calibrageBanque.saisie[c.id] = '')"
                                                class="flex-1 min-w-[12rem] text-[11px] font-bold px-2 py-1 rounded-lg border border-gray-200 bg-white outline-none focus:border-indigo-400 tabular-nums"/>
                                         <label :class="['shrink-0 cursor-pointer text-[11px] font-black px-2.5 py-1 rounded-lg border border-dashed transition-colors', calibrageBanque.enCours && calibrageBanque.compteId === c.id ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-300 text-gray-600 hover:border-indigo-400 hover:text-indigo-700']"
@@ -6265,7 +6265,7 @@
 
         <!-- ═══ v22.20 — FAB Save VPS (mobile only, si modifié) ═══ -->
         <button v-if="isMobile && serverSyncStatus === 'modified'" @click="saveToServer"
-            class="fixed bottom-32 right-4 z-50 bg-purple-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-2xl shadow-purple-900/50 animate-pulse text-lg"
+            class="fixed bottom-[8.5rem] left-4 z-50 bg-purple-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-2xl shadow-purple-900/50 animate-pulse text-lg"
             title="Sauver sur VPS">
             💾
         </button>
@@ -6294,9 +6294,13 @@
                     <label data-import-depot @dragover.prevent @drop.prevent="deposerBanque($event)"
                            class="block cursor-pointer rounded-2xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 hover:bg-indigo-50 px-4 py-5 text-center transition-colors">
                         <span class="block text-2xl">📷</span>
-                        <span class="block text-sm font-black text-indigo-800">Déposez vos captures, ou Ctrl+V</span>
-                        <span class="block text-[11px] font-semibold text-indigo-700/80">Plusieurs à la fois · sur mobile : touchez pour choisir dans vos photos</span>
-                        <input type="file" accept="image/*,.txt,.csv,text/plain,text/csv" multiple class="hidden" data-import-fichiers @change="ajouterFichiersBanque($event.target.files); $event.target.value = ''"/>
+                        <span class="block text-sm font-black text-indigo-800"><span class="md:hidden">Touchez pour choisir vos captures</span><span class="hidden md:inline">Déposez vos captures, ou Ctrl+V</span></span>
+                        <span class="block text-[11px] font-semibold text-indigo-700/80"><span class="md:hidden">dans vos photos · plusieurs à la fois</span><span class="hidden md:inline">Plusieurs à la fois · ou cliquez pour les choisir</span></span>
+                        <input type="file" accept="image/*" multiple class="hidden" data-import-fichiers @change="ajouterFichiersBanque($event.target.files); $event.target.value = ''"/>
+                    </label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer text-[11px] font-bold text-indigo-700 hover:underline">
+                        📄 un relevé en texte ou CSV
+                        <input type="file" accept=".txt,.csv,text/plain,text/csv" class="hidden" data-import-fichier-texte @change="ajouterFichiersBanque($event.target.files); $event.target.value = ''"/>
                     </label>
                     <div v-if="importBanque.fichiers.length" class="flex flex-wrap gap-2">
                         <div v-for="f in importBanque.fichiers" :key="'if_' + f.id" data-import-vignette :data-statut="f.statut" class="relative w-20">
@@ -6329,11 +6333,11 @@
                                     <template v-if="cap.analyse.identifiants.length">🔢 {{ cap.analyse.identifiants.map(idLisible).join(' · ') }}</template>
                                     <template v-else-if="cap.analyse.intitule">🖐️ « {{ cap.analyse.intitule }} » (aucun RIB à l'écran)</template>
                                     · {{ cap.analyse.operations.length }} opération(s)
-                                    <template v-if="cap.analyse.totaux && cap.analyse.totaux.debit != null"> · <span data-import-totaux :class="Math.abs(cap.analyse.operations.filter(o => o.montant < 0).reduce((s, o) => s - o.montant, 0) - cap.analyse.totaux.debit) < 0.01 ? 'text-emerald-700' : 'text-red-600'">débits {{ Math.abs(cap.analyse.operations.filter(o => o.montant < 0).reduce((s, o) => s - o.montant, 0) - cap.analyse.totaux.debit) < 0.01 ? '✓' : '≠' }} total banque {{ formatMAD(cap.analyse.totaux.debit) }}</span></template>
+                                    <template v-if="cap.analyse.totaux && cap.analyse.totaux.debit != null"> · <span data-import-totaux :class="Math.abs(cap.analyse.operations.filter(o => o.montant < 0).reduce((s, o) => s - o.montant, 0) - cap.analyse.totaux.debit) < 0.01 ? 'text-emerald-700' : 'text-gray-400'">{{ Math.abs(cap.analyse.operations.filter(o => o.montant < 0).reduce((s, o) => s - o.montant, 0) - cap.analyse.totaux.debit) < 0.01 ? 'débits ✓ total banque ' + formatMAD(cap.analyse.totaux.debit) : 'débits de la période : ' + formatMAD(cap.analyse.totaux.debit) + ' (capture partielle)' }}</span></template>
                                 </p>
                             </div>
                             <select data-import-compte :value="cap.compteId || ''" @change="changerCompteCapture(cap, $event.target.value)"
-                                    class="text-[11px] font-black px-2 py-1 rounded-lg border border-gray-200 bg-white outline-none focus:border-indigo-400">
+                                    class="w-full md:w-auto text-xs md:text-[11px] font-black px-2 py-1.5 md:py-1 rounded-lg border border-gray-200 bg-white outline-none focus:border-indigo-400">
                                 <option value="">Compte ?</option>
                                 <option v-for="c in comptes" :key="'ic_' + c.id" :value="c.id">{{ c.icone || '🏦' }} {{ c.label }}</option>
                             </select>
@@ -6385,7 +6389,7 @@
                                             <span v-else-if="l.action === 'ajouter' && l.cat && l.cat.statut === 'sur'" data-import-badge="sur" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-white text-emerald-800 border border-emerald-300">✓ {{ getCategorieLabel(l.cat.id) }} · sûr</span>
                                             <span v-else-if="l.action === 'ajouter'" data-import-badge="suspens" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">⚠️ En suspens{{ l.cat && l.cat.id ? ' · ' + getCategorieLabel(l.cat.id) + ' ?' : '' }}</span>
                                             <select data-import-action :value="l.action" @change="l.action = $event.target.value"
-                                                    class="text-[10px] font-bold px-1.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 outline-none max-w-[16rem]">
+                                                    class="flex-1 min-w-[10rem] md:flex-none md:max-w-[16rem] text-[11px] md:text-[10px] font-bold px-1.5 py-1.5 md:py-1 rounded-lg border border-gray-200 bg-white text-gray-700 outline-none">
                                                 <option v-for="o in optionsLigneBanque(l)" :key="o.v" :value="o.v">{{ o.t }}</option>
                                             </select>
                                         </template>
@@ -6428,6 +6432,8 @@
                     <button title="Fermer" aria-label="Fermer" @click="closeSaisieQuickModal" class="text-gray-400 hover:text-gray-800 text-2xl font-black w-8 h-8">×</button>
                 </div>
                 <div class="p-4 space-y-3">
+                    <button type="button" data-import-ouvrir-rapide @click="closeSaisieQuickModal(); ouvrirImportBanque()"
+                            class="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50 text-indigo-800 font-black text-sm">🏦 Importer mes captures bancaires</button>
                     <input v-model="saisieRapide" @keyup.enter="validerSaisieFormFromQuick" type="text"
                            placeholder='Ex: "400 courses"'
                            class="w-full px-4 py-4 text-base font-bold border-2 border-emerald-200 rounded-xl outline-none focus:border-emerald-500 bg-gray-50" />
@@ -8179,8 +8185,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.53 Banque";
+                    const CURRENT_VERSION = "37.54 Banque-Reel";
                     const CHANGELOG = [
+        { version: "37.54 Banque-Reel", date: "2026-10-14", changes: [
+            "📱 LE TÉLÉPHONE D'ABORD — « Touchez pour choisir vos captures » ouvre la GALERIE (images seulement, plusieurs à la fois ; le texte / CSV a son petit bouton à part). « 🏦 Importer mes captures bancaires » en tête de la saisie rapide (le ➕). Le ➕ était CACHÉ sous la baguette Merlin depuis la v34.08 : baguette et 💾 passent à gauche. 🪄 📑 🧠 ne couvrent plus les champs de la saisie rapide ni de l'import. La revue tient dans l'écran (compte sur sa ligne, actions lisibles). Une photo HEIC que le navigateur ne lit pas : « image illisible… envoyez une capture d'écran », au lieu d'un échec muet.",
+            "🔎 VOS VRAIES CAPTURES — Attijari : les centimes en EXPOSANT (« 4 318,³⁵ ») relus seuls, trois fois, deux lectures d'accord font foi (vos 4 213,32 ne deviennent plus 4 213,52). Saham en thème SOMBRE : montants verts et dates grises lus d'un coup. Bank Assafa : la barre du bas et ses icônes ne deviennent plus un libellé ; l'opération coupée en bas d'écran est laissée. « DH » / « MAD » en exposant lus « ph », « mao », « \"\"° » : avalés.",
+            "🖥️ ATTIJARINET EN CAPTURE PC — le jour seul dans sa colonne prend le mois de « OCTOBRE 2026 » ; un jour mal lu (« pis » pour 08) est complété par la seconde lecture ; « MARRAKECH ENNAKHIL 07/10 08H08 » (lieu, date, heure, sans CB) = un retrait ; « Total des mouvements » d'une période plus longue que la capture : « débits de la période… (capture partielle) », plus de faux ✓.",
+            "🛡️ VIREMENTS — l'OCR colle les mots (« Emission vrtinstantane n174182 ») : c'est toujours un virement, jamais une dépense ajoutée au journal (votre −6 000 du 29/08 l'aurait été). Deux lectures de la même ligne (« 9/08 » et « 29/08 ») : une seule opération.",
+            "🔒 DÉPÔT PUBLIC — les exemples de RIB de l'appli et les captures de test sont FICTIFS (identité « KARIM TESTEUR ») : vos vraies captures ne sont jamais dans le dépôt.",
+            "PREUVE — nouvelle suite « Banque : vraies captures » : 40 contrôles (le VRAI OCR sur 4 captures pleine résolution et sur 3 envoyées par WhatsApp, les textes que l'OCR rend vraiment, le parcours au téléphone à 390 px). Rejouée sur la v37.53 : 18 contrôles en échec. Trente-trois défauts réintroduits exprès : tous attrapés. Vos 3 vraies captures, lues en local : tout juste (soldes, dates, montants, décisions).",
+        ] },
         { version: "37.53 Banque", date: "2026-10-14", changes: [
             "🏦 IMPORTER DEPUIS LA BANQUE — Saisie et Trésorerie : déposez vos captures (plusieurs à la fois, Ctrl+V, ou depuis les photos du téléphone) ou collez le texte d'Attijarinet. Tout est lu SUR PLACE, sans IA : Attijarinet (dates « 14 / oct », vraie date CB, total des débits vérifié), Attijari Mobile (« Mes comptes » et « Compte chèque »), Bank Assafa (RIB, solde vert), Saham (sans RIB). L'OCR est embarqué (vendor/ocr) : deux lectures par capture, fusionnées.",
             "🎯 CALIBRAGE BANCAIRE & RIB — Trésorerie : la banque de chaque compte, ses RIB / n° de compte, son empreinte (« Saham · compte chèque dirhams » quand l'écran ne montre aucun RIB), le solde suivi chez Attijari, et un bouton « Calibrer avec une capture ». À l'import : RIB connu → le compte ; RIB inconnu → « Nouveau RIB détecté… À quel compte l'associer ? », mémorisé pour toujours ; sans RIB → l'empreinte, sinon la même question (RIB facultatif).",
@@ -21697,7 +21711,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         watch(() => parametres.value.backupIntervalMinutes, () => _startBackupInterval());
                     });
 
-                    /* ══ v37.53 BANQUE:PARSEUR:DEBUT ══════════════════════════════════════════════
+                    /* ══ v37.54 BANQUE:PARSEUR:DEBUT ══════════════════════════════════════════════
                        LE RELEVÉ, LU SUR PLACE — 0 appel IA. Texte collé (Attijarinet), CSV, ou texte
                        extrait d'une capture par l'OCR embarqué : la même lecture. Pur (aucune donnée
                        de l'appli) : testable seul.
@@ -21713,20 +21727,35 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     //  « févr », « déc », « août » : les accents tolérés dans le texte brut
                     const _bqMotif = (m) => m.replace(/a/g, '[aàâä]').replace(/e/g, '[eéèêë]').replace(/i/g, '[iîï]').replace(/o/g, '[oôö]').replace(/u/g, '[uùûü]');
                     const BQ_RE_MOIS = Object.keys(BQ_MOIS).sort((a, b) => b.length - a.length).map(_bqMotif).join('|');
-                    const BQ_MONTANT = /(^|[^\d,.])([+-]?) ?(\d{1,3}(?:[ .]\d{3})+|\d+)[,.](\d{2})(?!\d)(?: ?(mad|dhs|dh|drh)\b)?/gi;
+                    //  v37.54 : la devise en exposant, telle que l'OCR la lit (« ph », « mao », « map », « ""° »…), est avalée avec le montant
+                    const BQ_MONTANT = /(^|[^\d,.])([+-]?) ?(\d{1,3}(?:[ .]\d{3})+|\d+)[,.](\d{2})(?!\d)(?: ?(mad|dhs|dh|drh|ph|pn|man|mao|map|mau|van|dn|oh)\b| ?[°"'’“”*]{1,4}[a-z*"°']{0,3}(?=\s|$))?/gi;
                     const BQ_DATE_NUM = /(^|[^\d])(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4}|\d{2})(?!\d)/g;
                     const BQ_DATE_TXT = new RegExp('(^|[^\\d])(\\d{1,2})(?:er)? ?(' + BQ_RE_MOIS + ')\\.?(?: (\\d{4}))?(?![a-zà-ÿ])', 'gi');
-                    const BQ_DATE_GAB = /(^|\s)(\d{2}) (\d{2}) \d{2}h\d{2}\b/gi;           // « AWBGAB … E 14 10 09H01 »
+                    const BQ_DATE_GAB = /(^|\s)(\d{2})[ \/](\d{2}) \d{2}h\d{2}\b/gi;      // « AWBGAB … E 14 10 09H01 », « … 07/10 08H08 »
                     //  Les titres qui ouvrent la liste des opérations
                     const BQ_TITRES = /dernieres operations|transactions recentes|total des mouvements|derniers mouvements|historique des operations|liste des operations|mes operations/;
                     //  Les lignes d'interface qui ne sont jamais une opération
                     const BQ_BRUIT = /^(voir (tout|plus)|tout voir|afficher plus|accueil|comptes?|mes comptes|operations|virements?|paiements?|cartes?|plus|menu|profil|services|filtrer|rechercher|aujourd ?hui|hier|historique|releve|date|libelle|montant|debit|credit|solde|transferts?|mon compte|parametres|deconnexion)( (comptes?|virements?|cartes?|plus|operations|transferts?|services|profil))*$/;
+                    //  v37.54 : une barre de menu (« VIREMENTS PAIEMENTS RECHARGES RIB », « Accueil Comptes Cartes Menu ») n'est jamais un libellé
+                    const BQ_MENU = new Set(['accueil', 'comptes', 'compte', 'cartes', 'carte', 'virements', 'virement', 'paiements', 'paiement', 'recharges', 'recharge', 'rib', 'plus', 'menu',
+                        'autres', 'lifestyle', 'envoyer', 'payer', 'operations', 'transferts', 'transfert', 'services', 'profil', 'voir', 'tout', 'offres', 'decouvrir', 'mes', 'parametres', 'aide', 'contact']);
+                    const _bqEstMenu = (n) => { const m = n.split(/[^a-z]+/).filter(w => w.length > 2); return m.length > 0 && m.every(w => BQ_MENU.has(w)); };
+                    const BQ_MOIS_SEUL = new RegExp('^(' + Object.keys(BQ_MOIS).join('|') + ')\\.?( \\d{4})?$');
+                    //  Les icônes lues comme des lettres en tête de libellé (« = », « & », « sp », « st&p »…)
+                    const BQ_PETITS = new Set(['de', 'du', 'la', 'le', 'les', 'au', 'aux', 'en', 'un', 'une', 'et', 'l', 'd', 'a', 'n', 'el']);
+                    const _bqLibelle = (x) => {
+                        let t = String(x || '').replace(/^[\s|¦│=&@©®°;:'"“”‘’`~^*•·»«<>()\[\]{}_!?\\\/-]+(?=\p{L}|\d)/u, '')
+                            .replace(/^[^\x00-\x7F\s\dÀà]\s+(?=\p{L})/u, '');      // une icône lue « Î », « œ », « æ » (« À » est un mot)
+                        const m = t.match(/^([a-z]{1,3}|[A-Za-z]{1,2}[&@][A-Za-z]{0,2})\s+(?=\p{Lu})/u);
+                        if (m && !BQ_PETITS.has(m[1])) t = t.slice(m[0].length);
+                        return t.replace(/(\s+(?:[_*°"'’“”|.,;:<>]+|dhs?|mad|ph))+$/i, '').trim();
+                    };
                     const BQ_CREDIT = /reception|\brecu\b|versement|\bcredit\b|remboursement|salaire|virement recu|vir recu|\bdepot\b|annulation/;
 
                     //  Une date { j, m, a | null } → ISO, l'année devinée si l'écran la tait :
                     //  la plus récente qui ne soit pas dans le futur (à 7 jours près).
                     const bqResoudreDate = (d, aujourdhui) => {
-                        if (!d) return null;
+                        if (!d || d.inconnue) return null;
                         const ref = aujourdhui instanceof Date ? aujourdhui : new Date();
                         let a = d.a != null ? (d.a < 100 ? 2000 + d.a : d.a) : ref.getFullYear();
                         if (d.a == null && new Date(a, d.m - 1, d.j) > new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + 7)) a -= 1;
@@ -21736,6 +21765,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const bqMontantDe = (ent, dec) => Number(String(ent).replace(/[ .]/g, '') + '.' + dec);
                     //  Une ligne : ses montants, ses dates, et ce qui reste de texte
                     const _bqLigne = (raw) => {
+                        if (raw === BQ_JOUR_ILLISIBLE) return { raw, reste: '', texte: '', montants: [], dates: [{ inconnue: true }], L: false, D: true, A: false, bruit: false };
                         const montants = [], dates = [];
                         let r = raw.replace(BQ_MONTANT, (m, pre, signe, ent, dec, dev) => {
                             montants.push({ v: bqMontantDe(ent, dec), signe: signe || '', devise: dev ? dev.toLowerCase() : '' });
@@ -21744,22 +21774,45 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         r = r.replace(BQ_DATE_NUM, (m, pre, j, mo, a) => { dates.push({ j: +j, m: +mo, a: +a }); return pre + ' '; });
                         r = r.replace(BQ_DATE_TXT, (m, pre, j, mois, a) => { dates.push({ j: +j, m: BQ_MOIS[bqNorm(mois)], a: a ? +a : null }); return pre + ' '; });
                         r = r.replace(BQ_DATE_GAB, (m, pre, j, mo) => { dates.push({ j: +j, m: +mo, a: null, gab: true }); return pre + ' '; });
-                        const net = (x) => x.replace(/\(\*\)/g, ' ').replace(/\.{2,}|…/g, ' ').replace(/\s+/g, ' ').trim();
-                        const reste = net(r);
-                        const texte = net(raw.replace(BQ_MONTANT, (m, pre) => pre + ' '));
+                        const net = (x) => x.replace(/\(\*\)/g, ' ').replace(/[.…]{2,}|…/g, ' ').replace(/\s+/g, ' ').trim();
+                        const reste = _bqLibelle(net(r));
+                        const texte = _bqLibelle(net(raw.replace(BQ_MONTANT, (m, pre) => pre + ' ')));
                         const lettres = (reste.match(/\p{L}/gu) || []).length;
-                        const bruit = /https?:\/\/|www\./i.test(raw) || BQ_BRUIT.test(bqNorm(reste).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim());
+                        const nr = bqNorm(reste).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+                        //  v37.54 : des icônes lues comme des bouts de mots (« — Pre », « Qi O “ LS », « Le CG ») : aucun chiffre,
+                        //  quatre morceaux au plus, aucun de plus de trois lettres, aucun petit mot en minuscules (« box », « ok »
+                        //  sont la fin d'un libellé)
+                        const morceaux = net(r).split(' ').filter(Boolean);
+                        const icones = !/\d/.test(raw) && morceaux.length <= 4 && morceaux.every(x => (x.match(/\p{L}/gu) || []).length <= 3)
+                                    && !morceaux.some(x => /^\p{Ll}{2,3}$/u.test(x));
+                        const bruit = icones || /https?:\/\/|www\.|\.com\b|\.ma\//i.test(raw) || BQ_BRUIT.test(nr) || (!montants.length && !dates.length && _bqEstMenu(nr))
+                                    || BQ_MOIS_SEUL.test(bqNorm(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim());
                         return { raw, reste, texte, montants, dates, L: lettres >= 3 && !bruit, D: lettres < 3 && dates.length > 0, A: montants.length > 0, bruit: bruit || (lettres > 0 && lettres < 3 && !dates.length && !montants.length) };
                     };
                     //  Le texte en lignes : tabulations, « | » et colonnes collées deviennent des lignes ;
                     //  « 14 » suivi de « oct » (Attijarinet) redevient « 14 oct ».
+                    const BQ_JOUR_ILLISIBLE = '⁇';
                     const _bqLignes = (texte) => {
                         const brutes = String(texte || '').replace(/\r/g, '').replace(/\t+/g, '\n').replace(/ \| /g, '\n')
                             .replace(/[‐-―−]/g, '-').replace(/[^\S\n]+/g, ' ').split('\n').map(l => l.trim()).filter(Boolean);
                         const out = [];
+                        const reMois = new RegExp('^(' + BQ_RE_MOIS + ')\\.?( \\d{4})?$', 'i');
+                        let ctx = null;                              // v37.54 : « OCTOBRE 2026 » — le mois des lignes qui suivent
                         for (let i = 0; i < brutes.length; i++) {
-                            const l = brutes[i], s = brutes[i + 1];
-                            if (/^\d{1,2}$/.test(l) && s && new RegExp('^(' + BQ_RE_MOIS + ')\\.?( \\d{4})?$', 'i').test(s)) { out.push(l + ' ' + s); i++; continue; }
+                            const l = brutes[i].replace(/(^|\s)_ ?(?=\d)/g, '$1-'), s = brutes[i + 1];
+                            const mm = bqNorm(l).match(new RegExp('^(' + Object.keys(BQ_MOIS).join('|') + ') (\\d{4})$'));
+                            if (mm) { ctx = mm[1] + ' ' + mm[2]; out.push(l); continue; }
+                            if (/^\d{1,2}$/.test(l) && s && reMois.test(s)) { out.push(l + ' ' + s); i++; continue; }
+                            //  le jour seul dans sa colonne (« 14 | »), le libellé à la ligne suivante
+                            if (ctx && /^\d{1,2}$/.test(l) && +l >= 1 && +l <= 31 && s && /\p{L}{3}/u.test(s)) { out.push(l + ' ' + ctx); continue; }
+                            //  le jour mal lu (« pis », « a ») : la ligne garde sa place, sa date viendra de l'autre lecture
+                            if (ctx && /^\S{1,3}$/.test(l) && /\D/.test(l) && s && /\p{L}{3}/u.test(s) && /\d[,.]\d{2}\b/.test(s)) { out.push(BQ_JOUR_ILLISIBLE); continue; }
+                            //  un petit mot seul (« ok », « box ») sous un libellé : la fin de ce libellé, passée à la ligne
+                            const prec = out[out.length - 1];
+                            if (/^\p{Ll}{2,3}$/u.test(l) && prec && /\p{L}{3}/u.test(prec) && !/\d[,.]\d{2}\b/.test(prec)) { out[out.length - 1] = prec + ' ' + l; continue; }
+                            //  Capture PC d'Attijarinet : « 14 | AWBGAB … - 1 000,00 MAD », le « oct » perdu sous le jour
+                            const j = l.match(/^(\d{1,2})\s*[|¦│]?\s+(?=.*\p{L}{3})(.*)$/u);
+                            if (j && ctx && +j[1] >= 1 && +j[1] <= 31) { out.push(j[1] + ' ' + ctx); out.push(j[2]); continue; }
                             out.push(l);
                         }
                         return out;
@@ -21785,7 +21838,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         if (cur) ops.push(cur);
                         return ops;
                     };
-                    const _bqNote = (ops) => ops.reduce((s, o) => s + (o.montants.length === 1 ? 2 : (o.montants.length ? 0 : -2)) + (o.dates.length || o.datesLib.length ? 1 : -1) + (o.libs.length ? 1 : -2), 0);
+                    //  v37.54 : un reste final sans montant (une publicité sous la liste, l'heure de la barre des tâches) ne
+                    //  coûte rien — ce n'est pas une opération
+                    const _bqNote = (ops) => ops.reduce((s, o, i) => (i === ops.length - 1 && !o.montants.length) ? s
+                        : s + (o.montants.length === 1 ? 2 : (o.montants.length ? 0 : -2)) + (o.dates.length || o.datesLib.length ? 1 : -1) + (o.libs.length ? 1 : -2), 0);
 
                     const bqAnalyser = (texte, opts = {}) => {
                         const aujourdhui = opts.aujourdhui || new Date();
@@ -21828,7 +21884,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             totaux = { debit: v(/debit\s*:?\s*(\d{1,3}(?:[ .]\d{3})*|\d+)[,.](\d{2})/), credit: v(/credit\s*:?\s*(\d{1,3}(?:[ .]\d{3})*|\d+)[,.](\d{2})/) };
                         }
                         //  L'intitulé (« Compte chèque dirhams ») et la banque
-                        const lIntitule = tete.find(l => /\bcompte\b/.test(bqNorm(l)) && !/mes comptes|total des/.test(bqNorm(l)));
+                        const lIntitule = tete.filter(l => /\bcompte\b/.test(bqNorm(l)) && !/mes comptes|mon compte|total des|https?:|www\.|\.com|\//.test(bqNorm(l)))
+                            .map((l, i) => ({ l, s: (/cheque|courant|epargne|dirhams|devises|carnet/.test(bqNorm(l)) ? 2 : 0) + (/carte/.test(bqNorm(l)) ? 0 : 1) - i / 100 }))
+                            .sort((a, b) => b.s - a.s).map(x => x.l)[0];
                         const intitule = lIntitule ? bqNorm(lIntitule).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim() : '';
                         const score = {
                             attijari: (/attijari|wafa/.test(nTout) ? 5 : 0) + (/total des mouvements/.test(nTout) ? 4 : 0) + (/mes comptes/.test(nTete) ? 3 : 0)
@@ -21845,7 +21903,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         let fin = [];
                         while (corps.length && corps[corps.length - 1].A && !corps[corps.length - 1].L && !corps[corps.length - 1].D) fin.unshift(corps.pop());
                         const premier = corps.find(t => t.D || t.L);
-                        const essais = ['D', 'L'].map(tt => {
+                        //  v37.54 : l'ordre des écrans connus est un fait — Attijari Mobile et Saham : libellé puis date ; Bank Assafa
+                        //  et Attijarinet : date puis libellé (même une capture qui commence au milieu d'une opération) ;
+                        //  la note ne départage que les écrans inconnus
+                        const ordre = { attijari_mobile: 'L', saham_mobile: 'L', assafa_mobile: 'D', attijari_web: 'D' }[format];
+                        const essais = (ordre ? [ordre] : ['D', 'L']).map(tt => {
                             const ops = _bqDecouper(corps, tt);
                             const sans = ops.filter(o => !o.montants.length);
                             if (fin.length && sans.length === fin.length) sans.forEach((o, i) => o.montants.push(...fin[i].montants));
@@ -21859,7 +21921,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             const dateOp = bqResoudreDate(o.dates[0], aujourdhui);
                             const dLib = o.datesLib.find(d => !d.gab) || o.datesLib[0];
                             const dateAchat = bqResoudreDate(dLib, aujourdhui);
-                            return { date: dateAchat || dateOp, dateOp: dateOp || dateAchat, dateAchat, libelle, montant: signe * m.v, brut: o.libs.join(' / ') };
+                            const op = { date: dateAchat || dateOp, dateOp: dateOp || dateAchat, dateAchat, libelle, montant: signe * m.v, brut: o.libs.join(' / ') };
+                            if (!dateOp) op.sansDateOp = true;       // v37.54 : la date comptable n'a pas été lue (jour illisible)
+                            return op;
                         });
                         return { banque: bq, format, identifiants, intitule, signature: bq + '|' + intitule, soldes, totaux, operations };
                     };
@@ -21867,12 +21931,26 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     //  que l'autre rate (un solde vert sur fond vert, une date grise).
                     const bqFusionner = (a, b) => {
                         if (!a) return b; if (!b) return a;
-                        const q = (x) => x.operations.reduce((s, o) => s + (o.dateOp ? 1 : 0) + 1, 0) + (Object.keys(x.soldes).length ? 1 : 0);
+                        const q = (x) => x.operations.reduce((s, o) => s + (o.dateOp && !o.sansDateOp ? 1 : 0) + 1, 0) + (Object.keys(x.soldes).length ? 1 : 0);
                         const [p, s] = q(a) >= q(b) ? [a, b] : [b, a];
-                        const ops = p.operations.slice();
-                        const cle = (o) => (o.dateOp || '') + '|' + Math.round(o.montant * 100);
-                        const n = {}; ops.forEach(o => { n[cle(o)] = (n[cle(o)] || 0) + 1; });
-                        s.operations.forEach(o => { if (o.dateOp && (n[cle(o)] || 0) === 0) { ops.push(o); } else if (n[cle(o)]) n[cle(o)]--; });
+                        //  v37.54 : la même opération dans les deux lectures — même montant, puis du plus sûr au plus lâche :
+                        //  même date et libellé proche, même date, puis une date manquante, à 3 jours ou du même mois (« 9/08 »
+                        //  pour « 29/08 » : un chiffre perdu) et un libellé proche — la date la plus tardive l'emporte
+                        const ops = p.operations.slice(), pris = new Set(), libre = s.operations.map(() => true);
+                        const ln = (o) => bqLibNorm(o.libelle), jours = (x, y) => Math.abs(new Date(x) - new Date(y)) / 864e5;
+                        const tours = [
+                            (x, o) => x.dateOp === o.dateOp && bqLibProche(ln(x), ln(o)),
+                            (x, o) => x.dateOp === o.dateOp,
+                            (x, o) => (x.sansDateOp || o.sansDateOp || jours(x.dateOp, o.dateOp) <= 3 || String(x.dateOp).slice(0, 7) === String(o.dateOp).slice(0, 7)) && bqLibProche(ln(x), ln(o)),
+                        ];
+                        tours.forEach(meme => s.operations.forEach((o, j) => {
+                            if (!libre[j]) return;
+                            const i = ops.findIndex((x, k) => !pris.has(k) && Math.round(x.montant * 100) === Math.round(o.montant * 100) && meme(x, o));
+                            if (i < 0) return;
+                            pris.add(i); libre[j] = false;
+                            if (!o.sansDateOp && (ops[i].sansDateOp || String(o.dateOp) > String(ops[i].dateOp))) { const c = { ...ops[i], dateOp: o.dateOp }; delete c.sansDateOp; c.date = c.dateAchat || c.dateOp; ops[i] = c; }
+                        }));
+                        s.operations.forEach((o, j) => { if (libre[j] && o.dateOp && !o.sansDateOp) ops.push(o); });
                         const soldes = { ...s.soldes, ...p.soldes };
                         const identifiants = [...new Set([...p.identifiants, ...s.identifiants])];
                         const banque = p.banque !== 'autre' ? p.banque : s.banque;
@@ -21883,8 +21961,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const bqClasser = (op) => {
                         const n = bqNorm(op.libelle);
                         if (/\b(awb)?gab\b|retrait|\bdab\b/.test(n)) return 'gab';
+                        //  v37.54 : un retrait chez une autre banque : « MARRAKECH ENNAKHIL 07/10 08H08 » (lieu, date, heure, pas de « CB »)
+                        if (/\b\d{2}[\/ ]\d{2} \d{2}h\d{2}\b/.test(n) && !/paiement|achat|\bcb\b|\btpe\b/.test(n)) return 'gab';
                         if (/^com\b|^comm?\.?\s*-|commission|\bfrais\b|agios|cotisation|\btimbre\b|\btaxe\b|\btva\b/.test(n)) return 'frais';
-                        if (/virement|\bvir\b|\bvrt\b|\bvirt\b|transfert|mise a disposition/.test(n)) return 'virement';
+                        //  v37.54 : l'OCR colle les mots (« Emission vrtinstantane n174182 ») ; « Emission » (Saham) = un virement émis
+                        if (/virement|\bvir(\b|inst)|\bvrt|\bvirt\b|transfert|mise a disposition|^emission\b|instantane/.test(n)) return 'virement';
                         return op.montant > 0 ? 'credit' : 'achat';
                     };
                     //  Le commerçant : « PAIEMENT CB 11/10/26 CARAMELIO » → « CARAMELIO »
@@ -21898,6 +21979,15 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         let h = 0x811c9dc5;
                         for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
                         return 'bq' + h.toString(16).padStart(8, '0');
+                    };
+                    //  v37.54 : deux libellés « proches » (l'OCR a lu une lettre, une icône de travers) : trigrammes communs (Dice)
+                    const bqLibProche = (a, b) => {
+                        if (!a || !b) return false;
+                        if (a === b || a.includes(b) || b.includes(a) || a.slice(0, 10) === b.slice(0, 10)) return true;
+                        const tri = (s) => { const o = new Map(); for (let i = 0; i < s.length - 2; i++) { const k = s.slice(i, i + 3); o.set(k, (o.get(k) || 0) + 1); } return o; };
+                        const A = tri(a), B = tri(b); let c = 0, n = 0;
+                        A.forEach((v, k) => { c += Math.min(v, B.get(k) || 0); n += v; }); B.forEach(v => { n += v; });
+                        return n > 0 && 2 * c / n >= 0.6;
                     };
                     /* ══ BANQUE:PARSEUR:FIN ══ */
 
@@ -21918,7 +22008,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     ];
                     const nomBanque = (k) => (BANQUES_CB.find(b => b.cle === k) || {}).nom || 'Banque non reconnue';
                     const _idNorm = (x) => String(x || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
-                    //  « 362780920110100084189738 » → « 362 780 9201101000841897 38 »
+                    //  « 007450000123456789012345 » → « 007 450 0001234567890123 45 »
                     const idLisible = (x) => { const v = _idNorm(x); return v.length === 24 ? v.slice(0, 3) + ' ' + v.slice(3, 6) + ' ' + v.slice(6, 22) + ' ' + v.slice(22) : v; };
                     //  Le même compte : identiques, ou l'un contient l'autre (n° de compte dans le RIB), 7 signes au moins
                     const _memeId = (a, b) => {
@@ -21988,30 +22078,119 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         _ocr.promesse.catch(() => { _ocr.promesse = null; });
                         return _ocr.promesse;
                     };
-                    //  Une capture → une image propre : agrandie si elle est petite, sombre → inversée
-                    const _preparerImage = async (fichier) => {
-                        const bmp = await createImageBitmap(fichier);
-                        const k = bmp.width < 1000 ? Math.min(3, 1000 / bmp.width + 1) : 1;
+                    //  v37.54 — une capture du téléphone (PNG, JPEG) ; un format que le navigateur ne lit pas le dit
+                    const _chargerImage = async (fichier) => {
+                        try { return await createImageBitmap(fichier); }
+                        catch (e) {
+                            const url = URL.createObjectURL(fichier);
+                            try {
+                                return await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i);
+                                    i.onerror = () => ko(new Error('image illisible par ce navigateur (photo HEIC ?) — envoyez une capture d’écran')); i.src = url; });
+                            } finally { setTimeout(() => URL.revokeObjectURL(url), 2000); }
+                        }
+                    };
+                    //  Une image propre : un téléphone (portrait) ramené à ~1 300 px de large, un écran de PC agrandi
+                    //  ×2 (son texte est petit). « min » : le canal le plus sombre de chaque pixel — le blanc sur
+                    //  orange, le vert sur blanc deviennent du noir sur blanc. « max » (thème sombre) : le canal le
+                    //  plus clair, inversé — le vert, le blanc et le gris sur noir deviennent du noir sur blanc.
+                    const _preparerImage = (img, mode) => {
+                        const w0 = img.width, h0 = img.height;
+                        const k = h0 > w0 * 1.4 ? Math.max(1, Math.min(3, 1300 / w0)) : Math.max(1, Math.min(2, 3800 / w0));
                         const cv = document.createElement('canvas');
-                        cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+                        cv.width = Math.round(w0 * k); cv.height = Math.round(h0 * k);
                         const ctx = cv.getContext('2d');
                         ctx.imageSmoothingQuality = 'high';
-                        ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+                        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+                        if (mode === 'min') {
+                            const d = ctx.getImageData(0, 0, cv.width, cv.height), p = d.data;
+                            for (let i = 0; i < p.length; i += 4) { const m = Math.min(p[i], p[i + 1], p[i + 2]); p[i] = p[i + 1] = p[i + 2] = m; }
+                            ctx.putImageData(d, 0, 0);
+                        }
+                        if (mode === 'max') {
+                            const d = ctx.getImageData(0, 0, cv.width, cv.height), p = d.data;
+                            for (let i = 0; i < p.length; i += 4) { const m = 255 - Math.max(p[i], p[i + 1], p[i + 2]); p[i] = p[i + 1] = p[i + 2] = m; }
+                            ctx.putImageData(d, 0, 0);
+                        }
                         return cv;
                     };
-                    //  Deux lectures (binarisations Otsu puis Sauvola), fusionnées : l'une voit ce que l'autre rate
+                    //  Les centimes en EXPOSANT (« 4 318,³⁵ DH ») : la zone après la virgule, relue seule, agrandie,
+                    //  chiffres seulement. Seulement quand la lecture est douteuse (rien de net après la virgule,
+                    //  ou une devise mal lue collée derrière : « 52PH », « 5"° »).
+                    const BQ_JUNK_DEVISE = /^(?:P[H*]?|ph|pH|[°"'’“”*]+\S{0,3})$/;
+                    const _relireCentimes = async (w, cv, data) => {
+                        let texte = data.text || '';
+                        const mots = data.words || [];
+                        const douteux = mots.filter((m, i) => {
+                            if (!/\d,/.test(m.text)) return false;
+                            const s = mots[i + 1];
+                            const memeLigne = s && Math.abs((s.bbox.y0 + s.bbox.y1) - (m.bbox.y0 + m.bbox.y1)) < (m.bbox.y1 - m.bbox.y0);
+                            return !/,\d{2}$/.test(m.text) || (memeLigne && BQ_JUNK_DEVISE.test(s.text));
+                        });
+                        if (!douteux.length) return texte;
+                        await w.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789DH' });
+                        //  trois relectures (décalée de 3 px, au ras de la virgule, agrandie ×3) : deux qui s'accordent
+                        //  font foi — une seule lecture se trompe d'un pixel près (« 52 » pour « 32 »)
+                        for (const m of douteux) {
+                            const v = (m.symbols || []).find(s => s.text === ',');
+                            const lb = (m.line && m.line.bbox) || m.bbox;
+                            const xv = v ? v.bbox.x1 : Math.round(m.bbox.x0 + (m.bbox.x1 - m.bbox.x0) * 0.6);
+                            const y0 = Math.max(0, Math.min(m.bbox.y0, lb.y0) - 6), y1 = Math.min(cv.height, m.bbox.y1 + 4), x1 = Math.min(cv.width, m.bbox.x1 + 60);
+                            const votes = {};
+                            for (const [dx, k] of [[3, 2], [0, 2], [3, 3]]) {
+                                const x0 = Math.max(0, xv + dx);
+                                if (x1 - x0 < 4 || y1 - y0 < 4) continue;
+                                const c2 = document.createElement('canvas');
+                                c2.width = (x1 - x0) * k + 40; c2.height = (y1 - y0) * k + 40;
+                                const g = c2.getContext('2d');
+                                g.fillStyle = '#fff'; g.fillRect(0, 0, c2.width, c2.height); g.imageSmoothingQuality = 'high';
+                                g.drawImage(cv, x0, y0, x1 - x0, y1 - y0, 20, 20, (x1 - x0) * k, (y1 - y0) * k);
+                                const c = ((await w.recognize(c2)).data.text || '').replace(/\s/g, '').match(/^(\d{2})/);
+                                if (c) votes[c[1]] = (votes[c[1]] || 0) + 1;
+                            }
+                            const [cc, nv] = Object.entries(votes).sort((p, q) => q[1] - p[1])[0] || [];
+                            if (nv >= 2) texte = texte.replace(m.text, m.text.slice(0, m.text.indexOf(',') + 1) + cc + ' DH');
+                        }
+                        await w.setParameters({ tessedit_pageseg_mode: '4', tessedit_char_whitelist: '' });
+                        return texte;
+                    };
+                    //  Le fond de l'écran : clair ou sombre (Saham) — sur une vignette de 64 px
+                    const _ecranSombre = (img) => {
+                        const c = document.createElement('canvas'); c.width = 64; c.height = Math.max(1, Math.round(64 * img.height / img.width));
+                        const g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
+                        const p = g.getImageData(0, 0, c.width, c.height).data; let s = 0;
+                        for (let i = 0; i < p.length; i += 4) s += 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+                        return s / (p.length / 4) < 100;
+                    };
+                    //  Deux lectures — le canal sombre (blanc sur orange, vert sur blanc) ou, sur un thème sombre, le canal
+                    //  clair inversé (vert et gris sur noir) ; puis la couleur —, fusionnées : l'une voit ce que l'autre rate.
                     const ocrCapture = async (fichier, surProgres) => {
                         const w = await _workerOCR();
-                        const img = await _preparerImage(fichier);
+                        const img = await _chargerImage(fichier);
                         const textes = [];
-                        for (const [i, seuil] of ['0', '2'].entries()) {
-                            _ocr.progres = (m) => surProgres && surProgres((i + (m.status === 'recognizing text' ? m.progress : 0)) / 2);
-                            await w.setParameters({ tessedit_pageseg_mode: '4', preserve_interword_spaces: '1', thresholding_method: seuil });
-                            const { data } = await w.recognize(img);
-                            textes.push(data.text || '');
+                        const lire = async (i, n, mode, seuil) => {
+                            _ocr.progres = (m) => surProgres && surProgres(Math.min(1, (i + (m.status === 'recognizing text' ? m.progress : 0)) / n));
+                            const cv = _preparerImage(img, mode);
+                            await w.setParameters({ tessedit_pageseg_mode: '4', preserve_interword_spaces: '1', thresholding_method: seuil, tessedit_char_whitelist: '' });
+                            const { data } = await w.recognize(cv);
+                            _ocr.progres = null;
+                            textes.push(await _relireCentimes(w, cv, data));
+                        };
+                        await lire(0, 2, _ecranSombre(img) ? 'max' : 'min', '0');
+                        await lire(1, 2, 'rgb', '0');
+                        //  Un téléphone dont aucun solde n'a été lu (un texte clair sur un bandeau coloré, que le seuil global
+                        //  noie avec son fond) : une troisième lecture au seuil local (Sauvola) — pour l'en-tête seulement
+                        if (img.height > img.width * 1.4 && !textes.some(t => Object.keys(bqAnalyser(t).soldes).length)) {
+                            await lire(2, 3, 'rgb', '2');
+                            textes.enTete = 2;
                         }
-                        _ocr.progres = null;
                         return textes;
+                    };
+                    //  Les lectures d'une capture → une analyse ; la lecture « en-tête » n'apporte que soldes et numéros
+                    const bqAnalyserOCR = (textes, opts) => {
+                        const [a, b, c] = textes.map(t => bqAnalyser(t, opts));
+                        const r = bqFusionner(a, b);
+                        if (c && textes.enTete === 2) { r.soldes = { ...c.soldes, ...r.soldes }; r.identifiants = [...new Set([...r.identifiants, ...c.identifiants])]; }
+                        return r;
                     };
 
                     /* ── L'IMPORT ───────────────────────────────────────────────────────────── */
@@ -22063,7 +22242,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const lib = bqLibNorm(op.libelle);
                         const m = Math.round(op.montant * 100);
                         return reg.find(e => !pris.has(e.h) && (e.h === hash || (String(e.c) === String(compteId) && e.d === (op.dateOp || op.date) && Math.round(e.m * 100) === m
-                            && (e.l === lib || (e.l && lib && (e.l.slice(0, 10) === lib.slice(0, 10) || e.l.startsWith(lib) || lib.startsWith(e.l)))))));
+                            && bqLibProche(e.l, lib))));   // v37.54 : trigrammes — une lettre, une icône lue de travers
                     };
                     const _enregistrerOp = (compteId, l, statut, extra = {}) => {
                         const d = _seauDe(l.op.dateOp || l.op.date);
@@ -22170,8 +22349,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 f.statut = 'ocr'; f.progres = 0;
                                 try {
                                     f.textes = await ocrCapture(f.fichier, (p) => { f.progres = Math.round(p * 100); });
-                                    const [a, b] = f.textes.map(t => bqAnalyser(t, { aujourdhui }));
-                                    captures.push({ id: 'f' + f.id, source: f.nom, vignette: f.url, analyse: bqFusionner(a, b) });
+                                    captures.push({ id: 'f' + f.id, source: f.nom, vignette: f.url, analyse: bqAnalyserOCR(f.textes, { aujourdhui }) });
                                     f.statut = 'ok'; f.progres = 100;
                                 } catch (e) { f.statut = 'erreur'; importBanque.erreur = 'Lecture impossible de « ' + f.nom + ' » : ' + (e && e.message || e); }
                             }
@@ -22290,8 +22468,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         if (!f) return;
                         Object.assign(calibrageBanque, { compteId, enCours: true, message: 'Lecture de la capture…' });
                         try {
-                            const [t0, t2] = await ocrCapture(f);
-                            const a = bqFusionner(bqAnalyser(t0), bqAnalyser(t2));
+                            const a = bqAnalyserOCR(await ocrCapture(f));
                             const autre = resoudreCompteReleve(a);
                             const c = calibrerCompte(compteId, a);
                             const quoi = a.identifiants.length ? a.identifiants.map(idLisible).join(', ') : (a.signature && !/\|$/.test(a.signature) ? 'empreinte ' + signatureLisible(a.signature) : null);
@@ -22472,7 +22649,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         BANQUES_SELECT, nomBanque, idLisible, signatureLisible, importBanque, calibrageBanque, ouvrirImportBanque, fermerImportBanque,
                         ajouterFichiersBanque, retirerFichierBanque, deposerBanque, analyserImportBanque, repondreCompteCapture, changerCompteCapture,
                         optionsLigneBanque, resumeImportBanque, appliquerImportBanque, calibrerAvecCapture, retirerIdentifiant, retirerEmpreinte,
-                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, ocrCapture,
+                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, ocrCapture,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage,
