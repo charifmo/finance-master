@@ -152,7 +152,8 @@ try {
     await section('B', async () => {
         const r = await cat(['mcdonald s', 'McDo', 'burger king', 'glovo', 'Marjane', 'carrefour', 'alimentation']);
         v('B. « mcdonald s », « McDo », « burger king », « glovo » → cafe Resto Wknd (règle fast-food), sûr',
-          ['mcdonald s', 'McDo', 'burger king', 'glovo'].every(l => r[l].statut === 'sur' && r[l].cat === 'cafe Resto Wknd' && r[l].source === 'règle'), JSON.stringify(r));
+          //  v37.52 : l'ancien « mcdonald s » a été rangé d'office au chargement — il est désormais aussi « appris »
+          ['mcdonald s', 'McDo', 'burger king', 'glovo'].every(l => r[l].statut === 'sur' && r[l].cat === 'cafe Resto Wknd' && (r[l].source === 'règle' || (l === 'mcdonald s' && r[l].source === 'appris'))), JSON.stringify(r));
         v('  → « Marjane » → VOTRE ligne Marjane (pas Alimentation, ni l\'ancienne « Marjane Lait »)',
           r.Marjane.statut === 'sur' && r.Marjane.cat === 'Marjane' && r.Marjane.source === 'libellé' && !r.Marjane.candidats.includes('Marjane Lait'), JSON.stringify(r.Marjane));
         v('  → « carrefour », « alimentation » → Alimentation (Tqdya), pas les poches d\'épargne « Épargne courses » ni « Alimentation depenses annuels »',
@@ -251,25 +252,22 @@ try {
         await saisir('15 objet inconnu'); await valider(); await saisir('15 panne'); await valider(); await attendreIA();
         const o = await tx('objet inconnu'), p = await tx('panne');
         const msg = await page.evaluate((ST) => JSON.parse(JSON.stringify(eval(ST).iaCategorisation.messages)), ST);
-        v('  → un id inventé par l\'IA est refusé ; une panne laisse la transaction en attente — les deux restent « À catégoriser »',
-          o.categorieId === 'cat_misc' && /ne voit aucune de vos catégories/.test(msg[o.id] || '') && p.categorieId === 'cat_misc' && /IA injoignable/.test(msg[p.id] || '')
-          && !!(await ligne(o.id)) && /IA injoignable/.test(await ligne(p.id) || ''), JSON.stringify([o.categorieId, p.categorieId, msg]));
-        //  « 🤖 Demander à l'IA » : toutes les lignes sans piste sûre partent ensemble… une à la fois
-        ia.maxEnVol = 0; const n1 = ia.requetes.length;
-        await page.click('[data-ia-tout]'); await page.waitForTimeout(100); await attendreIA();
-        v('  → « 🤖 Demander à l\'IA » sur plusieurs lignes : une demande à la fois (jamais deux en vol)', ia.requetes.length - n1 >= 2 && ia.maxEnVol === 1, JSON.stringify([ia.requetes.length - n1, ia.maxEnVol]));
+        //  v37.52 : l'IA qui échoue ne laisse plus rien en attente — une catégorie PAR DÉFAUT (votre plus utilisée), à vérifier
+        const alim = await idDe('Alimentation (Tqdya)');
+        v('  → un id inventé par l\'IA est refusé, une panne aussi : rangées PAR DÉFAUT (Alimentation, la plus utilisée), à vérifier',
+          o.categorieId === alim && o.categorieSource === 'défaut' && o.aVerifier === true && /ne voit aucune de vos catégories.*rangée par défaut dans « Alimentation \(Tqdya\) »/.test(msg[o.id] || '')
+          && p.categorieId === alim && p.categorieSource === 'défaut' && p.aVerifier === true && /IA injoignable.*rangée par défaut/.test(msg[p.id] || '')
+          && /✓ Alimentation \(Tqdya\) · par défaut/.test(await ligne(p.id) || ''), JSON.stringify([o, p, msg]));
+        //  Saisies, doutes et anciennes transactions partent seuls à l'IA… une à la fois
+        v('  → toutes les demandes de la session, une à la fois (jamais deux en vol), sans aucun bouton', ia.requetes.length >= 5 && ia.maxEnVol === 1 && !(await page.$('[data-ia-tout]')), JSON.stringify([ia.requetes.length, ia.maxEnVol]));
     });
 
     /* ── F. À catégoriser et le journal ──────────────────────────────── */
     await section('F', async () => {
-        const m = await tx('mcdonald s');
-        const l = await ligne(m.id);
-        v('F. l\'ancien « mcdonald s » Non catégorisé : dans la liste, « ✓ cafe Resto Wknd · sûr »', /✓ cafe Resto Wknd · sûr/.test(l || ''), String(l));
-        const n = await page.evaluate(() => document.querySelector('[data-appliquer-sures]')?.textContent.replace(/\s+/g, ' ').trim());
-        await page.click('[data-appliquer-sures]'); await page.waitForTimeout(200);
+        //  v37.52 : plus de bouton — la suggestion sûre est appliquée d'office, dès le chargement
         const m2 = await tx('mcdonald s');
-        v('  → « ✓ Appliquer les suggestions sûres » : rangé (source « règle »), sorti de la liste',
-          /Appliquer les 1 suggestion/.test(n || '') && m2.categorieId === await idDe('cafe Resto Wknd') && m2.categorieSource === 'règle' && !(await ligne(m.id)), JSON.stringify([n, m2]));
+        v('F. l\'ancien « mcdonald s » Non catégorisé : rangé d\'office dans cafe Resto Wknd (« règle »), hors de la liste, sans bouton',
+          m2.categorieId === await idDe('cafe Resto Wknd') && m2.categorieSource === 'règle' && !m2.aVerifier && !(await ligne(m2.id)) && !(await page.$('[data-appliquer-sures]')), JSON.stringify(m2));
         const k = await tx('kfc');
         await page.click(`[data-journal-cat][data-tx="${k.id}"]`); await page.waitForTimeout(150);
         await page.selectOption('[data-journal-cat-select]', await idDe('barber')); await page.waitForTimeout(200);

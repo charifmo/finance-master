@@ -5770,7 +5770,7 @@
                                   :class="['text-[10px] font-black px-2 py-0.5 rounded-full border', saisieCatSource === 'manuel' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (saisieCatStatut === 'doute' ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-blue-50 text-blue-700 border-blue-200')]">
                                 {{ saisieCatStatut === 'doute' && saisieCatSource !== 'manuel' ? '⚠️' : '🏷️' }} {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}<span v-if="saisieCatSource" class="font-bold opacity-70"> · {{ SOURCES_CATEGORIE[saisieCatSource] || saisieCatSource }}</span><span v-if="saisieCatStatut === 'doute' && saisieCatSource !== 'manuel'" class="font-bold"> · à vérifier</span>
                             </span>
-                            <span v-else-if="saisieForm.libelle && saisieCatStatut === 'inconnu'" data-saisie-cat-inconnue class="text-[10px] font-black px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200" title="Aucune règle ne connaît ce libellé">🤖 Inconnu des règles : l'IA proposera une catégorie</span>
+                            <span v-else-if="saisieForm.libelle && saisieCatStatut === 'inconnu'" data-saisie-cat-inconnue class="text-[10px] font-black px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200" title="Aucune règle ne connaît ce libellé : l'IA est appelée à l'enregistrement ; si elle ne répond pas, une catégorie par défaut est posée, à vérifier">🤖 Inconnu des règles : l'IA proposera une catégorie</span>
                             <span v-if="saisieForm.compteId" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200">🏦 {{ (comptes.find(c => c.id === saisieForm.compteId) || {}).label || '—' }}</span>
                             <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">📅 {{ saisieDateLabel }}</span>
                             <button @click="showSaisieDetails = !showSaisieDetails" class="ml-auto text-[10px] font-black text-gray-400 hover:text-emerald-600 transition-colors">
@@ -5822,14 +5822,8 @@
                     <!-- ═══ v37.49 : À CATÉGORISER — le doute et l'inconnu, surlignés, rangés en un clic ═══ -->
                     <div v-if="aCategoriser.length" data-a-categoriser class="bg-amber-50 rounded-2xl border-2 border-amber-300 shadow-sm overflow-hidden">
                         <div class="px-4 md:px-5 py-3 border-b border-amber-200 flex flex-wrap items-center gap-2">
-                            <h3 class="font-black uppercase tracking-widest text-amber-900 text-xs md:text-sm">⚠️ À catégoriser ({{ aCategoriser.length }})</h3>
-                            <span class="text-[10px] font-semibold text-amber-900">Un doute, ou rien de trouvé : un clic range la transaction, et votre choix devient une règle.</span>
-                            <div class="ml-auto flex flex-wrap gap-1.5">
-                                <button v-if="aCategoriser.some(l => l.sure)" type="button" data-appliquer-sures @click="appliquerSuggestionsSures()"
-                                        class="text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-600 text-white hover:bg-emerald-700">✓ Appliquer les {{ aCategoriser.filter(l => l.sure).length }} suggestion(s) sûre(s)</button>
-                                <button v-if="aCategoriser.some(l => !l.sure && l.source !== 'ia')" type="button" data-ia-tout @click="demanderIAPourTout()"
-                                        class="text-[10px] font-black px-2.5 py-1 rounded-full bg-violet-600 text-white hover:bg-violet-700">🤖 Demander à l'IA</button>
-                            </div>
+                            <h3 class="font-black uppercase tracking-widest text-amber-900 text-xs md:text-sm">⚠️ À vérifier ({{ aCategoriser.length }})</h3>
+                            <span data-a-categoriser-aide class="text-[10px] font-semibold text-amber-900">Rangées d'office : les règles, puis l'IA, puis une catégorie par défaut si l'IA ne répond pas. Rien n'attend — ✓ confirme, ou choisissez-en une autre : votre choix devient une règle.</span>
                         </div>
                         <ul class="divide-y divide-amber-200">
                             <li v-for="l in aCategoriser" :key="'ac_' + l.id" data-a-categoriser-ligne :data-tx="l.id" class="px-4 md:px-5 py-2.5 flex flex-col md:flex-row md:items-center gap-2">
@@ -5843,7 +5837,7 @@
                                     <button v-for="cid in l.propositions" :key="'acp_' + l.id + '_' + cid" type="button" data-ranger :data-cat="cid" @click="rangerTransaction(l.id, cid)"
                                             :title="cid === l.actuelle ? ('Proposée' + (l.source === 'ia' ? ' par l’IA' + (l.iaRaison ? ' : ' + l.iaRaison : '') : '') + ' — cliquez pour confirmer') : (cid === l.sure ? 'Sûr d’après les règles : ' + l.regle.raison : 'Ranger ici')"
                                             :class="['text-[10px] font-black px-2 py-1 rounded-full border transition-colors', cid === l.actuelle || cid === l.sure ? 'bg-white text-amber-900 border-amber-400 ring-1 ring-amber-300 hover:bg-emerald-50 hover:text-emerald-800' : 'bg-white/70 text-gray-700 border-amber-200 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300']">
-                                        {{ cid === l.actuelle || cid === l.sure ? '✓ ' : '' }}{{ getCategorieLabel(cid) }}<span v-if="cid === l.actuelle && l.source === 'ia'" class="opacity-70"> · IA</span><span v-else-if="cid === l.sure" class="opacity-70"> · sûr</span>
+                                        {{ cid === l.actuelle || cid === l.sure ? '✓ ' : '' }}{{ getCategorieLabel(cid) }}<span v-if="cid === l.actuelle && l.source === 'ia'" class="opacity-70"> · IA</span><span v-else-if="cid === l.actuelle && l.source === 'défaut'" class="opacity-70"> · par défaut</span><span v-else-if="cid === l.sure" class="opacity-70"> · sûr</span>
                                     </button>
                                     <select data-ranger-autre @change="rangerTransaction(l.id, $event.target.value)" class="text-[10px] font-bold px-1.5 py-1 rounded-full border border-amber-200 bg-white/70 text-gray-700 outline-none">
                                         <option value="">autre…</option>
@@ -5851,7 +5845,7 @@
                                             <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
                                         </optgroup>
                                     </select>
-                                    <button v-if="!l.sure && !iaCategorisation.enCours[l.id]" type="button" data-ia-une @click="demanderCategorieIA(l.id)" class="text-[10px] font-bold text-violet-700 hover:underline">🤖 IA</button>
+                                    <button v-if="!l.sure && l.source !== 'ia' && !iaCategorisation.enCours[l.id]" type="button" data-ia-une @click="demanderCategorieIA(l.id)" class="text-[10px] font-bold text-violet-700 hover:underline">🤖 relancer l'IA</button>
                                     <span v-if="iaCategorisation.messages[l.id]" data-ia-message class="text-[10px] font-semibold text-amber-900 w-full">{{ iaCategorisation.messages[l.id] }}</span>
                                 </div>
                             </li>
@@ -5894,7 +5888,7 @@
                                             </select>
                                             <button v-else type="button" data-journal-cat :data-tx="tx.id" @click="editionCategorieTx = tx.id" title="Changer la catégorie"
                                                     :class="['text-left hover:underline decoration-dotted', estACategoriser(tx) ? 'text-amber-900' : 'text-blue-700']">
-                                                <span v-if="estACategoriser(tx)">⚠️ </span>{{ tx.categorieId && tx.categorieId !== 'cat_misc' ? (getCategorieLabel(tx.categorieId) || '(Hors)') : 'À catégoriser' }}<span v-if="tx.categorieSource === 'ia'" class="text-[9px] font-black text-violet-700"> · IA</span>
+                                                <span v-if="estACategoriser(tx)">⚠️ </span>{{ tx.categorieId && tx.categorieId !== 'cat_misc' ? (getCategorieLabel(tx.categorieId) || '(Hors)') : 'À catégoriser' }}<span v-if="tx.categorieSource === 'ia'" class="text-[9px] font-black text-violet-700"> · IA</span><span v-else-if="tx.categorieSource === 'défaut'" class="text-[9px] font-black text-amber-700"> · par défaut</span>
                                             </button>
                                         </td>
                                         <td class="p-2 md:p-3 text-gray-800 text-[11px] md:text-sm">{{ tx.libelle }}</td>
@@ -6249,7 +6243,7 @@
                                   :class="['text-[10px] font-black px-2 py-0.5 rounded-full border', saisieCatSource === 'manuel' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (saisieCatStatut === 'doute' ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-blue-50 text-blue-700 border-blue-200')]">
                                 {{ saisieCatStatut === 'doute' && saisieCatSource !== 'manuel' ? '⚠️' : '🏷️' }} {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}<span v-if="saisieCatSource" class="font-bold opacity-70"> · {{ SOURCES_CATEGORIE[saisieCatSource] || saisieCatSource }}</span><span v-if="saisieCatStatut === 'doute' && saisieCatSource !== 'manuel'" class="font-bold"> · à vérifier</span>
                             </span>
-                            <span v-else-if="saisieForm.libelle && saisieCatStatut === 'inconnu'" data-saisie-cat-inconnue class="text-[10px] font-black px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200" title="Aucune règle ne connaît ce libellé">🤖 Inconnu des règles : l'IA proposera une catégorie</span>
+                            <span v-else-if="saisieForm.libelle && saisieCatStatut === 'inconnu'" data-saisie-cat-inconnue class="text-[10px] font-black px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200" title="Aucune règle ne connaît ce libellé : l'IA est appelée à l'enregistrement ; si elle ne répond pas, une catégorie par défaut est posée, à vérifier">🤖 Inconnu des règles : l'IA proposera une catégorie</span>
                     </div>
                     <div v-if="saisieForm.montant && saisieCatSource !== 'manuel' && saisieCatStatut !== 'sur' && saisieCatSuggestions.length" data-saisie-suggestions
                              class="flex flex-wrap items-center gap-1.5 -mt-1">
@@ -7987,8 +7981,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.51 Cloture";
+                    const CURRENT_VERSION = "37.52 Categorisation-Auto";
                     const CHANGELOG = [
+        { version: "37.52 Categorisation-Auto", date: "2026-10-14", changes: [
+            "PLUS AUCUN BOUTON À PRESSER — les règles d'abord ; ce qu'elles ne savent pas (inconnu OU doute) part à l'IA d'office ; si l'IA ne répond pas (injoignable, réponse illisible, catégorie inventée, « aucune »), une catégorie PAR DÉFAUT est posée : la meilleure piste des règles, sinon votre catégorie la plus utilisée, sinon « Dépense exceptionnelle ». Plus rien ne reste « Non catégorisé ».",
+            "PARTOUT, PAS SEULEMENT À LA SAISIE — une transaction arrivée sans catégorie (agent, import, autre appareil, version d'avant) est traitée dès l'ouverture : la règle sûre appliquée (« mcdonald s » → cafe Resto Wknd), le reste à l'IA, une demande à la fois, une seule fois par transaction et par session.",
+            "LA DARIJA, MÊME ÉCRITE AUTREMENT — lettres doublées et article « l / el » ramenés à la même racine : « Hri » est votre ligne « lhrri » (sûr, sans IA). Jamais devant une voyelle ni un chiffre : « lait », « l7m » restent eux-mêmes.",
+            "« À VÉRIFIER » — le panneau ne demande plus rien : il montre ce qui a été rangé à l'essai (« ✓ Alimentation · par défaut », le motif) ; ✓ confirme et devient une règle, « autre… » corrige, « 🤖 relancer l'IA » sur une ligne rangée par défaut. Le journal dit « · par défaut ».",
+            "PREUVE — nouvelle suite « Catégorisation automatique » : 21 contrôles (Hri, mcdonald s, zzqx par l'IA, panne → par défaut, afriquia gardée en Voiture, sans libellé, une demande par session, panneau, journal, relance, saisie sûre / inconnue / doute, confirmation). Rejouée sur la v37.51 : 20 contrôles en échec. Quinze défauts réintroduits exprès : tous attrapés. La suite v37.49 suit la nouvelle règle (plus de bouton, l'IA en panne range par défaut).",
+        ] },
         { version: "37.51 Cloture", date: "2026-10-14", changes: [
             "🔒 CLÔTURER UNE CASE DU PILOTAGE — chaque ligne « À traiter » a son petit cadenas : la case est close pour le cycle, à ce qui a été réglé (eau 54 / 300 : 54 réglés, 246 libérés). Plus rien n'est attendu : le reste quitte le Relevé, le reste à payer par compte, l'urgence, la progression, le surplus. Close à 0 (rien payé) : 0 réglé, pas son dû. Revenus compris : « plus rien à recevoir ».",
             "RIEN NE SE BLOQUE — dans « Déjà validé », chaque ligne garde un champ « + ajouter » (« -20 » corrige), même close. Au-delà du dû elle le dit : « dépassement +34 », montant en rouge. Une ligne close affiche « 🔒 clôturé · 246 libérés ». Décocher une case close la rouvre avec ce qui a été réglé.",
@@ -9402,6 +9403,15 @@
                         return liste.map(c => { const A = _analyseLibelle(c.label); return { id: c.id, label: String(c.label || '').trim(), parent: c.parent || null, type: c.type, mots: A.toks, phrase: A.toks.join(' ') }; })
                                     .filter(c => c.mots.length);
                     });
+                    //  v37.52 — LA RACINE D'UN MOT DARIJA : lettres doublées ramenées à une, article
+                    //  « l / el » collé devant une consonne retiré (« lhrri » → « hri », « lkhodra » →
+                    //  « khodra »). Jamais devant une voyelle ni un chiffre : « lait », « l7m » restent.
+                    const _racineDarija = (w) => {
+                        const r = String(w || '').replace(/(.)\1+/g, '$1');
+                        const s = r.replace(/^(el|l)(?=[^aeiouy\d\s])/, '');
+                        return s.length >= 3 ? s : r;
+                    };
+                    const _memeRacine = (a, b) => { const x = _racineDarija(a); return x.length >= 3 && x === _racineDarija(b); };
                     //  Des mots de libellé qui ne disent rien de la dépense
                     const _MOTS_LABEL_FAIBLES = new Set(['reste', 'charge', 'charges', 'compte', 'part', 'divers', 'autre', 'autres', 'total', 'plus']);
                     //  Un mot du dictionnaire → vos catégories qui le portent
@@ -9508,6 +9518,8 @@
                             if (c.phrase === cle) return proposer(c.id, 97, 'libellé', '« ' + c.label + ' » est une de vos lignes');
                             if (c.mots.length > 1 && A.tphrase.includes(' ' + c.phrase + ' ')) return proposer(c.id, 92, 'libellé', '« ' + c.label + ' » dans le libellé');
                             if (c.mots.length === 1 && libres.includes(c.mots[0])) return proposer(c.id, 92, 'libellé', '« ' + c.label + ' » dans le libellé');
+                            //  v37.52 : le même mot, autre graphie (« Hri » pour « lhrri »)
+                            if (c.mots.length === 1 && libres.some(w => _memeRacine(w, c.mots[0]))) return proposer(c.id, 90, 'libellé', '« ' + c.label + ' », autre graphie');
                             const k = forts.filter(w => libres.includes(w)).length;
                             if (k) proposer(c.id, Math.min(85, 60 + 10 * (k - 1)), 'libellé', 'un mot de « ' + c.label + ' »');
                         });
@@ -9719,9 +9731,37 @@
                         return null;
                     };
                     let _iaFile = Promise.resolve();
+                    const _iaTentees = new Set();
+                    //  v37.52 — L'IA N'A PAS RÉPONDU : UNE CATÉGORIE PAR DÉFAUT, À VÉRIFIER. La meilleure
+                    //  piste des règles, sinon votre catégorie la plus utilisée, sinon « Dépense
+                    //  exceptionnelle ». Une piste déjà posée (un doute) est gardée.
+                    const _categorieParDefaut = (r) => {
+                        const vivantes = _categoriesCandidates.value, ids = new Set(vivantes.map(c => c.id));
+                        if (r && r.id && ids.has(r.id)) return r.id;
+                        const u = categoriesLesPlusUtilisees.value.find(id => ids.has(id));
+                        if (u) return u;
+                        if (ids.has('cat_irr_depense_exceptionnelle')) return 'cat_irr_depense_exceptionnelle';
+                        return vivantes.length ? vivantes[0].id : null;
+                    };
+                    const _poserParDefaut = (txId, motif) => {
+                        const t = _txParId(txId);
+                        if (!t || t.categorieSource === 'vous') return;
+                        if (t.categorieId && t.categorieId !== 'cat_misc') {
+                            t.aVerifier = true;
+                            iaCategorisation.messages[txId] = motif + ' : gardée dans « ' + String(getCategorieLabel(t.categorieId) || '').trim() + ' », à vérifier.';
+                        } else {
+                            const id = _categorieParDefaut(categoriserLibelle(t.libelle));
+                            if (!id) { iaCategorisation.messages[txId] = motif + ' : à vous de la ranger.'; return; }
+                            t.categorieId = id; t.categorieSource = 'défaut'; t.aVerifier = true;
+                            iaCategorisation.messages[txId] = motif + ' : rangée par défaut dans « ' + String(getCategorieLabel(id) || '').trim() + ' », à vérifier.';
+                        }
+                        calculationTick.value++;
+                        handleDataChange();
+                    };
                     const demanderCategorieIA = (txId) => {
                         if (iaCategorisation.enCours[txId]) return _iaFile;
                         iaCategorisation.enCours[txId] = true;
+                        _iaTentees.add(txId);   // v37.52 : une fois par session, le balayage n'y revient pas
                         delete iaCategorisation.messages[txId];
                         _iaFile = _iaFile.then(() => _iaUne(txId)).catch(() => {});
                         return _iaFile;
@@ -9730,7 +9770,7 @@
                         try {
                             const t = _txParId(txId);
                             if (!t) return;
-                            if (!_analyseLibelle(t.libelle).toks.length || t.libelle === 'Sans libellé') { iaCategorisation.messages[txId] = "Pas de libellé : rien à demander à l'IA, à vous de la ranger."; return; }
+                            if (!_analyseLibelle(t.libelle).toks.length || t.libelle === 'Sans libellé') { _poserParDefaut(txId, "Pas de libellé, rien à demander à l'IA"); return; }
                             const res = await fetch(cfoWebhookUrl.value || MARKET_WEBHOOK, {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ session_id: 'categorisation', source: 'categorisation', question: _questionCategorieIA(t) }),
@@ -9741,7 +9781,7 @@
                             const u = _txParId(txId);
                             if (!u || u.categorieSource === 'vous') return;                          // rangée à la main entre-temps
                             if (!(r.id && _categoriesCandidates.value.some(c => c.id === r.id))) {
-                                iaCategorisation.messages[txId] = "L'IA ne voit aucune de vos catégories" + (r.raison ? ' (' + String(r.raison).slice(0, 80) + ')' : '') + ' : à vous de la ranger.';
+                                _poserParDefaut(txId, "L'IA ne voit aucune de vos catégories" + (r.raison ? ' (' + String(r.raison).slice(0, 80) + ')' : ''));
                                 return;
                             }
                             const conf = ['haute', 'moyenne', 'basse'].includes(r.confiance) ? r.confiance : 'moyenne';
@@ -9751,14 +9791,14 @@
                             calculationTick.value++;
                             handleDataChange();
                         } catch (e) {
-                            iaCategorisation.messages[txId] = 'IA injoignable (' + (e && e.message || e) + ') : la transaction attend, à vous de la ranger.';
+                            _poserParDefaut(txId, 'IA injoignable (' + (e && e.message || e) + ')');
                         } finally {
                             delete iaCategorisation.enCours[txId];
                         }
                     };
 
                     // ── v37.49 : À CATÉGORISER — le doute et l'inconnu, surlignés ───────────
-                    const SOURCES_CATEGORIE = { vous: 'vous', manuel: 'vous', appris: 'appris', 'libellé': 'votre libellé', 'règle': 'règle', ia: 'IA' };
+                    const SOURCES_CATEGORIE = { vous: 'vous', manuel: 'vous', appris: 'appris', 'libellé': 'votre libellé', 'règle': 'règle', ia: 'IA', 'défaut': 'par défaut' };
                     const estACategoriser = (t) => !!t && (!t.categorieId || t.categorieId === 'cat_misc' || !!t.aVerifier);
                     const aCategoriser = computed(() => {
                         calculationTick.value;
@@ -9799,6 +9839,15 @@
                     const demanderIAPourTout = () => aCategoriser.value
                         .filter(l => !l.sure && l.source !== 'ia' && !iaCategorisation.enCours[l.id])
                         .forEach(l => demanderCategorieIA(l.id));
+                    //  v37.52 — SANS BOUTON : dès qu'une transaction attend (saisie, agent, import, autre
+                    //  appareil), le sûr est rangé, le reste part à l'IA — une fois par session.
+                    const _balayerACategoriser = () => {
+                        if (appliquerSuggestionsSures()) return;          // la liste change : on repasse
+                        aCategoriser.value.forEach(l => {
+                            if (l.sure || l.source === 'ia' || l.source === 'vous' || _iaTentees.has(l.id) || iaCategorisation.enCours[l.id]) return;
+                            demanderCategorieIA(l.id);
+                        });
+                    };
                     //  Le journal : la ligne dont on change la catégorie
                     const editionCategorieTx = ref(null);
                     //  « autre… » : vos catégories VIVANTES, chaque ligne sous sa catégorie mère
@@ -21445,6 +21494,11 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     onBeforeUnmount(() => {
                         if (_resizeHandler) window.removeEventListener('resize', _resizeHandler);
                     });
+
+                    //  v37.52 : le balayage « À vérifier » — posé ICI, quand tout le moteur est défini
+                    //  (plus haut, il lirait des valeurs pas encore initialisées).
+                    watch(() => aCategoriser.value.map(l => l.id + ':' + (l.sure || '') + ':' + (l.source || '')).join('|'),
+                          () => _balayerACategoriser(), { immediate: true });
 
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 

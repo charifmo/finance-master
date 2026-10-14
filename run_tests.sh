@@ -91,5 +91,6 @@ suite "Semaine saisie en partie : tapé = compté, vide = prévu" node test_cfo_
 suite "Catégorisation : règles hors-ligne, IA, doute à vous" node test_cfo_engine_parity/test_categorisation.mjs
 suite "Un compte par ligne · budget sans mode édition"         node test_cfo_engine_parity/test_compte_par_ligne.mjs
 suite "Clôturer une case · semaine, 15 j, cycle"               node test_cfo_engine_parity/test_cloture.mjs
+suite "Catégorisation automatique : règles → IA → par défaut"   node test_cfo_engine_parity/test_categorisation_auto.mjs
 
 echo "✅ Toutes les suites passent."
