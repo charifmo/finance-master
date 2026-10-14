@@ -445,16 +445,15 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
             if (!$isC(oget($r, 'destinationCompte'))) continue;
             $v = $eff($r, oget($r, 'base'), $m); if ($v > 0) $entrants += $v;
         }
-        if ($isC($fxSrc)) {
-            foreach (ovals(oget($y, 'chargesFixes', onew())) as $f) {
-                $v = $eff($f, oget($f, 'valeur'), $m); if ($v > 0) $sortants += $v;
-            }
+        //  v37.50 : chaque charge sur SON compte (oget compte), sinon le compte par défaut de sa famille
+        foreach (ovals(oget($y, 'chargesFixes', onew())) as $f) {
+            if (!$isC(oget($f, 'compte') ?: oget($si, 'compteChargesFixes', 'courant'))) continue;
+            $v = $eff($f, oget($f, 'valeur'), $m); if ($v > 0) $sortants += $v;
         }
-        if ($isC($varSrc)) {
-            foreach (ovals(oget($y, 'chargesVariables', onew())) as $cv) {
-                $v = cfo_cout_variable_cycle($cv, $m, (int)$year, $jdp, true);   // v37.29-30 : semaines réelles, ligne par ligne
-                if ($v > 0) $sortants += $v;
-            }
+        foreach (ovals(oget($y, 'chargesVariables', onew())) as $cv) {
+            if (!$isC(oget($cv, 'compte') ?: oget($si, 'compteChargesVariables', 'courant'))) continue;   // v37.50
+            $v = cfo_cout_variable_cycle($cv, $m, (int)$year, $jdp, true);   // v37.29-30 : semaines réelles, ligne par ligne
+            if ($v > 0) $sortants += $v;
         }
         foreach ((oget($y, 'depensesIrregulieres') ?: []) as $d) {
             if (!is_object($d) || oget($d, 'sourceAssurance')) continue;

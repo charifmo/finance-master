@@ -1176,9 +1176,7 @@
                         <div>
                             <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-3">
                                 ⚙️ Budget Structurel — {{anneeAffichage}}
-                                <button @click="modeEdition = !modeEdition" :class="['text-[10px] px-3 py-1.5 rounded-lg font-black transition-colors shadow-sm uppercase tracking-widest border', modeEdition ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-white text-gray-600 hover:bg-gray-100 border-gray-300']">
-                                    {{ modeEdition ? '✅ Terminer Edition' : '✏️ Editer Noms' }}
-                                </button>
+                                <span class="text-[10px] font-semibold text-gray-400 normal-case tracking-normal" data-aide-double-clic>✎ double-clic sur un nom pour le renommer</span>
                             </h2>
                             <p class="text-sm text-gray-500 mt-1">Chaque année possède ses propres salaires et charges.</p>
                         </div>
@@ -1222,7 +1220,8 @@
                                         <button title="Descendre" aria-label="Descendre" @click="moveCompte(idx, 1)" :disabled="idx === comptes.length - 1" class="text-[10px] text-gray-400 hover:text-blue-600 disabled:opacity-20 leading-tight font-black">↓</button>
                                     </div>
                                     <div class="flex-1 min-w-0">
-                                        <p class="font-black text-gray-800 text-sm truncate">{{ compte.label }}</p>
+                                        <input v-if="estEnEdition('compte:' + compte.id)" data-nom-edition type="text" :value="(comptes.find(x => x.id === compte.id) || compte).label" @input="(comptes.find(x => x.id === compte.id) || compte).label = $event.target.value" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="text-sm font-bold text-gray-800 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none w-56" />
+                                        <p v-else data-nom :data-ligne="'compte:' + compte.id" @dblclick="commencerRenommer('compte:' + compte.id, comptes.find(x => x.id === compte.id) || compte, 'label')" title="Double-clic pour renommer" class="font-black text-gray-800 text-sm truncate cursor-text select-none">{{ compte.label }}</p>
                                         <div class="flex items-center gap-2 mt-0.5">
                                             <span :class="['text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full', compte.type === 'liquide' ? 'bg-blue-100 text-blue-700' : compte.type === 'epargne' ? 'bg-green-100 text-green-700' : compte.type === 'investissement' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700']">{{ compte.type }}</span>
                                             <span v-if="compte.inclureLiquidite !== false" class="text-[9px] text-blue-500 font-bold">💧 inclus liquide</span>
@@ -1303,18 +1302,18 @@
                         <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].revenus" :key="key" class="mb-5 border-b border-gray-100 pb-4 last:border-0">
                             <div class="flex justify-between items-center mb-2">
                                 <div>
-                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-green-400 w-48" />
-                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
+                                    <input v-if="estEnEdition('revenus:' + key)" data-nom-edition type="text" v-model="item.label" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-green-400 w-48" />
+                                    <label v-else data-nom :data-ligne="'revenus:' + key" @dblclick="commencerRenommer('revenus:' + key, item, 'label', renommerLigneBudget('revenus', key))" title="Double-clic pour renommer" class="block text-sm font-black text-gray-700 uppercase tracking-wide cursor-text select-none">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
                                     <div class="flex items-center gap-2 mt-1.5">
                                         <button @click="uiBasculer('budget.revenus.' + key + '.periodes', item.showExceptions)" class="text-[10px] text-blue-500 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
                                             {{ uiOuvert('budget.revenus.' + key + '.periodes', item.showExceptions) ? '➖ Masquer options' : '➕ Suspendre / Modifier Période' }}
                                         </button>
-                                        <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
-                                        <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette entrée">🗑️ Supprimer</button>
+                                        <button v-if="uiOuvert('budget.revenus.' + key + '.periodes', item.showExceptions) && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
+                                        <button v-if="uiOuvert('budget.revenus.' + key + '.periodes', item.showExceptions)" data-supprimer-ligne @click="supprimerLigneBudget('revenus', key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette entrée">🗑️ Supprimer</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3">
-                                    <input type="number" v-model.number="item.base" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-32 p-3 border rounded-xl text-right font-black text-lg outline-none transition-all', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed' : 'border-gray-200 bg-gray-50 text-green-700 focus:ring-2 focus:ring-green-400']"/>
+                                    <input type="number" v-model.number="item.base" @input="handleDataChange" @change="propagerValeurLigne('revenus', key, 'base')" :disabled="item.parts && item.parts.length > 0" :class="['w-32 p-3 border rounded-xl text-right font-black text-lg outline-none transition-all', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed' : 'border-gray-200 bg-gray-50 text-green-700 focus:ring-2 focus:ring-green-400']"/>
                                     <span class="text-gray-400 text-xs font-bold">DH</span>
                                 </div>
                             </div>
@@ -1368,7 +1367,7 @@
                                 <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
                             </div>
                         </div>
-                        <button v-if="modeEdition" @click="ajouterEntree()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-green-600 bg-green-50 border-2 border-dashed border-green-300 rounded-xl hover:bg-green-100 transition-colors">+ Ajouter une Entrée</button>
+                        <button type="button" data-ajouter-ligne="revenus" @click="ajouterEntree()" class="w-full mt-3 py-2 text-[11px] font-black uppercase tracking-widest text-green-600 bg-white border border-dashed border-green-300 rounded-xl hover:bg-green-100 transition-colors">+ Ajouter une Entrée</button>
                         </div><!-- /cfo-collapsible-body revenus -->
                     </div><!-- /param-revenus -->
 
@@ -1381,7 +1380,7 @@
                         <p class="text-xs text-gray-500 italic mb-4">Pour signaler un paiement, rendez-vous dans la <b>Checklist Détaillée</b> de l'année en cours.</p>
                         <!-- v24.80 : Sélecteur global compte charges fixes -->
                         <div class="flex items-center gap-3 mb-5 p-3 bg-orange-50 rounded-xl border border-orange-200">
-                            <label class="text-[10px] font-black text-orange-700 uppercase tracking-widest whitespace-nowrap">🏦 Prélever toutes les charges fixes sur :</label>
+                            <label class="text-[10px] font-black text-orange-700 uppercase tracking-widest whitespace-nowrap">🏦 Compte par défaut des charges fixes :</label>
                             <select v-model="soldesInitiaux.compteChargesFixes" @change="handleDataChange" class="flex-1 p-2 text-xs font-bold border border-orange-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-orange-400">
                                 <option value="courant">💳 Compte Courant</option>
                                 <optgroup label="── Comptes bancaires ──">
@@ -1395,18 +1394,27 @@
                         <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesFixes" :key="key" class="mb-5 border-b border-gray-100 pb-4 last:border-0">
                             <div class="flex justify-between items-center mb-2">
                                 <div>
-                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-orange-400 w-48" />
-                                    <label v-else class="block text-sm font-black text-gray-700 uppercase tracking-wide">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
+                                    <input v-if="estEnEdition('chargesFixes:' + key)" data-nom-edition type="text" v-model="item.label" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-orange-400 w-48" />
+                                    <label v-else data-nom :data-ligne="'chargesFixes:' + key" @dblclick="commencerRenommer('chargesFixes:' + key, item, 'label', renommerLigneBudget('chargesFixes', key))" title="Double-clic pour renommer" class="block text-sm font-black text-gray-700 uppercase tracking-wide cursor-text select-none">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
                                     <div class="flex items-center gap-2 mt-1.5">
                                         <button @click="uiBasculer('budget.fixes.' + key + '.periodes', item.showExceptions)" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-orange-50 px-2 py-0.5 rounded">
                                             {{ uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions) ? '➖ Masquer options' : '➕ Gérer Périodes' }}
                                         </button>
-                                        <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
-                                        <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
+                                        <!-- v37.50 : le compte de CETTE ligne -->
+                                        <select data-compte-ligne :data-ligne="'chargesFixes:' + key" :value="item.compte || ''" @change="choisirCompteLigne('chargesFixes', key, $event.target.value)" @click.stop
+                                                :title="item.compte ? 'Cette charge sort de ce compte (choisi sur la ligne)' : 'Compte par défaut — choisissez-en un autre pour cette seule ligne'"
+                                                :class="['max-w-[19rem] text-[10px] font-bold rounded-lg border px-1.5 py-1 outline-none cursor-pointer', item.compte ? 'bg-indigo-50 text-indigo-800 border-indigo-300' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400']">
+                                            <option value="">🏦 {{ getNomCompte(soldesInitiaux.compteChargesFixes || 'courant') }} · par défaut</option>
+                                            <option value="courant">💳 Compte Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'lc_' + key + c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'lce_' + key + ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label || ep.nom }}</option>
+                                        </select>
+                                        <button v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions) && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
+                                        <button v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions)" data-supprimer-ligne @click="supprimerLigneBudget('chargesFixes', key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3">
-                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-32 p-3 border rounded-xl text-right font-black text-lg outline-none transition-all', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed' : 'border-gray-200 bg-gray-50 text-orange-700 focus:ring-2 focus:ring-orange-400']"/>
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" @change="propagerValeurLigne('chargesFixes', key, 'valeur')" :disabled="item.parts && item.parts.length > 0" :class="['w-32 p-3 border rounded-xl text-right font-black text-lg outline-none transition-all', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed' : 'border-gray-200 bg-gray-50 text-orange-700 focus:ring-2 focus:ring-orange-400']"/>
                                     <span class="text-gray-400 text-xs font-bold">DH</span>
                                 </div>
                             </div>
@@ -1441,7 +1449,7 @@
                                 <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
                             </div>
                         </div>
-                        <button v-if="modeEdition" @click="ajouterChargeFixe()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-orange-600 bg-orange-50 border-2 border-dashed border-orange-300 rounded-xl hover:bg-orange-100 transition-colors">+ Ajouter une Charge Fixe</button>
+                        <button type="button" data-ajouter-ligne="chargesFixes" @click="ajouterChargeFixe()" class="w-full mt-3 py-2 text-[11px] font-black uppercase tracking-widest text-orange-600 bg-white border border-dashed border-orange-300 rounded-xl hover:bg-orange-100 transition-colors">+ Ajouter une Charge Fixe</button>
                         </div><!-- /cfo-collapsible-body charges-fixes -->
                     </div><!-- /param-charges-fixes -->
 
@@ -1453,7 +1461,7 @@
                         <div class="cfo-collapsible-body">
                         <!-- v24.80 : Sélecteur global compte charges variables -->
                         <div class="flex items-center gap-3 mb-5 p-3 bg-red-50 rounded-xl border border-red-200">
-                            <label class="text-[10px] font-black text-red-700 uppercase tracking-widest whitespace-nowrap">🏦 Prélever toutes les charges variables sur :</label>
+                            <label class="text-[10px] font-black text-red-700 uppercase tracking-widest whitespace-nowrap">🏦 Compte par défaut des charges variables :</label>
                             <select v-model="soldesInitiaux.compteChargesVariables" @change="handleDataChange" class="flex-1 p-2 text-xs font-bold border border-red-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-red-400">
                                 <option value="courant">💳 Compte Courant</option>
                                 <optgroup label="── Comptes bancaires ──">
@@ -1467,8 +1475,8 @@
                         <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesVariables" :key="key" class="mb-6 border-b border-gray-100 pb-5 last:border-0">
                             <div class="flex justify-between items-start md:items-center mb-2 flex-col md:flex-row gap-3">
                                 <div>
-                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-red-400 w-48" />
-                                    <label v-else class="block text-sm font-black text-gray-800 uppercase tracking-wide">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
+                                    <input v-if="estEnEdition('chargesVariables:' + key)" data-nom-edition type="text" v-model="item.label" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-red-400 w-48" />
+                                    <label v-else data-nom :data-ligne="'chargesVariables:' + key" @dblclick="commencerRenommer('chargesVariables:' + key, item, 'label', renommerLigneBudget('chargesVariables', key))" title="Double-clic pour renommer" class="block text-sm font-black text-gray-800 uppercase tracking-wide cursor-text select-none">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-2 font-bold">✂️ {{item.parts.length}} parties</span></label>
                                     <div class="flex items-center gap-2 mt-1.5">
                                         <button @click="uiBasculer('budget.variables.' + key + '.details', item.showDetails)" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">
                                             {{ uiOuvert('budget.variables.' + key + '.details', item.showDetails) ? '➖ Fermer Détails' : '➕ Voir Lignes de calcul' }}
@@ -1476,12 +1484,21 @@
                                         <button @click="uiBasculer('budget.variables.' + key + '.periodes', item.showExceptions)" class="text-[10px] text-red-600 hover:text-red-800 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded">
                                             {{ uiOuvert('budget.variables.' + key + '.periodes', item.showExceptions) ? '➖ Masquer options' : '➕ Gérer Périodes' }}
                                         </button>
-                                        <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
-                                        <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
+                                        <!-- v37.50 : le compte de CETTE ligne -->
+                                        <select data-compte-ligne :data-ligne="'chargesVariables:' + key" :value="item.compte || ''" @change="choisirCompteLigne('chargesVariables', key, $event.target.value)" @click.stop
+                                                :title="item.compte ? 'Cette charge sort de ce compte (choisi sur la ligne)' : 'Compte par défaut — choisissez-en un autre pour cette seule ligne'"
+                                                :class="['max-w-[19rem] text-[10px] font-bold rounded-lg border px-1.5 py-1 outline-none cursor-pointer', item.compte ? 'bg-indigo-50 text-indigo-800 border-indigo-300' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400']">
+                                            <option value="">🏦 {{ getNomCompte(soldesInitiaux.compteChargesVariables || 'courant') }} · par défaut</option>
+                                            <option value="courant">💳 Compte Courant</option>
+                                            <option v-for="c in comptesSelectOptions" :key="'lc_' + key + c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                            <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'lce_' + key + ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label || ep.nom }}</option>
+                                        </select>
+                                        <button v-if="uiOuvert('budget.variables.' + key + '.periodes', item.showExceptions) && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="text-[10px] text-blue-500 hover:bg-blue-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-blue-200" title="Scinder en sous-parties">✂️ Scinder</button>
+                                        <button v-if="uiOuvert('budget.variables.' + key + '.periodes', item.showExceptions)" data-supprimer-ligne @click="supprimerLigneBudget('chargesVariables', key)" class="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors uppercase tracking-widest p-1.5 rounded-lg border border-red-200" title="Supprimer cette charge">🗑️ Supprimer</button>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="(item.details && item.details.length > 0) || (item.parts && item.parts.length > 0)" :class="['w-28 p-3 border rounded-xl text-right font-black text-lg focus:ring-2 focus:ring-red-400 outline-none transition-all', (item.details && item.details.length > 0) || (item.parts && item.parts.length > 0) ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" @change="propagerValeurLigne('chargesVariables', key, 'valeur')" :disabled="(item.details && item.details.length > 0) || (item.parts && item.parts.length > 0)" :class="['w-28 p-3 border rounded-xl text-right font-black text-lg focus:ring-2 focus:ring-red-400 outline-none transition-all', (item.details && item.details.length > 0) || (item.parts && item.parts.length > 0) ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
                                     <select v-model="item.periode" @change="handleDataChange" class="p-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-gray-100 outline-none cursor-pointer">
                                         <option value="semaine">/ sem</option>
                                         <option value="mois">/ mois</option>
@@ -1541,7 +1558,7 @@
                                 <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="text-[10px] text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg font-bold transition-colors shadow-sm uppercase tracking-widest">+ Ajouter Règle</button>
                             </div>
                         </div>
-                        <button v-if="modeEdition" @click="ajouterChargeVariable()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-red-600 bg-red-50 border-2 border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
+                        <button type="button" data-ajouter-ligne="chargesVariables" @click="ajouterChargeVariable()" class="w-full mt-3 py-2 text-[11px] font-black uppercase tracking-widest text-red-600 bg-white border border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
                         </div><!-- /cfo-collapsible-body charges-var -->
                     </div><!-- /param-charges-var -->
 
@@ -1555,7 +1572,8 @@
                         <div v-if="donneesAnnuelles[anneeAffichage].epargne && donneesAnnuelles[anneeAffichage].epargne.length > 0">
                             <div v-for="obj in donneesAnnuelles[anneeAffichage].epargne" :key="obj.id" class="flex items-center justify-between border-b border-gray-100 pb-3 mb-3 last:border-0 last:mb-0 gap-3">
                                 <div class="flex-1 min-w-0">
-                                    <span class="text-sm font-black text-gray-700 uppercase tracking-wide block">{{ obj.nom }}</span>
+                                    <input v-if="estEnEdition('epargne:' + obj.id)" data-nom-edition type="text" v-model="obj.nom" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-purple-400 w-48" />
+                                    <span v-else data-nom :data-ligne="'epargne:' + obj.id" @dblclick="commencerRenommer('epargne:' + obj.id, obj, 'nom', renommerEpargne(obj.id))" title="Double-clic pour renommer" class="text-sm font-black text-gray-700 uppercase tracking-wide block cursor-text select-none">{{ obj.nom }}</span>
                                     <!-- v17.33 : Virement inter-comptes -->
                                     <div class="flex items-center gap-1 mt-1 flex-wrap">
                                         <span class="text-[9px] text-purple-600 font-bold uppercase">De :</span>
@@ -4399,9 +4417,6 @@
                 <div v-if="activeMobileTab === 'parametres' && donneesAnnuelles[anneeAffichage]">
                     <div class="flex items-center justify-between mb-3 px-1">
                         <h2 class="text-lg font-black text-gray-800 uppercase tracking-tighter">⚙️ Réglages & Paramètres</h2>
-                        <button @click="modeEdition = !modeEdition" :class="['text-[10px] px-3 py-2 rounded-lg font-black uppercase tracking-widest border', modeEdition ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-white text-gray-600 border-gray-300']">
-                            {{ modeEdition ? '✅ Fin' : '✏️ Noms' }}
-                        </button>
                     </div>
 
                     <!-- HEADER : Reste à vivre base (en évidence) -->
@@ -4629,10 +4644,10 @@
                         <div class="p-4 border-t border-gray-100 space-y-4">
                             <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].revenus" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="flex items-center justify-between gap-2 mb-2">
-                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
-                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-1">✂️</span></label>
+                                    <input v-if="estEnEdition('revenus:' + key)" data-nom-edition type="text" v-model="item.label" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none" />
+                                    <label v-else data-nom :data-ligne="'revenus:' + key" @dblclick="commencerRenommer('revenus:' + key, item, 'label', renommerLigneBudget('revenus', key))" title="Double-clic pour renommer" class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1 cursor-text select-none">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-1">✂️</span></label>
                                 </div>
-                                <input type="number" v-model.number="item.base" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-full p-3 border rounded-xl text-right font-black text-xl outline-none', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed' : 'border-gray-200 bg-gray-50 text-green-700']"/>
+                                <input type="number" v-model.number="item.base" @input="handleDataChange" @change="propagerValeurLigne('revenus', key, 'base')" :disabled="item.parts && item.parts.length > 0" :class="['w-full p-3 border rounded-xl text-right font-black text-xl outline-none', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed' : 'border-gray-200 bg-gray-50 text-green-700']"/>
                                 <!-- v17.29 : Sous-parties revenus mobile -->
                                 <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-green-300 space-y-2">
                                     <div v-for="(part, pi) in item.parts" :key="part.id" class="bg-green-50/60 rounded-lg p-2 border border-green-100">
@@ -4669,8 +4684,8 @@
                                     <button @click="uiBasculer('budget.revenus.' + key + '.periodes', item.showExceptions)" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
                                         {{ uiOuvert('budget.revenus.' + key + '.periodes', item.showExceptions) ? '➖ Masquer périodes' : '➕ Suspendre / Modifier Période' }}
                                     </button>
-                                    <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
-                                    <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].revenus, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
+                                    <button v-if="uiOuvert('budget.revenus.' + key + '.periodes', item.showExceptions) && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="uiOuvert('budget.revenus.' + key + '.periodes', item.showExceptions)" data-supprimer-ligne @click="supprimerLigneBudget('revenus', key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
                                 </div>
                                 <div v-if="uiOuvert('budget.revenus.' + key + '.periodes', item.showExceptions)" class="mt-3 bg-blue-50 rounded-xl p-3 border border-blue-100">
                                     <p class="text-[9px] font-black text-blue-800 uppercase tracking-widest mb-2">Règles d'exception</p>
@@ -4694,7 +4709,7 @@
                                     <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2 text-xs text-white bg-blue-600 rounded-lg font-bold uppercase tracking-widest">+ Ajouter Règle</button>
                                 </div>
                             </div>
-                            <button v-if="modeEdition" @click="ajouterEntree()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-green-600 bg-green-50 border-2 border-dashed border-green-300 rounded-xl hover:bg-green-100 transition-colors">+ Ajouter une Entrée</button>
+                            <button type="button" data-ajouter-ligne="revenus" @click="ajouterEntree()" class="w-full mt-3 py-2 text-[11px] font-black uppercase tracking-widest text-green-600 bg-white border border-dashed border-green-300 rounded-xl hover:bg-green-100 transition-colors">+ Ajouter une Entrée</button>
                         </div>
                     </details>
 
@@ -4715,7 +4730,7 @@
                             <!-- v32.10 : réglage global (v24.80), absent de la vue mobile jusqu'ici —
                                  c'est LUI qui pilote réellement le compte de toutes les charges fixes. -->
                             <div class="p-3 bg-orange-50 rounded-xl border border-orange-200">
-                                <label class="text-[10px] font-black text-orange-700 uppercase tracking-widest block mb-1.5">🏦 Prélever toutes les charges fixes sur :</label>
+                                <label class="text-[10px] font-black text-orange-700 uppercase tracking-widest block mb-1.5">🏦 Compte par défaut des charges fixes :</label>
                                 <select v-model="soldesInitiaux.compteChargesFixes" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-orange-300 rounded-lg bg-white outline-none">
                                     <option value="courant">💳 Compte Courant</option>
                                     <optgroup label="── Comptes bancaires ──">
@@ -4728,10 +4743,10 @@
                             </div>
                             <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesFixes" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="flex items-center justify-between gap-2 mb-2">
-                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
-                                    <label v-else class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-1">✂️</span></label>
+                                    <input v-if="estEnEdition('chargesFixes:' + key)" data-nom-edition type="text" v-model="item.label" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none" />
+                                    <label v-else data-nom :data-ligne="'chargesFixes:' + key" @dblclick="commencerRenommer('chargesFixes:' + key, item, 'label', renommerLigneBudget('chargesFixes', key))" title="Double-clic pour renommer" class="text-xs font-black text-gray-700 uppercase tracking-wide flex-1 cursor-text select-none">{{ item.label }}<span v-if="item.parts && item.parts.length" class="text-[9px] text-blue-500 ml-1">✂️</span></label>
                                 </div>
-                                <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.parts && item.parts.length > 0" :class="['w-full p-3 border rounded-xl text-right font-black text-xl outline-none', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed' : 'border-gray-200 bg-gray-50 text-orange-700']"/>
+                                <input type="number" v-model.number="item.valeur" @input="handleDataChange" @change="propagerValeurLigne('chargesFixes', key, 'valeur')" :disabled="item.parts && item.parts.length > 0" :class="['w-full p-3 border rounded-xl text-right font-black text-xl outline-none', item.parts && item.parts.length ? 'bg-gray-100 text-gray-400 border-dashed' : 'border-gray-200 bg-gray-50 text-orange-700']"/>
                                 <!-- v17.29 : Sous-parties charges fixes mobile -->
                                 <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-orange-300 space-y-2">
                                     <div v-for="(part, pi) in item.parts" :key="part.id" class="bg-orange-50/60 rounded-lg p-2 border border-orange-100">
@@ -4751,17 +4766,23 @@
                                      plus rien ne lit depuis la v24.80 Macro-Accounts (routage unifié
                                      via soldesInitiaux.compteChargesFixes, moteur ET pilotage).
                                      Remplacé par un rappel en lecture seule du compte réellement utilisé. -->
-                                <div v-if="!item.parts || !item.parts.length" class="mt-2 flex items-center gap-2 bg-orange-50/70 border border-orange-200 rounded-lg px-2.5 py-2">
+                                <div class="mt-2 flex items-center gap-2 bg-orange-50/70 border border-orange-200 rounded-lg px-2.5 py-1.5">
                                     <span class="text-[9px] font-black text-orange-700 uppercase tracking-widest shrink-0">← Prélevé sur</span>
-                                    <span class="text-[11px] font-black text-orange-800 truncate min-w-0">🏦 {{ getNomCompte(soldesInitiaux.compteChargesFixes || 'courant') }}</span>
-                                    <span class="text-[8px] text-orange-500 font-bold ml-auto shrink-0 text-right leading-tight">réglage global<br/>Charges Fixes</span>
+                                    <select data-compte-ligne :data-ligne="'chargesFixes:' + key" :value="item.compte || ''" @change="choisirCompteLigne('chargesFixes', key, $event.target.value)" @click.stop
+                                            :title="item.compte ? 'Cette charge sort de ce compte (choisi sur la ligne)' : 'Compte par défaut — choisissez-en un autre pour cette seule ligne'"
+                                            :class="['flex-1 min-w-0 text-[11px] font-black bg-transparent outline-none cursor-pointer', item.compte ? 'text-indigo-800' : 'text-orange-800']">
+                                        <option value="">🏦 {{ getNomCompte(soldesInitiaux.compteChargesFixes || 'courant') }} · par défaut</option>
+                                        <option value="courant">💳 Compte Courant</option>
+                                        <option v-for="c in comptesSelectOptions" :key="'lc_' + key + c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'lce_' + key + ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label || ep.nom }}</option>
+                                    </select>
                                 </div>
                                 <div class="flex gap-2 mt-2">
                                     <button @click="uiBasculer('budget.fixes.' + key + '.periodes', item.showExceptions)" class="flex-1 py-2 text-[10px] text-orange-600 font-bold uppercase tracking-widest bg-orange-50 rounded-lg">
                                         {{ uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions) ? '➖ Masquer périodes' : '➕ Gérer Périodes' }}
                                     </button>
-                                    <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
-                                    <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesFixes, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
+                                    <button v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions) && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions)" data-supprimer-ligne @click="supprimerLigneBudget('chargesFixes', key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
                                 </div>
                                 <div v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions)" class="mt-3 bg-orange-50 rounded-xl p-3 border border-orange-100">
                                     <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-orange-100 mb-2">
@@ -4784,7 +4805,7 @@
                                     <button @click="(item.exceptions = item.exceptions || []).push({ id: Date.now(), moisDebut: 1, moisFin: 1, nouvelleValeur: 0 }); handleDataChange()" class="w-full py-2 text-xs text-white bg-orange-600 rounded-lg font-bold uppercase tracking-widest">+ Ajouter Règle</button>
                                 </div>
                             </div>
-                            <button v-if="modeEdition" @click="ajouterChargeFixe()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-orange-600 bg-orange-50 border-2 border-dashed border-orange-300 rounded-xl hover:bg-orange-100 transition-colors">+ Ajouter une Charge Fixe</button>
+                            <button type="button" data-ajouter-ligne="chargesFixes" @click="ajouterChargeFixe()" class="w-full mt-3 py-2 text-[11px] font-black uppercase tracking-widest text-orange-600 bg-white border border-dashed border-orange-300 rounded-xl hover:bg-orange-100 transition-colors">+ Ajouter une Charge Fixe</button>
                         </div>
                     </details>
 
@@ -4803,7 +4824,7 @@
                         <div class="p-4 border-t border-gray-100 space-y-4">
                             <!-- v32.10 : réglage global (v24.80), absent de la vue mobile jusqu'ici. -->
                             <div class="p-3 bg-red-50 rounded-xl border border-red-200">
-                                <label class="text-[10px] font-black text-red-700 uppercase tracking-widest block mb-1.5">🏦 Prélever toutes les charges variables sur :</label>
+                                <label class="text-[10px] font-black text-red-700 uppercase tracking-widest block mb-1.5">🏦 Compte par défaut des charges variables :</label>
                                 <select v-model="soldesInitiaux.compteChargesVariables" @change="handleDataChange" class="w-full p-2 text-xs font-bold border border-red-300 rounded-lg bg-white outline-none">
                                     <option value="courant">💳 Compte Courant</option>
                                     <optgroup label="── Comptes bancaires ──">
@@ -4816,11 +4837,11 @@
                             </div>
                             <div v-for="(item, key) in donneesAnnuelles[anneeAffichage].chargesVariables" :key="key" class="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="flex items-center justify-between gap-2 mb-2">
-                                    <input v-if="modeEdition" type="text" v-model="item.label" @input="handleDataChange" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none"/>
-                                    <label v-else class="text-xs font-black text-gray-800 uppercase tracking-wide flex-1">{{ item.label }}</label>
+                                    <input v-if="estEnEdition('chargesVariables:' + key)" data-nom-edition type="text" v-model="item.label" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="flex-1 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-2 outline-none" />
+                                    <label v-else data-nom :data-ligne="'chargesVariables:' + key" @dblclick="commencerRenommer('chargesVariables:' + key, item, 'label', renommerLigneBudget('chargesVariables', key))" title="Double-clic pour renommer" class="text-xs font-black text-gray-800 uppercase tracking-wide flex-1 cursor-text select-none">{{ item.label }}</label>
                                 </div>
                                 <div class="flex items-stretch gap-2">
-                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" :disabled="item.details && item.details.length > 0" :class="['flex-1 p-3 border rounded-xl text-right font-black text-xl outline-none', item.details && item.details.length > 0 ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
+                                    <input type="number" v-model.number="item.valeur" @input="handleDataChange" @change="propagerValeurLigne('chargesVariables', key, 'valeur')" :disabled="item.details && item.details.length > 0" :class="['flex-1 p-3 border rounded-xl text-right font-black text-xl outline-none', item.details && item.details.length > 0 ? 'bg-gray-100 text-gray-400 border-dashed border-gray-300' : 'border-gray-200 bg-gray-50 text-red-700']"/>
                                     <select v-model="item.periode" @change="handleDataChange" class="p-3 border border-gray-200 rounded-xl text-xs font-black text-gray-700 bg-gray-100 outline-none min-w-[80px]">
                                         <option value="semaine">/ sem</option>
                                         <option value="mois">/ mois</option>
@@ -4846,10 +4867,16 @@
                                 </div>
                                 <!-- v32.10 : idem charges fixes — sélecteur mort depuis la v24.80,
                                      routage réel via soldesInitiaux.compteChargesVariables. -->
-                                <div v-if="!item.parts || !item.parts.length" class="mt-2 flex items-center gap-2 bg-red-50/70 border border-red-200 rounded-lg px-2.5 py-2">
+                                <div class="mt-2 flex items-center gap-2 bg-red-50/70 border border-red-200 rounded-lg px-2.5 py-1.5">
                                     <span class="text-[9px] font-black text-red-700 uppercase tracking-widest shrink-0">← Prélevé sur</span>
-                                    <span class="text-[11px] font-black text-red-800 truncate min-w-0">🏦 {{ getNomCompte(soldesInitiaux.compteChargesVariables || 'courant') }}</span>
-                                    <span class="text-[8px] text-red-500 font-bold ml-auto shrink-0 text-right leading-tight">réglage global<br/>Charges Variables</span>
+                                    <select data-compte-ligne :data-ligne="'chargesVariables:' + key" :value="item.compte || ''" @change="choisirCompteLigne('chargesVariables', key, $event.target.value)" @click.stop
+                                            :title="item.compte ? 'Cette charge sort de ce compte (choisi sur la ligne)' : 'Compte par défaut — choisissez-en un autre pour cette seule ligne'"
+                                            :class="['flex-1 min-w-0 text-[11px] font-black bg-transparent outline-none cursor-pointer', item.compte ? 'text-indigo-800' : 'text-red-800']">
+                                        <option value="">🏦 {{ getNomCompte(soldesInitiaux.compteChargesVariables || 'courant') }} · par défaut</option>
+                                        <option value="courant">💳 Compte Courant</option>
+                                        <option v-for="c in comptesSelectOptions" :key="'lc_' + key + c.id" :value="'cpt_' + c.id">{{ c.icone }} {{ c.label }}</option>
+                                        <option v-for="ep in donneesAnnuelles[anneeAffichage].epargne" :key="'lce_' + key + ep.id" :value="'ep_' + ep.id">🎯 {{ ep.label || ep.nom }}</option>
+                                    </select>
                                 </div>
                                 <div class="flex gap-2 mt-2">
                                     <button @click="uiBasculer('budget.variables.' + key + '.details', item.showDetails)" class="flex-1 py-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 rounded-lg">
@@ -4858,8 +4885,8 @@
                                     <button @click="uiBasculer('budget.variables.' + key + '.periodes', item.showExceptions)" class="flex-1 py-2 text-[10px] text-red-600 font-bold uppercase tracking-widest bg-red-50 rounded-lg border border-red-200">
                                         {{ uiOuvert('budget.variables.' + key + '.periodes', item.showExceptions) ? '➖ Masquer périodes' : '➕ Gérer Périodes' }}
                                     </button>
-                                    <button v-if="modeEdition && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
-                                    <button v-if="modeEdition" @click="supprimerLigneObj(donneesAnnuelles[anneeAffichage].chargesVariables, key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
+                                    <button v-if="uiOuvert('budget.variables.' + key + '.periodes', item.showExceptions) && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
+                                    <button v-if="uiOuvert('budget.variables.' + key + '.periodes', item.showExceptions)" data-supprimer-ligne @click="supprimerLigneBudget('chargesVariables', key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
                                 </div>
                                 <!-- v18.10 : Gérer Périodes variables mobile -->
                                 <div v-if="uiOuvert('budget.variables.' + key + '.periodes', item.showExceptions)" class="mt-3 bg-red-50 rounded-xl p-3 border border-red-100">
@@ -4902,7 +4929,7 @@
                                     <button @click="(item.details = item.details || []).push({ id: Date.now(), nom: 'Nouvelle ligne', montant: 0, periode: item.periode === 'mois' ? 'cycle' : 'semaine', paye: false, montantPaye: 0 }); handleDataChange()" class="w-full py-2 mt-3 text-xs text-white bg-gray-700 rounded-lg font-bold uppercase tracking-widest">+ Nouvelle ligne</button>
                                 </div>
                             </div>
-                            <button v-if="modeEdition" @click="ajouterChargeVariable()" class="w-full mt-4 py-3 text-sm font-black uppercase tracking-widest text-red-600 bg-red-50 border-2 border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
+                            <button type="button" data-ajouter-ligne="chargesVariables" @click="ajouterChargeVariable()" class="w-full mt-3 py-2 text-[11px] font-black uppercase tracking-widest text-red-600 bg-white border border-dashed border-red-300 rounded-xl hover:bg-red-100 transition-colors">+ Ajouter une Charge Variable</button>
                         </div>
                     </details>
 
@@ -4921,7 +4948,8 @@
                         <div class="p-4 border-t border-gray-100 space-y-4">
                             <!-- v17.15 : lecture seule mobile — édition dans Patrimoine & Objectifs -->
                             <div v-for="obj in donneesAnnuelles[anneeAffichage].epargne" :key="obj.id" class="flex justify-between items-center pb-3 mb-3 border-b border-gray-100 last:border-0 last:mb-0">
-                                <span class="text-xs font-black text-gray-700 uppercase tracking-wide">{{ obj.nom }}</span>
+                                <input v-if="estEnEdition('epargne:' + obj.id)" data-nom-edition type="text" v-model="obj.nom" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="text-xs font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none" />
+                                <span v-else data-nom :data-ligne="'epargne:' + obj.id" @dblclick="commencerRenommer('epargne:' + obj.id, obj, 'nom', renommerEpargne(obj.id))" title="Double-clic pour renommer" class="text-xs font-black text-gray-700 uppercase tracking-wide cursor-text select-none">{{ obj.nom }}</span>
                                 <span class="text-sm font-black text-purple-700">{{ formatMAD(obj.valeur) }}<span class="text-[9px] text-gray-400 ml-1">/mois</span></span>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-xs py-3 italic">Aucun objectif.</div>
@@ -14569,33 +14597,87 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
 
                     // v17.31 : Ajouter des entrées par défaut
-                    const ajouterEntree = () => {
-                        const yr = anneeAffichage.value;
-                        if (!donneesAnnuelles.value[yr]) return;
-                        const id = 'rev_' + Date.now();
-                        const catId = 'cat_rv_' + _slugCat(id);
-                        donneesAnnuelles.value[yr].revenus[id] = { label: 'Nouveau revenu', base: 0, destinationCompte: 'courant', exceptions: [], categorieId: catId };
-                        migrateCategoriesV22(); // ré-indexe la nouvelle entrée dans le registre
+                    // ── v37.50 : ÉDITER LE BUDGET SANS « MODE ÉDITION » ───────────────────────
+                    //   Double-clic sur un nom : il devient modifiable (Entrée garde, Échap annule).
+                    //   « + Ajouter » toujours là : la ligne naît avec son nom prêt à taper. Ajout,
+                    //   renommage, compte et suppression valent pour l'année affichée ET les
+                    //   suivantes (même clé de ligne) : une charge ne s'arrête pas au 31 décembre.
+                    const nomEnEdition = ref(null);
+                    const estEnEdition = (id) => !!nomEnEdition.value && nomEnEdition.value.id === id;
+                    const finRenommer = (annuler) => {
+                        const e = nomEnEdition.value;
+                        if (!e) return;
+                        nomEnEdition.value = null;
+                        const v = String(e.objet[e.champ] == null ? '' : e.objet[e.champ]).trim();
+                        if (annuler || !v) { e.objet[e.champ] = e.avant; return; }
+                        e.objet[e.champ] = v;
+                        if (v !== e.avant) { if (e.suite) e.suite(v, e.avant); handleDataChange(); }
+                    };
+                    const commencerRenommer = (id, objet, champ, suite) => {
+                        if (!objet) return;
+                        if (nomEnEdition.value) finRenommer(false);
+                        nomEnEdition.value = { id, objet, champ, avant: objet[champ], suite: suite || null };
+                        nextTick(() => { const el = document.querySelector('[data-nom-edition]'); if (el) { el.focus(); el.select(); } });
+                    };
+                    const _anneesDes = () => Object.keys(donneesAnnuelles.value || {}).map(Number)
+                        .filter(a => a >= Number(anneeAffichage.value)).sort((a, b) => a - b);
+                    const _lignesSuivantes = (coll, key) => _anneesDes().map(a => ((donneesAnnuelles.value[a] || {})[coll] || {})[key]).filter(Boolean);
+                    //  Renommer : les années suivantes qui portaient le même nom suivent
+                    const renommerLigneBudget = (coll, key) => (nouveau, avant) =>
+                        _lignesSuivantes(coll, key).forEach(it => { if (it.label === avant) it.label = nouveau; });
+                    const renommerEpargne = (id) => (nouveau, avant) => _anneesDes().forEach(a => {
+                        ((donneesAnnuelles.value[a] || {}).epargne || []).forEach(ep => { if (ep && String(ep.id) === String(id) && ep.nom === avant) ep.nom = nouveau; });
+                    });
+                    //  Le compte d'UNE ligne (vide = le compte par défaut de sa famille)
+                    const choisirCompteLigne = (coll, key, compte) => {
+                        _lignesSuivantes(coll, key).forEach(it => { if (compte) it.compte = compte; else delete it.compte; });
+                        calculationTick.value++;
                         handleDataChange();
                     };
-                    const ajouterChargeFixe = () => {
-                        const yr = anneeAffichage.value;
-                        if (!donneesAnnuelles.value[yr]) return;
-                        const id = 'fix_' + Date.now();
-                        const catId = 'cat_cf_' + _slugCat(id);
-                        donneesAnnuelles.value[yr].chargesFixes[id] = { label: 'Nouvelle charge fixe', valeur: 0, sourceCompte: 'courant', exceptions: [], categorieId: catId };
-                        migrateCategoriesV22();
+                    const _MODELES_LIGNE = {
+                        revenus: ['rev_', 'cat_rv_', () => ({ label: 'Nouveau revenu', base: 0, destinationCompte: 'courant', exceptions: [] })],
+                        chargesFixes: ['fix_', 'cat_cf_', () => ({ label: 'Nouvelle charge fixe', valeur: 0, exceptions: [] })],
+                        chargesVariables: ['var_', 'cat_cv_', () => ({ label: 'Nouvelle charge variable', valeur: 0, periode: 'mois', exceptions: [] })],
+                    };
+                    const ajouterLigneBudget = (coll) => {
+                        const yr = Number(anneeAffichage.value), P = _MODELES_LIGNE[coll];
+                        if (!P || !donneesAnnuelles.value[yr]) return null;
+                        const id = P[0] + Date.now();
+                        _anneesDes().forEach(a => {
+                            const d = donneesAnnuelles.value[a];
+                            if (!d) return;
+                            if (!d[coll] || typeof d[coll] !== 'object') d[coll] = {};
+                            d[coll][id] = { ...P[2](), categorieId: P[1] + _slugCat(id) };
+                        });
+                        migrateCategoriesV22();   // ré-indexe la nouvelle entrée dans le registre
+                        handleDataChange();
+                        //  Le nom tout de suite : « Syndic magasin », Entrée
+                        nextTick(() => commencerRenommer(coll + ':' + id, donneesAnnuelles.value[yr][coll][id], 'label', renommerLigneBudget(coll, id)));
+                        return id;
+                    };
+                    const supprimerLigneBudget = (coll, key) => {
+                        const an = Number(anneeAffichage.value);
+                        const it = ((donneesAnnuelles.value[an] || {})[coll] || {})[key];
+                        if (!it) return;
+                        const suivantes = _anneesDes().filter(a => a > an && ((donneesAnnuelles.value[a] || {})[coll] || {})[key]);
+                        if (!confirm('Supprimer « ' + (it.label || key) + ' » de ' + an + (suivantes.length ? ' et des années suivantes (' + suivantes.join(', ') + ')' : '') + ' ?')) return;
+                        _anneesDes().forEach(a => { const c = (donneesAnnuelles.value[a] || {})[coll]; if (c && c[key]) delete c[key]; });
+                        calculationTick.value++;
                         handleDataChange();
                     };
-                    const ajouterChargeVariable = () => {
-                        const yr = anneeAffichage.value;
-                        if (!donneesAnnuelles.value[yr]) return;
-                        const id = 'var_' + Date.now();
-                        const catId = 'cat_cv_' + _slugCat(id);
-                        donneesAnnuelles.value[yr].chargesVariables[id] = { label: 'Nouvelle charge variable', valeur: 0, periode: 'mois', sourceCompte: 'courant', categorieId: catId };
-                        migrateCategoriesV22();
+                    //  Un montant tapé sur une ligne : les années suivantes encore à 0 le reprennent
+                    //  (une ligne ajoutée vit aussi en 2027…) — un montant déjà saisi n'est jamais écrasé.
+                    const propagerValeurLigne = (coll, key, champ) => {
+                        const an = Number(anneeAffichage.value);
+                        const v = Number((((donneesAnnuelles.value[an] || {})[coll] || {})[key] || {})[champ] || 0);
+                        if (!(v > 0)) return;
+                        _lignesSuivantes(coll, key).forEach(it => { if (it !== donneesAnnuelles.value[an][coll][key] && !(Number(it[champ]) > 0)) it[champ] = v; });
                         handleDataChange();
                     };
+                    //  Les anciens noms, gardés pour leurs appelants
+                    const ajouterEntree = () => ajouterLigneBudget('revenus');
+                    const ajouterChargeFixe = () => ajouterLigneBudget('chargesFixes');
+                    const ajouterChargeVariable = () => ajouterLigneBudget('chargesVariables');
 
                     // v17.29 : Scinder = sous-catégories imbriquées sous le parent
                     const scinderLigneObj = (item) => {
@@ -15420,27 +15502,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // Mois futurs → calcul théorique inchangé
                         const _isCurM = (mois === moisBudgetaire.value.mois && an === moisBudgetaire.value.an);
                         if (_isCurM) {
-                            const resteFixe = Number(resteAPayerFixes.value || 0);
-                            if (resteFixe > 0) {
-                                unpaidItems.push({
-                                    libelle: '💳 Total Charges Fixes',
-                                    montant: resteFixe, type: 'debit',
-                                    jourPrevu: 10,
-                                    etat: 'prevu',
-                                    sourceCompte: soldesInitiaux.value.compteChargesFixes || 'courant'
-                                });
-                            }
+                            //  v37.50 : une ligne par compte (un seul compte : une ligne, comme avant)
+                            Object.entries(resteAPayerFixesParCompte.value).forEach(([src, resteFixe]) => {
+                                if (resteFixe > 0) unpaidItems.push({ libelle: '💳 Total Charges Fixes', montant: resteFixe, type: 'debit', jourPrevu: 10, etat: 'prevu', sourceCompte: src });
+                            });
                             // v28.90 Factures-Fix : ligne Factures (Règle 1, due − avance), routée variables
-                            const resteFact = Number(resteAPayerFactures.value || 0);
-                            if (resteFact > 0) {
-                                unpaidItems.push({
-                                    libelle: '🧾 Total Factures',
-                                    montant: resteFact, type: 'debit',
-                                    jourPrevu: 6,
-                                    etat: 'prevu',
-                                    sourceCompte: soldesInitiaux.value.compteChargesVariables || 'courant'
-                                });
-                            }
+                            Object.entries(resteAPayerFacturesParCompte.value).forEach(([src, resteFact]) => {
+                                if (resteFact > 0) unpaidItems.push({ libelle: '🧾 Total Factures', montant: resteFact, type: 'debit', jourPrevu: 6, etat: 'prevu', sourceCompte: src });
+                            });
                         } else {
                             Object.values(dAnnee.chargesFixes || {}).forEach(f => {
                                 const due = Number(f.valeur || 0);
@@ -15452,7 +15521,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     montant: amt, type: 'debit',
                                     jourPrevu: Number(f.jourPrevu || 10),
                                     etat: paid ? 'realise' : 'prevu',
-                                    sourceCompte: soldesInitiaux.value.compteChargesFixes || 'courant'
+                                    sourceCompte: compteDeLaCharge('fixe', f)   // v37.50
                                 });
                             });
                         }
@@ -15461,19 +15530,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // Mois courant → lire enveloppeVariableProrata.value (SSOT, prorata temporis)
                         // Mois futurs → calcul théorique inchangé
                         if (_isCurM) {
-                            const envVar = Number(enveloppeVariableProrata.value || 0);
-                            if (envVar > 0) {
-                                unpaidItems.push({
-                                    libelle: '🛒 Total Charges Variables',
-                                    montant: envVar, type: 'debit',
-                                    jourPrevu: 15,
-                                    etat: 'prevu',
-                                    sourceCompte: soldesInitiaux.value.compteChargesVariables || 'courant'
-                                });
-                            }
+                            //  v37.50 : l'enveloppe de chaque compte
+                            Object.entries(enveloppeConsoParCompte.value).forEach(([src, envVar]) => {
+                                if (envVar > 0) unpaidItems.push({ libelle: '🛒 Total Charges Variables', montant: envVar, type: 'debit', jourPrevu: 15, etat: 'prevu', sourceCompte: src });
+                            });
                         } else {
                             Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
-                                const _cvSrc = soldesInitiaux.value.compteChargesVariables || 'courant';
+                                const _cvSrc = compteDeLaCharge('variable', cv);   // v37.50
                                 if ((cv.details || []).length > 0) {
                                     let _paidAmt = 0, _unpaidAmt = 0;
                                     cv.details.forEach(d => {
@@ -15641,22 +15704,31 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             // ═══════════════════════════════════════════════════════════════════
                             const _isCurrentCycle = (mode === 'remaining' && m === curM && a === curA);
                             if (_isCurrentCycle) {
+                                //  v37.50 : chaque reste sur le compte de SES lignes (un seul compte : une ligne, comme avant)
+                                const _parCompte = (src) => { const o = {}; Object.entries(src || {}).forEach(([k, v]) => { const n = _normKey(k); o[n] = (o[n] || 0) + Number(v || 0); }); return o; };
                                 // 💳 Charges fixes — Règle 1 (due − avance)
-                                const _resteFix = Math.round(Number(resteAPayerFixes.value || 0) * 100) / 100;
-                                if (_resteFix > 0) out.push({ account: _fxSrc, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
+                                Object.entries(_parCompte(resteAPayerFixesParCompte.value)).forEach(([k, v]) => {
+                                    const _resteFix = Math.round(v * 100) / 100;
+                                    if (_resteFix > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
+                                });
                                 // 🧾 Factures — Règle 1 (due − avance), même traitement que les fixes (v28.90)
-                                const _resteFact = Math.round(Number(resteAPayerFactures.value || 0) * 100) / 100;
-                                if (_resteFact > 0) out.push({ account: _varSrc, libelle: '🧾 Total Factures', montant: _resteFact, type: 'debit', jourPrevu: 6, internal: false });
+                                Object.entries(_parCompte(resteAPayerFacturesParCompte.value)).forEach(([k, v]) => {
+                                    const _resteFact = Math.round(v * 100) / 100;
+                                    if (_resteFact > 0) out.push({ account: k, libelle: '🧾 Total Factures', montant: _resteFact, type: 'debit', jourPrevu: 6, internal: false });
+                                });
                                 // 🛒 Variables consommables — Règle 2 (prorata temporis, HORS factures)
-                                const _envVar = Math.round(Number(enveloppeVariableProrata.value || 0) * 100) / 100;
                                 //  v37.46 : une ligne par semaine restante, plus un bloc au 15
-                                semainesVariablesDuCycle(m, a, _envVar, new Date()).forEach(s =>
-                                    out.push({ account: _varSrc, libelle: s.libelle, montant: s.montant, type: 'debit', jourPrevu: s.jour, internal: false, variableSemaine: true }));
+                                Object.entries(_parCompte(enveloppeConsoParCompte.value)).forEach(([k, v]) => {
+                                    const _envVar = Math.round(v * 100) / 100;
+                                    semainesVariablesDuCycle(m, a, _envVar, new Date()).forEach(s =>
+                                        out.push({ account: k, libelle: s.libelle, montant: s.montant, type: 'debit', jourPrevu: s.jour, internal: false, variableSemaine: true }));
+                                });
                             } else {
                                 // ===== CHARGES FIXES (cycles futurs) : reduce → UNE seule ligne par compte =====
                                 const _fixByAcc = Object.values(dA.chargesFixes || {}).reduce((acc, f) => {
                                     const amt = _amt(f, f.valeur);
-                                    if (amt > 0) acc[_fxSrc] = Math.round(((acc[_fxSrc] || 0) + amt) * 100) / 100;
+                                    const k = _normKey(compteDeLaCharge('fixe', f));   // v37.50
+                                    if (amt > 0) acc[k] = Math.round(((acc[k] || 0) + amt) * 100) / 100;
                                     return acc;
                                 }, {});
                                 Object.keys(_fixByAcc).forEach(k => { if (_fixByAcc[k] > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _fixByAcc[k], type: 'debit', jourPrevu: 10, internal: false }); });
@@ -15664,7 +15736,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 // ===== CHARGES VARIABLES (cycles futurs) : reduce → UNE seule ligne par compte =====
                                 const _varByAcc = Object.values(dA.chargesVariables || {}).reduce((acc, cv) => {
                                     const amt = _varAmt(cv);
-                                    if (amt > 0) acc[_varSrc] = Math.round(((acc[_varSrc] || 0) + amt) * 100) / 100;
+                                    const k = _normKey(compteDeLaCharge('variable', cv));   // v37.50
+                                    if (amt > 0) acc[k] = Math.round(((acc[k] || 0) + amt) * 100) / 100;
                                     return acc;
                                 }, {});
                                 //  v37.46 : le budget variable du cycle, une ligne par semaine réelle
@@ -16188,12 +16261,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const a = _amt(r, r.base); if (a > 0) entrants += a;
                         });
                         // Charges fixes → sortants (filtre compte macro des fixes si scope courant)
-                        if (!_perim || _dans(_fxSrc)) {
-                            Object.values(dA.chargesFixes || {}).forEach(f => { const a = _amt(f, f.valeur); if (a > 0) sortants += a; });
-                        }
+                        //  v37.50 : ligne par ligne — chacune sur SON compte
+                        Object.values(dA.chargesFixes || {}).forEach(f => {
+                            if (_perim && !_dans(compteDeLaCharge('fixe', f))) return;
+                            const a = _amt(f, f.valeur); if (a > 0) sortants += a;
+                        });
                         // Charges variables → sortants (filtre compte macro des variables si scope courant)
-                        if (!_perim || _dans(_varSrc)) {
+                        {
                             Object.values(dA.chargesVariables || {}).forEach(cv => {
+                                if (_perim && !_dans(compteDeLaCharge('variable', cv))) return;   // v37.50
                                 const effV = _effVal(cv, cv.valeur);
                                 let monthly = coutVariableDuCycle(cv, mNum, annee, true);   // v37.30 : ligne par ligne
                                 monthly = Math.round(monthly * 100) / 100;
@@ -16423,6 +16499,35 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
                     // v28.40 RÈGLE 2 : Reste variable = enveloppe prorata temporis (plus de saisie manuelle)
                     const resteAPayerVariables = computed(() => enveloppeVariableProrata.value);
+                    //  v37.50 : les mêmes restes, COMPTE PAR COMPTE (clé brute du compte de chaque ligne).
+                    //  Σ = resteAPayerFixes / resteAPayerFactures, au centime.
+                    const resteAPayerFixesParCompte = computed(() => {
+                        calculationTick.value;
+                        const an = soldesInitiaux.value.anneeActuelle;
+                        const d = donneesAnnuelles.value[an], out = {};
+                        if (!d) return out;
+                        Object.values(d.chargesFixes || {}).forEach(f => {
+                            const due = getDueFixe(f, an);
+                            if (!(due > 0)) return;
+                            const r = Math.max(0, due - getPaidAmount(f, due));
+                            if (r > 0) { const k = compteDeLaCharge('fixe', f); out[k] = (out[k] || 0) + r; }
+                        });
+                        return out;
+                    });
+                    const resteAPayerFacturesParCompte = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value;
+                        const d = donneesAnnuelles.value[mb.an], out = {};
+                        if (!d) return out;
+                        Object.values(d.chargesVariables || {}).filter(cv => cv && cv.categorieId === 'cat_cv_factures').forEach(cv => {
+                            const k = compteDeLaCharge('variable', cv);
+                            ((cv.details || []).length ? cv.details : [cv]).forEach(det => {
+                                const due = Number(det.montant ?? det.valeur ?? 0);
+                                if (due > 0) { const r = Math.max(0, due - getPaidAmount(det, due)); if (r > 0) out[k] = (out[k] || 0) + r; }
+                            });
+                        });
+                        return out;
+                    });
                     // v28.90 Factures-Fix : RÈGLE 1 appliquée aux Factures (cat_cv_factures), bien
                     //   qu'elles soient stockées sous chargesVariables. Une facture est un montant EXACT
                     //   (élec, tel, internet…) → reste = dû − avance saisie, comme une charge fixe.
@@ -16732,7 +16837,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const due = getDueFixe(f, an);
                             const reste = Math.max(0, due - getPaidAmount(f, due));
                             if (reste > 0 && ok(f)) {
-                                const grp = getOrCreate(soldesInitiaux.value.compteChargesFixes || 'courant');
+                                const grp = getOrCreate(compteDeLaCharge('fixe', f));   // v37.50
                                 grp.montant += reste; grp.parNature.fix += reste;
                                 grp.lignes.push({ nom: f.label || '?', montant: reste, type: 'fix' });
                             }
@@ -16742,7 +16847,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         Object.values(dActuelle.chargesVariables || {})
                             .filter(cv => cv && cv.categorieId === 'cat_cv_factures')
                             .forEach(cv => {
-                                const srcFac = soldesInitiaux.value.compteChargesVariables || 'courant';
+                                const srcFac = compteDeLaCharge('variable', cv);   // v37.50
                                 const items = (cv.details || []).length ? cv.details : [cv];
                                 items.forEach(det => {
                                     const due = Number(det.montant ?? det.valeur ?? 0);
@@ -16756,8 +16861,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                         // v28.40 RÈGLE 2 : Charges variables CONSOMMABLES → enveloppe au prorata temporis
                         // (1 ligne, PAS une obligation par saisie ; HORS factures). Compte macro des variables.
-                        if (enveloppeVariableProrata.value > 0) {
-                            const srcVar = soldesInitiaux.value.compteChargesVariables || 'courant';
+                        //  v37.50 : un seul compte → exactement comme avant ; plusieurs → l'enveloppe de chacun,
+                        //  et chaque catégorie sous le compte qui la paie.
+                        const _envParCpt = enveloppeConsoParCompte.value;
+                        const _cvsActu = dActuelle.chargesVariables || {};
+                        if (Object.keys(_envParCpt).length > 1) {
+                            Object.entries(_envParCpt).forEach(([src, env]) => {
+                                const grp = getOrCreate(src);
+                                grp.montant += env; grp.parNature.var += env;
+                                consoResteParCategorie.value.filter(dc => compteDeLaCharge('variable', _cvsActu[dc.key]) === src)
+                                    .forEach(dc => grp.lignes.push({ nom: dc.nom, montant: dc.montant, type: 'var', estim: dc.estim }));
+                            });
+                        } else if (enveloppeVariableProrata.value > 0) {
+                            const srcVar = Object.keys(_envParCpt)[0] || compteDeLaCharge('variable', null);
                             const envVar = enveloppeVariableProrata.value;
                             const grp = getOrCreate(srcVar);
                             grp.montant += envVar; grp.parNature.var += envVar;
@@ -17128,8 +17244,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const grp = resteAPayerDetailParCompte.value.find(g => g.key === 'courant');
                         if (!grp) return 0;
                         // L'enveloppe conso n'est imputée au courant que si c'est le compte des variables
-                        const srcVar = soldesInitiaux.value.compteChargesVariables || 'courant';
-                        const envVar = (srcVar === 'courant') ? enveloppeVariableProrata.value : 0;
+                        //  v37.50 : la part de l'enveloppe portée par le courant
+                        const envVar = Number(enveloppeConsoParCompte.value['courant'] || 0);
                         return grp.montant - envVar;
                     });
 
@@ -17269,11 +17385,20 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
                     const cleDeCompte = (k) => _cleCompte(k, _cleCourant.value);
                     //  La règle de routage du moteur du Relevé (_mkLegs), mot pour mot.
+                    //  v37.50 — LE COMPTE D'UNE CHARGE : le sien s'il est choisi (item.compte), sinon le
+                    //  compte par défaut de sa famille (« Prélever toutes les charges … sur »). Le vieux
+                    //  champ sourceCompte des lignes fixes / variables reste ignoré (v24.80) : il vaut
+                    //  « courant » partout, il ne doit rien déplacer. Clé BRUTE (courant, cpt_…, ep_…).
+                    const compteDeLaCharge = (nature, item) => {
+                        const it = item || {}, si = soldesInitiaux.value || {};
+                        if (it.compte) return it.compte;
+                        return nature === 'fixe' ? (si.compteChargesFixes || 'courant') : (si.compteChargesVariables || 'courant');
+                    };
                     const compteDeFlux = (nature, item) => {
                         const si = soldesInitiaux.value || {};
                         const it = item || {};
-                        if (nature === 'fixe') return cleDeCompte(si.compteChargesFixes || 'courant');
-                        if (nature === 'variable') return cleDeCompte(si.compteChargesVariables || 'courant');
+                        if (nature === 'fixe') return cleDeCompte(compteDeLaCharge('fixe', it));
+                        if (nature === 'variable') return cleDeCompte(compteDeLaCharge('variable', it));
                         if (nature === 'epargne') return cleDeCompte(it.sourceCompte || 'courant');
                         if (nature === 'exceptionnel') return cleDeCompte(it.sourceCompte);
                         if (nature === 'virement') return cleDeCompte(it.sourceCompte || 'courant');
@@ -17283,8 +17408,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     //  …et la même règle, dite en clair, pour la bulle.
                     const regleDeRoutage = (nature, item) => {
                         const it = item || {};
-                        if (nature === 'fixe') return 'Toutes les charges fixes sortent de ce compte (réglage « compte des charges fixes »).';
-                        if (nature === 'variable') return 'Toutes les charges variables sortent de ce compte (réglage « compte des charges variables »).';
+                        if (nature === 'fixe') return it.compte ? 'Compte choisi sur cette charge fixe (Budget Structurel).' : 'Compte par défaut des charges fixes (Budget Structurel), aucun compte choisi sur cette ligne.';
+                        if (nature === 'variable') return it.compte ? 'Compte choisi sur cette charge variable (Budget Structurel).' : 'Compte par défaut des charges variables (Budget Structurel), aucun compte choisi sur cette ligne.';
                         if (nature === 'epargne') return 'Transfert vers « ' + (it.nom || it.label || 'épargne') + ' » ; compte source choisi sur cette épargne' + (it.sourceCompte ? '' : ' (par défaut : le courant)') + '.';
                         if (nature === 'exceptionnel') return it.sourceCompte ? 'Compte source choisi sur cette dépense.' : 'Aucun compte choisi sur cette dépense : par défaut, le compte courant.';
                         if (nature === 'virement') return 'Virement interne : sort de ce compte vers « ' + getNomCompte(it.destinationCompte || 'courant') + ' » (Calendrier pluriannuel).';
@@ -17891,7 +18016,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         Object.entries(d.chargesFixes || {}).forEach(([cle, f]) => {
                             const v = valeurEffective(f, f.valeur, m);
                             if (!(v > 0)) return;
-                            const l = { cle, nom: f.label || '?', montant: v, jourPrevu: f.jourPrevu || null, compte: compteDeFlux('fixe', f), nature: 'fixe' };
+                            const l = { cle, nom: f.label || '?', montant: v, jourPrevu: f.jourPrevu || null, compte: compteDeFlux('fixe', f), nature: 'fixe', ref: f };
                             if (estFonctionnement(l.compte)) lignes.fixes.push(l); else _hors({ ...l, sens: 'sortie' });
                         });
                         Object.values(d.chargesVariables || {}).forEach(c => {
@@ -18288,7 +18413,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const coussinMin = Math.round(Math.max(0, R.ressources) * 0.05);
                         //  Atterrissage si l'on s'en tient au reste à vivre plutôt qu'à tout
                         //  le budget conso. N'a de sens que si la conso sort du courant.
-                        const conso_sur_courant = (soldesInitiaux.value.compteChargesVariables || 'courant') === 'courant';
+                        const _envCpts = Object.keys(enveloppeConsoParCompte.value);   // v37.50
+                        const conso_sur_courant = _envCpts.length ? _envCpts.every(k => k === 'courant') : compteDeLaCharge('variable', null) === 'courant';
                         const siRav = conso_sur_courant ? courant + env - Math.max(0, rav) : null;
                         let etat, icone, titre, raison, conseil;
                         if (A.negatif) {
@@ -18789,7 +18915,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const dt = String(t.date || '').slice(0, 10);
                                 if (!dt || dt < dMin || dt > dMax) return;
                                 const m = Number(t.montant) || 0;
-                                const tx = _txRayonX(t, dt, cleVar);
+                                const tx = _txRayonX(t, dt, carte[t.categorieId] ? compteDeFlux('variable', d.chargesVariables[carte[t.categorieId]]) : cleVar);   // v37.50
                                 tx.categorieId = t.categorieId || null;
                                 //  Au-delà d'une semaine, « lun. 29 » ne suffit plus : on donne le mois.
                                 if (dt < ilYa6j) { const [, mo, j] = dt.split('-').map(Number); tx.quand = j + ' ' + _MOIS_COURTS[mo - 1]; }
@@ -18989,6 +19115,27 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // Nom historique conservé : tout le moteur (journal, reste à payer, relevé)
                     // consomme ce getter — il pointe maintenant sur l'enveloppe réelle.
                     const enveloppeVariableProrata = computed(() => enveloppeConsoRestante.value);
+                    //  v37.50 : l'enveloppe conso, COMPTE PAR COMPTE. Toutes les catégories sur le même
+                    //  compte (le cas d'avant) : l'enveloppe entière, au dirham. Sinon chaque compte porte
+                    //  le reste de SES catégories — un dépassement sur un compte ne se rembourse pas
+                    //  sur un autre.
+                    const enveloppeConsoParCompte = computed(() => {
+                        calculationTick.value;
+                        if (isCyclePasse.value) return {};
+                        const d = donneesAnnuelles.value[consoT0Annee.value] || {};
+                        const cvs = d.chargesVariables || {};
+                        const uns = [...new Set(Object.values(cvs).filter(cv => cv && cv.categorieId !== 'cat_cv_factures').map(cv => compteDeLaCharge('variable', cv)))];
+                        const total = Number(enveloppeConsoRestante.value || 0);
+                        if (uns.length <= 1) return total > 0 ? { [uns[0] || compteDeLaCharge('variable', null)]: total } : {};
+                        const reel = consoT0Renseigne.value, ratio = joursCycleRestants.value / joursCycleTotal.value;
+                        const out = {};
+                        consoCategoriesT0.value.forEach(c => {
+                            const k = compteDeLaCharge('variable', cvs[c.key]);
+                            out[k] = (out[k] || 0) + (reel ? (c.budget - c.engage) : c.budget * ratio);
+                        });
+                        Object.keys(out).forEach(k => { out[k] = Math.max(0, Math.round(out[k])); if (!out[k]) delete out[k]; });
+                        return out;
+                    });
 
                     // ── v32.40 : ventilation de l'enveloppe conso par catégorie ──────
                     //   La somme des lignes doit tomber EXACTEMENT sur enveloppeConsoRestante,
@@ -19007,7 +19154,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const reel = consoT0Renseigne.value;
                         const ratio = joursCycleRestants.value / joursCycleTotal.value;
                         const lignes = cats.map(c => ({
-                            nom: c.label,
+                            nom: c.label, key: c.key,   // v37.50 : pour la ranger sous le compte de SA catégorie
                             montant: Math.round(reel ? (c.budget - c.engage) : (c.budget * ratio)),
                             estim: !reel,
                         }));
@@ -19862,8 +20009,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 let baseVal = Number((f || {}).valeur || 0);
                                 let effVal = baseVal;
                                 (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) effVal = Number(e.nouvelleValeur || 0); });
-                                // v24.80 : routing macro-compte (ignore sourceCompte par ligne)
-                                const _sfx = _normKey(soldesInitiaux.value.compteChargesFixes || 'courant');
+                                // v24.80 : routing macro-compte (ignore sourceCompte par ligne) — v37.50 : ou le compte de la ligne
+                                const _sfx = _normKey(compteDeLaCharge('fixe', f));
                                 if (_sfx === courantCptKey || _sfx === 'courant') { fixCourant += effVal; }
                                 else { fixParCompte[_sfx] = (fixParCompte[_sfx] || 0) + effVal; }
                             });
@@ -19875,8 +20022,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 //  v17.99 : exceptions du mois — v37.29 : appliquées AVANT la conversion,
                                 //  × les semaines réelles du cycle (une exception « / sem » est hebdo).
                                 let effVal = valeurVariableDuCycle(curr || {}, mNum, aNum);
-                                // v24.80 : routing macro-compte (ignore sourceCompte par ligne)
-                                const _svar = _normKey(soldesInitiaux.value.compteChargesVariables || 'courant');
+                                // v24.80 : routing macro-compte (ignore sourceCompte par ligne) — v37.50 : ou le compte de la ligne
+                                const _svar = _normKey(compteDeLaCharge('variable', curr));
                                 if (_svar === courantCptKey || _svar === 'courant') { varCourant += effVal; }
                                 else { varParCompte[_svar] = (varParCompte[_svar] || 0) + effVal; }
                             });
@@ -20010,8 +20157,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     let due = getDueFixe(f, aNum);
                                     let remaining = Math.max(0, due - getPaidAmount(f, due));
                                     if (remaining <= 0) return;
-                                    // v24.80 : routing macro-compte
-                                    const src = soldesInitiaux.value.compteChargesFixes || 'courant';
+                                    // v24.80 : routing macro-compte — v37.50 : ou le compte de la ligne
+                                    const src = compteDeLaCharge('fixe', f);
                                     if (src === 'courant') { fRestCourant += remaining; }
                                     else { fRestParCompte[src] = (fRestParCompte[src] || 0) + remaining; }
                                 });
@@ -20041,8 +20188,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                         remaining = Number(curr?.valeur || 0) * rConso;
                                     }
                                     if (remaining <= 0) return;
-                                    // v24.80 : routing macro-compte
-                                    const src = soldesInitiaux.value.compteChargesVariables || 'courant';
+                                    // v24.80 : routing macro-compte — v37.50 : ou le compte de la ligne
+                                    const src = compteDeLaCharge('variable', curr);
                                     if (src === 'courant') { vRestCourant += remaining; }
                                     else { vRestParCompte[src] = (vRestParCompte[src] || 0) + remaining; }
                                 });
@@ -21099,6 +21246,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     return { 
                         CURRENT_VERSION, CHANGELOG, showChangelog, showImportWarning, importDeltas, fileVersionImported, confirmerImport, annulerImport, 
                         activeTab, appMode, modeEdition, fileInput, soldesInitiaux, donneesAnnuelles, projetStudio,
+                        // v37.50 : édition du budget sans mode édition
+                        estEnEdition, commencerRenommer, finRenommer, renommerLigneBudget, renommerEpargne, choisirCompteLigne,
+                        ajouterLigneBudget, supprimerLigneBudget, propagerValeurLigne,
                         // v37.0 — Supervision IA
                         aiMemoryOnglet, aiMemoryRag, aiMemoryChat, aiMemoryChargement, aiMemoryChargee,
                         aiMemoryErreur, aiMemoryAvertissement, aiMemoryFiltre, chargerAiMemory,
@@ -21271,6 +21421,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         liberteCycle, sanctuaireHebdo, consoCompteurRenseigne, saisirCompteurConso,
                         // v37.29 : semaines réelles du cycle
                         semainesDuCycle, semainesDeLAnnee, cyclesSemaines,
+                        // v37.50 : un compte par ligne
+                        compteDeLaCharge, resteAPayerFixesParCompte, resteAPayerFacturesParCompte, enveloppeConsoParCompte,
                         // v37.30 : un rythme par ligne de détail
                         periodeDetail, coutVariableDuCycle, dependDesSemaines, valeurEquivalente,
                         // v37.31 : semaine écoulée sans saisie = son prévu
