@@ -766,7 +766,7 @@
                         <span class="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200">Vue Prévi · Lecture seule</span>
                     </div>
 
-                    <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" lien="Pointer le réalisé"
+                    <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @cloturer="basculerClotureConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" lien="Pointer le réalisé"
                                       @aller="appMode = 'reel'; activeTab = 'pilotage'"
                                       @revenir="pilotageViewedCycle = null"></meteo-financiere>
 
@@ -3655,7 +3655,7 @@
                 <!-- v37.17 : sur téléphone, le Prévisionnel n'a pas d'onglet « Théorique » :
                      la météo se pose donc ici, en tête de chaque écran. -->
                 <div class="mb-4">
-                    <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" lien="Pointer le réalisé"
+                    <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @cloturer="basculerClotureConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" lien="Pointer le réalisé"
                                       @aller="appMode = 'reel'; activeTab = 'pilotage'"
                                       @revenir="pilotageViewedCycle = null"></meteo-financiere>
                 </div>
@@ -5108,7 +5108,7 @@
                     </div>
 
                     <!-- v37.17 : la même météo que dans le Prévisionnel -->
-                    <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" :chips="false"
+                    <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @cloturer="basculerClotureConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" :chips="false"
                                       :lien="isMobile ? null : 'Voir le budget prévu'"
                                       @aller="appMode = 'previsionnel'; activeTab = 'pilotageTheo'"
                                       @revenir="pilotageViewedCycle = null"></meteo-financiere>
@@ -5401,6 +5401,13 @@
                                                     </div>
                                                     <span v-if="t.sens === 'credit'" data-entree-montant class="text-sm font-black text-emerald-300 tabular-nums whitespace-nowrap">+ {{ formatMAD(t.due) }}</span>
                                                     <span v-else class="text-[10px] font-black text-slate-400 w-16 text-right tabular-nums">/ {{ formatNombre(t.due) }}</span>
+                                                    <!-- v37.51 : clôturer la case — plus rien n'est attendu sur ce cycle -->
+                                                    <button type="button" data-cloturer @click="cloturerItem(t.ref, cyclePilotage)"
+                                                            :aria-label="'Clôturer ' + t.libelle + ' pour ce cycle'"
+                                                            :title="t.sens === 'credit'
+                                                                ? 'Clôturer : plus rien à recevoir sur ce cycle' + (t.regle > 0 ? ' (' + formatNombre(t.regle) + ' reçus)' : '')
+                                                                : 'Clôturer pour ce cycle : plus rien n’est attendu' + (t.regle > 0 ? ' — ' + formatNombre(t.regle) + ' réglés, ' + formatNombre(Math.max(0, t.due - t.regle)) + ' libérés' : '')"
+                                                            class="shrink-0 w-7 h-7 grid place-items-center rounded-lg border border-slate-700/60 text-[11px] text-slate-500 opacity-70 hover:opacity-100 hover:text-emerald-300 hover:border-emerald-500/60 hover:bg-emerald-500/10 transition">🔒</button>
                                                 </div>
                                             </div>
                                         </transition-group>
@@ -5427,13 +5434,23 @@
                                         <div v-for="t in dejaValidePilotage.lignes" :key="'ok_' + t.cle" data-valide :data-nature-ligne="t.nature"
                                              class="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-slate-900/70 border border-slate-800 opacity-70 hover:opacity-100 transition-opacity">
                                             <label class="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
-                                                <input type="checkbox" :checked="true" @change="toggleItemPaid(t.ref, t.due, cyclePilotage)" title="Décocher : remettre à traiter"
+                                                <input type="checkbox" :checked="true" @change="toggleItemPaid(t.ref, t.due, cyclePilotage)" :title="t.clos ? 'Décocher : rouvrir la case (ce qui est réglé reste)' : 'Décocher : remettre à traiter'"
                                                        class="w-4 h-4 accent-emerald-500 cursor-pointer shrink-0"/>
                                                 <span data-badge-nature :data-nature="t.nature" class="text-[9px] font-black text-slate-500 shrink-0 whitespace-nowrap">{{ t.badge }}</span>
                                                 <span data-valide-nom class="text-xs font-bold text-slate-400 line-through truncate">{{ t.libelle }}</span>
                                                 <span v-if="t.quand" class="hidden sm:inline text-[9px] text-slate-600 font-bold shrink-0">le {{ t.quand }}</span>
                                             </label>
-                                            <span data-valide-montant :class="['text-xs font-black shrink-0 tabular-nums', t.sens === 'credit' ? 'text-emerald-400' : 'text-slate-400']">{{ t.sens === 'credit' ? '+ ' : '' }}{{ formatMAD(t.regle || t.due) }}</span>
+                                            <!-- v37.51 : une case validée ou close reste OUVERTE aux ajouts ; elle dit ce qu'elle a libéré, ou son dépassement -->
+                                            <span v-if="t.clos" data-valide-clos title="Clôturée : plus rien n’est attendu sur ce cycle — décocher pour la rouvrir"
+                                                  class="text-[9px] font-black px-1.5 py-px rounded-full border border-slate-600 text-slate-400 shrink-0 whitespace-nowrap">🔒<span class="hidden sm:inline"> clôturé</span><template v-if="t.regle < t.due"> · {{ formatNombre(t.due - t.regle) }}<span class="hidden sm:inline"> libérés</span></template></span>
+                                            <span v-if="t.sens !== 'credit' && t.regle > t.due" data-valide-depassement
+                                                  class="text-[9px] font-black px-1.5 py-px rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/40 shrink-0 whitespace-nowrap">dépassement +{{ formatNombre(t.regle - t.due) }}</span>
+                                            <input v-if="t.sens !== 'credit' || t.nature === 'exceptionnel'" type="text" inputmode="decimal" autocomplete="off" data-valide-ajout
+                                                   :aria-label="'Ajouter un montant à ' + t.libelle" placeholder="+ ajouter"
+                                                   :title="'Ajouter une dépense à cette case (réglé : ' + formatNombre(t.regle) + ' / ' + formatNombre(t.due) + ') — « -20 » corrige'"
+                                                   @change="ajouterAuRegle(t.ref, t.due, $event.target.value, cyclePilotage); $event.target.value = ''" @keydown.enter="$event.target.blur()"
+                                                   class="w-[5rem] h-6 shrink-0 bg-transparent border border-slate-700/60 hover:border-slate-500 rounded-lg px-1.5 text-right text-[11px] font-bold text-slate-300 placeholder:text-slate-600 placeholder:font-semibold outline-none focus:border-emerald-400 transition"/>
+                                            <span data-valide-montant :class="['text-xs font-black shrink-0 tabular-nums', t.sens === 'credit' ? 'text-emerald-400' : (t.regle > t.due ? 'text-rose-300' : 'text-slate-400')]">{{ t.sens === 'credit' ? '+ ' : '' }}{{ formatMAD(t.clos ? t.regle : (t.regle || t.due)) }}</span>
                                         </div>
                                     </div>
                                 </details>
@@ -7343,7 +7360,7 @@
         const MeteoFinanciere = {
             props: { meteo: { type: Object, required: true }, formatMad: { type: Function, required: true },
                      lien: { type: String, default: null }, chips: { type: Boolean, default: true } },
-            emits: ['aller', 'revenir', 'effacer', 'semaine', 'saisie', 'retirer'],
+            emits: ['aller', 'revenir', 'effacer', 'semaine', 'saisie', 'retirer', 'cloturer'],
             components: { 'mono-compte': MonoCompte },
             data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: { ...(etatUI['meteo.postes'] || {}) }, caseActive: null }; },
             computed: {
@@ -7432,6 +7449,11 @@
                 postesVisibles(c) { return this.rxTousPostes ? c.prevu : c.prevu.slice(0, 8); },
                 //  v37.30 : le rythme d'une ligne, en court
                 uniteCourte(u) { return u === 'quinzaine' ? '/ 15 j' : (u === 'cycle' ? '/ cycle' : '/ sem'); },
+                //  v37.51 : le 🔒 d'une case — / sem : la semaine affichée ; / 15 j et / cycle : le cycle
+                titreCloture(nom, unite, clos) {
+                    if (clos) return 'Rouvrir ' + nom + ' : sa case attend de nouveau des dépenses';
+                    return 'Clôturer ' + nom + (unite === 'semaine' ? ' pour cette semaine' : ' pour ce cycle') + ' : plus rien n’est attendu, le reste de son prévu est libéré';
+                },
                 deplierPostes() { this.rxTousPostes = true; this.$nextTick(() => this.placer()); },
                 estOuvert(type, key) { return !!this.rx && this.rx.type === type && this.rx.key === key; },
                 //  Souris : le survol ouvre, la sortie referme (avec un temps de grâce
@@ -7688,6 +7710,7 @@
                                     <template v-if="c.sem.declare"> · <template v-if="c.sem.reste >= 0">reste <span class="font-black text-white/90">{{ chiffre(c.sem.reste) }}</span></template><span v-else class="font-black text-rose-200">dépassé de {{ chiffre(-c.sem.reste) }}</span></template>
                                     <template v-if="c.sem.tickets > 0"> · 🧾 {{ chiffre(c.sem.tickets) }}</template>
                                     <template v-if="c.sem.defaut > 0"> · <span class="text-emerald-200" data-pulse-defaut>✓ au prévu</span></template>
+                                    <template v-if="c.sem.ecoS > 0"> · <span class="font-black text-white/85" data-pulse-libere>🔒 {{ chiffre(c.sem.ecoS) }} libérés</span></template>
                                 </span>
                                 <span v-if="c.sem.prevuCycle > 0" data-pulse-prevu-cycle class="block text-[10px] font-semibold text-white/50 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ '+ ' + chiffre(c.sem.prevuCycle) + ' DH / cycle (' + c.sem.postes.filter(p => p.unite !== 'semaine').map(p => p.nom).join(' · ') + ')' }}</span>
                             </span>
@@ -7714,6 +7737,9 @@
                                    class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                         </label>
+                        <button v-if="!c.sem.postes.length" type="button" data-pulse-cloturer :data-poste="c.key" :aria-pressed="c.sem.clos ? 'true' : 'false'" :title="titreCloture(c.label, 'semaine', c.sem.clos)"
+                                @click="$emit('cloturer', sm.lundi, c.key, 'semaine'); fermer()"
+                                :class="['shrink-0 w-6 h-6 grid place-items-center rounded-md text-[10px] transition', c.sem.clos ? 'bg-white/25 ring-1 ring-white/60' : 'opacity-35 hover:opacity-100 hover:bg-white/10']">🔒</button>
                     </div>
                     <!-- 📦 Des saisies d'avant la saisie par semaine, toujours comptées -->
                     <p v-if="c.sem.cycleAvant > 0" data-pulse-cycle-avant class="mt-1 ml-1 md:ml-2 text-[10px] font-semibold text-white/55 leading-snug">
@@ -7727,7 +7753,7 @@
                             <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }}</span>
-                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">Prévu : {{ chiffre(d.prevu) }} DH{{ d.unite !== 'semaine' ? ' ' + uniteCourte(d.unite) : '' }}<template v-if="d.unite !== 'semaine' && d.cycleEngage > 0"> · <span class="text-white/75">{{ chiffre(d.cycleEngage) }} ce cycle</span></template><template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template><template v-if="d.defaut > 0"> · <span class="text-emerald-200" data-pulse-poste-defaut>✓ au prévu</span></template></span>
+                                <span class="block text-[10px] font-semibold text-white/45 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">Prévu : {{ chiffre(d.prevu) }} DH{{ d.unite !== 'semaine' ? ' ' + uniteCourte(d.unite) : '' }}<template v-if="d.unite !== 'semaine' && d.cycleEngage > 0"> · <span class="text-white/75">{{ chiffre(d.cycleEngage) }} ce cycle</span></template><template v-if="d.tickets > 0"> · 🧾 {{ chiffre(d.tickets) }}</template><template v-if="d.defaut > 0"> · <span class="text-emerald-200" data-pulse-poste-defaut>✓ au prévu</span></template><template v-if="d.exces > 0"> · <span class="font-black text-rose-200" data-pulse-poste-depasse>dépassement +{{ chiffre(d.exces) }}</span></template><template v-else-if="d.clos"> · <span class="font-black text-white/85" data-pulse-poste-clos>🔒 {{ d.eco > 0 ? chiffre(d.eco) + ' libérés' : 'clôturé' }}</span></template></span>
                                 <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.depasse ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pct + '%' }"></span></span>
                             </span>
                             <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
@@ -7738,6 +7764,9 @@
                                        class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                                 <span class="text-[10px] font-bold text-white/45">DH</span>
                             </label>
+                            <button type="button" data-pulse-cloturer :data-poste="d.cle" :aria-pressed="d.clos ? 'true' : 'false'" :title="titreCloture(d.nom, d.unite, d.clos)"
+                                    @click="$emit('cloturer', sm.lundi, d.cle, d.unite); fermer()"
+                                    :class="['shrink-0 w-6 h-6 grid place-items-center rounded-md text-[10px] transition', d.clos ? 'bg-white/25 ring-1 ring-white/60' : 'opacity-35 hover:opacity-100 hover:bg-white/10']">🔒</button>
                         </div>
                         <div data-pulse-poste data-poste="libre" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
                             <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">🏷️</span>
@@ -7753,6 +7782,7 @@
                                        class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                                 <span class="text-[10px] font-bold text-white/45">DH</span>
                             </label>
+                            <span aria-hidden="true" class="shrink-0 w-6"></span>
                         </div>
                     </div>
                     </div>
@@ -7957,8 +7987,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.50 Compte-Par-Ligne";
+                    const CURRENT_VERSION = "37.51 Cloture";
                     const CHANGELOG = [
+        { version: "37.51 Cloture", date: "2026-10-14", changes: [
+            "🔒 CLÔTURER UNE CASE DU PILOTAGE — chaque ligne « À traiter » a son petit cadenas : la case est close pour le cycle, à ce qui a été réglé (eau 54 / 300 : 54 réglés, 246 libérés). Plus rien n'est attendu : le reste quitte le Relevé, le reste à payer par compte, l'urgence, la progression, le surplus. Close à 0 (rien payé) : 0 réglé, pas son dû. Revenus compris : « plus rien à recevoir ».",
+            "RIEN NE SE BLOQUE — dans « Déjà validé », chaque ligne garde un champ « + ajouter » (« -20 » corrige), même close. Au-delà du dû elle le dit : « dépassement +34 », montant en rouge. Une ligne close affiche « 🔒 clôturé · 246 libérés ». Décocher une case close la rouvre avec ce qui a été réglé.",
+            "🔒 DANS LA MÉTÉO — sur chaque poste : une ligne / sem se clôt pour la semaine affichée, une ligne / 15 j ou / cycle pour le cycle, une catégorie sans poste pour la semaine. Close et vide, elle vaut 0 (plus « au prévu ») ; ce qui reste de son prévu est libéré : il sort de l'enveloppe conso, du Reste à dépenser et du Relevé. La saisie reste ouverte : au-delà du prévu, « dépassement ». Un second 🔒 rouvre ; « effacer tout le cycle » efface aussi ses clôtures.",
+            "SANS CLÔTURE, RIEN NE BOUGE — vérifié au dirham sur vos données (Relevé, soldes, reste à payer, tâches, surplus 2026/2027, respiration, Bilan).",
+            "PREUVE — nouvelle suite « Clôturer une case » : 46 contrôles calculés à la main (Œufs 30 / 50 clos : 20 libérés puis dépassement +20 ; semaine écoulée ; Hri / cycle 400 libérés ; SORTIES ; rechargement ; eau 54 / 300 ; « + ajouter » ; décocher ; tel close à 0 ; LOYER avec avance ; SALAIRE). Rejouée sur la v37.50 : 30 contrôles en échec. Vingt-quatre défauts réintroduits exprès : tous attrapés.",
+        ] },
         { version: "37.50 Compte-Par-Ligne", date: "2026-10-14", changes: [
             "UN COMPTE PAR LIGNE — chaque charge fixe et chaque charge variable a sa puce « 🏦 » : « par défaut » (le compte de sa famille, réglé en tête de section) ou le compte de CETTE ligne (ex. « Syndic magasin » sur le Courant pendant que les autres charges fixes partent d'Assafa). Sur mobile, l'encart « ← Prélevé sur » devient ce choix. Tant que rien n'est choisi, aucun chiffre ne bouge (vérifié au dirham sur vos données).",
             "PARTOUT LA MÊME RÈGLE — le Relevé (cycle en cours et cycles futurs : une ligne « 💳 Total Charges Fixes » par compte), le reste à payer et les cartes par compte, l'enveloppe conso (chaque compte porte le reste de SES catégories), les tâches du Pilotage, le surplus et la Météo (une charge payée par un compte d'épargne passe à part, comme une dépense exceptionnelle), la projection et le CFO côté serveur. Le vieux champ « sourceCompte » de ces lignes, à « courant » partout, reste ignoré.",
@@ -15328,6 +15365,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const isItemPaid = (item, dueAmount, cle) => {
                         const e = _etatCycle(item, cle);
                         if (!e) return false;
+                        if (e.cloture) return true;          // v37.51 : close = plus rien n'est attendu
                         if (e.paye && !e.montantPaye) return true;
                         return Math.abs(Number(e.montantPaye) || 0) >= Math.abs(Number(dueAmount) || 0);
                     };
@@ -15341,9 +15379,47 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return e.paye ? dueAmount : 0;
                     };
 
+                    /*  v37.51 — UNE CASE CLÔTURÉE. « Plus rien n'est attendu sur ce cycle » : elle
+                        vaut ce qui a été réglé, le reste de son dû est libéré. getPaidAmount dit
+                        toujours ce qui a VRAIMENT été réglé ; trois lectures en découlent :
+                          resteDuItem  — ce qui reste à payer (0 si close)
+                          regleDuItem  — ce qu'une ligne faite a coûté (close à 0 : 0, pas son dû)
+                          couvertItem  — ce qu'une ligne couvre de son dû dans une somme (close : tout) */
+                    const estClotureItem = (item, cle) => !!(_etatCycle(item, cle) || {}).cloture;
+                    const resteDuItem = (item, due, cle) => estClotureItem(item, cle) ? 0 : Math.max(0, due - getPaidAmount(item, due, cle));
+                    const regleDuItem = (item, due, cle) => estClotureItem(item, cle) ? (getPaidAmount(item, due, cle) || 0) : (getPaidAmount(item, due, cle) || due);
+                    const couvertItem = (item, due, cle) => {
+                        const p = getPaidAmount(item, due, cle) || 0;
+                        return estClotureItem(item, cle) ? Math.max(p, Number(due) || 0) : p;
+                    };
+                    const cloturerItem = (item, cle) => {
+                        if (!item) return;
+                        const e = _etatCycle(item, cle) || { paye: false, montantPaye: 0 };
+                        _poserEtatCycle(item, cle, Object.assign({}, e, { cloture: true, dateReelle: e.dateReelle || _aujourdhuiISO() }));
+                        handleDataChange();
+                    };
+                    //  « + ajouter » d'une ligne déjà validée (ou close) : s'ajoute au réglé, rien ne se
+                    //  désactive. « −20 » corrige. Au-delà du dû, la ligne le dit : dépassement.
+                    const ajouterAuRegle = (item, due, valeur, cle) => {
+                        const t = String(valeur == null ? '' : valeur).trim().replace(',', '.').replace('−', '-').replace(/^\+/, '').replace(/\s+/g, '');
+                        const v = Number(t);
+                        if (!t || !Number.isFinite(v) || v === 0) return;
+                        const base = Math.abs(Number(getPaidAmount(item, due, cle)) || 0);
+                        setMontantPayeCycle(item, Math.max(0, Math.round((base + v) * 100) / 100), cle);
+                    };
+
                     const toggleItemPaid = (item, dueAmount, cle) => {
                         // v25.40 Strict-Immutability : cocher/décocher ne change QUE l'état
                         // de l'item. Le solde réel des comptes n'est JAMAIS muté ici.
+                        //  v37.51 : décocher une case CLOSE la rouvre avec ce qui a été réglé.
+                        const _e = _etatCycle(item, cle);
+                        if (_e && _e.cloture && Math.abs(Number(_e.montantPaye) || 0) < Math.abs(Number(dueAmount) || 0)) {
+                            const rouverte = Object.assign({}, _e);
+                            delete rouverte.cloture;
+                            _poserEtatCycle(item, cle, rouverte);
+                            handleDataChange();
+                            return;
+                        }
                         const dejaPaye = isItemPaid(item, dueAmount, cle);
                         _poserEtatCycle(item, cle, dejaPaye
                             ? { paye: false, montantPaye: 0 }
@@ -15495,7 +15571,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const due = Number(r.base || 0);
                             if (!due) return;
                             const paid = isItemPaid(r, due, _cyc);
-                            const amt = paid ? (getPaidAmount(r, due, _cyc) || due) : due;
+                            const amt = paid ? (regleDuItem(r, due, _cyc)) : due;
                             (paid ? paidItems : unpaidItems).push({
                                 libelle: r.label || 'Revenu',
                                 montant: amt, type: 'credit',
@@ -15522,7 +15598,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const due = Number(f.valeur || 0);
                                 if (!due) return;
                                 const paid = isItemPaid(f, due, _cyc);
-                                const amt = paid ? (getPaidAmount(f, due, _cyc) || due) : due;
+                                const amt = paid ? (regleDuItem(f, due, _cyc)) : due;
                                 (paid ? paidItems : unpaidItems).push({
                                     libelle: f.label || 'Charge fixe',
                                     montant: amt, type: 'debit',
@@ -15549,7 +15625,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     cv.details.forEach(d => {
                                         const due = dueDetailDuCycle(d, cv, mois, an);   // v37.30 : son rythme
                                         if (!due) return;
-                                        if (isItemPaid(d, due, _cyc)) _paidAmt += getPaidAmount(d, due, _cyc) || due;
+                                        if (isItemPaid(d, due, _cyc)) _paidAmt += regleDuItem(d, due, _cyc);
                                         else _unpaidAmt += due;
                                     });
                                     if (_paidAmt > 0) paidItems.push({ libelle: cv.label || 'Variable', montant: _paidAmt, type: 'debit', jourPrevu: 15, etat: 'realise', sourceCompte: _cvSrc });
@@ -15558,7 +15634,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const due = Number(cv.valeur || 0);
                                     if (!due) return;
                                     const paid = isItemPaid(cv, due, _cyc);
-                                    const amt = paid ? (getPaidAmount(cv, due, _cyc) || due) : due;
+                                    const amt = paid ? (regleDuItem(cv, due, _cyc)) : due;
                                     (paid ? paidItems : unpaidItems).push({ libelle: cv.label || 'Variable', montant: amt, type: 'debit', jourPrevu: 15, etat: paid ? 'realise' : 'prevu', sourceCompte: _cvSrc });
                                 }
                             });
@@ -15569,7 +15645,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const due = Number(dep.montant || 0);
                             if (!due) return;
                             const paid = isItemPaid(dep, due, _cyc);
-                            const amt = paid ? (getPaidAmount(dep, due, _cyc) || due) : due;
+                            const amt = paid ? (regleDuItem(dep, due, _cyc)) : due;
                             (paid ? paidItems : unpaidItems).push({
                                 libelle: dep.nom || dep.label || 'Dépense',
                                 montant: amt, type: 'debit',
@@ -15677,8 +15753,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (monthly <= 0) return 0;
                                 if (mode === 'full') return monthly;
                                 let paid = 0;
-                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, dueDetailDuCycle(d, cv, m, a), _cyc) || 0; });
-                                else paid = getPaidAmount(cv, effValeur, _cyc) || 0;
+                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += couvertItem(d, dueDetailDuCycle(d, cv, m, a), _cyc) || 0; });
+                                else paid = couvertItem(cv, effValeur, _cyc) || 0;
                                 const rem = monthly - paid;
                                 return rem > 0 ? Math.round(rem * 100) / 100 : 0;
                             };
@@ -15689,7 +15765,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (mode === 'realized-in') {
                                     const v = _effVal(r, r.base, m);
                                     if (v <= 0 || !isItemPaid(r, v, _cyc)) return; // non encaissé → ignoré (radar asymétrique)
-                                    const paid = Math.round((getPaidAmount(r, v, _cyc) || v) * 100) / 100;
+                                    const paid = Math.round((regleDuItem(r, v, _cyc)) * 100) / 100;
                                     if (paid > 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💰 ' + (r.label || r.nom || 'Revenu'), montant: paid, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), internal: false });
                                     return;
                                 }
@@ -16283,8 +16359,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (monthly <= 0) return;
                                 if (mode === 'full') { sortants += monthly; return; }
                                 let paid = 0;
-                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += getPaidAmount(d, dueDetailDuCycle(d, cv, mNum, annee)) || 0; });
-                                else paid = getPaidAmount(cv, effV) || 0;
+                                if ((cv.details || []).length > 0) cv.details.forEach(d => { paid += couvertItem(d, dueDetailDuCycle(d, cv, mNum, annee)) || 0; });
+                                else paid = couvertItem(cv, effV) || 0;
                                 const rem = monthly - paid;
                                 if (rem > 0) sortants += Math.round(rem * 100) / 100;
                             });
@@ -16500,7 +16576,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let total = 0;
                         Object.values(dActuelle.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, an);
-                            if (due > 0) total += Math.max(0, due - getPaidAmount(f, due));
+                            if (due > 0) total += resteDuItem(f, due);
                         });
                         return total;
                     });
@@ -16516,7 +16592,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         Object.values(d.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, an);
                             if (!(due > 0)) return;
-                            const r = Math.max(0, due - getPaidAmount(f, due));
+                            const r = resteDuItem(f, due);
                             if (r > 0) { const k = compteDeLaCharge('fixe', f); out[k] = (out[k] || 0) + r; }
                         });
                         return out;
@@ -16530,7 +16606,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const k = compteDeLaCharge('variable', cv);
                             ((cv.details || []).length ? cv.details : [cv]).forEach(det => {
                                 const due = Number(det.montant ?? det.valeur ?? 0);
-                                if (due > 0) { const r = Math.max(0, due - getPaidAmount(det, due)); if (r > 0) out[k] = (out[k] || 0) + r; }
+                                if (due > 0) { const r = resteDuItem(det, due); if (r > 0) out[k] = (out[k] || 0) + r; }
                             });
                         });
                         return out;
@@ -16550,7 +16626,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const items = (cv.details || []).length ? cv.details : [cv];
                                 items.forEach(det => {
                                     const due = Number(det.montant ?? det.valeur ?? 0);
-                                    if (due > 0) total += Math.max(0, due - getPaidAmount(det, due));
+                                    if (due > 0) total += resteDuItem(det, due);
                                 });
                             });
                         return Math.round(total * 100) / 100;
@@ -16594,7 +16670,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let total = 0;
                         epArr.forEach(ep => {
                             const m = Number(ep.valeur || 0);
-                            if (m > 0) total += Math.max(0, m - getPaidAmount(ep, m));
+                            if (m > 0) total += resteDuItem(ep, m);
                         });
                         return total;
                     });
@@ -16842,7 +16918,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // v28.40 RÈGLE 1 : Charges fixes → reste = dû − avance saisie (montantPaye)
                         Object.values(dActuelle.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, an);
-                            const reste = Math.max(0, due - getPaidAmount(f, due));
+                            const reste = resteDuItem(f, due);
                             if (reste > 0 && ok(f)) {
                                 const grp = getOrCreate(compteDeLaCharge('fixe', f));   // v37.50
                                 grp.montant += reste; grp.parNature.fix += reste;
@@ -16858,7 +16934,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const items = (cv.details || []).length ? cv.details : [cv];
                                 items.forEach(det => {
                                     const due = Number(det.montant ?? det.valeur ?? 0);
-                                    const reste = Math.max(0, due - getPaidAmount(det, due));
+                                    const reste = resteDuItem(det, due);
                                     if (reste > 0 && ok(det)) {
                                         const grp = getOrCreate(srcFac);
                                         grp.montant += reste; grp.parNature.var += reste;
@@ -16917,7 +16993,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // v28.40 RÈGLE 1 : Virements sortants → reste = dû − avance
                         getVirementsMois(mois, an).forEach(vir => {
                             const m = Number(vir.montant || 0);
-                            const reste = Math.max(0, m - getPaidAmount(vir, m));
+                            const reste = resteDuItem(vir, m);
                             if (m > 0 && reste > 0 && ok(vir)) {
                                 const grp = getOrCreate(vir.sourceCompte || 'courant');
                                 grp.montant += reste; grp.parNature.virement += reste;
@@ -16932,7 +17008,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const m = Number(ep.valeur || 0);
                             if (m <= 0) return;
                             // v28.40 RÈGLE 1 : reste = virement prévu − avance déjà effectuée
-                            const reste = Math.max(0, m - getPaidAmount(ep, m));
+                            const reste = resteDuItem(ep, m);
                             if (reste <= 0) return;
                             if (!ok(ep)) return;
                             const src = ep.sourceCompte || 'courant';
@@ -17062,7 +17138,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (m <= 0) return;
                             add('ep_' + ep.id,
                                 'Alimentation depuis ' + getNomCompte(ep.sourceCompte || 'courant'),
-                                Math.max(0, m - getPaidAmount(ep, m)));
+                                resteDuItem(ep, m));
                         });
                         // Virements internes → destinationCompte
                         getVirementsMois(mb.mois, mb.an).forEach(vir => {
@@ -17070,7 +17146,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (m <= 0) return;
                             add(vir.destinationCompte,
                                 'Virement depuis ' + getNomCompte(vir.sourceCompte || 'courant'),
-                                Math.max(0, m - getPaidAmount(vir, m)));
+                                resteDuItem(vir, m));
                         });
                         return map;
                     });
@@ -17218,7 +17294,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // v28.40 RÈGLE 1 : provisions futures fixes = dû − avance (jourPrevu futur)
                         Object.values(d.chargesFixes || {}).forEach(f => {
                             const due = getDueFixe(f, mb.an);
-                            if (due > 0 && f.jourPrevu && f.jourPrevu > today) total += Math.max(0, due - getPaidAmount(f, due));
+                            if (due > 0 && f.jourPrevu && f.jourPrevu > today) total += resteDuItem(f, due);
                         });
                         // v28.40 RÈGLE 2 : les variables ne sont plus provisionnées par saisie — elles
                         // relèvent de l'enveloppe prorata (prorataVariableT0), donc exclues d'ici (anti double-compte).
@@ -17227,7 +17303,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const epArr = Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {});
                         epArr.forEach(ep => {
                             const m = Number(ep?.valeur || 0);
-                            if (m > 0 && ep.jourPrevu && ep.jourPrevu > today) total += Math.max(0, m - getPaidAmount(ep, m));
+                            if (m > 0 && ep.jourPrevu && ep.jourPrevu > today) total += resteDuItem(ep, m);
                         });
                         return total;
                     });
@@ -17585,6 +17661,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                         && _rangDansCycle(jourPrevu) <= _rangAujourdhui.value + HORIZON_URGENCE,
                                 paye: isItemPaid(ref, d, cyc),
                                 regle: getPaidAmount(ref, d, cyc) || 0,
+                                clos: estClotureItem(ref, cyc),   // v37.51
                                 quand: dateReelleCycle(ref, cyc),
                             });
                         };
@@ -17647,7 +17724,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const resteATraiterPilotage = computed(() =>
                         Math.round(tachesATraiter.value.reduce((s, t) => s + Math.max(0, t.due - t.regle), 0)));
                     const totalTraitePilotage = computed(() =>
-                        Math.round(tachesTerminees.value.reduce((s, t) => s + (t.regle || t.due), 0)));
+                        Math.round(tachesTerminees.value.reduce((s, t) => s + (t.clos ? t.regle : (t.regle || t.due)), 0)));
 
                     const pilotageTermineOuvert = refUI('pilotage.terminees', false);   // v37.32 : mémorisé
 
@@ -17687,6 +17764,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 jourPrevu: Number(jourPrevu) || null, rang,
                                 retard: rang < rAuj, proche: rang >= rAuj && rang <= rAuj + HORIZON_URGENCE,
                                 paye: isItemPaid(ref, d, cyc), regle: getPaidAmount(ref, d, cyc) || 0,
+                                clos: estClotureItem(ref, cyc),   // v37.51
                                 quand: dateReelleCycle(ref, cyc),
                             });
                         };
@@ -17731,7 +17809,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const dejaValidePilotage = computed(() => {
                         const lignes = TIROIRS_POINTAGE.flatMap(T => _lignesDuTiroir(T.cle).filter(t => t.paye)
                             .sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle)));
-                        const somme = (sens) => Math.round(lignes.filter(t => (t.sens || 'debit') === sens).reduce((s, t) => s + (t.regle || t.due), 0));
+                        const somme = (sens) => Math.round(lignes.filter(t => (t.sens || 'debit') === sens).reduce((s, t) => s + (t.clos ? t.regle : (t.regle || t.due)), 0));
                         return { lignes, regle: somme('debit'), encaisse: somme('credit') };
                     });
                     //  Ce qui est suspendu ce mois (exception à 0) : dit en une ligne.
@@ -17801,7 +17879,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         tachesPilotage.value.forEach(t => {
                             //  Une ligne pointée vaut ce qui a été réglé (ou son dû) ;
                             //  une ligne ouverte vaut son avance déjà versée.
-                            const r = t.paye ? (t.regle || t.due) : Math.min(t.regle || 0, t.due);
+                            const r = t.paye ? (t.clos ? t.regle : (t.regle || t.due)) : Math.min(t.regle || 0, t.due);
                             const x = t.paye ? 0 : Math.max(0, t.due - (t.regle || 0));
                             regle += r; reste += x;
                             const n = parNature[t.nature] || (parNature[t.nature] = { regle: 0, reste: 0 });
@@ -18216,6 +18294,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const baseCycle = consoT0SaisiesCycle.value;
                         const aSaisie = (cle) => Object.prototype.hasOwnProperty.call(valsSem, cle);
                         const defsSem = defautsSemaine(lundiSel);                        // v37.31 : {} si pas écoulée
+                        //  v37.51 : les cases closes — de la semaine affichée (/ sem) et du cycle (/ 15 j, / cycle)
+                        const closS = _cloturesConso.value['S' + lundiSel] || {}, closC = _cloturesConso.value['C' + consoT0CycleKey.value] || {};
                         //  v37.48 : la semaine EN COURS — ce que ses lignes encore vides compteront dimanche soir
                         const defsAVenir = decal === 0 && _semaineDansCycle(lundiSel) ? defautsSemaine(lundiSel, true) : {};
                         const categories = consoCategoriesT0.value.map(c => {
@@ -18263,7 +18343,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  catégorie affiche son rythme attendu, pour que les tuiles
                             //  racontent la même histoire que le grand chiffre.
                             const engageCat = c.declare || declare ? c.engage : c.theorique;
-                            const resteCat = c.budget - engageCat;
+                            const resteCat = c.budget - engageCat - (c.eco || 0);   // v37.51
                             //  v37.28 : ce qui a VRAIMENT été saisi ou ticketé — 0 tant que rien
                             //  n'est déclaré. C'est ce qu'affichent les Rayons X ; l'estimation
                             //  reste l'affaire du moteur (grand chiffre, ⓘ), jamais d'une case.
@@ -18279,15 +18359,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const base = { cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, saisi: sai, declare: aSaisie(p.cle), tickets: tk, engage: eng, defaut };
                                 if (p.unite === 'semaine') {
                                     const bud = Math.round(p.partCycle / nSem);
+                                    const clos = !!closS[p.cle];
                                     return { ...base, budget: bud, prevu: bud, planifie: 0,
-                                             pct: bud > 0 ? Math.min(100, Math.round(eng / bud * 100)) : (eng > 0 ? 100 : 0), depasse: eng > bud };
+                                             pct: bud > 0 ? Math.min(100, Math.round(eng / bud * 100)) : (eng > 0 ? 100 : 0), depasse: eng > bud,
+                                             clos, eco: clos ? Math.max(0, bud - eng) : 0, exces: Math.max(0, eng - bud) };
                                 }
                                 //  v37.30 : une ligne /15 j ou /cycle se suit sur le CYCLE ; dépensée cette
                                 //  semaine, elle compte comme PRÉVUE dans la limite de son enveloppe restante.
                                 const ailleurs = Math.max(0, p.engage - eng);
+                                const closP = !!closC[p.cle];
                                 return { ...base, budget: 0, prevu: p.montant, cyclePrevu: p.partCycle, cycleEngage: p.engage,
                                          planifie: Math.min(eng, Math.max(0, p.partCycle - ailleurs)),
-                                         pct: p.pctEngage, depasse: p.engage > p.partCycle };
+                                         pct: p.pctEngage, depasse: p.engage > p.partCycle,
+                                         clos: closP, eco: closP ? Math.max(0, p.partCycle - p.engage) : 0, exces: Math.max(0, p.engage - p.partCycle) };
                             });
                             //  Le prévu de la semaine : les lignes « / sem » (ou la catégorie entière,
                             //  sans ligne) + les lignes /15 j et /cycle dépensées cette semaine.
@@ -18299,13 +18383,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const ticketsS = Math.round(gS.total);
                             //  v37.31 : une semaine ÉCOULÉE : chaque ligne laissée vide compte son prévu
                             const defautS = Math.round(defsSem[c.key] || 0) + postesSem.reduce((s, p) => s + (p.defaut || 0), 0);
-                            const declS = saisiS > 0 || ticketsS > 0 || defautS > 0 || Object.keys(valsSem).some(k => k === c.key || k.startsWith(c.key + '::'));
+                            //  v37.51 : la catégorie sans poste se clôt d'un bloc ; une ligne / sem close libère sa semaine
+                            const closCat = !postesSem.length && !!closS[c.key];
+                            const declS = closCat || postesSem.some(p => p.clos && p.unite === 'semaine') || saisiS > 0 || ticketsS > 0 || defautS > 0 || Object.keys(valsSem).some(k => k === c.key || k.startsWith(c.key + '::'));
                             //  v37.28 : la semaine en cours (et à venir) vaut ce qui a été TAPÉ (ou
                             //  ticketé), rien d'autre ; aucune estimation n'entre dans une case.
                             const engS = declS ? Math.max(saisiS, ticketsS) + defautS : 0;
+                            const ecoCat = closCat ? Math.max(0, semBudget - engS) : 0;
+                            const ecoS = ecoCat + postesSem.reduce((s, p) => s + (p.unite === 'semaine' ? (p.eco || 0) : 0), 0);
                             const sem = {
                                 budget: semBudget, prevuSemaine, prevuCycle: prevuCycleLignes, engage: engS, saisi: saisiS, libre: libreS, tickets: ticketsS, declare: declS, defaut: defautS,
-                                reste: semBudget - engS, pct: semBudget > 0 ? Math.min(100, Math.round(engS / semBudget * 100)) : (engS > 0 ? 100 : 0),
+                                clos: closCat, eco: ecoCat, ecoS, exces: Math.max(0, engS - semBudget),
+                                reste: semBudget - engS - ecoS, pct: semBudget > 0 ? Math.min(100, Math.round(engS / semBudget * 100)) : (engS > 0 ? 100 : 0),
                                 source: declS ? (saisiS === 0 && ticketsS === 0 && defautS > 0 ? 'defaut' : (ticketsS > saisiS ? 'tickets' : 'compteur')) : 'vide',
                                 postes: postesSem, nb: gS.tx.length,
                                 //  Les saisies de CYCLE d'avant la saisie hebdomadaire, toujours comptées
@@ -18368,7 +18457,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                                  .sort((a, b) => b.montant - a.montant);
                                          })(),
                                          aVenirTotal: Object.values(defsAVenir).reduce((s, m) => s + Math.round(m), 0),
-                                         budget: sb, engage: se, reste: sb - se, pct: sb > 0 ? Math.min(100, Math.round(se / sb * 100)) : 0 };
+                                         eco: categories.reduce((s, c) => s + (c.sem.ecoS || 0), 0),
+                                         budget: sb, engage: se, reste: sb - se - categories.reduce((s, c) => s + (c.sem.ecoS || 0), 0), pct: sb > 0 ? Math.min(100, Math.round(se / sb * 100)) : 0 };
                             })(),
                         };
                     });
@@ -18800,7 +18890,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const _enveloppeDepuisBudget = (budget) => {
                         if (isCyclePasse.value) return 0;
                         return consoT0Renseigne.value
-                            ? Math.max(0, budget - consoEngageeT0.value)
+                            ? Math.max(0, budget - consoEngageeT0.value - consoEcoT0.value)
                             : Math.round(budget * (joursCycleRestants.value / joursCycleTotal.value));
                     };
                     //   On part des budgets ARRONDIS, comme le fait budgetConsoCycle : sinon
@@ -18952,17 +19042,108 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         entière, sans ligne) pour un budget de cycle donné : le MÊME calcul que
                         l'affichage de la Météo (parts du cycle triées, reste d'arrondi sur la
                         première), pour que le défaut tombe pile sur le « Prévu » affiché. */
-                    const prevuHebdoLignes = (key, cv, budget, n) => {
+                    //  v37.51 : la part du CYCLE de chaque ligne (même calcul que l'affichage)
+                    const _partsCycleLignes = (cv, budget, n) => {
                         const dets = (cv.details || []).filter(x => x && Number(x.montant) > 0);
-                        if (!dets.length) return { [key]: Math.round(budget / n) };
                         const poids = (x) => Number(x.montant) * facteurPeriode(periodeDetail(x, cv), n);
                         const W = dets.reduce((s, x) => s + poids(x), 0);
                         const parts = dets.map(x => ({ x, part: Math.round(W > 0 ? budget * poids(x) / W : 0), montant: Math.round(Number(x.montant) * (W > 0 ? budget / W : 1)) }))
                                           .sort((a, b) => b.part - a.part || b.montant - a.montant);
                         if (parts.length) parts[0].part += Math.round(budget) - parts.reduce((s, p) => s + p.part, 0);
+                        return parts;
+                    };
+                    const prevuHebdoLignes = (key, cv, budget, n) => {
+                        const dets = (cv.details || []).filter(x => x && Number(x.montant) > 0);
+                        if (!dets.length) return { [key]: Math.round(budget / n) };
+                        const parts = _partsCycleLignes(cv, budget, n);
                         const out = {};
                         parts.forEach(p => { if (periodeDetail(p.x, cv) === 'semaine') out[cleDetailT0(key, p.x)] = Math.round(p.part / n); });
                         return out;
+                    };
+                    /*  v37.51 — LES CASES CLOSES DE LA MÉTÉO. consoClotureT0['S' + lundi] (lignes / sem,
+                        catégorie sans ligne) et ['C' + cycle] (lignes / 15 j et / cycle) = { clé: true },
+                        tous seaux annuels confondus. Une ligne close n'attend plus rien : vide, elle
+                        vaut 0 (plus « au prévu ») et ce qui reste de son prévu est LIBÉRÉ — il sort
+                        de l'enveloppe conso. Au-delà du prévu : dépassement, rien ne se bloque. */
+                    const _cloturesConso = computed(() => {
+                        calculationTick.value;
+                        const out = {};
+                        Object.values(donneesAnnuelles.value || {}).forEach(a => {
+                            const r = a && a.consoClotureT0;
+                            if (!r || typeof r !== 'object') return;
+                            Object.entries(r).forEach(([k, v]) => { if (v && typeof v === 'object') out[k] = Object.assign(out[k] || {}, v); });
+                        });
+                        return out;
+                    });
+                    //  Ce que libèrent les cases closes du cycle : { parCle, parCat, clos: { catégorie: true }, total }
+                    const consoEcoClotures = computed(() => {
+                        calculationTick.value;
+                        const out = { parCle: {}, parCat: {}, clos: {}, total: 0 };
+                        const d = donneesAnnuelles.value[consoT0Annee.value];
+                        const CL = _cloturesConso.value;
+                        if (!d || !Object.keys(CL).length) return out;
+                        const mb = moisBudgetaire.value, n = semainesDuCycle(mb.mois, mb.an);
+                        const noter = (key, cle, v) => {
+                            out.clos[key] = true;
+                            const e = Math.max(0, Math.round(v));
+                            if (!e) return;
+                            out.parCle[cle] = (out.parCle[cle] || 0) + e; out.parCat[key] = (out.parCat[key] || 0) + e; out.total += e;
+                        };
+                        const cats = Object.entries(d.chargesVariables || {}).filter(([, cv]) => cv && cv.categorieId !== 'cat_cv_factures')
+                            .map(([key, cv]) => ({ key, cv, budget: Math.round(budgetCategorieRevise(cv)) })).filter(c => c.budget > 0);
+                        const idsDe = (key, cv) => { const m = {}; (cv.details || []).forEach(x => { if (x) m[cleDetailT0(key, x)] = x.categorieId; }); return m; };
+                        //  Les semaines du cycle (règle du jeudi)
+                        const { debut, fin } = consoT0Fenetre.value;
+                        const j = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
+                        for (; j.getTime() <= fin.getTime(); j.setDate(j.getDate() + 7)) {
+                            const lundi = _ymd(new Date(j.getFullYear(), j.getMonth(), j.getDate() - 3));
+                            const fermes = CL['S' + lundi];
+                            if (!fermes || !Object.keys(fermes).length) continue;
+                            const vals = _valeursSemaine(lundi), T = _lireTickets(lundi, _ymd(_decaler(lundi, 6)));
+                            cats.forEach(({ key, cv, budget }) => {
+                                const g = T.parCle[key] || { total: 0, parPoste: {} }, idDe = idsDe(key, cv);
+                                Object.entries(prevuHebdoLignes(key, cv, budget, n)).forEach(([cle, v]) => {
+                                    if (!fermes[cle]) return;
+                                    const sai = Math.max(0, Math.round(Number(vals[cle] || 0)));
+                                    const tk = Math.round(cle === key ? g.total : (idDe[cle] ? (g.parPoste[idDe[cle]] || 0) : 0));
+                                    noter(key, cle, v - Math.max(sai, tk));
+                                });
+                            });
+                        }
+                        //  Le cycle : les lignes / 15 j et / cycle
+                        const fermesC = CL['C' + consoT0CycleKey.value];
+                        if (fermesC && Object.keys(fermesC).length) {
+                            const S = consoT0Saisies.value, TC = _ticketsCycle.value;
+                            cats.forEach(({ key, cv, budget }) => {
+                                const g = TC.parCle[key] || { total: 0, parPoste: {} };
+                                _partsCycleLignes(cv, budget, n).forEach(p => {
+                                    const cle = cleDetailT0(key, p.x);
+                                    if (periodeDetail(p.x, cv) === 'semaine' || !fermesC[cle]) return;
+                                    const sai = Math.max(0, Math.round(Number(S[cle] || 0)));
+                                    const tk = Math.round(p.x.categorieId ? (g.parPoste[p.x.categorieId] || 0) : 0);
+                                    noter(key, cle, p.part - Math.max(sai, tk));
+                                });
+                            });
+                        }
+                        return out;
+                    });
+                    //  Clôturer / rouvrir une case de la Météo (le 🔒 d'un poste ou d'une catégorie sans poste)
+                    const basculerClotureConso = (lundiISO, cle, unite) => {
+                        const d = donneesAnnuelles.value[consoT0Annee.value];
+                        if (!d || !cle) return;
+                        const k = unite && unite !== 'semaine' ? 'C' + consoT0CycleKey.value : 'S' + lundiISO;
+                        const porteur = Object.values(donneesAnnuelles.value || {})
+                            .find(a => a && a.consoClotureT0 && a.consoClotureT0[k] && a.consoClotureT0[k][cle]);
+                        if (porteur) {
+                            delete porteur.consoClotureT0[k][cle];
+                            if (!Object.keys(porteur.consoClotureT0[k]).length) delete porteur.consoClotureT0[k];
+                        } else {
+                            if (!d.consoClotureT0 || typeof d.consoClotureT0 !== 'object') d.consoClotureT0 = {};
+                            if (!d.consoClotureT0[k] || typeof d.consoClotureT0[k] !== 'object') d.consoClotureT0[k] = {};
+                            d.consoClotureT0[k][cle] = true;
+                        }
+                        calculationTick.value++;
+                        handleDataChange();
                     };
                     //  Les défauts d'UNE semaine (lundi ISO) : {} tant qu'elle n'est pas écoulée.
                     //  v37.48 : projeter = ce qu'ELLE retiendra à sa clôture (semaine en cours).
@@ -18974,6 +19155,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const mb = moisBudgetaire.value, n = semainesDuCycle(mb.mois, mb.an);
                         const vals = _valeursSemaine(lundiISO), base = consoT0SaisiesCycle.value;
                         const T = _lireTickets(lundiISO, dimanche);
+                        const fermes = _cloturesConso.value['S' + lundiISO] || {};   // v37.51 : close, vide = 0
                         const out = {};
                         Object.entries(d.chargesVariables || {}).forEach(([key, cv]) => {
                             if (!cv || cv.categorieId === 'cat_cv_factures') return;
@@ -18991,6 +19173,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             (cv.details || []).forEach(x => { if (x) idDe[cleDetailT0(key, x)] = x.categorieId; });
                             Object.entries(prevuHebdoLignes(key, cv, budget, n)).forEach(([cle, v]) => {
                                 if (!(v > 0) || Object.prototype.hasOwnProperty.call(vals, cle)) return;   // saisi, même 0
+                                if (fermes[cle]) return;                                                    // v37.51 : close
                                 const tk = cle === key ? g.total : (idDe[cle] ? (g.parPoste[idDe[cle]] || 0) : 0);
                                 if (tk > 0) return;                                                         // un ticket daté
                                 out[cle] = v;
@@ -19028,6 +19211,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     // au réel, plus au temps
                     const consoT0Renseigne = computed(() =>
                         consoCompteurRenseigne.value || _ticketsCycle.value.total > 0 || Object.keys(consoDefautsDuCycle.value).length > 0
+                        || Object.keys(consoEcoClotures.value.clos).length > 0   // v37.51 : clôturer, c'est déclarer
                     );
 
                     // Budget conso du cycle (variables consommables, HORS factures)
@@ -19070,10 +19254,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 //  défauts ne couvrent que des lignes-semaines SANS saisie ni ticket :
                                 //  ils s'ajoutent au max(saisi, tickets), sans double comptage.
                                 const defaut = Math.round(defautDeCategorie(key));
-                                const declare = saisi > 0 || tickets > 0 || defaut > 0 || (declareQuelquePart && (Object.prototype.hasOwnProperty.call(saisies, key) || clesPostes.length > 0));
+                                //  v37.51 : ce que ses cases closes libèrent — hors de l'engagé (ce n'est pas dépensé)
+                                const eco = Math.round(consoEcoClotures.value.parCat[key] || 0), clos = !!consoEcoClotures.value.clos[key];
+                                const declare = clos || saisi > 0 || tickets > 0 || defaut > 0 || (declareQuelquePart && (Object.prototype.hasOwnProperty.call(saisies, key) || clesPostes.length > 0));
                                 const engage = declare ? Math.max(saisi, tickets) + defaut : (declareQuelquePart ? theoriqueCat : 0);
                                 return {
-                                    key, saisi, libre, parPostes, tickets, declare, defaut,
+                                    key, saisi, libre, parPostes, tickets, declare, defaut, eco, clos,
                                     label: cv.label || key,
                                     periode: cv.periode || 'mois',
                                     budgetInitial,
@@ -19081,7 +19267,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     economie: budgetInitial - budget,
                                     budget,
                                     engage,
-                                    reste: Math.max(0, budget - engage),
+                                    reste: Math.max(0, budget - engage - eco),
                                     pondere: estSuspendableAbsence(cv) && estLoisirAbsence(cv),
                                     theorique: Math.round(budget * (estSuspendableAbsence(cv) ? ratioEcoule : ratioEcouleBrut)),
                                     pct: budget > 0 ? Math.round((engage / budget) * 100) : (engage > 0 ? 100 : 0),
@@ -19093,6 +19279,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                     const consoEngageeT0 = computed(() =>
                         consoCategoriesT0.value.reduce((s, c) => s + c.engage, 0)
+                    );
+                    //  v37.51 : libéré par les cases closes (sort de l'enveloppe, n'est pas dépensé)
+                    const consoEcoT0 = computed(() =>
+                        consoCategoriesT0.value.reduce((s, c) => s + (c.eco || 0), 0)
                     );
                     // Ce qui AURAIT dû être consommé à ce stade du cycle (référence de rythme)
                     //   v34.06 : somme des références par catégorie plutôt qu'un prorata
@@ -19115,7 +19305,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value;
                         if (isCyclePasse.value) return 0;
                         return consoT0Renseigne.value
-                            ? Math.max(0, budgetConsoCycle.value - consoEngageeT0.value)
+                            ? Math.max(0, budgetConsoCycle.value - consoEngageeT0.value - consoEcoT0.value)
                             : enveloppeConsoProrataTemps.value;
                     });
 
@@ -19138,7 +19328,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const out = {};
                         consoCategoriesT0.value.forEach(c => {
                             const k = compteDeLaCharge('variable', cvs[c.key]);
-                            out[k] = (out[k] || 0) + (reel ? (c.budget - c.engage) : c.budget * ratio);
+                            out[k] = (out[k] || 0) + (reel ? (c.budget - c.engage - (c.eco || 0)) : c.budget * ratio);
                         });
                         Object.keys(out).forEach(k => { out[k] = Math.max(0, Math.round(out[k])); if (!out[k]) delete out[k]; });
                         return out;
@@ -19162,7 +19352,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const ratio = joursCycleRestants.value / joursCycleTotal.value;
                         const lignes = cats.map(c => ({
                             nom: c.label, key: c.key,   // v37.50 : pour la ranger sous le compte de SA catégorie
-                            montant: Math.round(reel ? (c.budget - c.engage) : (c.budget * ratio)),
+                            montant: Math.round(reel ? (c.budget - c.engage - (c.eco || 0)) : (c.budget * ratio)),
                             estim: !reel,
                         }));
                         const ecart = total - lignes.reduce((s, l) => s + l.montant, 0);
@@ -19237,6 +19427,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const r = a && a.consoRealiseeT0;
                             if (!r) return;
                             Object.keys(r).forEach(k => { if (_RE_SEMAINE.test(k) && _semaineDansCycle(k.slice(1))) delete r[k]; });
+                        });
+                        //  v37.51 : … et ses cases closes
+                        Object.values(donneesAnnuelles.value || {}).forEach(a => {
+                            const c = a && a.consoClotureT0;
+                            if (!c) return;
+                            Object.keys(c).forEach(k => { if ((_RE_SEMAINE.test(k) && _semaineDansCycle(k.slice(1))) || k === 'C' + consoT0CycleKey.value) delete c[k]; });
                         });
                         const d = donneesAnnuelles.value[consoT0Annee.value];
                         if (!d || !d.consoRealiseeT0) { calculationTick.value++; handleDataChange(); return; }
@@ -20073,7 +20269,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 let due = Number(d.montant || 0);
                                 if (d._virtual) return s + due;
                                 if (due < 0) return isItemPaid(d, due) ? s : s + due;
-                                return s + Math.max(0, due - getPaidAmount(d, due));
+                                return s + resteDuItem(d, due);
                             }, 0);
 
                             // v17.33 : Répartition épargne avec sourceCompte — ventilation + double-entrée journal
@@ -20108,7 +20304,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 let due = Number(d.montant || 0);
                                 if (d._virtual) return due;
                                 if (due < 0) return isItemPaid(d, due) ? 0 : due;
-                                return Math.max(0, due - getPaidAmount(d, due));
+                                return resteDuItem(d, due);
                             };
                             const irregCourant = depMoisExpanded.filter(d => (d.sourceCompte || 'courant') === 'courant').reduce((s, d) => s + _chocEffectif(d), 0);
                             // v17.34 : irregParCompte — ep_* ET cpt_* pour déduction physique
@@ -20162,7 +20358,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const fRestParCompte = {};
                                 Object.values(dataAnnee.chargesFixes || {}).forEach(f => {
                                     let due = getDueFixe(f, aNum);
-                                    let remaining = Math.max(0, due - getPaidAmount(f, due));
+                                    let remaining = resteDuItem(f, due);
                                     if (remaining <= 0) return;
                                     // v24.80 : routing macro-compte — v37.50 : ou le compte de la ligne
                                     const src = compteDeLaCharge('fixe', f);
@@ -20187,7 +20383,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                             const p = periodeDetail(d, curr), mt = Number(d.montant || 0);
                                             if (p === 'semaine') return sum + mt * semRest;
                                             if (p === 'quinzaine') return sum + mt * semRest / 2;
-                                            return sum + Math.max(0, mt - getPaidAmount(d, mt));
+                                            return sum + resteDuItem(d, mt);
                                         }, 0);
                                     } else if (curr?.periode === 'semaine') {
                                         remaining = Number(curr?.valeur || 0) * semRest;
@@ -20243,7 +20439,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 depMoisExpanded.forEach(d => {
                                     const src = d.sourceCompte || 'courant';
                                     let due = Number(d.montant || 0);
-                                    const montantEffectif = d._virtual ? due : (due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due)));
+                                    const montantEffectif = d._virtual ? due : (due < 0 ? (isItemPaid(d, due) ? 0 : due) : resteDuItem(d, due));
                                     if (montantEffectif === 0) return;
                                     if (src.startsWith('cpt_') && src !== courantCptKey && src in soldesComptes) {
                                         soldesComptes[src] -= montantEffectif;
@@ -20373,7 +20569,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 depMoisExpanded.forEach(d => {
                                     const src = d.sourceCompte || 'courant';
                                     let due = Number(d.montant || 0);
-                                    const montantEffectif = d._virtual ? due : (due < 0 ? (isItemPaid(d, due) ? 0 : due) : Math.max(0, due - getPaidAmount(d, due)));
+                                    const montantEffectif = d._virtual ? due : (due < 0 ? (isItemPaid(d, due) ? 0 : due) : resteDuItem(d, due));
                                     if (montantEffectif === 0) return;
                                     if (src.startsWith('cpt_') && src !== courantCptKey && src in soldesComptes) {
                                         soldesComptes[src] -= montantEffectif;
@@ -21404,6 +21600,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
                         // v37.12 — suivi d'exécution par cycle
                         cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, dateReelleCycle,
+                        estClotureItem, cloturerItem, ajouterAuRegle, basculerClotureConso, consoEcoT0, entreesPilotageToutes,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage,
