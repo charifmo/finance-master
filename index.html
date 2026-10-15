@@ -8201,8 +8201,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.55 Calibrage-RIB";
+                    const CURRENT_VERSION = "37.56 Tickets-Cumules";
                     const CHANGELOG = [
+        { version: "37.56 Tickets-Cumules", date: "2026-10-15", changes: [
+            "🧾 LES TICKETS MARJANE SE CUMULENT — le Pilotage affichait « Marjane · 180 » alors que le journal en comptait 180 + 176 + 80 + 80. Les tickets de 176 et 80, saisis avant le rangement automatique, étaient posés sur la catégorie MÈRE « Alimentation » : une ligne ne compte que les tickets rangés SUR elle. Un ticket sur la catégorie mère dont le libellé dit SÛREMENT une de ses lignes est maintenant rattaché à cette ligne, tout seul, une fois (journal, Pilotage, Rayons X). Jamais un choix fait à la main, un ticket « à vérifier » ou un doute.",
+            "PREUVE — nouvelle suite « Tickets cumulés » : 10 contrôles (rejouée sur la v37.55 : en échec). Cinq défauts réintroduits exprès : quatre attrapés, le cinquième est sans effet (doublon d'une autre garde). Sur vos données : les deux tickets Marjane passent sur la ligne Marjane.",
+        ] },
         { version: "37.55 Calibrage-RIB", date: "2026-10-15", changes: [
             "💰 LE BON SOLDE — l'import proposait le total « Mes comptes » (3 945) quand le solde du « Compte chèque » n'était pas lu. Plus jamais : le solde SUIVI ou rien, avec « ⚠️ Solde « Compte chèque » illisible sur cette capture : solde non mis à jour ». « Mes comptes » est nommé pour ce qu'il est : le TOTAL de vos comptes Attijari.",
             "🎯 UN SEUL BOUTON — « Calibrer avec une capture » en tête du Calibrage (Trésorerie), plusieurs captures à la fois : l'écran « Détails du compte » de votre appli suffit (RIB + n° de compte). Un compte reconnu est complété ; un inconnu demande une fois « À quel compte ? ». Plus de bouton par compte.",
@@ -9793,6 +9797,32 @@
                         return { id, statut: sur ? 'sur' : 'doute', source: best.source, score: best.note, candidats, raison: best.raison };
                     };
 
+                    //  v37.56 — UN TICKET SUR LA CATÉGORIE MÈRE, DONT LE LIBELLÉ DIT UNE DE SES LIGNES : rattaché à cette ligne.
+                    //  (« Marjane » 176 sur « Alimentation » → ligne « Marjane » : le Pilotage les cumule.) Seulement si
+                    //  les règles sont SÛRES ; jamais un choix « vous », un ticket à vérifier, un doute.
+                    let _rattachement = false;
+                    const rattacherTicketsALaLigne = () => {
+                        if (_rattachement) return 0;
+                        _rattachement = true;
+                        let n = 0;
+                        try {
+                            const cats = _categoriesCandidates.value;
+                            const meres = new Set(cats.filter(c => c.parent).map(c => c.parent));
+                            if (!meres.size) return 0;
+                            const parId = new Map(cats.map(c => [c.id, c]));
+                            Object.values(donneesAnnuelles.value || {}).forEach(d => (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).forEach(t => {
+                                if (!t || !meres.has(t.categorieId) || t.aVerifier || t.categorieSource === 'vous' || t.categorieSource === 'banque') return;
+                                if (!(Number(t.montant) > 0) || !String(t.libelle || '').trim()) return;
+                                const r = categoriserLibelle(t.libelle);
+                                if (r.statut !== 'sur' || !r.id || r.id === t.categorieId) return;
+                                const c = parId.get(r.id);
+                                if (!c || c.parent !== t.categorieId) return;
+                                t.categorieId = r.id; t.categorieSource = 'auto'; n++;
+                            }));
+                        } finally { _rattachement = false; }
+                        if (n) { calculationTick.value++; handleDataChange(); }
+                        return n;
+                    };
                     const ajouterTransactionReelle = (data) => {
                         const a = anneeAffichage.value;
                         if (!donneesAnnuelles.value[a]) return;
@@ -9897,7 +9927,8 @@
                         Object.values(donneesAnnuelles.value || {}).forEach(d => {
                             (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).forEach(t => {
                                 if (!t || !t.categorieId || t.categorieId === 'cat_misc') return;
-                                compte[t.categorieId] = (compte[t.categorieId] || 0) + 1;
+                                const fam = ((soldesInitiaux.value.categories || []).find(c => c && c.id === t.categorieId) || {}).parent || t.categorieId;   // v37.56 : la famille
+                                compte[fam] = (compte[fam] || 0) + 1;
                             });
                         });
                         const tries = Object.entries(compte).sort((a, b) => b[1] - a[1]).map(([id]) => id);
@@ -22573,6 +22604,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         if (c) calibrageBanque.resultats.push({ nom: x.nom, ok: true, texte: '✓ ' + c.label + ' : ' + nomBanque(x.analyse.banque) + ' · ' + x.quoi });
                     };
                     const BANQUES_SELECT = BANQUES_CB;
+                    watch(_categoriesCandidates, () => { rattacherTicketsALaLigne(); }, { flush: 'post' });
 
                     onBeforeUnmount(() => {
                         if (_resizeHandler) window.removeEventListener('resize', _resizeHandler);
@@ -22742,7 +22774,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         BANQUES_SELECT, nomBanque, idLisible, signatureLisible, importBanque, calibrageBanque, ouvrirImportBanque, fermerImportBanque,
                         ajouterFichiersBanque, retirerFichierBanque, deposerBanque, analyserImportBanque, repondreCompteCapture, changerCompteCapture,
                         optionsLigneBanque, resumeImportBanque, appliquerImportBanque, calibrerCaptures, associerCalibrage, retirerIdentifiant, retirerEmpreinte,
-                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, bqMemeCompte, bqRibValide, ocrCapture,
+                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, bqMemeCompte, bqRibValide, rattacherTicketsALaLigne, ocrCapture,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage,

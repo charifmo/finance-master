@@ -95,5 +95,6 @@ suite "Catégorisation automatique : règles → IA → par défaut"   node test
 suite "Banque : calibrage RIB, lecture locale, réconciliation"  node test_cfo_engine_parity/test_banque.mjs
 suite "Banque : vraies captures, téléphone d'abord"  node test_cfo_engine_parity/test_banque_reel.mjs
 suite "Banque : calibrer une fois, le bon solde toujours"  node test_cfo_engine_parity/test_calibrage_rib.mjs
+suite "Tickets : cumulés sur leur ligne (Marjane)"  node test_cfo_engine_parity/test_ligne_cumul.mjs
 
 echo "✅ Toutes les suites passent."
