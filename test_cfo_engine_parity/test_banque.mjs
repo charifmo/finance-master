@@ -215,11 +215,15 @@ try {
 
     /* ── C. Calibrer « Compte urgence » d'une capture Saham ──────────── */
     await section('C', async () => {
-        await page.setInputFiles(`[data-calibrage-compte][data-compte="${URGENCE}"] [data-calibrage-capture]`, path.join(BQ, 'saham_mobile.png'));
-        await page.waitForFunction((ST) => !eval(ST).calibrageBanque.enCours && /Saham|Aucun|impossible/.test(eval(ST).calibrageBanque.message), ST, { timeout: 120000 });
+        //  v37.55 : un seul bouton « 🎯 Calibrer avec une capture » ; un compte inconnu → « à quel compte ? », une fois
+        await page.setInputFiles('[data-calibrage-captures]', path.join(BQ, 'saham_mobile.png'));
+        await page.waitForFunction((ST) => !eval(ST).calibrageBanque.enCours && (eval(ST).calibrageBanque.attente.length || eval(ST).calibrageBanque.resultats.length), ST, { timeout: 120000 });
+        await page.selectOption('[data-calibrage-attente] [data-calibrage-reponse]', String(URGENCE));
+        await page.click('[data-calibrage-attente] [data-calibrage-associer]');
+        await page.waitForTimeout(200);
         const u = await compte(URGENCE);
-        const msg = await page.evaluate(() => document.querySelector('[data-calibrage-message]')?.textContent.trim());
-        v('C. 📷 Calibrer « Compte urgence » avec la capture Saham : banque Saham, empreinte « compte chèque dirhams » (pas de RIB à l\'écran)',
+        const msg = await page.evaluate(() => [...document.querySelectorAll('[data-calibrage-resultat]')].map(e => e.textContent.trim()).join(' | '));
+        v('C. 🎯 Calibrer avec la capture Saham → « Compte urgence » : banque Saham, empreinte « compte chèque dirhams » (pas de RIB à l\'écran)',
           u.banque === 'saham' && JSON.stringify(u.empreintes) === '["saham|compte cheque dirhams"]' && !(u.identifiants || []).length && /Saham Bank · empreinte/.test(msg || ''), JSON.stringify([u, msg]));
     });
 

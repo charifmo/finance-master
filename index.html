@@ -6033,11 +6033,32 @@
                     <!-- 🎯 v37.53 : CALIBRAGE BANCAIRE & RIB — chaque compte reconnu à sa capture -->
                     <div data-calibrage class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                         <div class="px-6 py-4 border-b border-gray-100 bg-indigo-50 flex flex-wrap items-center gap-2">
-                            <div class="min-w-0 flex-1">
+                            <div class="min-w-0 w-full md:w-auto md:flex-1">
                                 <h3 class="font-black uppercase tracking-widest text-indigo-800 text-sm">🎯 Calibrage Bancaire &amp; RIB</h3>
-                                <p class="text-[10px] text-indigo-700 mt-0.5">Une capture suffit : le RIB (ou le n° de compte) est reconnu ensuite, partout. Sans RIB à l'écran (Saham), c'est l'empreinte « banque + intitulé » qui parle.</p>
+                                <p class="text-[10px] text-indigo-700 mt-0.5">Une fois pour toutes : la capture « Détails du compte » de votre appli (RIB + n° de compte). Ensuite l'accueil suffit — son n° est rapproché du RIB. Sans RIB à l'écran (Saham), c'est l'empreinte « banque + intitulé » qui parle.</p>
                             </div>
+                            <label data-calibrage-bouton @dragover.prevent @drop.prevent="calibrerCaptures($event.dataTransfer && $event.dataTransfer.files)"
+                                   title="L'écran « Détails du compte » de votre appli (RIB, n° de compte), ou l'accueil : plusieurs captures à la fois"
+                                   :class="['shrink-0 cursor-pointer px-3 py-2 rounded-xl border-2 border-dashed text-xs font-black transition-colors', calibrageBanque.enCours ? 'border-indigo-400 bg-indigo-100 text-indigo-700' : 'border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50']">
+                                🎯 {{ calibrageBanque.enCours ? 'Lecture…' : 'Calibrer avec une capture' }}
+                                <input type="file" accept="image/*" multiple class="hidden" data-calibrage-captures @change="calibrerCaptures($event.target.files); $event.target.value = ''"/>
+                            </label>
                             <button type="button" data-import-ouvrir @click="ouvrirImportBanque()" class="shrink-0 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow">📥 Importer captures / relevé</button>
+                        </div>
+                        <!-- v37.55 : ce que la calibration a lu, et les comptes à désigner une fois -->
+                        <div v-if="calibrageBanque.enCours || calibrageBanque.attente.length || calibrageBanque.resultats.length" data-calibrage-retour class="px-4 md:px-6 py-3 border-b border-gray-100 bg-white space-y-2">
+                            <p v-if="calibrageBanque.enCours" class="text-[11px] font-bold text-indigo-700">{{ calibrageBanque.message }}</p>
+                            <p v-for="(r, i) in calibrageBanque.resultats" :key="'cr_' + i" data-calibrage-resultat :class="['text-[11px] font-bold', r.ok ? 'text-emerald-700' : 'text-red-600']">{{ r.texte }} <span class="font-semibold text-gray-400">· {{ r.nom }}</span></p>
+                            <div v-for="x in calibrageBanque.attente" :key="'ca_' + x.id" data-calibrage-attente class="rounded-xl border border-amber-200 bg-amber-50 p-2.5 space-y-1.5">
+                                <p class="text-[11px] font-black text-amber-900">🆕 {{ nomBanque(x.analyse.banque) }} · {{ x.quoi }} — à quel compte l'associer ?</p>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <select data-calibrage-reponse v-model="x.reponse" class="flex-1 min-w-[10rem] text-xs font-bold px-2 py-1.5 rounded-lg border border-amber-300 bg-white outline-none">
+                                        <option value="">Choisir le compte…</option>
+                                        <option v-for="c in comptes" :key="'car_' + c.id" :value="c.id">{{ c.icone || '🏦' }} {{ c.label }}</option>
+                                    </select>
+                                    <button type="button" data-calibrage-associer @click="associerCalibrage(x)" :disabled="!x.reponse" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-black">Associer pour toujours</button>
+                                </div>
+                            </div>
                         </div>
                         <div class="divide-y divide-gray-100">
                             <div v-for="c in comptes" :key="'cal_' + c.id" data-calibrage-compte :data-compte="c.id" class="px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-start gap-2 md:gap-4">
@@ -6055,8 +6076,8 @@
                                         <select v-if="c.banque === 'attijari'" data-calibrage-solde :value="c.soldeSuivi || 'compteCheque'" @change="c.soldeSuivi = $event.target.value; handleDataChange()"
                                                 title="Attijari Mobile affiche deux soldes : lequel suivre pour ce compte ?"
                                                 class="text-[11px] font-bold px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 outline-none focus:border-indigo-400">
-                                            <option value="compteCheque">Solde suivi : « Compte chèque »</option>
-                                            <option value="mesComptes">Solde suivi : « Mes comptes »</option>
+                                            <option value="compteCheque">Solde suivi : « Compte chèque » (ce compte)</option>
+                                            <option value="mesComptes">Solde suivi : « Mes comptes » (TOTAL de vos comptes Attijari)</option>
                                         </select>
                                         <span v-for="x in (c.identifiants || [])" :key="'id_' + x" data-calibrage-id class="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 tabular-nums">
                                             🔢 {{ idLisible(x) }}<button type="button" @click="retirerIdentifiant(c, x)" :aria-label="'Retirer ' + x" class="text-indigo-400 hover:text-red-600">×</button>
@@ -6069,13 +6090,7 @@
                                         <input type="text" data-calibrage-saisie :placeholder="'RIB ou n° de compte (ex. 007 450 0001234567890123 45)'" v-model="calibrageBanque.saisie[c.id]"
                                                @keydown.enter="ajouterIdentifiantCompte(c, calibrageBanque.saisie[c.id]) && (calibrageBanque.saisie[c.id] = '')"
                                                class="flex-1 min-w-[12rem] text-[11px] font-bold px-2 py-1 rounded-lg border border-gray-200 bg-white outline-none focus:border-indigo-400 tabular-nums"/>
-                                        <label :class="['shrink-0 cursor-pointer text-[11px] font-black px-2.5 py-1 rounded-lg border border-dashed transition-colors', calibrageBanque.enCours && calibrageBanque.compteId === c.id ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-300 text-gray-600 hover:border-indigo-400 hover:text-indigo-700']"
-                                               @dragover.prevent @drop.prevent="calibrerAvecCapture(c.id, $event.dataTransfer && $event.dataTransfer.files)" title="Déposez (ou choisissez) une capture de ce compte : son RIB ou son empreinte est mémorisé">
-                                            📷 {{ calibrageBanque.enCours && calibrageBanque.compteId === c.id ? 'Lecture…' : 'Calibrer avec une capture' }}
-                                            <input type="file" accept="image/*" class="hidden" data-calibrage-capture @change="calibrerAvecCapture(c.id, $event.target.files); $event.target.value = ''"/>
-                                        </label>
                                     </div>
-                                    <p v-if="calibrageBanque.message && calibrageBanque.compteId === c.id" data-calibrage-message class="text-[10px] font-bold text-indigo-700">{{ calibrageBanque.message }}</p>
                                 </div>
                             </div>
                         </div>
@@ -6369,6 +6384,7 @@
                                 <span class="text-xs font-black tabular-nums text-gray-400 line-through">{{ formatMAD((comptes.find(c => String(c.id) === String(cap.compteId)) || {}).solde) }}</span>
                                 <span class="text-xs font-black tabular-nums text-indigo-700" :title="'Exact : ' + cap.soldeChoisi.toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' DH'">→ {{ formatMAD(cap.soldeChoisi) }}</span>
                             </label>
+                            <p v-if="cap.compteId && cap.soldeIllisible" data-import-solde-illisible class="px-3 py-2 text-[11px] font-bold text-amber-800 bg-amber-50 border-b border-amber-100">⚠️ Solde « {{ (comptes.find(c => String(c.id) === String(cap.compteId)) || {}).soldeSuivi === 'mesComptes' ? 'Mes comptes' : 'Compte chèque' }} » illisible sur cette capture : solde non mis à jour (le total « Mes comptes » n'est jamais pris à sa place).</p>
                             <!-- Les opérations -->
                             <ul class="divide-y divide-gray-100">
                                 <li v-for="l in cap.lignes" :key="'il_' + l.hash" data-import-ligne :data-type="l.type" :data-action="l.action.split(':')[0]" :data-hash="l.hash"
@@ -8185,8 +8201,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.54 Banque-Reel";
+                    const CURRENT_VERSION = "37.55 Calibrage-RIB";
                     const CHANGELOG = [
+        { version: "37.55 Calibrage-RIB", date: "2026-10-15", changes: [
+            "💰 LE BON SOLDE — l'import proposait le total « Mes comptes » (3 945) quand le solde du « Compte chèque » n'était pas lu. Plus jamais : le solde SUIVI ou rien, avec « ⚠️ Solde « Compte chèque » illisible sur cette capture : solde non mis à jour ». « Mes comptes » est nommé pour ce qu'il est : le TOTAL de vos comptes Attijari.",
+            "🎯 UN SEUL BOUTON — « Calibrer avec une capture » en tête du Calibrage (Trésorerie), plusieurs captures à la fois : l'écran « Détails du compte » de votre appli suffit (RIB + n° de compte). Un compte reconnu est complété ; un inconnu demande une fois « À quel compte ? ». Plus de bouton par compte.",
+            "🔗 LE N° ET LE RIB RAPPROCHÉS — l'accueil Attijari montre « 000999B… », le RIB contient « 0009992… » (la lettre devient un chiffre dans un RIB marocain). Calibré une fois avec le RIB, le compte est reconnu à chaque import, SANS question, même quand l'OCR lit « 8 » pour « B ».",
+            "📄 « DÉTAILS DU COMPTE » LU — RIB à clé de contrôle vérifiée, banque déduite de son code (007 Attijari, 362 Assafa, 022 Saham), n° de compte gardé seulement s'il colle au RIB, solde ; aucune opération inventée. « PAIEMENT CB 141026 » : la date d'achat lue sans séparateurs.",
+            "PREUVE — nouvelle suite « Banque : calibrer une fois » : 27 contrôles (le VRAI OCR sur un écran « Détails du compte » fictif, en 248 px comme envoyé par WhatsApp, puis l'accueil reconnu sans question). Rejouée sur la v37.54 : 6 contrôles en échec (et ses sections B, C, D n'y tournent pas). Dix-neuf défauts réintroduits exprès : tous attrapés. Vos captures réelles, lues en local : RIB reconnu, accueil sans question, solde 3 839,78.",
+        ] },
         { version: "37.54 Banque-Reel", date: "2026-10-14", changes: [
             "📱 LE TÉLÉPHONE D'ABORD — « Touchez pour choisir vos captures » ouvre la GALERIE (images seulement, plusieurs à la fois ; le texte / CSV a son petit bouton à part). « 🏦 Importer mes captures bancaires » en tête de la saisie rapide (le ➕). Le ➕ était CACHÉ sous la baguette Merlin depuis la v34.08 : baguette et 💾 passent à gauche. 🪄 📑 🧠 ne couvrent plus les champs de la saisie rapide ni de l'import. La revue tient dans l'écran (compte sur sa ligne, actions lisibles). Une photo HEIC que le navigateur ne lit pas : « image illisible… envoyez une capture d'écran », au lieu d'un échec muet.",
             "🔎 VOS VRAIES CAPTURES — Attijari : les centimes en EXPOSANT (« 4 318,³⁵ ») relus seuls, trois fois, deux lectures d'accord font foi (vos 4 213,32 ne deviennent plus 4 213,52). Saham en thème SOMBRE : montants verts et dates grises lus d'un coup. Bank Assafa : la barre du bas et ses icônes ne deviennent plus un libellé ; l'opération coupée en bas d'écran est laissée. « DH » / « MAD » en exposant lus « ph », « mao », « \"\"° » : avalés.",
@@ -21711,7 +21734,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         watch(() => parametres.value.backupIntervalMinutes, () => _startBackupInterval());
                     });
 
-                    /* ══ v37.54 BANQUE:PARSEUR:DEBUT ══════════════════════════════════════════════
+                    /* ══ v37.55 BANQUE:PARSEUR:DEBUT ══════════════════════════════════════════════
                        LE RELEVÉ, LU SUR PLACE — 0 appel IA. Texte collé (Attijarinet), CSV, ou texte
                        extrait d'une capture par l'OCR embarqué : la même lecture. Pur (aucune donnée
                        de l'appli) : testable seul.
@@ -21746,9 +21769,37 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const _bqLibelle = (x) => {
                         let t = String(x || '').replace(/^[\s|¦│=&@©®°;:'"“”‘’`~^*•·»«<>()\[\]{}_!?\\\/-]+(?=\p{L}|\d)/u, '')
                             .replace(/^[^\x00-\x7F\s\dÀà]\s+(?=\p{L})/u, '');      // une icône lue « Î », « œ », « æ » (« À » est un mot)
-                        const m = t.match(/^([a-z]{1,3}|[A-Za-z]{1,2}[&@][A-Za-z]{0,2})\s+(?=\p{Lu})/u);
+                        const m = t.match(/^([a-z]{1,3}|[A-Za-z]{1,2}[&@][A-Za-z]{0,2}|[A-Za-z]\))\s+(?=\p{Lu})/u);
                         if (m && !BQ_PETITS.has(m[1])) t = t.slice(m[0].length);
                         return t.replace(/(\s+(?:[_*°"'’“”|.,;:<>]+|dhs?|mad|ph))+$/i, '').trim();
+                    };
+                    //  v37.55 — LE RIB MAROCAIN : 3 chiffres banque, 3 ville, 16 compte, 2 clé (97 − (22 premiers × 100) mod 97).
+                    //  Une lettre du n° de compte devient un chiffre dans le RIB (A, J → 1 ; B, K, S → 2 ; … I, R, Z → 9) :
+                    //  « 000999B000123456 » à l'écran = « 0009992000123456 » dans le RIB.
+                    const BQ_CODES = { '007': 'attijari', '362': 'assafa', '022': 'saham' };
+                    const _bqChiffreRib = (c) => /[A-Z]/.test(c) ? String('123456789123456789234567890'.charAt('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.indexOf(c)) || '') : c;
+                    const bqRibValide = (x) => {
+                        const r = String(x || '').replace(/\s/g, '');
+                        if (!/^\d{24}$/.test(r) || typeof BigInt !== 'function') return false;
+                        return (97n - (BigInt(r.slice(0, 22)) * 100n) % 97n) === BigInt(r.slice(22));
+                    };
+                    //  L'OCR confond 8 et B, 0 et O, 1 et I, 5 et S, 2 et Z, 6 et G
+                    const BQ_SOSIES = { 8: 'B', 0: 'O', 1: 'I', 5: 'S', 2: 'Z', 6: 'G', B: '8', O: '0', D: '0', Q: '0', I: '1', L: '1', S: '5', Z: '2', G: '6' };
+                    //  Le même compte ? identiques ; un n° à l'écran face au RIB (lettre → chiffre, sosies OCR) ; deux n° aux
+                    //  sosies près ; sinon l'un contient l'autre (7 signes au moins)
+                    const bqMemeCompte = (a, b) => {
+                        const x = String(a || '').toUpperCase().replace(/[^0-9A-Z]/g, ''), y = String(b || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+                        if (!x || !y) return false;
+                        if (x === y) return true;
+                        const rib = [x, y].find(v => /^\d{24}$/.test(v)), autre = rib === x ? y : x;
+                        if (rib && autre.length === 16) {
+                            const part = rib.slice(6, 22);
+                            return [...autre].every((c, i) => c === part[i] || _bqChiffreRib(c) === part[i] || (BQ_SOSIES[c] && _bqChiffreRib(BQ_SOSIES[c]) === part[i]));
+                        }
+                        if (x.length === y.length && x.length >= 10 && !rib)
+                            return [...x].every((c, i) => c === y[i] || BQ_SOSIES[c] === y[i]);
+                        const [c, l] = x.length <= y.length ? [x, y] : [y, x];
+                        return c.length >= 7 && l.includes(c);
                     };
                     const BQ_CREDIT = /reception|\brecu\b|versement|\bcredit\b|remboursement|salaire|virement recu|vir recu|\bdepot\b|annulation/;
 
@@ -21771,6 +21822,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             montants.push({ v: bqMontantDe(ent, dec), signe: signe || '', devise: dev ? dev.toLowerCase() : '' });
                             return pre + ' ';
                         });
+                        //  v37.55 : « PAIEMENT CB 141026 MARJ… » — la date d'achat sans séparateurs
+                        r = r.replace(/(\bcb\s+)(\d{2}) ?(\d{2}) ?(\d{2})(?!\d)/gi, (m, pre, j, mo, a) => { dates.push({ j: +j, m: +mo, a: +a }); return pre + ' '; });
                         r = r.replace(BQ_DATE_NUM, (m, pre, j, mo, a) => { dates.push({ j: +j, m: +mo, a: +a }); return pre + ' '; });
                         r = r.replace(BQ_DATE_TXT, (m, pre, j, mois, a) => { dates.push({ j: +j, m: BQ_MOIS[bqNorm(mois)], a: a ? +a : null }); return pre + ' '; });
                         r = r.replace(BQ_DATE_GAB, (m, pre, j, mo) => { dates.push({ j: +j, m: +mo, a: null, gab: true }); return pre + ' '; });
@@ -21862,7 +21915,12 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const noter = (x) => { const v = String(x).toUpperCase().replace(/[^0-9A-Z]/g, ''); if (v && !identifiants.includes(v)) identifiants.push(v); };
                         (tete.join('\n').match(/\d[\d ]{20,40}\d/g) || []).forEach(m => { const d = m.replace(/ /g, ''); if (d.length === 24) noter(d); });
                         (tete.join('\n').toUpperCase().match(/\b\d{3,}[A-Z]{1,2}\d{5,}\b/g) || []).forEach(m => { if (m.length >= 12 && m.length <= 20) noter(m); });
+                        //  v37.55 : un n° seul sur sa ligne, tout en chiffres (« 0009998000123456 » : le B lu 8)
+                        tete.forEach(l => { const v = String(l).trim(); if (/^\d{12,20}$/.test(v)) noter(v); });
                         (String(texte || '').match(/compte\/(\d{5,})/gi) || []).forEach(m => noter(m.split('/')[1]));
+                        //  v37.55 : un RIB à clé juste, où qu'il soit sur l'écran, est sûr — et son code dit la banque
+                        (String(texte || '').match(/\d[\d ]{20,40}\d/g) || []).forEach(m => { const d = m.replace(/ /g, ''); if (bqRibValide(d)) noter(d); });
+                        const parCode = identifiants.filter(bqRibValide).map(x => BQ_CODES[x.slice(0, 3)]).find(Boolean);
                         //  Les soldes de l'en-tête, rangés sous le libellé qui les annonce
                         const soldes = {}; let cle = null, totaux = null;
                         tete.forEach(l => {
@@ -21887,7 +21945,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const lIntitule = tete.filter(l => /\bcompte\b/.test(bqNorm(l)) && !/mes comptes|mon compte|total des|https?:|www\.|\.com|\//.test(bqNorm(l)))
                             .map((l, i) => ({ l, s: (/cheque|courant|epargne|dirhams|devises|carnet/.test(bqNorm(l)) ? 2 : 0) + (/carte/.test(bqNorm(l)) ? 0 : 1) - i / 100 }))
                             .sort((a, b) => b.s - a.s).map(x => x.l)[0];
-                        const intitule = lIntitule ? bqNorm(lIntitule).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+                        let intitule = lIntitule ? bqNorm(lIntitule).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim() : '';
                         const score = {
                             attijari: (/attijari|wafa/.test(nTout) ? 5 : 0) + (/total des mouvements/.test(nTout) ? 4 : 0) + (/mes comptes/.test(nTete) ? 3 : 0)
                                     + (/\bawbgab\b|\bawb\b/.test(nTout) ? 2 : 0) + (/\bmad\b/.test(nTout) ? 1 : 0) + (/compte\/\d/.test(nTout) ? 3 : 0)
@@ -21895,9 +21953,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             assafa: (/assafa/.test(nTete) ? 5 : 0) + (/vos dernieres operations/.test(nTout) ? 4 : 0) + (/\bdhs\b/.test(nTout) ? 2 : 0) + (identifiants.some(x => x.length === 24) ? 1 : 0),
                             saham: (/saham/.test(nTout) ? 5 : 0) + (/transactions recentes/.test(nTout) ? 4 : 0) + (/bonjour/.test(nTete) ? 2 : 0) + (/compte cheque dirhams/.test(nTete) ? 2 : 0),
                         };
+                        if (parCode) score[parCode] += 8;
                         const [banque, sc] = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
                         const bq = sc >= 3 ? banque : 'autre';
-                        const format = bq === 'attijari' ? (/total des mouvements|compte\/\d/.test(nTout) ? 'attijari_web' : 'attijari_mobile')
+                        let format = bq === 'attijari' ? (/total des mouvements|compte\/\d/.test(nTout) ? 'attijari_web' : 'attijari_mobile')
                                      : bq === 'assafa' ? 'assafa_mobile' : bq === 'saham' ? 'saham_mobile' : 'inconnu';
                         //  Les opérations : l'ordre qui découpe le mieux ; des montants restés en colonne à la fin sont rendus aux lignes
                         let fin = [];
@@ -21925,6 +21984,30 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             if (!dateOp) op.sansDateOp = true;       // v37.54 : la date comptable n'a pas été lue (jour illisible)
                             return op;
                         });
+                        //  v37.55 : Attijari Mobile — le solde du COMPTE CHÈQUE est celui qui suit son libellé ; un montant sans
+                        //  libellé après « Mes comptes » est le sien. Jamais le total « Mes comptes » à sa place.
+                        if (format === 'attijari_mobile') {
+                            if (soldes.compteCheque == null && soldes.mesComptes != null && soldes.solde != null && soldes.solde !== soldes.mesComptes) soldes.compteCheque = soldes.solde;
+                            delete soldes.solde;
+                        }
+                        //  v37.55 : l'écran « Détails du compte » (Agence, Nature, Intitulé, N° de compte, RIB, Solde) : de quoi
+                        //  calibrer, aucune opération. Le n° lu n'est gardé que s'il colle au RIB (sinon l'OCR l'a abîmé).
+                        const lignesN = lignes.map(l => bqNorm(l).trim());
+                        const iNum = lignesN.findIndex(l => /^n\W{0,3}de compte\b/.test(l));
+                        if (/details du compte/.test(nTout) || (iNum >= 0 && /(^|\n)rib\b/.test(nTout))) {
+                            const ribs = identifiants.filter(bqRibValide);
+                            const num = iNum >= 0 && lignes[iNum + 1] ? String(lignes[iNum + 1]).toUpperCase().replace(/[^0-9A-Z]/g, '') : '';
+                            const ids = ribs.length ? [...ribs, ...(num && ribs.some(r => bqMemeCompte(num, r)) ? [num] : [])]
+                                                    : [...new Set([...(num.length >= 10 ? [num] : []), ...identifiants])];
+                            const montantSous = (re) => { const i = lignesN.findIndex(l => re.test(l)); const t = i >= 0 && lignes[i + 1] ? _bqLigne(lignes[i + 1]) : null; return t && t.montants[0] ? t.montants[0].v : null; };
+                            const premier = lignes.map(_bqLigne).find(t => t.montants.length);
+                            const solde = montantSous(/^solde$/) ?? (premier ? premier.montants[0].v : null);
+                            const iNat = lignesN.findIndex(l => /^nature$/.test(l));
+                            intitule = iNat >= 0 && lignes[iNat + 1] ? bqNorm(lignes[iNat + 1]).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim() : intitule;
+                            const bqD = parCode || bq;
+                            return { banque: bqD, format: 'details', identifiants: ids, intitule, signature: bqD + '|' + intitule,
+                                     soldes: solde != null ? { compteCheque: solde } : {}, totaux: null, operations: [] };
+                        }
                         return { banque: bq, format, identifiants, intitule, signature: bq + '|' + intitule, soldes, totaux, operations };
                     };
                     //  Deux lectures OCR de la même capture (binarisations différentes) : l'une voit ce
@@ -22010,14 +22093,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const _idNorm = (x) => String(x || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
                     //  « 007450000123456789012345 » → « 007 450 0001234567890123 45 »
                     const idLisible = (x) => { const v = _idNorm(x); return v.length === 24 ? v.slice(0, 3) + ' ' + v.slice(3, 6) + ' ' + v.slice(6, 22) + ' ' + v.slice(22) : v; };
-                    //  Le même compte : identiques, ou l'un contient l'autre (n° de compte dans le RIB), 7 signes au moins
-                    const _memeId = (a, b) => {
-                        const x = _idNorm(a), y = _idNorm(b);
-                        if (!x || !y) return false;
-                        if (x === y) return true;
-                        const [c, l] = x.length <= y.length ? [x, y] : [y, x];
-                        return c.length >= 7 && l.includes(c);
-                    };
+                    //  Le même compte : v37.55 — le n° de l'écran face au RIB (lettre → chiffre, sosies de l'OCR), voir bqMemeCompte
+                    const _memeId = (a, b) => bqMemeCompte(_idNorm(a), _idNorm(b));
                     const signatureLisible = (s) => { const [b, i] = String(s || '').split('|'); return nomBanque(b) + (i ? ' · « ' + i + ' »' : ''); };
                     const _compteParId = (id) => (comptes.value || []).find(c => String(c.id) === String(id)) || null;
 
@@ -22195,7 +22272,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
 
                     /* ── L'IMPORT ───────────────────────────────────────────────────────────── */
                     const importBanque = reactive({ ouvert: false, etape: 'depot', texte: '', fichiers: [], captures: [], erreur: '', resume: null, enCours: false });
-                    const calibrageBanque = reactive({ compteId: null, enCours: false, message: '', saisie: {} });
+                    const calibrageBanque = reactive({ enCours: false, message: '', saisie: {}, attente: [], resultats: [] });
                     let _fichierSeq = 0;
                     const ouvrirImportBanque = () => {
                         Object.assign(importBanque, { ouvert: true, etape: 'depot', texte: '', fichiers: [], captures: [], erreur: '', resume: null, enCours: false });
@@ -22328,10 +22405,12 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             return l;
                         });
                         const s = cap.analyse.soldes || {}, c = _compteParId(cap.compteId) || {};
+                        //  v37.55 : le solde SUIVI, ou aucun — jamais le total « Mes comptes » à la place du compte chèque
                         cap.soldeChoisi = cap.analyse.banque === 'attijari'
-                            ? (c.soldeSuivi === 'mesComptes' ? (s.mesComptes ?? s.compteCheque ?? s.solde) : (s.compteCheque ?? s.solde ?? s.mesComptes))
-                            : (s.solde ?? s.compteCheque ?? s.mesComptes);
+                            ? (c.soldeSuivi === 'mesComptes' ? s.mesComptes : (s.compteCheque ?? s.solde))
+                            : (s.solde ?? s.compteCheque);
                         cap.soldeChoisi = cap.soldeChoisi == null ? null : cap.soldeChoisi;
+                        cap.soldeIllisible = cap.soldeChoisi == null && Object.keys(s).length > 0;
                         cap.appliquerSolde = cap.soldeChoisi != null;
                     };
                     const _reproposer = () => {
@@ -22462,22 +22541,36 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         importBanque.etape = 'fini';
                         return st;
                     };
-                    //  Calibrer un compte d'une capture, depuis la section dédiée
-                    const calibrerAvecCapture = async (compteId, liste) => {
-                        const f = [...(liste || [])].find(x => x && /^image\//.test(x.type));
-                        if (!f) return;
-                        Object.assign(calibrageBanque, { compteId, enCours: true, message: 'Lecture de la capture…' });
+                    //  v37.55 — UN SEUL BOUTON : « 🎯 Calibrer avec une capture » (l'écran « Détails du compte », l'accueil…,
+                    //  plusieurs à la fois). Un compte reconnu est complété ; un inconnu demande une fois « À quel compte ? ».
+                    let _calSeq = 0;
+                    const _quoiCalibrage = (a) => a.identifiants.length ? a.identifiants.map(idLisible).join(', ')
+                        : (a.signature && !/\|$/.test(a.signature) ? 'empreinte ' + signatureLisible(a.signature) : null);
+                    const calibrerCaptures = async (liste) => {
+                        const fichiers = [...(liste || [])].filter(x => x && /^image\//.test(x.type));
+                        if (!fichiers.length) return;
+                        Object.assign(calibrageBanque, { enCours: true, message: 'Lecture de ' + fichiers.length + ' capture(s)…', resultats: [] });
                         try {
-                            const a = bqAnalyserOCR(await ocrCapture(f));
-                            const autre = resoudreCompteReleve(a);
-                            const c = calibrerCompte(compteId, a);
-                            const quoi = a.identifiants.length ? a.identifiants.map(idLisible).join(', ') : (a.signature && !/\|$/.test(a.signature) ? 'empreinte ' + signatureLisible(a.signature) : null);
-                            calibrageBanque.message = !quoi ? 'Aucun RIB ni intitulé lisible sur cette capture.'
-                                : '✓ ' + (c ? c.label : '') + ' : ' + nomBanque(a.banque) + ' · ' + quoi
-                                  + (autre.compteId && String(autre.compteId) !== String(compteId) ? ' (retiré de « ' + ((_compteParId(autre.compteId) || {}).label || '') + ' »)' : '');
-                        } catch (e) {
-                            calibrageBanque.message = 'Lecture impossible : ' + (e && e.message || e);
-                        } finally { calibrageBanque.enCours = false; }
+                            for (const f of fichiers) {
+                                const nom = f.name || 'capture';
+                                let a;
+                                try { a = bqAnalyserOCR(await ocrCapture(f)); }
+                                catch (e) { calibrageBanque.resultats.push({ nom, ok: false, texte: 'Lecture impossible : ' + (e && e.message || e) }); continue; }
+                                const quoi = _quoiCalibrage(a);
+                                if (!quoi) { calibrageBanque.resultats.push({ nom, ok: false, texte: 'Aucun RIB, n° de compte ni intitulé lisible.' }); continue; }
+                                const r = resoudreCompteReleve(a);
+                                if (r.compteId) {
+                                    const c = calibrerCompte(r.compteId, a);
+                                    calibrageBanque.resultats.push({ nom, ok: true, texte: '✓ ' + (c ? c.label : '') + ' : ' + nomBanque(a.banque) + ' · ' + quoi });
+                                } else calibrageBanque.attente.push({ id: ++_calSeq, nom, analyse: a, quoi, reponse: '', candidats: r.candidats || [] });
+                            }
+                        } finally { calibrageBanque.enCours = false; calibrageBanque.message = ''; }
+                    };
+                    const associerCalibrage = (x) => {
+                        if (!x || !x.reponse) return;
+                        const c = calibrerCompte(x.reponse, x.analyse);
+                        calibrageBanque.attente = calibrageBanque.attente.filter(y => y.id !== x.id);
+                        if (c) calibrageBanque.resultats.push({ nom: x.nom, ok: true, texte: '✓ ' + c.label + ' : ' + nomBanque(x.analyse.banque) + ' · ' + x.quoi });
                     };
                     const BANQUES_SELECT = BANQUES_CB;
 
@@ -22648,8 +22741,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.53 — calibrage bancaire & import
                         BANQUES_SELECT, nomBanque, idLisible, signatureLisible, importBanque, calibrageBanque, ouvrirImportBanque, fermerImportBanque,
                         ajouterFichiersBanque, retirerFichierBanque, deposerBanque, analyserImportBanque, repondreCompteCapture, changerCompteCapture,
-                        optionsLigneBanque, resumeImportBanque, appliquerImportBanque, calibrerAvecCapture, retirerIdentifiant, retirerEmpreinte,
-                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, ocrCapture,
+                        optionsLigneBanque, resumeImportBanque, appliquerImportBanque, calibrerCaptures, associerCalibrage, retirerIdentifiant, retirerEmpreinte,
+                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, bqMemeCompte, bqRibValide, ocrCapture,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage,

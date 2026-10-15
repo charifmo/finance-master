@@ -94,5 +94,6 @@ suite "Clôturer une case · semaine, 15 j, cycle"               node test_cfo_e
 suite "Catégorisation automatique : règles → IA → par défaut"   node test_cfo_engine_parity/test_categorisation_auto.mjs
 suite "Banque : calibrage RIB, lecture locale, réconciliation"  node test_cfo_engine_parity/test_banque.mjs
 suite "Banque : vraies captures, téléphone d'abord"  node test_cfo_engine_parity/test_banque_reel.mjs
+suite "Banque : calibrer une fois, le bon solde toujours"  node test_cfo_engine_parity/test_calibrage_rib.mjs
 
 echo "✅ Toutes les suites passent."
