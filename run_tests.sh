@@ -97,5 +97,7 @@ suite "Banque : vraies captures, téléphone d'abord"  node test_cfo_engine_pari
 suite "Banque : calibrer une fois, le bon solde toujours"  node test_cfo_engine_parity/test_calibrage_rib.mjs
 suite "Tickets : cumulés sur leur ligne (Marjane)"  node test_cfo_engine_parity/test_ligne_cumul.mjs
 suite "Journal : chercher, ranger par catégorie, corriger, retenir"  node test_cfo_engine_parity/test_journal.mjs
+suite "Leçons : l'IA lit le cycle, vous gardez"                 node test_cfo_engine_parity/test_lecons_ia.mjs
+suite "Telegram : chaque réponse arrive, et seulement chez vous"  node test_cfo_engine_parity/test_telegram.mjs
 
 echo "✅ Toutes les suites passent."
