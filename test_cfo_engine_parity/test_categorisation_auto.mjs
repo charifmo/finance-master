@@ -187,7 +187,7 @@ try {
         const l = await ligne(603);
         v('  → « ✓ Alimentation (Tqdya) · par défaut », « 🤖 relancer l\'IA », le message', /✓ Alimentation \(Tqdya\) · par défaut/.test(l || '') && /relancer l'IA/.test(l || '') && /IA injoignable/.test(l || ''), String(l));
         v('  → les lignes rangées (Hri, zzqx) ne sont plus dans la liste', !(await ligne(601)) && !(await ligne(602)));
-        const j = await page.evaluate(() => { const c = document.querySelector('[data-journal-cat][data-tx="603"]'); return c ? { txt: c.textContent.replace(/\s+/g, ' ').trim(), surligne: !!c.closest('tr[data-a-verifier]') } : null; });
+        const j = await page.evaluate(() => { const c = document.querySelector('[data-journal-cat][data-tx="603"]'); return c ? { txt: c.textContent.replace(/\s+/g, ' ').trim(), surligne: !!c.closest('[data-journal-ligne][data-a-verifier]') } : null; });
         v('  → journal : « Alimentation (Tqdya) · par défaut », ligne surlignée', !!j && /· par défaut/.test(j.txt) && j.surligne, JSON.stringify(j));
     });
     /* ── E. Relancer l'IA ────────────────────────────────────────────── */

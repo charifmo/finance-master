@@ -318,7 +318,7 @@ try {
         const t = await txs();
         const ids = ['CARAMELIO', 'LA BONNE P CHE'].map(l => (t.find(x => x.libelle === l) || {}).id);
         const l = await page.evaluate((ids) => ids.map(id => !!document.querySelector(`[data-a-categoriser-ligne][data-tx="${id}"]`)), ids);
-        const src = await page.evaluate(() => [...document.querySelectorAll('tr')].filter(r => /CARAMELIO/.test(r.textContent)).map(r => r.textContent.replace(/\s+/g, ' ')).join(' | '));
+        const src = await page.evaluate(() => [...document.querySelectorAll('[data-journal-ligne]')].filter(r => /CARAMELIO/.test(r.textContent)).map(r => r.textContent.replace(/\s+/g, ' ')).join(' | '));
         v('F. CARAMELIO et LA BONNE P CHE attendent dans « ⚠️ À vérifier » (un clic pour les ranger), source BANQUE au journal',
           l.every(Boolean) && t.filter(x => ids.includes(x.id)).every(x => x.aVerifier === true) && /banque/i.test(src), JSON.stringify([l, src.slice(0, 160)]));
         const cara = t.find(x => x.libelle === 'CARAMELIO') || {}, bonne = t.find(x => x.libelle === 'LA BONNE P CHE') || {};

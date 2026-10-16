@@ -220,12 +220,12 @@ try {
         const a = await tx('afriquia');
         v('  → validée sans choisir : rangée dans Voiture À VÉRIFIER, surlignée dans le journal et dans « À catégoriser »',
           a.categorieId === await idDe('Voiture') && a.aVerifier === true && !!(await ligne(a.id))
-          && await page.evaluate((id) => !!document.querySelector(`[data-journal-cat][data-tx="${id}"]`)?.closest('tr[data-a-verifier]'), a.id), JSON.stringify(a));
+          && await page.evaluate((id) => !!document.querySelector(`[data-journal-cat][data-tx="${id}"]`)?.closest('[data-journal-ligne][data-a-verifier]'), a.id), JSON.stringify(a));
         await page.click(`[data-a-categoriser-ligne][data-tx="${a.id}"] [data-ranger][data-cat="${await idDe('diesel skoda')}"]`); await page.waitForTimeout(200);
         const a2 = await tx('afriquia');
         v('  → un clic sur « diesel skoda » : rangée (« vous »), sortie de la liste, plus surlignée',
           a2.categorieId === await idDe('diesel skoda') && a2.categorieSource === 'vous' && !a2.aVerifier && !(await ligne(a.id))
-          && await page.evaluate((id) => !document.querySelector(`[data-journal-cat][data-tx="${id}"]`)?.closest('tr[data-a-verifier]'), a.id), JSON.stringify(a2));
+          && await page.evaluate((id) => !document.querySelector(`[data-journal-cat][data-tx="${id}"]`)?.closest('[data-journal-ligne][data-a-verifier]'), a.id), JSON.stringify(a2));
     });
 
     /* ── E. L'IA ──────────────────────────────────────────────────────── */
