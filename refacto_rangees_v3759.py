@@ -6,8 +6,8 @@ v37.59 — CHAQUE MONTANT SUR SA LIGNE.
 Attijari Mobile, écran « Compte chèque » : l'OCR lit la colonne des 11 libellés, PUIS la colonne des 11
 montants. L'application les recollait dans l'ordre ; le premier libellé (« AWBGAB… », sous le bouton
 « Remonter ») écarté, et l'écran non reconnu (lu « date d'abord »), CHAQUE montant glissait d'une ligne :
-« Carrefour −500 » (le retrait GAB), « PHCIE −80 », « VIR WEB −285,50 » (la pharmacie, ignorée comme
-virement), « G2ABVSHOP +500 » (le virement reçu)… et le dernier montant sur un bout de la barre d'état.
+« Carrefour » avec le montant du retrait GAB, « VIR WEB » avec celui de la pharmacie (ignorée comme virement),
+« G2ABVSHOP » avec celui du virement reçu… et le dernier montant sur un bout de la barre d'état.
   • LES RANGÉES DE L'ÉCRAN : chaque ligne lue par l'OCR est rangée à sa HAUTEUR sur la capture ; un montant
     rejoint le libellé qui est à son niveau. L'ordre de lecture de l'OCR ne décide plus de rien.
   • L'écran « Compte chèque » d'Attijari reconnu (« PAIEMENT CB 17 10 26 », « VIR WEB », « AWBGAB ») : lu
