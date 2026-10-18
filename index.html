@@ -6595,7 +6595,8 @@
                                         <span v-if="l.dejaTraitee" data-import-badge="traitee" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">↺ déjà traitée le {{ String(l.dejaTraitee.t || '').slice(8, 10) }}/{{ String(l.dejaTraitee.t || '').slice(5, 7) }}</span>
                                         <span v-else-if="l.doublon" data-import-badge="doublon" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">↺ déjà sur une autre capture</span>
                                         <template v-else>
-                                            <span v-if="l.type === 'gab'" data-import-badge="gab" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">🚫 Retrait espèces</span>
+                                            <span v-if="l.decale" data-import-badge="decale" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-50 text-orange-800 border border-orange-300" :title="'Importée le ' + String(l.decale.t || '').slice(8, 10) + '/' + String(l.decale.t || '').slice(5, 7) + ' avec le libellé de la ligne voisine'">✏️ Importée sous « {{ l.decale.l }} »</span>
+                                            <span v-else-if="l.type === 'gab'" data-import-badge="gab" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">🚫 Retrait espèces</span>
                                             <span v-else-if="l.type === 'virement'" data-import-badge="virement" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">🔄 Virement</span>
                                             <span v-else-if="l.type === 'frais'" data-import-badge="frais" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">🧾 Frais</span>
                                             <span v-else-if="l.action.startsWith('deja:')" data-import-badge="journal" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">✓ Déjà dans le journal</span>
@@ -6614,7 +6615,7 @@
                     </div>
                     <div class="sticky bottom-0 bg-white pt-2 pb-1 border-t border-gray-100">
                         <p data-import-resume class="text-[11px] font-bold text-gray-600 mb-2">
-                            {{ resumeImportBanque.ajouter }} à ajouter ({{ resumeImportBanque.suspens }} en suspens) · {{ resumeImportBanque.deja }} déjà au journal · {{ resumeImportBanque.pointer }} à pointer · {{ resumeImportBanque.frais }} frais · {{ resumeImportBanque.ignorer }} ignorée(s) · {{ resumeImportBanque.traitees }} déjà traitée(s){{ resumeImportBanque.soldes ? ' · ' + resumeImportBanque.soldes + ' solde(s)' : '' }}{{ resumeImportBanque.sansCompte ? ' · ' + resumeImportBanque.sansCompte + ' sans compte (répondez à la question)' : '' }}
+                            <template v-if="resumeImportBanque.corriger || resumeImportBanque.retirer"><b class="text-orange-800">✏️ {{ resumeImportBanque.corriger }} à corriger · {{ resumeImportBanque.retirer }} à retirer (import décalé)</b> · </template>{{ resumeImportBanque.ajouter }} à ajouter ({{ resumeImportBanque.suspens }} en suspens) · {{ resumeImportBanque.deja }} déjà au journal · {{ resumeImportBanque.pointer }} à pointer · {{ resumeImportBanque.frais }} frais · {{ resumeImportBanque.ignorer }} ignorée(s) · {{ resumeImportBanque.traitees }} déjà traitée(s){{ resumeImportBanque.soldes ? ' · ' + resumeImportBanque.soldes + ' solde(s)' : '' }}{{ resumeImportBanque.sansCompte ? ' · ' + resumeImportBanque.sansCompte + ' sans compte (répondez à la question)' : '' }}
                         </p>
                         <div class="flex gap-2">
                             <button type="button" @click="importBanque.etape = 'depot'" class="px-4 py-3 rounded-xl border border-gray-200 text-gray-600 font-black text-sm">← Retour</button>
@@ -6628,6 +6629,7 @@
                     <p class="text-lg font-black text-emerald-700">✓ Relevé appliqué</p>
                     <ul class="text-sm font-bold text-gray-700 space-y-1">
                         <li>➕ {{ importBanque.resume.ajoutees }} opération(s) ajoutée(s) au journal (source BANQUE)<template v-if="importBanque.resume.suspens"> — dont {{ importBanque.resume.suspens }} en suspens dans « ⚠️ À vérifier »</template></li>
+                        <li v-if="importBanque.resume.corrigees || importBanque.resume.retirees" data-import-fini-decale>✏️ {{ importBanque.resume.corrigees }} opération(s) corrigée(s), {{ importBanque.resume.retirees }} retirée(s) du journal (import décalé)</li>
                         <li>✓ {{ importBanque.resume.deja }} déjà dans le journal</li>
                         <li>📌 {{ importBanque.resume.pointees }} pointée(s) dans le Pilotage</li>
                         <li>🧾 {{ importBanque.resume.frais }} frais regroupés · 🚫 {{ importBanque.resume.ignorees }} ignorée(s)</li>
@@ -8398,8 +8400,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.58 Lecons-IA";
+                    const CURRENT_VERSION = "37.59 Rangees";
                     const CHANGELOG = [
+        { version: "37.59 Rangees", date: "2026-10-18", changes: [
+            "🚨 LE DÉCALAGE CAPTURE ↔ IMPORT — Attijari Mobile, écran « Compte chèque » : l'OCR lisait la colonne des libellés, PUIS celle des montants ; l'application les recollait dans l'ordre. Le premier libellé (« AWBGAB… », sous le bouton « Remonter ») écarté, CHAQUE montant glissait d'une ligne : « Carrefour −500 » (c'était le retrait), « VIR WEB −285,50 » (la pharmacie, ignorée comme virement), « G2ABVSHOP +500 » (le virement reçu)…",
+            "📐 CHAQUE MONTANT SUR SA LIGNE — chaque ligne lue par l'OCR est rangée à sa HAUTEUR sur la capture : un montant rejoint le libellé qui est à son niveau, l'ordre de lecture ne décide plus. L'écran « Compte chèque » est reconnu (Attijari, libellé d'abord). Un écran inconnu : des montants restés en colonne vont aux opérations datées, jamais à un bout d'interface. « Remonter » n'est plus un libellé ; « CB17 10 26 » donne sa date d'achat ; l'icône ↗ lue « 2) » et une année lue « 2020 » sont écartées.",
+            "🧾 L'ANTI-DOUBLON COMPARE LE COMMERÇANT — « PAIEMENT CB 17 10 26 MCDO » et « … Carrefour », même jour, même montant, passaient pour la même opération (les 10 premiers signes suffisaient) : l'achat restait « déjà traité », jamais ajouté. Désormais « PAIEMENT CB » et la date d'achat ne comptent plus.",
+            "✏️ VOS IMPORTS DÉCALÉS RÉPARÉS — réimportez la même capture : une ligne de même compte, même date, même montant au centime, déjà importée sous le libellé de sa voisine, est proposée « ✏️ Corriger » (l'opération du journal reprend son vrai libellé et sa catégorie — sauf une catégorie choisie par vous) ou « 🗑 Retirer » (un retrait, un virement ajouté à tort). Jamais un second ajout. Une opération du journal déjà liée à une ligne de banque n'est plus rapprochée d'une autre du même montant.",
+            "PREUVE — nouvelle suite « Banque : chaque montant sur sa ligne » : 30 contrôles (le texte que l'OCR a VRAIMENT rendu sur l'écran « Compte chèque », contenu fictif ; les lignes de l'OCR rangées par hauteur ; le VRAI OCR sur une maquette fictive, pleine résolution et WhatsApp ; un import décalé réparé). Rejouée sur la v37.58 : 24 contrôles en échec (et la section des rangées n'y tourne pas). Seize défauts réintroduits exprès : quinze attrapés ; le seizième (abaisser le seuil de 50 % de chevauchement vertical) ne change rien de visible sur ces écrans. Votre capture, lue en local (jamais dans le dépôt) : les 11 opérations justes.",
+        ] },
         { version: "37.58 Lecons-IA", date: "2026-10-16", changes: [
             "🧠 LES LEÇONS DU CYCLE, PAR L'IA — Journal › 💡 Leçons › « Analyser avec l'IA ». L'application calcule d'abord LES FAITS (par catégorie : dépensé, budget, cycle précédent, moyenne des 3 cycles d'avant, lignes et libellés ; le week-end ; les petits achats ; vos notes ; vos leçons gardées) ; l'IA n'a que ces chiffres. Elle propose au plus 5 leçons : un constat chiffré, UNE action mesurable, l'enjeu en DH par cycle.",
             "🔍 VÉRIFIÉ AU RETOUR — catégorie inconnue : retirée ; chaque chiffre du constat cherché dans les faits, sinon « ⚠️ chiffre non retrouvé dans vos données ». Rien n'est gardé sans vous : 📌 Garder / ✕ Écarter.",
@@ -22504,7 +22513,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const _bqLibelle = (x) => {
                         let t = String(x || '').replace(/^[\s|¦│=&@©®°;:'"“”‘’`~^*•·»«<>()\[\]{}_!?\\\/-]+(?=\p{L}|\d)/u, '')
                             .replace(/^[^\x00-\x7F\s\dÀà]\s+(?=\p{L})/u, '');      // une icône lue « Î », « œ », « æ » (« À » est un mot)
-                        const m = t.match(/^([a-z]{1,3}|[A-Za-z]{1,2}[&@][A-Za-z]{0,2}|[A-Za-z]\))\s+(?=\p{Lu})/u);
+                        const m = t.match(/^([a-z]{1,3}|[A-Za-z]{1,2}[&@][A-Za-z]{0,2}|[A-Za-z0-9]\))\s+(?=\p{Lu})/u);   // v37.59 : « 2) » = l'icône ↗
                         if (m && !BQ_PETITS.has(m[1])) t = t.slice(m[0].length);
                         return t.replace(/(\s+(?:[_*°"'’“”|.,;:<>]+|dhs?|mad|ph))+$/i, '').trim();
                     };
@@ -22544,7 +22553,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         if (!d || d.inconnue) return null;
                         const ref = aujourdhui instanceof Date ? aujourdhui : new Date();
                         let a = d.a != null ? (d.a < 100 ? 2000 + d.a : d.a) : ref.getFullYear();
-                        if (d.a == null && new Date(a, d.m - 1, d.j) > new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + 7)) a -= 1;
+                        const devinee = d.a == null || Math.abs(a - ref.getFullYear()) > 1;   // v37.59 : « 2020 » lu pour « 2026 »
+                        if (devinee) a = ref.getFullYear();
+                        if (devinee && new Date(a, d.m - 1, d.j) > new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + 7)) a -= 1;
                         if (!(d.m >= 1 && d.m <= 12 && d.j >= 1 && d.j <= 31)) return null;
                         return a + '-' + String(d.m).padStart(2, '0') + '-' + String(d.j).padStart(2, '0');
                     };
@@ -22558,11 +22569,13 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             return pre + ' ';
                         });
                         //  v37.55 : « PAIEMENT CB 141026 MARJ… » — la date d'achat sans séparateurs
-                        r = r.replace(/(\bcb\s+)(\d{2}) ?(\d{2}) ?(\d{2})(?!\d)/gi, (m, pre, j, mo, a) => { dates.push({ j: +j, m: +mo, a: +a }); return pre + ' '; });
+                        r = r.replace(/(\bcb\s*)(\d{2}) ?(\d{2}) ?(\d{2})(?!\d)/gi, (m, pre, j, mo, a) => { dates.push({ j: +j, m: +mo, a: +a }); return pre + ' '; });
                         r = r.replace(BQ_DATE_NUM, (m, pre, j, mo, a) => { dates.push({ j: +j, m: +mo, a: +a }); return pre + ' '; });
                         r = r.replace(BQ_DATE_TXT, (m, pre, j, mois, a) => { dates.push({ j: +j, m: BQ_MOIS[bqNorm(mois)], a: a ? +a : null }); return pre + ' '; });
                         r = r.replace(BQ_DATE_GAB, (m, pre, j, mo) => { dates.push({ j: +j, m: +mo, a: null, gab: true }); return pre + ' '; });
-                        const net = (x) => x.replace(/\(\*\)/g, ' ').replace(/[.…]{2,}|…/g, ' ').replace(/\s+/g, ' ').trim();
+                        const net = (x) => x.replace(/\(\*\)/g, ' ').replace(/[.…]{2,}|…/g, ' ')
+                            .replace(/(^|\s)\S{0,2}\s*\b(?:remonter|haut de page)\b\s*\S{0,2}(?=\s|$)/gi, ' ')   // v37.59 : le bouton « ↑ Remonter »
+                            .replace(/\s+/g, ' ').trim();
                         const reste = _bqLibelle(net(r));
                         const texte = _bqLibelle(net(raw.replace(BQ_MONTANT, (m, pre) => pre + ' ')));
                         const lettres = (reste.match(/\p{L}/gu) || []).length;
@@ -22684,6 +22697,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const score = {
                             attijari: (/attijari|wafa/.test(nTout) ? 5 : 0) + (/total des mouvements/.test(nTout) ? 4 : 0) + (/mes comptes/.test(nTete) ? 3 : 0)
                                     + (/\bawbgab\b|\bawb\b/.test(nTout) ? 2 : 0) + (/\bmad\b/.test(nTout) ? 1 : 0) + (/compte\/\d/.test(nTout) ? 3 : 0)
+                                    + (/paiement cb ?\d{2}/.test(nTout) ? 2 : 0) + (/\bvir web\b/.test(nTout) ? 1 : 0)   // v37.59 : l'écran « Compte chèque »
                                     + (identifiants.some(x => /[A-Z]/.test(x)) ? 3 : 0) + (/dernieres operations/.test(nTete) && !/vos dernieres/.test(nTete) ? 1 : 0),
                             assafa: (/assafa/.test(nTete) ? 5 : 0) + (/vos dernieres operations/.test(nTout) ? 4 : 0) + (/\bdhs\b/.test(nTout) ? 2 : 0) + (identifiants.some(x => x.length === 24) ? 1 : 0),
                             saham: (/saham/.test(nTout) ? 5 : 0) + (/transactions recentes/.test(nTout) ? 4 : 0) + (/bonjour/.test(nTete) ? 2 : 0) + (/compte cheque dirhams/.test(nTete) ? 2 : 0),
@@ -22704,7 +22718,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const essais = (ordre ? [ordre] : ['D', 'L']).map(tt => {
                             const ops = _bqDecouper(corps, tt);
                             const sans = ops.filter(o => !o.montants.length);
+                            const datees = sans.filter(o => o.dates.length || o.datesLib.length);   // v37.59 : pas un bout d'interface
                             if (fin.length && sans.length === fin.length) sans.forEach((o, i) => o.montants.push(...fin[i].montants));
+                            else if (fin.length && datees.length === fin.length) datees.forEach((o, i) => o.montants.push(...fin[i].montants));
                             else if (fin.length && ops.length) ops[ops.length - 1].montants.push(...fin.flatMap(t => t.montants));
                             return { tt, ops, note: _bqNote(ops) + (premier && (premier.D ? 'D' : 'L') === tt ? 0.5 : 0) };
                         }).sort((a, b) => b.note - a.note);
@@ -22789,7 +22805,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     //  Le commerçant : « PAIEMENT CB 11/10/26 CARAMELIO » → « CARAMELIO »
                     const bqMarchand = (op) => String(op.libelle || '')
                         .replace(/^(paiement|paiment|achat|pmt|reglement)\s*(par\s*)?(cb|carte|tpe|internet|mobile)?\s*/i, '')
-                        .replace(/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/g, ' ').replace(/\(\*\)|\.{2,}|…/g, ' ').replace(/\s+/g, ' ').trim() || String(op.libelle || '').trim();
+                        .replace(/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/g, ' ').replace(/\(\*\)|\.{2,}|…/g, ' ')
+                        .replace(/^\s*\d{2} ?\d{2} ?\d{2}(?!\d)\s*/, '').replace(/[\s(\-.,;:]+$/, '')   // v37.59 : « 17 10 26 Carrefour ( »
+                        .replace(/\s+/g, ' ').trim() || String(op.libelle || '').trim();
                     //  L'empreinte d'une opération : compte + date comptable + libellé + montant exact
                     const bqLibNorm = (s) => bqNorm(s).replace(/[^a-z0-9]/g, '').slice(0, 32);
                     const bqHash = (compteId, op) => {
@@ -22799,8 +22817,14 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         return 'bq' + h.toString(16).padStart(8, '0');
                     };
                     //  v37.54 : deux libellés « proches » (l'OCR a lu une lettre, une icône de travers) : trigrammes communs (Dice)
-                    const bqLibProche = (a, b) => {
-                        if (!a || !b) return false;
+                    const _bqCoeur = (s) => String(s || '').replace(/^(paiement|paiment|achat|pmt|reglement)(par)?(cb|carte|tpe|internet|mobile)?\d{0,6}/, '')
+                        .replace(/^(virweb|virinst|vir)(de|emis|recu)?/, '');
+                    const bqLibProche = (a0, b0) => {
+                        if (!a0 || !b0) return false;
+                        if (a0 === b0) return true;
+                        //  v37.59 : le commerçant, sans « PAIEMENT CB 18 10 26 » (commun à tous les paiements par carte)
+                        const ca = _bqCoeur(a0), cb = _bqCoeur(b0);
+                        const [a, b] = ca.length >= 3 && cb.length >= 3 ? [ca, cb] : [a0, b0];
                         if (a === b || a.includes(b) || b.includes(a) || a.slice(0, 10) === b.slice(0, 10)) return true;
                         const tri = (s) => { const o = new Map(); for (let i = 0; i < s.length - 2; i++) { const k = s.slice(i, i + 3); o.set(k, (o.get(k) || 0) + 1); } return o; };
                         const A = tri(a), B = tri(b); let c = 0, n = 0;
@@ -22929,8 +22953,33 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     //  chiffres seulement. Seulement quand la lecture est douteuse (rien de net après la virgule,
                     //  ou une devise mal lue collée derrière : « 52PH », « 5"° »).
                     const BQ_JUNK_DEVISE = /^(?:P[H*]?|ph|pH|[°"'’“”*]+\S{0,3})$/;
+                    //  v37.59 — LES RANGÉES DE L'ÉCRAN. L'OCR lit parfois une colonne entière puis l'autre (Attijari
+                    //  « Compte chèque » : 11 libellés, puis 11 montants) ; recollés dans l'ordre, un libellé perdu
+                    //  décalait TOUS les montants. Ici chaque ligne lue est rangée à sa hauteur sur la capture : un
+                    //  montant rejoint le libellé qui est à son niveau (séparés par une tabulation, il le suit
+                    //  immédiatement). Deux lignes qui se chevauchent en largeur ne sont jamais fusionnées.
+                    const _texteParRangees = (data) => {
+                        const lignes = (data && Array.isArray(data.lines) ? data.lines : [])
+                            .filter(l => l && l.bbox && String(l.text || '').trim() && l.bbox.y1 > l.bbox.y0);
+                        if (lignes.length < 2) return (data && data.text) || '';
+                        const rangees = [];
+                        lignes.slice().sort((a, b) => (a.bbox.y0 + a.bbox.y1) - (b.bbox.y0 + b.bbox.y1)).forEach(l => {
+                            const b = l.bbox, h = b.y1 - b.y0;
+                            let meilleure = null, taux = 0;
+                            rangees.forEach(r => {
+                                if (r.items.some(x => x.bbox.x0 < b.x1 && b.x0 < x.bbox.x1)) return;
+                                const t = (Math.min(r.y1, b.y1) - Math.max(r.y0, b.y0)) / Math.max(1, Math.min(h, r.y1 - r.y0));
+                                if (t > taux) { taux = t; meilleure = r; }
+                            });
+                            if (meilleure && taux >= 0.5) meilleure.items.push(l);
+                            else rangees.push({ y0: b.y0, y1: b.y1, items: [l] });
+                        });
+                        return rangees.sort((a, b) => a.y0 - b.y0)
+                            .map(r => r.items.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(l => String(l.text).replace(/\s*\n\s*/g, ' ').trim()).join('\t'))
+                            .join('\n');
+                    };
                     const _relireCentimes = async (w, cv, data) => {
-                        let texte = data.text || '';
+                        let texte = _texteParRangees(data);
                         const mots = data.words || [];
                         const douteux = mots.filter((m, i) => {
                             if (!/\d,/.test(m.text)) return false;
@@ -23109,18 +23158,41 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         }).filter(c => c.score >= (type === 'achat' ? (c.famille ? 10 : 40) : 50)).sort((a, b) => b.score - a.score).slice(0, 3);
                     };
                     //  Les propositions d'une capture dont le compte est connu
+                    //  v37.59 — UN IMPORT DÉCALÉ : même compte, même date, même montant au centime, mais un autre libellé (la
+                    //  v37.58 collait parfois le montant au libellé de la ligne voisine). Seulement après les correspondances
+                    //  exactes de toute la capture : deux achats du même montant le même jour gardent chacun le leur.
+                    const _importDecale = (reg, compteId, op, pris) => {
+                        const m = Math.round(op.montant * 100), d = op.dateOp || op.date, lib = bqLibNorm(op.libelle);
+                        return reg.find(e => !pris.has(e.h) && String(e.c) === String(compteId) && e.d === d && Math.round(Number(e.m) * 100) === m && !bqLibProche(e.l, lib)) || null;
+                    };
+                    const _oublierOpBanque = (h) => Object.values(donneesAnnuelles.value || {}).forEach(d => { if (d && d.banqueOperations) delete d.banqueOperations[h]; });
                     const _proposer = (cap, deja, reservees) => {
                         const reg = _registreBanque(), pris = new Set(), txPris = new Set(), occ = {};
-                        cap.lignes = cap.analyse.operations.map(op => {
+                        const prep = cap.analyse.operations.map(op => {
                             const base = bqHash(cap.compteId, op);
                             occ[base] = (occ[base] || 0) + 1;
-                            const hash = base + (occ[base] > 1 ? '-' + occ[base] : '');
+                            return { op, hash: base + (occ[base] > 1 ? '-' + occ[base] : ''), e: null };
+                        });
+                        //  l'opération du journal liée à une ligne déjà traitée n'est plus libre pour une autre (même montant, même jour)
+                        prep.forEach(p => { if (deja.has(p.hash)) return; p.e = _dejaTraitee(reg, cap.compteId, p.op, p.hash, pris); if (p.e) { pris.add(p.e.h); if (p.e.x != null) txPris.add(p.e.x); } });
+                        cap.lignes = prep.map(({ op, hash, e }) => {
                             const type = bqClasser(op), marchand = bqMarchand(op);
-                            const l = { op, hash, type, marchand, cat: null, journal: null, cibles: [], action: 'ignorer', raison: '', dejaTraitee: null, doublon: false };
+                            const l = { op, hash, type, marchand, cat: null, journal: null, cibles: [], action: 'ignorer', raison: '', dejaTraitee: null, doublon: false, decale: null };
                             if (deja.has(hash)) { l.doublon = true; l.action = 'aucune'; return l; }
                             deja.add(hash);
-                            const e = _dejaTraitee(reg, cap.compteId, op, hash, pris);
-                            if (e) { pris.add(e.h); l.dejaTraitee = e; l.action = 'aucune'; return l; }
+                            if (e) { l.dejaTraitee = e; l.action = 'aucune'; return l; }
+                            const dec = _importDecale(reg, cap.compteId, op, pris);
+                            if (dec && dec.s !== 'ignoree') {
+                                const tx = dec.s === 'ajoutee' && dec.x != null ? _toutesTx().find(t => String(t.id) === String(dec.x)) : null;
+                                if (tx || dec.s !== 'ajoutee') {
+                                    pris.add(dec.h);
+                                    l.decale = { h: dec.h, l: tx ? tx.libelle : dec.l, s: dec.s, t: dec.t, tx: tx ? tx.id : null };
+                                    if (!tx) { l.dejaTraitee = dec; l.action = 'aucune'; return l; }   // pointée, rapprochée : rien à refaire
+                                    if (type === 'achat') { l.cat = categoriserLibelle(marchand); l.action = 'corriger:' + tx.id; }
+                                    else { l.action = 'retirer:' + tx.id; l.raison = type === 'gab' ? 'Retrait espèces' : type === 'frais' ? 'Frais' : type === 'virement' ? 'Virement : déjà dans le solde' : 'Entrée : déjà dans le solde'; }
+                                    return l;
+                                }
+                            }
                             if (type === 'gab') { l.raison = 'Retrait espèces'; return l; }
                             if (type === 'frais') { l.action = 'frais'; return l; }
                             if (type === 'achat') {
@@ -23189,6 +23261,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const changerCompteCapture = (cap, id) => { cap.compteId = id || null; cap.via = id ? 'choix' : null; _reproposer(); };
                     const optionsLigneBanque = (l) => {
                         const o = [];
+                        if (l.decale && l.decale.tx != null) {
+                            if (l.type === 'achat') o.push({ v: 'corriger:' + l.decale.tx, t: '✏️ Corriger « ' + l.decale.l + ' » → « ' + l.marchand + ' »' });
+                            o.push({ v: 'retirer:' + l.decale.tx, t: '🗑 Retirer « ' + l.decale.l + ' » du journal' });
+                        }
                         if (l.journal) o.push({ v: 'deja:' + l.journal.id, t: '✓ Déjà dans le journal (' + (l.journal.libelle || '') + ', ' + formatMAD(l.journal.montant) + ')' });
                         l.cibles.forEach(c => o.push({ v: 'pointer:' + c.cle, t: '📌 Pointer « ' + c.libelle + ' » (' + formatNombre(c.regle) + ' / ' + formatNombre(c.due) + ')' }));
                         if (l.type === 'frais') o.push({ v: 'frais', t: '🧾 Frais bancaires (une ligne)' });
@@ -23197,7 +23273,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         return o;
                     };
                     const resumeImportBanque = computed(() => {
-                        const r = { ajouter: 0, suspens: 0, deja: 0, pointer: 0, ignorer: 0, frais: 0, traitees: 0, soldes: 0, sansCompte: 0 };
+                        const r = { ajouter: 0, suspens: 0, deja: 0, pointer: 0, ignorer: 0, frais: 0, traitees: 0, soldes: 0, sansCompte: 0, corriger: 0, retirer: 0 };
                         importBanque.captures.forEach(cap => {
                             if (!cap.compteId) { r.sansCompte += cap.analyse.operations.length; return; }
                             if (cap.appliquerSolde) r.soldes++;
@@ -23226,7 +23302,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         return tx;
                     };
                     const appliquerImportBanque = () => {
-                        const st = { ajoutees: 0, suspens: 0, deja: 0, pointees: 0, ignorees: 0, frais: 0, soldes: 0 };
+                        const st = { ajoutees: 0, suspens: 0, deja: 0, pointees: 0, ignorees: 0, frais: 0, soldes: 0, corrigees: 0, retirees: 0 };
                         const taches = [...tachesPilotageToutes.value, ...entreesPilotageToutes.value];
                         importBanque.captures.forEach(cap => {
                             if (!cap.compteId) return;
@@ -23248,6 +23324,25 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                     const tx = _txBanque(l.op.date, l.marchand, l.op.montant, cap.compteId, extra);
                                     _enregistrerOp(cap.compteId, l, 'ajoutee', { x: tx && tx.id });
                                     st.ajoutees++; if (!sur) st.suspens++;
+                                } else if (a === 'corriger' || a === 'retirer') {
+                                    //  v37.59 : l'import décalé — l'opération du journal reprend son vrai libellé, ou en sort
+                                    const s = _seauDeTx(Number(cible)) || _seauDeTx(cible);
+                                    const tx = s && s.arr[s.i];
+                                    if (l.decale) _oublierOpBanque(l.decale.h);
+                                    if (tx && a === 'corriger') {
+                                        tx.libelle = l.marchand; tx.banqueLibelle = l.op.libelle; tx.banqueMarchand = bqLibNorm(l.marchand); tx.banqueHash = l.hash;
+                                        if (tx.categorieSource !== 'vous') {
+                                            const r = l.cat || categoriserLibelle(l.marchand);
+                                            tx.categorieId = r.id || 'cat_misc'; tx.categorieSource = r.id ? (r.source || 'règle') : undefined;
+                                            if (!r.id) delete tx.categorieSource;
+                                            if (r.statut === 'sur') delete tx.aVerifier; else tx.aVerifier = true;
+                                        }
+                                        _enregistrerOp(cap.compteId, l, 'ajoutee', { x: tx.id });
+                                        st.corrigees++;
+                                    } else {
+                                        if (tx) { s.arr.splice(s.i, 1); st.retirees++; }
+                                        _enregistrerOp(cap.compteId, l, 'ignoree', { r: (l.raison || '') + ' — retirée (import décalé)' });
+                                    }
                                 } else if (a === 'deja') {
                                     const tx = _toutesTx().find(t => String(t.id) === cible);
                                     if (tx) { tx.banqueHash = l.hash; if (!tx.banqueMarchand) tx.banqueMarchand = bqLibNorm(l.marchand); if (!tx.compteId) tx.compteId = cap.compteId; }
@@ -23481,7 +23576,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         BANQUES_SELECT, nomBanque, idLisible, signatureLisible, importBanque, calibrageBanque, ouvrirImportBanque, fermerImportBanque,
                         ajouterFichiersBanque, retirerFichierBanque, deposerBanque, analyserImportBanque, repondreCompteCapture, changerCompteCapture,
                         optionsLigneBanque, resumeImportBanque, appliquerImportBanque, calibrerCaptures, associerCalibrage, retirerIdentifiant, retirerEmpreinte,
-                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, bqMemeCompte, bqRibValide, rattacherTicketsALaLigne, ocrCapture,
+                        ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, bqMemeCompte, bqRibValide, rattacherTicketsALaLigne, ocrCapture, bqTexteParRangees: _texteParRangees,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage,

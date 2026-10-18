@@ -99,5 +99,6 @@ suite "Tickets : cumulés sur leur ligne (Marjane)"  node test_cfo_engine_parity
 suite "Journal : chercher, ranger par catégorie, corriger, retenir"  node test_cfo_engine_parity/test_journal.mjs
 suite "Leçons : l'IA lit le cycle, vous gardez"                 node test_cfo_engine_parity/test_lecons_ia.mjs
 suite "Telegram : chaque réponse arrive, et seulement chez vous"  node test_cfo_engine_parity/test_telegram.mjs
+suite "Banque : chaque montant sur sa ligne (imports décalés réparés)"  node test_cfo_engine_parity/test_banque_rangees.mjs
 
 echo "✅ Toutes les suites passent."
