@@ -31,7 +31,7 @@ const section = async (nom, f) => { try { await f(); } catch (e) { v(`${nom} : e
 console.log('\n  CATÉGORISATION : RÈGLES HORS-LIGNE, IA, DOUTE À VOUS\n  ' + '─'.repeat(80));
 
 /* ── A. Statique ─────────────────────────────────────────────────────── */
-v('A. le moteur à notes remplace les trois couches v32.60', /const categoriserLibelle = \(libelle\)/.test(html) && !/const _guessCategorieId = /.test(html) && !/const ALIAS_CATEGORIES = /.test(html));
+v('A. le moteur à notes remplace les trois couches v32.60', /const categoriserLibelle = \(libelle(, montant)?\)/.test(html) && !/const _guessCategorieId = /.test(html) && !/const ALIAS_CATEGORIES = /.test(html));
 v('  → panneau « À catégoriser », journal surligné, règles visibles, repli IA', /data-a-categoriser\b/.test(html) && /:data-a-verifier=/.test(html) && /data-regles-categorisation/.test(html) && /session_id: 'categorisation'/.test(html));
 
 const require = createRequire(import.meta.url);
