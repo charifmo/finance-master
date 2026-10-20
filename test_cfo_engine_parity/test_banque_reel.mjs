@@ -35,10 +35,11 @@ v('A. le sélecteur ouvre la GALERIE du téléphone : image/* seul, plusieurs à
   && /accept="\.txt,\.csv,text\/plain,text\/csv" class="hidden" data-import-fichier-texte/.test(html));
 v('  → « 🏦 Importer mes captures bancaires » dans la saisie rapide (le ➕ flottant)',
   /data-import-ouvrir-rapide @click="closeSaisieQuickModal\(\); ouvrirImportBanque\(\)"/.test(html));
-v('  → la baguette Merlin n\'est plus posée sur le ➕ (bottom-20 right-4) : elle passe à gauche, le 💾 aussi',
-  /'bottom-20 left-4 w-12 h-12 text-xl'/.test(html) && !/'bottom-20 right-4 w-12 h-12 text-xl'/.test(html) && /fixed bottom-\[8\.5rem\] left-4 z-50 bg-purple-600/.test(html));
-v('  → 🪄 📑 🧠 masqués pendant la saisie rapide et l\'import (ils couvraient Montant, Catégorie, Libellé)',
-  (html.match(/v-if="isMobile && !showSaisieQuickModal && !importBanque\.ouvert"/g) || []).length === 3);
+v('  → rien n\'est posé sur le ➕ : v37.62, plus de 🪄 ni de 💾 flottants au téléphone (« laisse juste brain, journal et + »)',
+  !/'bottom-20 left-4 w-12 h-12 text-xl'/.test(html) && !/'bottom-20 right-4 w-12 h-12 text-xl'/.test(html) && !/fixed bottom-\[8\.5rem\] left-4 z-50 bg-purple-600/.test(html)
+  && /data-flottant="saisie"\s+class="fixed bottom-20 right-4/.test(html));
+v('  → 📑 🧠 masqués pendant la saisie rapide et l\'import (ils couvraient Montant, Catégorie, Libellé)',
+  (html.match(/v-if="isMobile && !showSaisieQuickModal && !importBanque\.ouvert"/g) || []).length === 2);
 v('  → l\'OCR : thème sombre (canal clair inversé), centimes relus trois fois, 3e lecture « en-tête » si aucun solde',
   /const _ecranSombre = /.test(html) && /mode === 'max'/.test(html) && /for \(const \[dx, k\] of \[\[3, 2\], \[0, 2\], \[3, 3\]\]\)/.test(html) && /textes\.enTete = 2/.test(html));
 //  Dépôt PUBLIC : tout RIB écrit dans l'appli et les fixtures est fictif
@@ -384,7 +385,7 @@ try {
         const plus = fl.find(x => x.t === '➕');
         const auCentre = plus && await tel.evaluate(({ x, y }) => (document.elementFromPoint(x, y) || {}).textContent.trim().slice(0, 2), { x: (plus.l + plus.r) / 2, y: (plus.h + plus.b) / 2 });
         v('D. téléphone 390 px : le ➕ se touche (plus rien posé dessus), aucun bouton flottant n\'en chevauche un autre',
-          !!plus && auCentre === '➕' && chev.length === 0 && fl.length >= 4, JSON.stringify([auCentre, chev, fl.map(x => x.t)]));
+          !!plus && auCentre === '➕' && chev.length === 0 && fl.length >= 3, JSON.stringify([auCentre, chev, fl.map(x => x.t)]));
         await tel.tap('button[title="Saisie rapide"]'); await tel.waitForTimeout(300);
         const fl2 = await flottants();
         v('  → saisie rapide ouverte : 🪄 📑 🧠 ne couvrent plus ses champs ; « 🏦 Importer mes captures bancaires » en tête',

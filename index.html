@@ -189,28 +189,24 @@
         <!-- v34.08 : les 3 actions IA quittent le flottant desktop pour le pied de sidebar
              (voir plus bas, dans le menu). Sur mobile — pas de sidebar — elles restent
              ici, flottantes, débarrassées des classes md:* qui les posaient sur le menu. -->
-        <button v-if="isMobile && !showSaisieQuickModal && !importBanque.ouvert" @click="toggleMerlin"
-            :title="merlinActive ? 'Désactiver Merlin (Echap)' : 'Activer Merlin — Audit IA d\'un champ'"
-            :class="['merlin-wand-btn fixed z-[9998] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110',
-                      'bottom-20 left-4 w-12 h-12 text-xl',     // v37.54 : à gauche — à droite, il couvrait le ➕
-                      merlinActive ? 'bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white border-fuchsia-300' : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-purple-500/40']">
-            🪄
-        </button>
+        <!-- v37.62 : sur le téléphone, trois boutons flottants seulement — 🧠 📑 ➕, sur une rangée en bas à droite.
+             🪄 Merlin reste au pied de la barre latérale (ordinateur) ; 💾 n'est plus utile (envoi automatique). -->
 
         <!-- v26.71 FAB Journal (mobile uniquement depuis v34.08) -->
         <button v-if="isMobile && !showSaisieQuickModal && !importBanque.ouvert" @click="ouvrirReleve()"
             title="Ouvrir le Journal / Relevé"
+            data-flottant="releve"
             class="fixed z-[9996] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl
-                   bottom-[11.5rem] right-4 w-12 h-12 text-xl
+                   bottom-[5.25rem] right-20 w-12 h-12 text-xl
                    bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-indigo-400/60 shadow-indigo-900/50">
             📑
         </button>
 
         <!-- v26.80 FAB CFO Widget (mobile uniquement depuis v34.08) -->
         <button v-if="isMobile && !showSaisieQuickModal && !importBanque.ouvert" @click="showCfoModal = true"
-            title="Ouvrir le CFO & Audit"
+            title="Ouvrir le CFO & Audit" data-flottant="cfo"
             :class="['fixed z-[9995] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl',
-                     'bottom-60 right-4 w-12 h-12 text-xl',
+                     'bottom-[5.25rem] right-[8.5rem] w-12 h-12 text-xl',
                      showCfoModal
                        ? 'bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white border-fuchsia-300 shadow-fuchsia-900/50'
                        : 'bg-gradient-to-br from-slate-800 to-slate-900 text-fuchsia-300 border-fuchsia-500/40 shadow-slate-900/50']">
@@ -6534,15 +6530,11 @@
             </template>
         </nav>
 
-        <!-- ═══ v22.20 — FAB Save VPS (mobile only, si modifié) ═══ -->
-        <button v-if="isMobile && serverSyncStatus === 'modified'" @click="saveToServer"
-            class="fixed bottom-[8.5rem] left-4 z-50 bg-purple-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-2xl shadow-purple-900/50 animate-pulse text-lg"
-            title="Sauver sur VPS">
-            💾
-        </button>
+        <!-- v37.62 : plus de 💾 flottant — vos changements partent seuls au VPS 2 s après (handleDataChange) ;
+             un conflit a son bandeau ; « Enregistrer maintenant » est dans les Réglages. -->
 
         <!-- ═══ v22.20 — FAB Saisie ultra-rapide (mobile only, toujours visible) ═══ -->
-        <button v-if="isMobile" @click="openSaisieQuickModal"
+        <button v-if="isMobile" @click="openSaisieQuickModal" data-flottant="saisie"
             class="fixed bottom-20 right-4 z-50 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl shadow-emerald-900/50 text-2xl"
             title="Saisie rapide">
             ➕
@@ -8479,8 +8471,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.61 Saisie";
+                    const CURRENT_VERSION = "37.62 Boutons";
                     const CHANGELOG = [
+        { version: "37.62 Boutons", date: "2026-10-20", changes: [
+            "🧹 TROIS BOUTONS FLOTTANTS — « laisse juste brain, journal et + » : au téléphone, 🧠 (CFO), 📑 (relevé) et ➕ (saisie rapide), sur UNE rangée en bas à droite, au-dessus des onglets. Avant : cinq boutons, dont une colonne au milieu de l'écran posée sur les montants du journal.",
+            "🪄 Merlin quitte le téléphone (il reste au pied de la barre latérale, sur ordinateur). 💾 aussi : il ne clignotait que pendant les 2 secondes qui précèdent l'envoi AUTOMATIQUE au VPS ; un conflit entre appareils a son bandeau (« Imposer la version de cet appareil ») ; « Enregistrer maintenant » reste dans les Réglages.",
+            "PREUVE — nouvelle suite « Boutons flottants » : 12 contrôles (trois boutons, une rangée, le milieu de l'écran libre, chacun répond, l'envoi au VPS toujours automatique). Rejouée sur la v37.61 : 6 contrôles en échec — dont un montant du journal caché sous un bouton. Cinq défauts réintroduits exprès : tous attrapés.",
+        ] },
         { version: "37.61 Saisie", date: "2026-10-20", changes: [
             "🔢 LE MONTANT LU JUSTE — « Marjane 1 250 » enregistrait 1 DH, « 7up 10 » 7 DH, « iam 4g 50 » 4 DH, « 1.250 loyer » 1,25 DH, « café 15dh » le libellé « café dh ». Désormais : un nombre collé à des lettres est un nom, « 1 250 » et « 1.250 » sont des milliers, le nombre en fin (sinon en tête) de texte est le montant, DH / MAD / درهم avalés, chiffres arabes (١٥٠) compris.",
             "🧹 RIEN DE PÉRIMÉ — effacer le nombre (« 50 café » → « café ») laissait 50 DH prêt à partir ; effacer le libellé le gardait ; le libellé changé dans « ⚙️ Ajuster » ne changeait pas la catégorie ; « — Catégorie — » rangeait « à la main » dans « non catégorisé » (désormais « 🤖 Automatique »).",
