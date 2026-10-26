@@ -536,7 +536,9 @@
             <div v-show="!chatFullScreen" class="sticky top-0 shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <div class="px-6 py-1.5 flex flex-wrap gap-4 justify-between items-center bg-slate-50 border-b border-gray-200">
                     <div class="flex items-center gap-3">
-                        <span class="text-xs font-black uppercase text-slate-500 tracking-widest">Édition des paramètres de l'année :</span>
+                        <!-- v37.63 : « Année : » sous 1 536 px — le patrimoine projeté garde sa place, en haut à droite -->
+                        <span class="hidden 2xl:inline text-xs font-black uppercase text-slate-500 tracking-widest">Édition des paramètres de l'année :</span>
+                        <span class="2xl:hidden text-xs font-black uppercase text-slate-500 tracking-widest" title="Édition des paramètres de l'année">Année :</span>
                         <div class="flex items-center gap-2">
                             <select v-model.number="anneeAffichage" class="bg-blue-600 text-white font-black py-1.5 px-3 rounded-lg outline-none cursor-pointer shadow-md border-2 border-blue-700 hover:bg-blue-700 transition-colors">
                                 <option v-for="a in anneesDisponibles" :key="a" :value="a">{{ a }}</option>
@@ -547,9 +549,10 @@
                         </div>
                     </div>
                     <!-- v32.80 : patrimoine projeté ramené sur une seule ligne -->
-                    <div class="text-right relative group flex items-center justify-end gap-2 flex-wrap">
+                    <!-- v37.63 : collé à droite même quand la ligne passe à la ligne ; détail au survol, au toucher, au clavier -->
+                    <div data-projection-entete tabindex="0" aria-label="Patrimoine global projeté : détail des comptes" class="ml-auto text-right relative group flex items-center justify-end gap-2 flex-wrap cursor-help outline-none">
                         <p class="text-[9px] font-black text-gray-400 uppercase tracking-wide italic flex items-center gap-1 whitespace-nowrap">
-                            <span>Patrimoine Global Projeté</span>
+                            <span>Patrimoine Global Projeté ⓘ</span>
                             <span class="normal-case tracking-normal text-gray-400">(Fin {{ anneeAffichage }})</span>
                             <span v-if="(soldesInitiaux.decalagePaie !== false)">(Avant Paie)</span>
                         </p>
@@ -558,17 +561,17 @@
                             <span :class="['px-1 py-0.5 rounded-md shadow-sm text-xs', patrimoineProjeteGlobal >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']">{{ patrimoineProjeteGlobal >= 0 ? '🎉' : '⚠️' }}</span>
                         </p>
                         <!-- v17.21 Tooltip répartition dynamique -->
-                        <div class="hidden group-hover:block absolute right-0 top-full mt-1 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 min-w-[300px] text-left border border-slate-700">
+                        <div data-projection-detail class="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 min-w-[300px] text-left border border-slate-700">
                             <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Répartition du Patrimoine Projeté</p>
                             <p class="text-[8px] font-bold text-slate-500 mb-2 -mt-1">Soldes issus du Relevé de Comptes — fin {{ Math.max(anneeAffichage, soldesInitiaux.anneeActuelle) }}</p>
                             <div class="space-y-1.5 text-sm">
                                 <!-- v17.37 : SSOT — Comptes physiques depuis bilan -->
                                 <template v-for="(val, key) in detailsComptesFinal" :key="'ttc_'+key">
-                                    <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleveProjection(key)" title="Ouvrir le Relevé sur le même horizon">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black" :class="val < 0 ? 'text-red-400' : ''">{{ formatMAD(val) }}</span></div>
+                                    <div class="flex justify-between"><span class="text-blue-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleveProjection(key); $event.target.closest('[data-projection-entete]').blur()" title="Ouvrir le Relevé sur le même horizon">{{ getCompteIcone(key) }} {{ getCompteLabel(key) }}</span><span class="font-black" :class="val < 0 ? 'text-red-400' : ''">{{ formatMAD(val) }}</span></div>
                                 </template>
                                 <!-- v17.45 : Radical — masque tout objectif ayant linkedAccountId, quelle que soit sa valeur -->
                                 <template v-for="(val, key) in detailsEpargneFinal" :key="'tt_'+key">
-                                    <div v-if="!getEpLinkedId(key)" class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleveProjection(key)" title="Ouvrir le Relevé sur le même horizon">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
+                                    <div v-if="!getEpLinkedId(key)" class="flex justify-between"><span class="text-purple-300 font-bold cursor-pointer hover:underline" @click="ouvrirReleveProjection(key); $event.target.closest('[data-projection-entete]').blur()" title="Ouvrir le Relevé sur le même horizon">🎯 {{ getEpargneLabel(key) }}</span><span class="font-black">{{ formatMAD(val) }}</span></div>
                                 </template>
                                 <div class="border-t border-slate-700 pt-1.5 mt-1.5 flex justify-between"><span class="text-emerald-300 font-black">🏛️ Total</span><span class="font-black text-emerald-400">{{ formatMAD(patrimoineProjeteGlobal) }}</span></div>
                                 <p class="text-[8px] text-slate-500 font-bold mt-1">Cliquez un compte pour ouvrir son relevé sur le même horizon.</p>
@@ -8471,8 +8474,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.62 Boutons";
+                    const CURRENT_VERSION = "37.63 Projection";
                     const CHANGELOG = [
+        { version: "37.63 Projection", date: "2026-10-26", changes: [
+            "📍 LE PATRIMOINE PROJETÉ, TOUJOURS EN HAUT À DROITE — « Patrimoine Global Projeté (Fin AAAA) », son détail des comptes au survol et le clic qui ouvre le relevé de chaque compte : rien n'avait été retiré (bloc identique depuis la v37.46), mais sous ~1 300 px de large la ligne de l'en-tête passait à la ligne et le bloc tombait À GAUCHE, sous l'année, méconnaissable. Désormais « Année : » (le libellé long au-delà de 1 536 px) laisse la place : à 1 265 px tout tient sur une ligne ; plus étroit, le bloc reste collé à droite.",
+            "👆 « ⓘ » le signale ; le détail s'ouvre au survol, et aussi au toucher / au clavier (tablette) ; un clic sur un compte ouvre son relevé sur le même horizon et le détail se referme.",
+            "PREUVE — nouvelle suite « En-tête » : 8 contrôles (1 265 px, 1 024 px, survol, clic, toucher). Rejouée sur la v37.62 : 4 en échec (à 1 265 px, le bloc à 561 px du bord droit, sur la ligne d'en dessous). Quatre défauts réintroduits exprès : tous attrapés. Aucun test ne gardait cet en-tête : c'est corrigé.",
+        ] },
         { version: "37.62 Boutons", date: "2026-10-20", changes: [
             "🧹 TROIS BOUTONS FLOTTANTS — « laisse juste brain, journal et + » : au téléphone, 🧠 (CFO), 📑 (relevé) et ➕ (saisie rapide), sur UNE rangée en bas à droite, au-dessus des onglets. Avant : cinq boutons, dont une colonne au milieu de l'écran posée sur les montants du journal.",
             "🪄 Merlin quitte le téléphone (il reste au pied de la barre latérale, sur ordinateur). 💾 aussi : il ne clignotait que pendant les 2 secondes qui précèdent l'envoi AUTOMATIQUE au VPS ; un conflit entre appareils a son bandeau (« Imposer la version de cet appareil ») ; « Enregistrer maintenant » reste dans les Réglages.",

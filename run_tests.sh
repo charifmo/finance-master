@@ -103,5 +103,6 @@ suite "Banque : chaque montant sur sa ligne (imports décalés réparés)"  node
 suite "Apprentissage : une correction, retenue (catégories, noms, choix d'import)"  node test_cfo_engine_parity/test_apprentissage.mjs
 suite "Saisie : simple et juste (montant lu, bonne date, bonne année, annuler)"  node test_cfo_engine_parity/test_saisie.mjs
 suite "Boutons flottants : 🧠 📑 ➕ sur une rangée"  node test_cfo_engine_parity/test_boutons.mjs
+suite "En-tête : le patrimoine projeté en haut à droite (détail des comptes)"  node test_cfo_engine_parity/test_entete.mjs
 
 echo "✅ Toutes les suites passent."
