@@ -105,5 +105,6 @@ suite "Saisie : simple et juste (montant lu, bonne date, bonne année, annuler)"
 suite "Boutons flottants : 🧠 📑 ➕ sur une rangée"  node test_cfo_engine_parity/test_boutons.mjs
 suite "En-tête : le patrimoine projeté en haut à droite (détail des comptes)"  node test_cfo_engine_parity/test_entete.mjs
 suite "Revenu arrivé ailleurs : pourquoi ce découvert, le virement déjà fait"  node test_cfo_engine_parity/test_revenu_ailleurs.mjs
+suite "CFO n8n : semaines = jours du cycle ÷ 7 (plus × 4,3), comme l'appli"  node test_cfo_engine_parity/test_n8n_jours_cycle.mjs
 
 echo "✅ Toutes les suites passent."
