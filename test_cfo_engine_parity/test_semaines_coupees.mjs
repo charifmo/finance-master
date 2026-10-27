@@ -37,7 +37,7 @@ console.log('\n  SEMAINES COUPÉES PAR LA PAIE : CHAQUE MORCEAU DANS SON CYCLE\n
 v('A. plus de « règle du jeudi » : aucun calcul ne cherche le jeudi d\'une semaine',
   !/\(4 - debut\.getDay\(\) \+ 7\) % 7/.test(html) && !/_jeudiISO/.test(html));
 v('  → un cycle compte ses jours (÷ 7) ; schéma 21 ; les saisies d\'avant la paie rendues au cycle qui finit',
-  /const semainesDuCycle = \(mois, an\) => joursDuCycle\(mois, an\) \/ 7;/.test(html) && /_schemaVersion: 21,/.test(html) && /const _nSemCoupees = migrerSemainesCoupees\(data\);/.test(html));
+  /const semainesDuCycle = \(mois, an\) => joursDuCycle\(mois, an\) \/ 7;/.test(html) && /_schemaVersion: (2[1-9]|[3-9]\d),/.test(html) && /const _nSemCoupees = migrerSemainesCoupees\(data\);/.test(html));
 const php = fs.readFileSync(path.join(RACINE, 'cfo_intent_engine.php'), 'utf8');
 v('  → le serveur (recalcul de secours) suit la même règle', /return cfo_jours_cycle\(\$m, \$an, \$jdp\) \/ 7;/.test(php) && !/\$jeudi/.test(php));
 
@@ -257,7 +257,7 @@ try {
         v('  → ‹ « Cycle précédent · lun. 26 oct. » : Resto 150', p.resto.saisi === 150 && p.debut === '2026-10-26', JSON.stringify(p.resto));
         await page.waitForTimeout(2600);
         const dernier = envois.length ? JSON.parse(envois[envois.length - 1]) : null;
-        v('  → l\'envoi au VPS porte le schéma 21', !!dernier && dernier._schemaVersion === 21 && !!dernier.donneesAnnuelles['2026'].consoRealiseeT0['S2026-10-26'], dernier ? String(dernier._schemaVersion) : 'aucun envoi');
+        v('  → l\'envoi au VPS porte le schéma 21 ou plus (22 depuis la v37.67)', !!dernier && dernier._schemaVersion >= 21 && !!dernier.donneesAnnuelles['2026'].consoRealiseeT0['S2026-10-26'], dernier ? String(dernier._schemaVersion) : 'aucun envoi');
         const trois = await page.evaluate((ST) => {
             const st = eval(ST), D = (v, k) => ({ ...(v ? { _schemaVersion: v } : {}), soldesInitiaux: { jourDePaie: 27 }, donneesAnnuelles: { 2026: { consoRealiseeT0: { [k]: { x: 1 } }, consoClotureT0: { [k]: { x: true } } } } });
             const v20 = D(20, 'S2026-10-27'), v19 = D(0, 'S2026-10-26'), v21 = D(21, 'S2026-10-27');

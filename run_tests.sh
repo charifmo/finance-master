@@ -107,5 +107,6 @@ suite "En-tête : le patrimoine projeté en haut à droite (détail des comptes)
 suite "Revenu arrivé ailleurs : pourquoi ce découvert, le virement déjà fait"  node test_cfo_engine_parity/test_revenu_ailleurs.mjs
 suite "Semaines coupées par la paie : chaque morceau dans son cycle"  node test_cfo_engine_parity/test_semaines_coupees.mjs
 suite "Sur tout le cycle, séances à la quinzaine, frise du cycle"      node test_cfo_engine_parity/test_frise_cycle.mjs
+suite "Le CFO lit le moteur (comptes, exceptions, virement vers le Courant), Annuler 50 pas"  node test_cfo_engine_parity/test_cfo_lit_le_moteur.mjs
 
 echo "✅ Toutes les suites passent."
