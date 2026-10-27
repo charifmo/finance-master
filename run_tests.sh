@@ -63,8 +63,8 @@ suite "Logistique bancaire (routage, radar, focus)"             node test_cfo_en
 suite "Deux PC, un seul état (vrai save_data.php)"               node test_cfo_engine_parity/test_deux_pc.mjs
 suite "Reste à dépenser du cycle (vrac, rythme, rôles)"         node test_cfo_engine_parity/test_reste_a_depenser.mjs
 suite "Rayons X & routage bancaire évident"                    node test_cfo_engine_parity/test_rayons_x.mjs
-suite "Semaines réelles du cycle (4 ou 5, plus × 4,3)"          node test_cfo_engine_parity/test_semaines_cycle.mjs
-suite "Semaines réelles du cycle — serveur (PHP)"              php test_cfo_engine_parity/test_semaines_cycle.php
+suite "Semaines du cycle = ses jours ÷ 7 (plus × 4,3, plus de jeudi)" node test_cfo_engine_parity/test_semaines_cycle.mjs
+suite "Semaines du cycle = ses jours ÷ 7 — serveur (PHP)"        php test_cfo_engine_parity/test_semaines_cycle.php
 suite "Un rythme par ligne de détail (/sem, /15j, /cycle)"     node test_cfo_engine_parity/test_rythmes.mjs
 suite "Un rythme par ligne — serveur (PHP)"                    php test_cfo_engine_parity/test_rythmes.php
 suite "Semaine écoulée sans saisie = son prévu"               node test_cfo_engine_parity/test_prevu_par_defaut.mjs
@@ -105,5 +105,6 @@ suite "Saisie : simple et juste (montant lu, bonne date, bonne année, annuler)"
 suite "Boutons flottants : 🧠 📑 ➕ sur une rangée"  node test_cfo_engine_parity/test_boutons.mjs
 suite "En-tête : le patrimoine projeté en haut à droite (détail des comptes)"  node test_cfo_engine_parity/test_entete.mjs
 suite "Revenu arrivé ailleurs : pourquoi ce découvert, le virement déjà fait"  node test_cfo_engine_parity/test_revenu_ailleurs.mjs
+suite "Semaines coupées par la paie : chaque morceau dans son cycle"  node test_cfo_engine_parity/test_semaines_coupees.mjs
 
 echo "✅ Toutes les suites passent."

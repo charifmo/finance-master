@@ -91,12 +91,12 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
 }
 /*  Respiration du mois budgétaire, à la main :
       ressources 20 000 ; sorties 6 000 + 800 + 1 000 × N + 2 000 + 700
-      N = les semaines RÉELLES du cycle (v37.29 : 4 ou 5, plus 4,3) — les jeudis
-      entre la paie de M−1 et la veille de celle de M, comptés jour par jour.
-      N = 4 → 13 500, marge 6 500 (33 %) ; N = 5 → 14 500, marge 5 500 (28 %) : « ample ». */
-const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getDay() === 4) n++; return n; };
+      N = les semaines du cycle (v37.65 : ses JOURS ÷ 7) — les jours entre la paie de
+      M−1 et la veille de celle de M, comptés jour par jour.
+      30 jours → 13 786, marge 6 214 (31 %) ; 31 jours → 13 929, marge 6 071 (30 %) : « ample ». */
+const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) n++; return n / 7; };
 const NS = semainesCycle(MOIS_BUDGET, AN_BUDGET, jourDePaie);
-const RESP = (() => { const sorties = 6000 + 800 + 1000 * NS + 2000 + 700; return { ressources: 20000, sorties, marge: 20000 - sorties, pct: Math.round((20000 - sorties) / 20000 * 100) }; })();
+const RESP = (() => { const sorties = Math.round(6000 + 800 + 1000 * NS + 2000 + 700); return { ressources: 20000, sorties, marge: 20000 - sorties, pct: Math.round((20000 - sorties) / 20000 * 100) }; })();
 
 const page0 = html
     .replace('<script src="https://unpkg.com/vue@3/dist/vue.global.js"', '<script src="/vue.js"')
@@ -190,7 +190,9 @@ try {
     v(`respiration du mois : ${RESP.marge} DH libres sur ${RESP.ressources} (${RESP.pct} %, ample)`,
       r.R.ressources === RESP.ressources && r.R.sorties === RESP.sorties && r.R.marge === RESP.marge && r.R.pct === RESP.pct && r.R.niveau === 'ample',
       JSON.stringify({ ressources: r.R.ressources, sorties: r.R.sorties, marge: r.R.marge, pct: r.R.pct, niveau: r.R.niveau }));
-    v('sur 12 mois, marge + épargne = surplusBudgetaireAnnuel (même moteur)', r.cumul === r.surplus, JSON.stringify(r));
+    //  v37.65 : un cycle compte ses jours ÷ 7 — chaque mois arrondit ses sorties au dirham ; douze arrondis
+    //  d'un demi-dirham au plus séparent la somme des mois du surplus annuel (non arrondi, le même moteur)
+    v('sur 12 mois, marge + épargne = surplusBudgetaireAnnuel (même moteur, à l\'arrondi mensuel près : ≤ 6 DH)', Math.abs(r.cumul - r.surplus) <= 6, JSON.stringify({ cumul: r.cumul, surplus: r.surplus }));
     v('les segments + la marge remplissent exactement la barre',
       Math.abs(r.R.segments.reduce((s, x) => s + x.part, 0) + r.R.partMarge - 100) < 0.01, JSON.stringify(r.R.segments.map(s => s.part)));
 

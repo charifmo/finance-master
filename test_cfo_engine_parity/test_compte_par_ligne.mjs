@@ -13,6 +13,9 @@
  *     A. statique · B. les moteurs (reste à payer, Relevé, enveloppe, cartes, tâches) ·
  *     C. surplus, Météo et CFO (PHP) · D. sans choix, rien ne bouge ·
  *     E. le Budget Structurel : double-clic, ajouter, montant, compte, supprimer, épargne, comptes, mobile.
+ *
+ *   v37.65 : un cycle compte ses jours ÷ 7 — octobre (30 jours) : Courses 1 000 × 30 / 7 = 4 286 ;
+ *   novembre (31 jours) : 1 000 × 31 / 7 = 4 429 (et non 5 × 1 000).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -123,16 +126,16 @@ try {
           JSON.stringify(b.fixes) === JSON.stringify({ cpt_2: 3000, courant: 300 }) && b.total === 3300, JSON.stringify(b));
         v('  → compteDeFlux : Syndic → Courant, Loyer → Assafa (défaut), Voiture → Assafa', JSON.stringify(b.flux) === '["cpt_1","cpt_2","cpt_2"]', JSON.stringify(b.flux));
         const ec = b.env.courant || 0, ea = b.env.cpt_2 || 0;
-        v('  → l\'enveloppe conso par compte : Courses (4 000 × prorata) sur le Courant, Voiture (800 × prorata) sur Assafa',
-          Object.keys(b.env).sort().join() === 'courant,cpt_2' && Math.abs(ec / ea - 5) < 0.05 && Math.abs(ec + ea - b.envTot) <= 2, JSON.stringify([b.env, b.envTot]));
+        v('  → l\'enveloppe conso par compte : Courses (1 000 × 30 / 7 × prorata) sur le Courant, Voiture (800 × prorata) sur Assafa',
+          Object.keys(b.env).sort().join() === 'courant,cpt_2' && Math.abs(ec / ea - 30000 / 7 / 800) < 0.05 && Math.abs(ec + ea - b.envTot) <= 2, JSON.stringify([b.env, b.envTot]));
         v('  → cartes « reste à payer » : Assafa = Loyer + Voiture, Courant = Syndic magasin + Courses',
           b.groupes.cpt_2 && b.groupes.cpt_2.m === 3000 + ea && b.groupes.cpt_2.l.includes('Loyer') && b.groupes.cpt_2.l.includes('Voiture')
           && b.groupes.courant && b.groupes.courant.l.includes('Syndic magasin') && b.groupes.courant.l.includes('Courses') && !b.groupes.courant.l.includes('Voiture'), JSON.stringify(b.groupes));
         v('  → tâches du Pilotage : Syndic magasin → Courant, Loyer → Assafa', b.taches.some(t => /Syndic magasin>cpt_1/.test(t)) && b.taches.some(t => /Loyer>cpt_2/.test(t)), JSON.stringify(b.taches));
         const r = await releve();
         v('  → Relevé d\'octobre (en cours) : 💳 3 000 sur Assafa, 300 sur le Courant', r.fixA10 === 3000 && r.fixC10 === 300, JSON.stringify(r));
-        v('  → Relevé de novembre : fixes 3 000 Assafa / 300 Courant ; variables 5 × 1 000 Courant, 800 Assafa',
-          r.fixA11 === 3000 && r.fixC11 === 300 && r.varC11 === 5000 && r.varA11 === 800, JSON.stringify(r));
+        v('  → Relevé de novembre : fixes 3 000 Assafa / 300 Courant ; variables 1 000 × 31 / 7 = 4 429 Courant, 800 Assafa',
+          r.fixA11 === 3000 && r.fixC11 === 300 && r.varC11 === 4429 && r.varA11 === 800, JSON.stringify(r));
         v('  → et en octobre, l\'enveloppe restante de chaque compte, semaine par semaine', Math.abs(r.varC10 - ec) <= 1 && Math.abs(r.varA10 - ea) <= 1, JSON.stringify([r.varC10, r.varA10, ec, ea]));
     });
 
@@ -145,17 +148,17 @@ try {
         const netPhp = (fd) => { const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cpl-')), 'fd.json'); fs.writeFileSync(f, JSON.stringify(fd));
             const o = essai(() => execFileSync('php', ['-r', `require '${path.join(RACINE, 'cfo_intent_engine.php')}'; $fd = json_decode(file_get_contents('${f}')); cfo_sanitize_finance_data($fd); echo json_encode(array_column(cfo_compute_monthly_net_courant($fd, 2026), 'net', 'mois'));`], { encoding: 'utf8' }));
             return o ? Math.round(JSON.parse(o)[11]) : null; };
-        //  Novembre, à la main : 20 000 − 3 000 − 300 − 5 × 1 000 − 800 = 10 900 (Courant et Assafa : fonctionnement)
+        //  Novembre, à la main : 20 000 − 3 000 − 300 − 1 000 × 31 / 7 (4 429) − 800 = 11 471 (Courant et Assafa : fonctionnement)
         const a = await mesure();
-        v('C. surplus de novembre : 20 000 − 3 000 − 300 − 5 000 − 800 = 10 900 ; la Météo dit pareil', a.brut === 10900 && a.net === 10900 && a.marge === 10900, JSON.stringify({ ...a, fd: undefined }));
+        v('C. surplus de novembre : 20 000 − 3 000 − 300 − 4 429 − 800 = 11 471 ; la Météo dit pareil', a.brut === 11471 && a.net === 11471 && a.marge === 11471, JSON.stringify({ ...a, fd: undefined }));
         const pa = netPhp(a.fd);
-        v('  → le CFO (PHP) aussi : 10 900', pa === 10900, String(pa));
+        v('  → le CFO (PHP) aussi : 11 471', pa === 11471, String(pa));
         await ev(`st.choisirCompteLigne('chargesFixes', 'syndicMag', 'cpt_3');`);
         const b = await mesure();
-        v('  → « Syndic magasin » payé par les Dépenses annuels (épargne) : hors du brut (11 200), à part dans la Météo (300)',
-          b.brut === 11200 && b.marge === 11200 && b.hors === 300, JSON.stringify({ ...b, fd: undefined }));
+        v('  → « Syndic magasin » payé par les Dépenses annuels (épargne) : hors du brut (11 771), à part dans la Météo (300)',
+          b.brut === 11771 && b.marge === 11771 && b.hors === 300, JSON.stringify({ ...b, fd: undefined }));
         const pb = netPhp(b.fd);
-        v('  → le CFO suit : 11 200', pb === 11200, String(pb));
+        v('  → le CFO suit : 11 771', pb === 11771, String(pb));
         await ev(`st.choisirCompteLigne('chargesFixes', 'syndicMag', 'courant');`);
     });
 

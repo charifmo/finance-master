@@ -882,7 +882,7 @@
                                 <h3 class="text-xs font-black uppercase tracking-[0.15em] text-slate-700 whitespace-nowrap">{{ s.icone }} {{ s.label }}</h3>
                                 <span class="text-sm font-black text-slate-900 tabular-nums whitespace-nowrap">{{ formatMAD(s.montant) }} <span class="text-[11px] font-bold text-slate-400">· {{ s.pctRevenus }} % des revenus</span></span>
                             </div>
-                            <p v-if="s.cle === 'conso'" class="-mt-1.5 mb-3 text-[11px] font-bold text-teal-700"><span data-theo-semaines>{{ formatMAD(respirationBudgetaire.consoParSemaine) }} par semaine × {{ respirationBudgetaire.semaines }} semaines ce cycle</span></p>
+                            <p v-if="s.cle === 'conso'" class="-mt-1.5 mb-3 text-[11px] font-bold text-teal-700"><span data-theo-semaines>{{ formatMAD(respirationBudgetaire.consoParSemaine) }} par semaine × {{ libSemaines(respirationBudgetaire.semaines) }} ce cycle</span></p>
                             <ul class="space-y-2.5">
                                 <li v-for="(l, i) in s.lignes" :key="'tl_' + s.cle + i">
                                     <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
@@ -1505,7 +1505,7 @@
                                 </div>
                             </div>
                             <div v-if="dependDesSemaines(item) || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mb-2 space-x-2">
-                                <span v-for="cy in cyclesSemaines" :key="'cvs_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ dependDesSemaines(item) ? formatMAD(coutVariableDuCycle(item, cy.mois, cy.an, false)) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
+                                <span v-for="cy in cyclesSemaines" :key="'cvs_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ libSemaines(cy.n) }} → {{ dependDesSemaines(item) ? formatMAD(coutVariableDuCycle(item, cy.mois, cy.an, false)) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
                             </div>
                             <!-- v17.29 : Sous-parties charges variables -->
                             <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-4 pl-3 border-l-2 border-red-300 space-y-2 mb-2">
@@ -4847,7 +4847,7 @@
                                     </select>
                                 </div>
                                 <p v-if="dependDesSemaines(item) || item.categorieId !== 'cat_cv_factures'" data-cv-semaines class="text-[9px] text-red-500 font-black uppercase tracking-widest text-right mt-1 space-x-2">
-                                    <span v-for="cy in cyclesSemaines" :key="'cvsm_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ cy.n }} sem. → {{ dependDesSemaines(item) ? formatMAD(coutVariableDuCycle(item, cy.mois, cy.an, false)) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
+                                    <span v-for="cy in cyclesSemaines" :key="'cvsm_' + cy.cle" data-cv-cycle :data-semaines="cy.n" class="inline-block whitespace-nowrap">{{ cy.label }} : {{ libSemaines(cy.n) }} → {{ dependDesSemaines(item) ? formatMAD(coutVariableDuCycle(item, cy.mois, cy.an, false)) : formatMAD((item.valeur || 0) / cy.n) + ' / sem.' }}</span>
                                 </p>
                                 <!-- v17.29 : Sous-parties charges variables mobile -->
                                 <div v-if="item.parts && item.parts.length > 0" class="mt-2 ml-3 pl-3 border-l-2 border-red-300 space-y-2">
@@ -7849,7 +7849,7 @@
                      lien: { type: String, default: null }, chips: { type: Boolean, default: true } },
             emits: ['aller', 'revenir', 'effacer', 'semaine', 'saisie', 'retirer', 'cloturer', 'retirer-virement'],
             components: { 'mono-compte': MonoCompte },
-            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: { ...(etatUI['meteo.postes'] || {}) }, caseActive: null }; },
+            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: { ...(etatUI['meteo.postes'] || {}) }, caseActive: null, noteCoupe: false }; },
             computed: {
                 fond() {
                     return this.meteo.etat === 'orage' ? 'from-rose-600 via-red-700 to-slate-900'
@@ -7899,7 +7899,7 @@
                 uiFixer(cle, v) { uiFixer(cle, v); },
                 anneau(c) { const e = c.engage != null ? c.engage : c.depense; return Math.min(100, c.budget > 0 ? e / c.budget * 100 : (e > 0 ? 100 : 0)); },
                 //  v37.23 : la saisie en vrac part au parent (setConsoT0), le panneau reste ouvert.
-                saisirCompteur(cle, e) { this.$emit('saisie', this.sm.lundi, cle, e.target.value); },
+                saisirCompteur(cle, e) { this.$emit('saisie', this.sm.debut, cle, e.target.value); },
                 //  v37.31 : une case au prévu retenu se vide quand on y entre — le prévu reste en
                 //  invite, on tape le vrai montant ; ressortie sans rien taper, elle le retrouve.
                 entrerCase(e, cle, defaut) { this.caseActive = cle; if (!(defaut > 0)) e.target.select(); },
@@ -7916,14 +7916,14 @@
                     const t = String(e.target.value).trim().replace(',', '.');
                     if (/^\d*\.?\d*$/.test(t)) {
                         if (t === '.') return;
-                        this.$emit('saisie', this.sm.lundi, d.cle, t);
+                        this.$emit('saisie', this.sm.debut, d.cle, t);
                         return;
                     }
                     if (!fin) return;
                     const m = t.match(/^([+\-−])\s*(\d+(?:\.\d+)?)$/);
                     if (m) {
                         const v = Math.max(0, Math.round((Number(d.declare ? d.saisi : d.defaut) || 0) + (m[1] === '+' ? 1 : -1) * Number(m[2])));
-                        this.$emit('saisie', this.sm.lundi, d.cle, String(v));
+                        this.$emit('saisie', this.sm.debut, d.cle, String(v));
                         e.target.value = String(v);
                     } else e.target.value = d.declare ? String(d.saisi) : '';
                 },
@@ -8179,10 +8179,12 @@
                     <button type="button" data-semaine-prec @click="$emit('semaine', -1)" aria-label="Semaine précédente" title="Semaine précédente"
                             class="shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-xl bg-black/25 ring-1 ring-white/30 hover:ring-white/70 hover:bg-black/35 text-white text-lg font-black leading-none outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors">‹</button>
                     <div class="min-w-0 flex-1 text-center leading-tight">
-                        <p class="text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] text-white/85" data-semaine-titre>Semaine du {{ sm.du }} au {{ sm.au }}</p>
+                        <p class="text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] text-white/85" data-semaine-titre>{{ sm.jours === 1 ? 'Le ' + sm.du : 'Semaine du ' + sm.du + ' au ' + sm.au }} <button v-if="sm.coupe" type="button" data-semaine-coupe-badge @click="noteCoupe = !noteCoupe" :aria-expanded="noteCoupe ? 'true' : 'false'"
+                                :title="'Semaine coupée par la paie : seulement ' + sm.jours + ' jour(s) dans ce cycle, prévu au prorata (' + sm.jours + '/7)'"
+                                class="ml-1 normal-case tracking-normal font-bold text-amber-200 rounded-full ring-1 ring-amber-200/50 px-1.5 hover:bg-amber-200/10">✂️ {{ sm.jours }} j</button></p>
                         <p class="mt-1 flex items-center justify-center gap-1.5 text-[10px] md:text-[11px] font-semibold text-white/60 tabular-nums">
                             <span data-semaine-statut :data-statut="sm.statut" :class="['rounded-full px-1.5 py-px text-[9px] font-black uppercase tracking-wider ring-1', statutClasse]">{{ statutTexte }}</span>
-                            <span v-if="sm.rang" data-semaine-rang class="font-bold text-white/70" :title="'Ce cycle compte ' + sm.nb + ' semaines : son budget = ' + sm.nb + ' × le prévu de la semaine'">sem. {{ sm.rang }}/{{ sm.nb }}</span>
+                            <span v-if="sm.rang" data-semaine-rang class="font-bold text-white/70" :title="'Ce cycle compte ' + sm.joursCycle + ' jours (' + sm.nbLib + ') en ' + sm.nb + ' morceaux : son budget = le prévu de la semaine × ' + sm.joursCycle + ' ÷ 7'">sem. {{ sm.rang }}/{{ sm.nb }}</span>
                             <span data-semaine-total><span class="font-black text-white/90">{{ formatMad(sm.engage) }}</span> / {{ formatMad(sm.budget) }}</span>
                         </p>
                     </div>
@@ -8196,15 +8198,20 @@
                     <button v-if="p.compteur" type="button" data-liberte-effacer @click="$emit('effacer')" title="Effacer toutes les saisies du cycle (toutes ses semaines)"
                             class="text-[10px] font-bold text-white/40 hover:text-white/80 underline decoration-dotted underline-offset-2">↩ effacer tout le cycle</button>
                 </div>
+                <!-- v37.65 : une semaine coupée par la paie se saisit en deux morceaux, chacun dans son cycle —
+                     au téléphone, la note se déplie d'une touche sur « ✂️ N j » (la Météo tient dans un écran) -->
+                <p v-if="sm.coupe && sm.autre" data-semaine-coupee :class="['mb-2 rounded-lg bg-amber-300/15 ring-1 ring-amber-200/40 px-2.5 py-1.5 text-[10px] font-semibold text-white/90 leading-snug', noteCoupe ? '' : 'hidden md:block']">
+                    ✂️ Semaine coupée par la paie : ici, seulement {{ sm.jours === 1 ? 'le ' + sm.du : 'du ' + sm.du + ' au ' + sm.au }} ({{ sm.jours }} j) — tapez ce qui est parti ces jours-là ; {{ sm.autre.jours === 1 ? 'le ' + sm.autre.du : 'du ' + sm.autre.du + ' au ' + sm.autre.au }} se saisit dans le cycle {{ sm.autre.rel === 'precedent' ? 'précédent (‹)' : 'suivant (›)' }}. Prévu au prorata : {{ sm.jours }}/7 de la semaine.
+                </p>
                 <p v-if="!sm.dansCycle" data-semaine-hors class="mb-2 rounded-lg bg-white/[0.07] ring-1 ring-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/75 leading-snug">
-                    ℹ️ Cette semaine appartient au cycle {{ sm.cycleRel === 'precedent' ? 'précédent' : 'suivant' }} : elle ne change pas le Reste à dépenser ci-dessus.
+                    ℹ️ {{ sm.coupe ? 'Ces jours appartiennent' : 'Cette semaine appartient' }} au cycle {{ sm.cycleRel === 'precedent' ? 'précédent' : 'suivant' }} : {{ sm.coupe ? 'ils ne changent' : 'elle ne change' }} pas le Reste à dépenser ci-dessus.
                 </p>
                 <p v-if="sm.defaut > 0" data-semaine-defaut class="mb-2 rounded-lg bg-emerald-400/15 ring-1 ring-emerald-200/30 px-2.5 py-1.5 text-[10px] font-semibold text-white/85 leading-snug">
                     ✓ Semaine écoulée : les lignes laissées vides comptent leur prévu ({{ formatMad(sm.defaut) }}). Tapez le vrai montant pour corriger — 0 si rien n'a été dépensé.
                 </p>
                 <!-- v37.48 : la semaine en cours annonce sa clôture — tapé = compté, vide = prévu -->
                 <p v-if="sm.statut === 'en_cours' && sm.dansCycle && sm.aVenirTotal > 0" data-semaine-a-venir class="mb-2 rounded-lg bg-white/[0.07] ring-1 ring-white/15 px-2.5 py-1.5 text-[10px] font-semibold text-white/80 leading-snug">
-                    ⏳ Dimanche soir, la semaine se clôt : une ligne tapée compte ce que vous avez tapé ; une ligne encore vide comptera son prévu — {{ sm.aVenir.slice(0, 3).map(l => l.nom + ' ' + formatMad(l.montant)).join(' · ') }}{{ sm.aVenir.length > 3 ? ' · + ' + (sm.aVenir.length - 3) + ' autre(s)' : '' }}, soit {{ formatMad(sm.aVenirTotal) }}. Rien dépensé ? Tapez 0.
+                    ⏳ {{ sm.cloture }}, la semaine se clôt : une ligne tapée compte ce que vous avez tapé ; une ligne encore vide comptera son prévu — {{ sm.aVenir.slice(0, 3).map(l => l.nom + ' ' + formatMad(l.montant)).join(' · ') }}{{ sm.aVenir.length > 3 ? ' · + ' + (sm.aVenir.length - 3) + ' autre(s)' : '' }}, soit {{ formatMad(sm.aVenirTotal) }}. Rien dépensé ? Tapez 0.
                 </p>
                 <div data-pulse-categories class="space-y-1 md:space-y-1.5">
                     <div v-for="c in p.categories" :key="'pc_' + c.key" data-pulse-categorie :data-cat="c.key">
@@ -8251,14 +8258,14 @@
                                :title="c.sem.source === 'tickets' ? 'Les tickets datés de la semaine (' + formatMad(c.sem.tickets) + ') comptent tant que votre saisie est plus petite' : 'Dépensé cette semaine, sans date'">
                             <span class="sr-only">Dépensé cette semaine en {{ c.label }}</span>
                             <span aria-hidden="true" class="text-[11px] text-white/60">✎</span>
-                            <input :key="'u_' + c.key + sm.lundi" type="number" inputmode="decimal" min="0" step="1" data-saisie data-pulse-saisie :data-cat="c.key"
+                            <input :key="'u_' + c.key + sm.debut" type="number" inputmode="decimal" min="0" step="1" data-saisie data-pulse-saisie :data-cat="c.key"
                                    :value="c.sem.saisi || (caseActive === c.key ? '' : (c.sem.defaut || ''))" :placeholder="!c.sem.saisi && c.sem.defaut > 0 && caseActive === c.key ? String(c.sem.defaut) : '0'" :data-defaut="!c.sem.saisi && c.sem.defaut > 0 ? '1' : null" :class="!c.sem.saisi && c.sem.defaut > 0 ? 'opacity-60' : ''"
                                    @input="saisirCompteur(c.key, $event)" @focus="entrerCase($event, c.key, !c.sem.saisi ? c.sem.defaut : 0); fermer()" @blur="sortirCase(c.key)" @keydown.enter="$event.target.blur()"
                                    class="w-[4.5rem] md:w-[5.5rem] bg-transparent text-right text-[13px] md:text-sm font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                         </label>
                         <button v-if="!c.sem.postes.length" type="button" data-pulse-cloturer :data-poste="c.key" :aria-pressed="c.sem.clos ? 'true' : 'false'" :title="titreCloture(c.label, 'semaine', c.sem.clos)"
-                                @click="$emit('cloturer', sm.lundi, c.key, 'semaine'); fermer()"
+                                @click="$emit('cloturer', sm.debut, c.key, 'semaine'); fermer()"
                                 :class="['shrink-0 w-6 h-6 grid place-items-center rounded-md text-[10px] transition', c.sem.clos ? 'bg-white/25 ring-1 ring-white/60' : 'opacity-35 hover:opacity-100 hover:bg-white/10']">🔒</button>
                     </div>
                     <!-- 📦 Des saisies d'avant la saisie par semaine, toujours comptées -->
@@ -8278,14 +8285,14 @@
                             </span>
                             <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
                                 <span class="sr-only">Dépensé sur {{ d.nom }} cette semaine</span>
-                                <input :key="'ip_' + d.cle + sm.lundi" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="c.key"
+                                <input :key="'ip_' + d.cle + sm.debut" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="c.key"
                                        :value="d.declare ? d.saisi : (caseActive === d.cle ? '' : (d.defaut || ''))" :placeholder="!d.declare && d.defaut > 0 && caseActive === d.cle ? String(d.defaut) : '0'" :data-defaut="!d.declare && d.defaut > 0 ? '1' : null" :class="!d.declare && d.defaut > 0 ? 'opacity-60' : ''"
                                        @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="entrerCase($event, d.cle, !d.declare ? d.defaut : 0); fermer()" @blur="sortirCase(d.cle)" @keydown.enter.prevent="suivant($event)"
                                        class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
                                 <span class="text-[10px] font-bold text-white/45">DH</span>
                             </label>
                             <button type="button" data-pulse-cloturer :data-poste="d.cle" :aria-pressed="d.clos ? 'true' : 'false'" :title="titreCloture(d.nom, d.unite, d.clos)"
-                                    @click="$emit('cloturer', sm.lundi, d.cle, d.unite); fermer()"
+                                    @click="$emit('cloturer', sm.debut, d.cle, d.unite); fermer()"
                                     :class="['shrink-0 w-6 h-6 grid place-items-center rounded-md text-[10px] transition', d.clos ? 'bg-white/25 ring-1 ring-white/60' : 'opacity-35 hover:opacity-100 hover:bg-white/10']">🔒</button>
                         </div>
                         <div data-pulse-poste data-poste="libre" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
@@ -8296,7 +8303,7 @@
                             </span>
                             <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner">
                                 <span class="sr-only">Autres dépenses en {{ c.label }} cette semaine</span>
-                                <input :key="'il_' + c.key + sm.lundi" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie data-poste="libre" :data-cat="c.key"
+                                <input :key="'il_' + c.key + sm.debut" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie data-poste="libre" :data-cat="c.key"
                                        :value="c.sem.libre || ''" placeholder="0"
                                        @input="saisirPoste(libreDe(c), $event, false)" @change="saisirPoste(libreDe(c), $event, true)" @focus="$event.target.select(); fermer()" @keydown.enter.prevent="suivant($event)"
                                        class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
@@ -8378,11 +8385,11 @@
                 <div v-if="rxContenu.c.prevu && rxContenu.c.prevu.length" data-rx-prevu class="mt-3 rounded-xl bg-slate-50 ring-1 ring-white/20 p-2.5 text-slate-600">
                     <p class="flex items-baseline justify-between gap-2">
                         <span class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">🧾 Budget prévu</span>
-                        <span class="text-[10px] font-bold text-slate-400 tabular-nums" data-rx-prevu-semaines>cycle de {{ p.nbSemaines }} semaines</span>
+                        <span class="text-[10px] font-bold text-slate-400 tabular-nums" data-rx-prevu-semaines>cycle de {{ p.joursCycle }} jours ({{ p.nbSemainesLib }})</span>
                     </p>
                     <div class="mt-2 flex flex-wrap gap-1">
                         <span v-for="(d, i) in postesVisibles(rxContenu.c)" :key="'rxp_' + i" data-rx-poste :data-depense="d.depense"
-                              :data-unite="d.unite" :title="formatMad(d.montant) + ' ' + uniteCourte(d.unite) + ' → ' + formatMad(d.partCycle) + ' sur ce cycle de ' + p.nbSemaines + ' semaines · ' + (d.depense > 0 ? formatMad(d.depense) + ' de tickets' : 'aucun ticket')"
+                              :data-unite="d.unite" :title="formatMad(d.montant) + ' ' + uniteCourte(d.unite) + ' → ' + formatMad(d.partCycle) + ' sur ce cycle de ' + p.joursCycle + ' jours · ' + (d.depense > 0 ? formatMad(d.depense) + ' de tickets' : 'aucun ticket')"
                               class="relative overflow-hidden inline-flex items-center gap-1 rounded-md bg-white ring-1 ring-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 tabular-nums">
                             <span v-if="d.depense > 0" aria-hidden="true" data-rx-poste-rempli :class="['absolute inset-y-0 left-0', d.depasse ? 'bg-rose-100' : 'bg-emerald-100']" :style="{ width: d.pct + '%' }"></span>
                             <span class="relative">{{ d.emoji }} {{ d.nom }} : <span class="font-black text-slate-800">{{ formatMad(d.montant) }}</span> <span class="text-slate-400" data-rx-poste-unite>{{ uniteCourte(d.unite) }}</span></span>
@@ -8507,8 +8514,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.64 Pourquoi";
+                    const CURRENT_VERSION = "37.65 Semaines";
                     const CHANGELOG = [
+        { version: "37.65 Semaines", date: "2026-10-27", changes: [
+            "✂️ LES SEMAINES COUPÉES PAR LA PAIE — « Ce n'est pas clair quoi rentrer et jusqu'à quand : l'appli me propose le réalisé sur une semaine même si elle est partagée entre 2 cycles, ce qui fausse les choses. » Depuis la v37.27, une semaine appartenait EN ENTIER au cycle de son jeudi : paie le mardi 27 oct., la semaine du 26 oct. au 1ᵉʳ nov. comptait en novembre lundi 26 compris (payé avec l'argent d'octobre), et celle du 23 au 29 nov. aussi, alors que la paie suivante tombe le 27. Désormais une semaine coupée par la paie se saisit en DEUX MORCEAUX, chacun dans son cycle : « Le 26 oct. ✂️ 1 j » (octobre), puis « Semaine du 27 oct. au 1 nov. ✂️ 6 j » (novembre). ‹ › passent d'un morceau à l'autre ; une note dit quoi taper et jusqu'à quand (au téléphone, une touche sur « ✂️ 6 j » la déplie : la Météo tient toujours dans un écran).",
+            "UN CYCLE = SES JOURS — un poste « / sem » coûte valeur × jours du cycle ÷ 7 (31 jours = « 4 sem. 3 j », 30 jours = « 4 sem. 2 j ») ; une charge « / mois » se répartit sur les jours. Le prévu d'un morceau est au prorata de ses jours (6 jours = 6/7) ; une semaine entière garde pile son prévu (600) et les morceaux coupés se partagent l'arrondi par les plus forts restes : tenir son prévu à chaque morceau = tenir le budget du cycle, au dirham près (514 + 600 + 600 + 600 + 343 = 2 657). Sur l'année : 365 jours ÷ 7.",
+            "PARTOUT — les tickets du cycle sont ceux de SES jours (un achat de la veille de la paie reste dans le cycle qui finit) ; le Relevé coupe ses lignes de charges variables à la veille de la paie (« semaine du 23 nov. au 26 nov. ») ; les semaines écoulées sans saisie comptent le prévu de leurs jours ; la section Charges variables, le Prévisionnel, les Rayons X (« cycle de 31 jours (4 sem. 3 j) ») et le recalcul de secours du serveur suivent la même règle.",
+            "VOS SAISIES NE BOUGENT PAS DE CYCLE (schéma 20) — l'ancienne clé du lundi d'une semaine dont la paie tombe un mardi, un mercredi ou un jeudi désignait la partie d'APRÈS la paie : elle est re-rangée sous le jour de paie, une seule fois, au chargement (cases closes comprises). Paie un vendredi, un samedi ou un dimanche : rien ne bouge.",
+            "PREUVE — nouvelle suite « Semaines coupées par la paie » : 29 contrôles (jour de paie mardi 27 oct., calculs faits à la main). Rejouée sur la v37.64 : 23 en échec. Sept défauts réintroduits exprès (semaine non coupée, saisies non re-rangées, prévu sans prorata, tickets de la veille comptés, arrondi sans plus forts restes, note jamais repliée, Relevé à parts égales) : tous attrapés. Treize suites qui encodaient la règle du jeudi (4 ou 5 semaines entières) recalculées à la main sur la nouvelle, sans en affaiblir aucune — deux seuls ajustements, justifiés : la Météo admet l'arrondi mensuel (≤ 6 DH sur 12 mois) entre la somme des mois et le surplus annuel, et le mouvement d'un mois au Relevé se lit sur la somme exacte de ses lignes (qui portent désormais des centimes), arrondie une fois.",
+        ] },
         { version: "37.64 Pourquoi", date: "2026-10-27", changes: [
             "❓ POURQUOI CE DÉCOUVERT ? — « J'attends des entrées appartement et magasin sur le courant, pourquoi ce n'est pas OK ? » Les loyers ÉTAIENT comptés ; rien à l'écran ne permettait de le voir. Sous le bloc rouge, « Pourquoi ? » donne le calcul du compte, celui du moteur du Relevé : « 6 300 aujourd'hui + 9 000 d'entrées − 22 900 de sorties = − 7 600 DH », puis les entrées attendues avec leur date (Loyer magasin + 5 000 le 3 nov., Loyer appartement + 4 000 le 5 nov.) et les sorties de la plus grosse à la plus petite (les semaines de charges variables en une seule ligne).",
             "💡 UN REVENU ARRIVÉ SUR UN AUTRE COMPTE — le vrai trou : le salaire et la bonification étaient arrivés sur ASSAFA alors que le plan les attend sur le Courant, et le plan gardait le virement Courant → ASSAFA qui devait les y envoyer. Le Courant payait un trajet que l'argent avait déjà fait. Le relevé importé le sait : une entrée venue de l'extérieur (pas la moitié d'un virement entre vos comptes : même montant, sens opposé, à un jour près) dont le montant colle à un revenu du cycle (± 5 %, à 7 jours de sa date — ou pointée sur lui) sur un autre compte que sa destination. La Météo le dit (« Salaire et Bonification — 32 298 DH reçus le 27 oct. — sont arrivés sur Assafa, pas sur Courant ») et nomme le virement prévu, avec « Retirer ce virement de novembre » (après confirmation) : le découvert disparaît s'il n'avait que cette cause.",
@@ -15043,7 +15057,7 @@
                         }
                     };
 
-                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 19, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 20, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value });
                     // v17.19 : Auto-Save debounce 2s
                     let _autoSaveTimer = null;
 
@@ -15521,6 +15535,40 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return data;
                     };
 
+                    // ── v37.65 : LES SEMAINES COUPÉES PAR LA PAIE (schéma 20) ──────────
+                    //  Une saisie de semaine était rangée sous 'S' + son lundi et appartenait au
+                    //  cycle de son JEUDI. Désormais 'S' + le premier jour du MORCEAU. Paie un mardi,
+                    //  un mercredi ou un jeudi : l'ancienne clé du lundi désignait la partie d'APRÈS
+                    //  la paie (le jeudi y tombe) — elle devient 'S' + le jour de paie et reste dans
+                    //  son cycle. Paie un vendredi, un samedi, un dimanche : la clé du lundi désigne
+                    //  déjà la partie d'avant, rien ne bouge. Saisies et cases closes.
+                    const migrerSemainesCoupees = (data) => {
+                        if (!data || (data._schemaVersion || 0) >= 20) return 0;
+                        const jdp = Number((data.soldesInitiaux || {}).jourDePaie) || 27;
+                        const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                        const estPaie = (d) => [0, -1].some(k => new Date(d.getFullYear(), d.getMonth() + k, jdp).getTime() === d.getTime());
+                        let n = 0;
+                        Object.values(data.donneesAnnuelles || {}).forEach(a => ['consoRealiseeT0', 'consoClotureT0'].forEach(champ => {
+                            const r = a && a[champ];
+                            if (!r || typeof r !== 'object') return;
+                            Object.keys(r).forEach(k => {
+                                const m = /^S(\d{4})-(\d{2})-(\d{2})$/.exec(k);
+                                if (!m || !r[k] || typeof r[k] !== 'object') return;
+                                const lundi = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                                if (lundi.getDay() !== 1) return;
+                                for (let i = 1; i <= 3; i++) {
+                                    const d = new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + i);
+                                    if (!estPaie(d)) continue;
+                                    const nk = 'S' + ymd(d);
+                                    r[nk] = Object.assign({}, r[nk] && typeof r[nk] === 'object' ? r[nk] : {}, r[k]);
+                                    delete r[k]; n++;
+                                    break;
+                                }
+                            });
+                        }));
+                        return n;
+                    };
+
                     // ── Patch v15.1 : corrige soldeInitial→solde + inclureLiquidite ──
                     const patchV151 = (data) => {
                         if ((data._patchVersion || 0) >= 151) return data;
@@ -15741,6 +15789,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             patchV151(data);
                             sanitizeEpargneKeys(data);
                             migrateEpargneToArray(data); // v17.15 : objet → tableau avant safeMerge
+                            const _nSemCoupees = migrerSemainesCoupees(data);   // v37.65 : schéma 20
+                            if (_nSemCoupees) addLog('✅ Semaines coupées par la paie : ' + _nSemCoupees + ' saisie(s) re-rangée(s) sous le jour de paie, dans leur cycle.', 'success');
                             // v18.50 : Sanitize null entries in epargne arrays (occur after CFO deletion)
                             Object.values(data.donneesAnnuelles || {}).forEach(yr => {
                                 if (Array.isArray(yr.epargne)) yr.epargne = yr.epargne.filter(ep => ep != null);
@@ -16548,30 +16598,78 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return v;
                     };
 
-                    /*  v37.29 — LES VRAIES SEMAINES D'UN CYCLE (fin du « × 4,3 »).
-                        Le cycle du mois budgétaire M court du jour de paie de M−1 à la
-                        veille du jour de paie de M (la fenêtre de la saisie par semaine) ;
-                        une semaine lui appartient si son JEUDI y tombe (v37.27). Un cycle
-                        compte donc 4 ou 5 semaines — jamais 4,3 — et l'année 52 ou 53.
-                        Une catégorie « / sem » coûte valeur × N ce cycle-là ; une catégorie
-                        « / mois » se répartit sur ses N semaines. */
-                    const semainesDuCycle = (mois, an) => {
+                    /*  v37.65 — LES SEMAINES COUPÉES PAR LA PAIE (avant : la règle du jeudi, v37.27-29).
+                        Le cycle du mois budgétaire M court du jour de paie de M−1 à la veille du
+                        jour de paie de M. Ses MORCEAUX : ses semaines (lundi → dimanche), coupées
+                        à ses bornes — paie un mardi, la semaine se saisit en deux morceaux, chacun
+                        dans son cycle (« lundi 26 oct. » | « du 27 oct. au 1ᵉʳ nov. »). Un cycle
+                        compte ses JOURS : un poste « / sem » coûte valeur × jours ÷ 7 (31 jours =
+                        4 sem. 3 j), un poste « / mois » se répartit sur ses jours ; le prévu d'un
+                        morceau est au prorata des siens. Tenir son prévu à chaque morceau = tenir
+                        le budget du cycle. Sur l'année : 365 ÷ 7 semaines.
+                        La part d'un morceau (partDuMorceau) : une semaine entière reçoit pile son
+                        prévu ; les morceaux coupés se partagent l'arrondi — la somme des morceaux
+                        vaut la part du cycle au dirham près (514 + 600 + 600 + 600 + 343 = 2 657).
+                        → morceaux : [{ debut, fin, lundi, dimanche (Date), jours, coupe, avant, total, bornes }] */
+                    const _bornesCycle = (mois, an) => {
                         const jdp = Number((soldesInitiaux.value || {}).jourDePaie) || 27;
                         const m = Number(mois) || MOIS_BUDGETAIRE_COURANT();
                         const a = Number(an) || Number(moisBudgetaire?.value?.an) || new Date().getFullYear();
-                        const debut = new Date(a, m - 2, jdp), fin = new Date(a, m - 1, jdp - 1);
-                        const jeudi = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
-                        let n = 0;
-                        while (jeudi.getTime() <= fin.getTime() && n < 6) { n++; jeudi.setDate(jeudi.getDate() + 7); }
-                        return n || 4;
+                        return { mois: m, an: a, debut: new Date(a, m - 2, jdp), fin: new Date(a, m - 1, jdp - 1) };
                     };
+                    const morceauxEntre = (debut, fin) => {
+                        const out = [];
+                        let d = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate());
+                        const d0 = d, f0 = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate());
+                        const total = Math.round((f0 - d0) / 864e5) + 1;
+                        while (d <= f0 && out.length < 8) {
+                            const lundi = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+                            const dimanche = new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + 6);
+                            const f = dimanche < f0 ? dimanche : f0;
+                            const jours = Math.round((f - d) / 864e5) + 1;
+                            out.push({ debut: d, fin: f, lundi, dimanche, jours, coupe: jours < 7, avant: Math.round((d - d0) / 864e5), total, bornes: { debut: d0, fin: f0 } });
+                            d = new Date(f.getFullYear(), f.getMonth(), f.getDate() + 1);
+                        }
+                        return out;
+                    };
+                    const morceauxDuCycle = (mois, an) => { const b = _bornesCycle(mois, an); return morceauxEntre(b.debut, b.fin); };
+                    const joursDuCycle = (mois, an) => { const b = _bornesCycle(mois, an); return Math.round((b.fin - b.debut) / 864e5) + 1; };
+                    //  Le morceau (et son cycle) qui contient une date — ISO ou Date
+                    const morceauDe = (quand) => {
+                        const d0 = quand instanceof Date ? quand : (() => { const [y, m, j] = String(quand).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, j); })();
+                        const d = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate());
+                        for (const k of [0, 1, -1, 2]) {
+                            const t = new Date(d.getFullYear(), d.getMonth() + k, 1), b = _bornesCycle(t.getMonth() + 1, t.getFullYear());
+                            if (d >= b.debut && d <= b.fin) {
+                                const ms = morceauxEntre(b.debut, b.fin), i = ms.findIndex(x => d >= x.debut && d <= x.fin);
+                                return { ...ms[i], rang: i + 1, nb: ms.length, cycle: { mois: b.mois, an: b.an, debut: b.debut, fin: b.fin, jours: Math.round((b.fin - b.debut) / 864e5) + 1 } };
+                            }
+                        }
+                        return null;
+                    };
+                    const semainesDuCycle = (mois, an) => joursDuCycle(mois, an) / 7;
+                    //  La part d'un montant de CYCLE (total arrondi, et sa valeur brute) qui revient à un
+                    //  morceau : brut × jours ÷ jours du cycle, arrondi par les plus forts restes sur les
+                    //  morceaux du cycle — une semaine entière tombe pile (600), la somme sur le total.
+                    const partDuMorceau = (total, brut, mo) => {
+                        const ms = morceauxEntre(mo.bornes.debut, mo.bornes.fin);
+                        const x = ms.map(m => { const v = (Number(brut) || 0) * m.jours / mo.total; return Math.abs(v - Math.round(v)) < 1e-6 ? Math.round(v) : v; });
+                        const base = x.map(v => Math.floor(v));
+                        let reste = Math.round(Number(total) || 0) - base.reduce((s, v) => s + v, 0);
+                        x.map((v, i) => [v - base[i], i]).filter(([f]) => f > 1e-9).sort((a, b) => b[0] - a[0] || a[1] - b[1])
+                            .forEach(([, i]) => { if (reste > 0) { base[i]++; reste--; } });
+                        if (reste) base[base.length - 1] += reste;
+                        const i = ms.findIndex(m => m.avant === mo.avant);
+                        return i < 0 ? 0 : base[i];
+                    };
+                    //  « 4 sem. 3 j » — ce que vaut un cycle en semaines, dit en jours
+                    const libSemaines = (n) => { const j = Math.round((Number(n) || 0) * 7), s = Math.floor(j / 7), r = j % 7; return s + ' sem.' + (r ? ' ' + r + ' j' : ''); };
                     const semainesDeLAnnee = (an) => { let s = 0; for (let m = 1; m <= 12; m++) s += semainesDuCycle(m, an); return s; };
                     /*  v37.46 — LES CHARGES VARIABLES, SEMAINE PAR SEMAINE.
                         Le Relevé déduisait tout le budget variable d'un cycle le 15, d'un bloc.
-                        On le répartit sur les semaines réelles du cycle (celles dont le JEUDI
-                        tombe dans le cycle, comme semainesDuCycle) : une ligne par semaine,
-                        datée de son lundi, borné au début du cycle.
-                          • cycle à venir : parts égales sur les N semaines ;
+                        On le répartit sur les morceaux du cycle (v37.65 : ses semaines, coupées
+                        à la paie, comme la saisie) : une ligne par morceau, datée de son premier jour.
+                          • cycle à venir : au prorata des jours de chaque morceau ;
                           • cycle en cours (depuis = aujourd'hui) : seulement les semaines pas
                             finies, au prorata des jours qui leur restent ; la semaine en cours
                             datée d'aujourd'hui. Plus aucune semaine : tout aujourd'hui.
@@ -16586,18 +16684,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const m = Number(mois), a = Number(an);
                         const debut = new Date(a, m - 2, jdp), fin = new Date(a, m - 1, jdp - 1);
                         const jour0 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-                        const plus = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
                         const lib = (d) => d.getDate() + ' ' + _MOIS_SEM[d.getMonth()];
                         const auj = depuis ? jour0(depuis) : null;
-                        const semaines = [];
-                        for (let j = plus(debut, (4 - debut.getDay() + 7) % 7); j <= fin && semaines.length < 6; j = plus(j, 7))
-                            semaines.push({ lundi: plus(j, -3), dimanche: plus(j, 3) });
-                        let lignes = semaines.map(s => {
-                            const date = new Date(Math.max(s.lundi, debut, auj || debut));
-                            const poids = auj ? Math.max(0, Math.round((s.dimanche - Math.max(s.lundi, auj)) / 864e5) + 1) : 1;
-                            const enCours = !!auj && s.lundi <= auj && auj <= s.dimanche;
+                        let lignes = morceauxEntre(debut, fin).map(s => {
+                            const date = new Date(Math.max(s.debut, auj || s.debut));
+                            const poids = auj ? Math.max(0, Math.round((s.fin - Math.max(s.debut, auj)) / 864e5) + 1) : s.jours;
+                            const enCours = !!auj && s.debut <= auj && auj <= s.fin;
                             return { date, poids, enCours,
-                                     libelle: '🛒 Charges variables — ' + (enCours ? 'semaine en cours (jusqu’au ' + lib(s.dimanche) + ')' : 'semaine du ' + lib(s.lundi) + ' au ' + lib(s.dimanche)) };
+                                     libelle: '🛒 Charges variables — ' + (enCours ? 'semaine en cours (jusqu’au ' + lib(s.fin) + ')' : 'semaine du ' + lib(s.debut) + ' au ' + lib(s.fin)) };
                         }).filter(l => l.poids > 0);
                         if (!lignes.length) lignes = [{ date: auj || debut, poids: 1, enCours: !!auj, libelle: '🛒 Charges variables — reste du cycle' }];
                         const P = lignes.reduce((s, l) => s + l.poids, 0);
@@ -19693,23 +19787,30 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const attendu = Math.round(consoTheoriqueAJour.value);
                         const rythme = !declare ? 'estime' : engage > budget ? 'depasse' : (engage - attendu > budget * 0.05 ? 'avance' : 'tenu');
                         const cleVar = compteDeFlux('variable');
-                        //  v37.27 : la SEMAINE affichée (lundi → dimanche), décalée de -1 / +1…
+                        //  v37.27 : la SEMAINE affichée, décalée de -1 / +1… — v37.65 : le MORCEAU affiché
+                        //  (une semaine coupée par la paie en compte deux, chacun dans son cycle)
                         const auj = new Date();
                         const decal = semaineDecalage.value;
-                        const idxAuj = (auj.getDay() + 6) % 7;
-                        const lundiSel = _ymd(_decaler(_lundiISO(auj), 7 * decal));
-                        const dimSel = _ymd(_decaler(lundiSel, 6));
-                        const frac = decal < 0 ? 1 : (decal > 0 ? 0 : (idxAuj + 1) / 7);   // part de la semaine écoulée
-                        const nSem = semainesDuCycle(mb.mois, mb.an);                       // v37.29 : 4 ou 5, jamais 4,3
-                        const TS = _lireTickets(lundiSel, dimSel);
-                        const valsSem = _valeursSemaine(lundiSel);
+                        let mSel = morceauDe(auj);
+                        for (let k = 0; mSel && k < Math.abs(decal); k++)
+                            mSel = morceauDe(decal < 0 ? _decaler(_ymd(mSel.debut), -1) : _decaler(_ymd(mSel.fin), 1));
+                        const debutSel = _ymd(mSel.debut), finSel = _ymd(mSel.fin), lundiSel = _ymd(mSel.lundi), dimSel = _ymd(mSel.dimanche);
+                        const idxAuj = Math.round((new Date(auj.getFullYear(), auj.getMonth(), auj.getDate()) - mSel.debut) / 864e5);
+                        const frac = decal < 0 ? 1 : (decal > 0 ? 0 : (idxAuj + 1) / mSel.jours);   // part du morceau écoulée
+                        const nSem = semainesDuCycle(mb.mois, mb.an);                       // v37.65 : jours du cycle ÷ 7
+                        //  v37.65 : la part du morceau — dans le cycle, partDuMorceau (la part arrondie et sa
+                        //  valeur brute) ; un morceau d'un autre cycle : 6/7 du prévu de la semaine
+                        const dansSel = _semaineDansCycle(_ymd(mSel.debut));
+                        const partSem = (brut, arrondi) => dansSel ? partDuMorceau(arrondi, brut, mSel) : Math.round(arrondi / nSem * mSel.jours / 7);
+                        const TS = _lireTickets(debutSel, finSel);
+                        const valsSem = _valeursSemaine(debutSel);
                         const baseCycle = consoT0SaisiesCycle.value;
                         const aSaisie = (cle) => Object.prototype.hasOwnProperty.call(valsSem, cle);
-                        const defsSem = defautsSemaine(lundiSel);                        // v37.31 : {} si pas écoulée
-                        //  v37.51 : les cases closes — de la semaine affichée (/ sem) et du cycle (/ 15 j, / cycle)
-                        const closS = _cloturesConso.value['S' + lundiSel] || {}, closC = _cloturesConso.value['C' + consoT0CycleKey.value] || {};
-                        //  v37.48 : la semaine EN COURS — ce que ses lignes encore vides compteront dimanche soir
-                        const defsAVenir = decal === 0 && _semaineDansCycle(lundiSel) ? defautsSemaine(lundiSel, true) : {};
+                        const defsSem = defautsSemaine(debutSel);                        // v37.31 : {} si pas écoulée
+                        //  v37.51 : les cases closes — du morceau affiché (/ sem) et du cycle (/ 15 j, / cycle)
+                        const closS = _cloturesConso.value['S' + debutSel] || {}, closC = _cloturesConso.value['C' + consoT0CycleKey.value] || {};
+                        //  v37.48 : le morceau EN COURS — ce que ses lignes encore vides compteront à sa clôture
+                        const defsAVenir = decal === 0 && _semaineDansCycle(debutSel) ? defautsSemaine(debutSel, true) : {};
                         const categories = consoCategoriesT0.value.map(c => {
                             const cv = (d.chargesVariables || {})[c.key] || {};
                             const g = T.parCle[c.key] || { total: 0, tx: [], parPoste: {} };
@@ -19739,7 +19840,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const p = { nom: x.nom || '—', emoji: emojiPoste(x.nom, x.icone), montant: Math.round(Number(x.montant) * ajuste), unite: periodeDetail(x, cv), categorieId: x.categorieId || null,
                                             depense: dep, pct: partCycle > 0 ? Math.min(100, Math.round(dep / partCycle * 100)) : (dep > 0 ? 100 : 0), depasse: dep > partCycle,
                                             cle, saisi: saisiP, declare: Object.prototype.hasOwnProperty.call(consoT0Saisies.value, cle),
-                                            partCycle: Math.round(partCycle), engage: engP,
+                                            partCycle: Math.round(partCycle), partBrute: budgetCategorieRevise(cv) * part, engage: engP,
                                             pctEngage: partCycle > 0 ? Math.min(100, Math.round(engP / partCycle * 100)) : (engP > 0 ? 100 : 0) };
                                 if (x.categorieId) parId[x.categorieId] = p;
                                 return p;
@@ -19770,7 +19871,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const eng = Math.max(sai, tk) + defaut;
                                 const base = { cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, saisi: sai, declare: aSaisie(p.cle), tickets: tk, engage: eng, defaut };
                                 if (p.unite === 'semaine') {
-                                    const bud = Math.round(p.partCycle / nSem);
+                                    const bud = partSem(p.partBrute, p.partCycle);
                                     const clos = !!closS[p.cle];
                                     return { ...base, budget: bud, prevu: bud, planifie: 0,
                                              pct: bud > 0 ? Math.min(100, Math.round(eng / bud * 100)) : (eng > 0 ? 100 : 0), depasse: eng > bud,
@@ -19788,7 +19889,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  Le prévu de la semaine : les lignes « / sem » (ou la catégorie entière,
                             //  sans ligne) + les lignes /15 j et /cycle dépensées cette semaine.
                             const prevuCycleLignes = postesSem.filter(p => p.unite !== 'semaine').reduce((s, p) => s + p.cyclePrevu, 0);
-                            const prevuSemaine = Math.round((c.budget - prevuCycleLignes) / nSem);
+                            //  v37.65 : avec des lignes « / sem », la somme de leurs prévus (la case tenue au prévu = la catégorie tenue)
+                            const lignesSem = postesSem.filter(p => p.unite === 'semaine');
+                            const prevuSemaine = lignesSem.length ? lignesSem.reduce((s, p) => s + p.budget, 0)
+                                : partSem(budgetCategorieRevise(cv) - prevu.filter(p => p.unite !== 'semaine').reduce((s, p) => s + p.partBrute, 0), c.budget - prevuCycleLignes);
                             const semBudget = prevuSemaine + postesSem.reduce((s, p) => s + p.planifie, 0);
                             const libreS = Math.max(0, Math.round(Number(valsSem[c.key] || 0)));
                             const saisiS = libreS + postesSem.reduce((s, p) => s + p.saisi, 0);
@@ -19846,20 +19950,28 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             pct: budget > 0 ? Math.round(engage / budget * 100) : 0,
                             pctAttendu: budget > 0 ? Math.min(100, Math.round(attendu / budget * 100)) : 0,
                             rythme, depassement: Math.max(0, engage - budget),
-                            paie: prochainePaieLabel.value, jourCycle: joursCycleEcoules.value, joursCycle: joursCycleTotal.value, nbSemaines: nSem,
+                            paie: prochainePaieLabel.value, jourCycle: joursCycleEcoules.value, joursCycle: joursCycleTotal.value, nbSemaines: nSem, nbSemainesLib: libSemaines(nSem),
                             compte: infoCompte(cleVar),
                             horsBudget: Math.round(T.horsTotal), horsBudgetTx: T.hors.slice().sort(_parDateDesc),
                             categories,
                             semaine: (() => {
                                 const sb = categories.reduce((s, c) => s + c.sem.budget, 0), se = categories.reduce((s, c) => s + c.sem.engage, 0);
                                 const lib = (iso) => { const t = _decaler(iso, 0); return t.getDate() + ' ' + _MOIS_COURTS[t.getMonth()]; };
-                                const { debut, fin } = consoT0Fenetre.value, th = _jeudiISO(lundiSel);
-                                return { decalage: decal, lundi: lundiSel, dimanche: dimSel, du: lib(lundiSel), au: lib(dimSel),
+                                const { debut, fin } = consoT0Fenetre.value;
+                                const dans = _semaineDansCycle(debutSel);
+                                //  v37.65 : l'autre morceau d'une semaine coupée par la paie (dans l'autre cycle)
+                                const autreDebut = debutSel > lundiSel ? lundiSel : _ymd(_decaler(finSel, 1)), autreFin = debutSel > lundiSel ? _ymd(_decaler(debutSel, -1)) : dimSel;
+                                return { decalage: decal, debut: debutSel, fin: finSel, lundi: lundiSel, dimanche: dimSel, du: lib(debutSel), au: lib(finSel),
+                                         jours: mSel.jours, coupe: mSel.coupe,
+                                         autre: !mSel.coupe ? null : { du: lib(autreDebut), au: lib(autreFin), jours: Math.round((_decaler(autreFin, 0) - _decaler(autreDebut, 0)) / 864e5) + 1,
+                                                                        rel: debutSel > lundiSel ? 'precedent' : 'suivant' },
+                                         //  v37.65 : la clôture du morceau — le dimanche soir, ou la veille de la paie
+                                         cloture: finSel === dimSel ? 'Dimanche soir' : 'Le ' + lib(finSel) + ' au soir (veille de paie)',
                                          statut: decal === 0 ? 'en_cours' : (decal < 0 ? 'passee' : 'avenir'),
-                                         idxJour: decal === 0 ? idxAuj : null, frac, dansCycle: _semaineDansCycle(lundiSel),
-                                         cycleRel: th < _ymd(debut) ? 'precedent' : (th > _ymd(fin) ? 'suivant' : null),
-                                         //  v37.29 : « semaine 2 sur 4 » du cycle
-                                         nb: nSem, rang: _semaineDansCycle(lundiSel) ? Math.round((_decaler(th, 0) - new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7))) / 6048e5) + 1 : null,
+                                         idxJour: decal === 0 ? idxAuj : null, frac, dansCycle: dans,
+                                         cycleRel: debutSel < _ymd(debut) ? 'precedent' : (debutSel > _ymd(fin) ? 'suivant' : null),
+                                         //  v37.29 : « semaine 2 sur 5 » du cycle — v37.65 : son morceau
+                                         nb: mSel.nb, rang: dans ? mSel.rang : null, joursCycle: mSel.cycle.jours, nbLib: libSemaines(nSem),
                                          defaut: categories.reduce((s, c) => s + (c.sem.defaut || 0), 0),
                                          //  v37.48 : retenu au prévu à la clôture — les lignes encore vides, du plus gros au plus petit
                                          aVenir: (() => {
@@ -20462,15 +20574,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     });
                     /* ── v37.27 : LES SEMAINES ──────────────────────────────────────────
                        Une semaine = un lundi (YYYY-MM-DD). Clé de stockage : 'S' + lundi,
-                       dans consoRealiseeT0, comme les cycles. Une semaine appartient au
-                       cycle où tombe son JEUDI : la majorité de ses jours. */
+                       dans consoRealiseeT0, comme les cycles. v37.65 : une semaine coupée par
+                       la paie se saisit en deux MORCEAUX, 'S' + le premier jour de chacun
+                       (le lundi, puis le jour de paie) — chacun dans son cycle. */
                     const _RE_SEMAINE = /^S\d{4}-\d{2}-\d{2}$/;
                     const _decaler = (iso, nbJours) => { const [y, m, j] = iso.split('-').map(Number); return new Date(y, m - 1, j + nbJours); };
-                    const _lundiISO = (dt) => _ymd(new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() - ((dt.getDay() + 6) % 7)));
-                    const _jeudiISO = (lundiISO) => _ymd(_decaler(lundiISO, 3));
-                    const _semaineDansCycle = (lundiISO) => {
-                        const t = _jeudiISO(lundiISO), { debut, fin } = consoT0Fenetre.value;
-                        return t >= _ymd(debut) && t <= _ymd(fin);
+                    //  v37.65 : un morceau (clé = son premier jour) appartient au cycle qui contient ce jour
+                    const _semaineDansCycle = (debutISO) => {
+                        const { debut, fin } = consoT0Fenetre.value;
+                        return debutISO >= _ymd(debut) && debutISO <= _ymd(fin);
                     };
                     //  Toutes les saisies d'une semaine, quel que soit le seau annuel qui les porte.
                     const _valeursSemaine = (lundiISO) => {
@@ -20544,13 +20656,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value;
                         const { debut, fin } = consoT0Fenetre.value;
                         const auj = new Date();
-                        //  v37.31 : les tickets des SEMAINES du cycle (règle du jeudi, v37.27), comme
-                        //  les saisies : du lundi de la 1ʳᵉ semaine au dimanche de la dernière.
-                        //  Un ticket du lundi 5 oct. compte dans le cycle qui commence le jeudi 8.
-                        const j1 = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
-                        const jN = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate() - ((fin.getDay() - 4 + 7) % 7));
-                        const lundi1 = new Date(j1.getFullYear(), j1.getMonth(), j1.getDate() - 3), dimN = new Date(jN.getFullYear(), jN.getMonth(), jN.getDate() + 3);
-                        return _lireTickets(_ymd(lundi1), _ymd(dimN < auj ? dimN : auj));
+                        //  v37.65 : les tickets des JOURS du cycle, comme ses morceaux (avant : ceux de
+                        //  ses semaines entières, règle du jeudi — un ticket de la veille de la paie
+                        //  comptait dans le cycle suivant).
+                        return _lireTickets(_ymd(debut), _ymd(fin < auj ? fin : auj));
                     });
                     /*  v37.31 — UNE SEMAINE ÉCOULÉE SANS SAISIE COMPTE SON PRÉVU.
                         Le prévu HEBDO de chaque ligne « / sem » d'une charge (ou de la charge
@@ -20567,12 +20676,23 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (parts.length) parts[0].part += Math.round(budget) - parts.reduce((s, p) => s + p.part, 0);
                         return parts;
                     };
-                    const prevuHebdoLignes = (key, cv, budget, n) => {
+                    //  v37.65 : q = un morceau du cycle — sa part des lignes (partDuMorceau : une semaine
+                    //  entière retombe pile sur son prévu, la somme des morceaux sur la part du cycle) ;
+                    //  ou la part de semaine (jours ÷ 7) d'un morceau d'un autre cycle
+                    const prevuHebdoLignes = (key, cv, budget, n, q = 1) => {
                         const dets = (cv.details || []).filter(x => x && Number(x.montant) > 0);
-                        if (!dets.length) return { [key]: Math.round(budget / n) };
+                        if (q && typeof q === 'object') {
+                            const B = budgetCategorieRevise(cv);
+                            if (!dets.length) return { [key]: partDuMorceau(budget, B, q) };
+                            const poids = (x) => Number(x.montant) * facteurPeriode(periodeDetail(x, cv), n);
+                            const W = dets.reduce((s, x) => s + poids(x), 0), out = {};
+                            _partsCycleLignes(cv, budget, n).forEach(p => { if (periodeDetail(p.x, cv) === 'semaine') out[cleDetailT0(key, p.x)] = partDuMorceau(p.part, W > 0 ? B * poids(p.x) / W : 0, q); });
+                            return out;
+                        }
+                        if (!dets.length) return { [key]: Math.round(budget / n * q) };
                         const parts = _partsCycleLignes(cv, budget, n);
                         const out = {};
-                        parts.forEach(p => { if (periodeDetail(p.x, cv) === 'semaine') out[cleDetailT0(key, p.x)] = Math.round(p.part / n); });
+                        parts.forEach(p => { if (periodeDetail(p.x, cv) === 'semaine') out[cleDetailT0(key, p.x)] = Math.round(p.part / n * q); });
                         return out;
                     };
                     /*  v37.51 — LES CASES CLOSES DE LA MÉTÉO. consoClotureT0['S' + lundi] (lignes / sem,
@@ -20607,17 +20727,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const cats = Object.entries(d.chargesVariables || {}).filter(([, cv]) => cv && cv.categorieId !== 'cat_cv_factures')
                             .map(([key, cv]) => ({ key, cv, budget: Math.round(budgetCategorieRevise(cv)) })).filter(c => c.budget > 0);
                         const idsDe = (key, cv) => { const m = {}; (cv.details || []).forEach(x => { if (x) m[cleDetailT0(key, x)] = x.categorieId; }); return m; };
-                        //  Les semaines du cycle (règle du jeudi)
+                        //  Les morceaux du cycle (v37.65 : ses semaines, coupées à la paie)
                         const { debut, fin } = consoT0Fenetre.value;
-                        const j = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
-                        for (; j.getTime() <= fin.getTime(); j.setDate(j.getDate() + 7)) {
-                            const lundi = _ymd(new Date(j.getFullYear(), j.getMonth(), j.getDate() - 3));
+                        for (const s of morceauxEntre(debut, fin)) {
+                            const lundi = _ymd(s.debut);
                             const fermes = CL['S' + lundi];
                             if (!fermes || !Object.keys(fermes).length) continue;
-                            const vals = _valeursSemaine(lundi), T = _lireTickets(lundi, _ymd(_decaler(lundi, 6)));
+                            const vals = _valeursSemaine(lundi), T = _lireTickets(lundi, _ymd(s.fin));
                             cats.forEach(({ key, cv, budget }) => {
                                 const g = T.parCle[key] || { total: 0, parPoste: {} }, idDe = idsDe(key, cv);
-                                Object.entries(prevuHebdoLignes(key, cv, budget, n)).forEach(([cle, v]) => {
+                                Object.entries(prevuHebdoLignes(key, cv, budget, n, s)).forEach(([cle, v]) => {
                                     if (!fermes[cle]) return;
                                     const sai = Math.max(0, Math.round(Number(vals[cle] || 0)));
                                     const tk = Math.round(cle === key ? g.total : (idDe[cle] ? (g.parPoste[idDe[cle]] || 0) : 0));
@@ -20660,10 +20779,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value++;
                         handleDataChange();
                     };
-                    //  Les défauts d'UNE semaine (lundi ISO) : {} tant qu'elle n'est pas écoulée.
-                    //  v37.48 : projeter = ce qu'ELLE retiendra à sa clôture (semaine en cours).
-                    const defautsSemaine = (lundiISO, projeter = false) => {
-                        const dimanche = _ymd(_decaler(lundiISO, 6));
+                    //  Les défauts d'UN morceau (son premier jour, ISO) : {} tant qu'il n'est pas écoulé.
+                    //  v37.48 : projeter = ce qu'IL retiendra à sa clôture (morceau en cours).
+                    //  v37.65 : un morceau coupé par la paie retient le prévu de SES jours (6 j = 6/7).
+                    const defautsSemaine = (debutISO, projeter = false) => {
+                        const mo = morceauDe(debutISO);
+                        if (!mo) return {};
+                        const lundiISO = debutISO, dimanche = _ymd(mo.fin), qSem = _semaineDansCycle(debutISO) ? mo : mo.jours / 7;
                         if (!projeter && !(dimanche < _ymd(new Date()))) return {};
                         const d = donneesAnnuelles.value[consoT0Annee.value];
                         if (!d) return {};
@@ -20686,7 +20808,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             //  (avant : toute la catégorie passait « en vrac », ses lignes vides à 0).
                             const idDe = {};
                             (cv.details || []).forEach(x => { if (x) idDe[cleDetailT0(key, x)] = x.categorieId; });
-                            Object.entries(prevuHebdoLignes(key, cv, budget, n)).forEach(([cle, v]) => {
+                            Object.entries(prevuHebdoLignes(key, cv, budget, n, qSem)).forEach(([cle, v]) => {
                                 if (!(v > 0) || Object.prototype.hasOwnProperty.call(vals, cle)) return;   // saisi, même 0
                                 if (fermes[cle]) return;                                                    // v37.51 : close
                                 const tk = cle === key ? g.total : (idDe[cle] ? (g.parPoste[idDe[cle]] || 0) : 0);
@@ -20701,11 +20823,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         calculationTick.value;
                         const { debut, fin } = consoT0Fenetre.value;
                         const out = {};
-                        const j = new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + ((4 - debut.getDay() + 7) % 7));
-                        for (; j.getTime() <= fin.getTime(); j.setDate(j.getDate() + 7)) {
-                            const lundi = _ymd(new Date(j.getFullYear(), j.getMonth(), j.getDate() - 3));
-                            const dft = defautsSemaine(lundi);
-                            if (Object.keys(dft).length) out[lundi] = dft;
+                        //  v37.65 : les morceaux du cycle — une semaine coupée par la paie n'y entre que par ses jours
+                        for (const s of morceauxEntre(debut, fin)) {
+                            const d0 = _ymd(s.debut), dft = defautsSemaine(d0);
+                            if (Object.keys(dft).length) out[d0] = dft;
                         }
                         return out;
                     });
@@ -24173,7 +24294,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.20 : pulse hebdomadaire
                         liberteCycle, sanctuaireHebdo, consoCompteurRenseigne, saisirCompteurConso,
                         // v37.29 : semaines réelles du cycle
-                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines,
+                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines, morceauxDuCycle, morceauDe, joursDuCycle, libSemaines, partDuMorceau, migrerSemainesCoupees,
                         // v37.50 : un compte par ligne
                         compteDeLaCharge, resteAPayerFixesParCompte, resteAPayerFacturesParCompte, enveloppeConsoParCompte,
                         // v37.30 : un rythme par ligne de détail

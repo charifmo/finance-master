@@ -10,6 +10,7 @@
  *     - le CFO qui change le total d'une catégorie aux rythmes mêlés : chaque
  *       ligne suit le même ratio et GARDE son rythme ; une sous-ligne modifiée
  *       met la valeur résumée à jour.
+ *   v37.65 : N = les jours du cycle ÷ 7 (les semaines coupées par la paie comptent pour leurs jours).
  */
 require_once __DIR__ . '/../cfo_intent_engine.php';
 
@@ -18,10 +19,11 @@ function v($titre, $attendu, $obtenu) {
     global $ko; $ok = $attendu === $obtenu; if (!$ok) $ko++;
     printf("  %s %-60s %s\n", $ok ? '✅' : '❌', $titre, $ok ? '' : "attendu=" . json_encode($attendu) . " obtenu=" . json_encode($obtenu));
 }
-function jeudis(int $m, int $an, int $jdp): int {
+//  v37.65 : les semaines d'un cycle = ses jours (comptés un par un) ÷ 7
+function semaines(int $m, int $an, int $jdp): float {
     $d = mktime(12, 0, 0, $m - 1, $jdp, $an); $fin = mktime(12, 0, 0, $m, $jdp - 1, $an); $n = 0;
-    for (; $d <= $fin; $d = strtotime('+1 day', $d)) if ((int)date('w', $d) === 4) $n++;
-    return $n;
+    for (; $d <= $fin; $d = strtotime('+1 day', $d)) $n++;
+    return $n / 7;
 }
 //  La fixture de parité, où « Alimentation » (/ sem) reçoit des lignes aux rythmes mêlés
 function etat() {
@@ -47,8 +49,8 @@ v('une ligne sans rythme hérite de sa catégorie (« semaine »)', 'semaine', c
 $fact = $fd->donneesAnnuelles->{'2026'}->chargesVariables->factures;
 v('  → et d\'une catégorie « mois » : « cycle »', 'cycle', cfo_periode_detail(($fact->details ?? [(object)[]])[0], $fact));
 $couts = []; $attendus = [];
-for ($m = 1; $m <= 12; $m++) { $n = jeudis($m, 2026, $jdp); $couts[] = cfo_cout_variable_cycle($alim, $m, 2026, $jdp); $attendus[] = (float)(250 * $n + 400 * $n / 2 + 1000); }
-v('coût du cycle = (150 + 100) × N + 400 × N/2 + 1 000, mois par mois', $attendus, $couts);
+for ($m = 1; $m <= 12; $m++) { $n = semaines($m, 2026, $jdp); $couts[] = round(cfo_cout_variable_cycle($alim, $m, 2026, $jdp), 6); $attendus[] = round(250 * $n + 400 * $n / 2 + 1000, 6); }
+v('coût du cycle = (150 + 100) × N + 400 × N/2 + 1 000, mois par mois (N = jours ÷ 7)', $attendus, $couts);
 
 //  Le net mensuel de secours : référence = la même fixture où Alimentation devient
 //  « / mois » sans ligne, avec pour chaque mois une exception = son coût calculé à la main.

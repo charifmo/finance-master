@@ -17,6 +17,12 @@
  *     - v37.24 : la saisie en vrac se fait sur la LIGNE de la carte (un champ
  *       par catégorie) ; l'ancien bloc « Réalisé à T0 » a disparu ; les Rayons X
  *       ne servent plus qu'à l'audit ; le mode Voyage survit, replié.
+ *
+ *   v37.65 — LES SEMAINES COUPÉES PAR LA PAIE : la paie tombe le jeudi 8 oct. ; le cycle (8 oct. → 7 nov.,
+ *   31 jours) se découpe en morceaux : du 8 au 11 (4 j), 12-18, 19-25, 26 oct.-1ᵉʳ nov., du 2 au 7 nov.
+ *   (6 j). Lundi 5, mardi 6 et mercredi 7 oct. appartiennent au cycle précédent (son morceau du 5 au 7) ;
+ *   le dimanche 8 nov., au suivant. Calculs à la main : COURSES 1 000 × 31 / 7 = 4 429 (HRI 2 657,
+ *   L7M 1 772), SORTIES 1 771, ESSENCE 860 ; du 8 au 11 : HRI 343, L7M 229, SORTIES 228, ESSENCE 111.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -65,8 +71,8 @@ const twCss = essai(() => {
 
 /* ── B. Le décor : un budget conso lisible à la main ─────────────────── */
 //    COURSES 1 000 / sem. → 1 000 × N · SORTIES 400 / sem. → 400 × N · ESSENCE 860 / mois
-//    (v37.29 : N = les semaines RÉELLES du cycle — 5 ici, du 8 oct. au 7 nov. 2026)
-//    budget conso du cycle = 1 400 × N + 860 (factures exclues)
+//    (v37.65 : N = les jours du cycle ÷ 7 — 31 / 7 ici, du 8 oct. au 7 nov. 2026)
+//    budget conso du cycle = 1 000 × N + 400 × N (arrondis) + 860 (factures exclues)
 //  L'HORLOGE EST FIXÉE (navigateur compris) : dimanche 11 octobre 2026 — la PREMIÈRE semaine du cycle
 //  (5-11 oct., jeudi 8 = jour de paie), pas encore écoulée : les règles de saisie se testent sans le
 //  prévu par défaut des semaines écoulées (v37.31), que la section L, elle, joue au mercredi 14
@@ -110,10 +116,10 @@ for (const an of Object.keys(fx.donneesAnnuelles)) {
     };
     d.epargne = []; d.depensesIrregulieres = []; d.virementsInternes = []; d.transactionsReelles = []; d.consoRealiseeT0 = {};
 }
-//  v37.29 : les jeudis entre la paie de M−1 et la veille de celle de M, comptés jour par jour
-const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getDay() === 4) n++; return n; };
-const NS = semainesCycle(MOIS_BUDGET, AN_BUDGET, jourDePaie);
-const BUDGET = 1000 * NS + 400 * NS + 860;
+//  v37.65 : les jours entre la paie de M−1 et la veille de celle de M, comptés jour par jour, ÷ 7
+const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) n++; return n / 7; };
+const NS = semainesCycle(MOIS_BUDGET, AN_BUDGET, jourDePaie), JC = Math.round(NS * 7);
+const BUDGET = Math.round(1000 * NS) + Math.round(400 * NS) + 860;          // 4 429 + 1 771 + 860 = 7 060
 const IDX = (maintenant.getDay() + 6) % 7;                                   // 0 = lundi
 
 const page0 = html
@@ -189,7 +195,7 @@ try {
     const a0 = await lire();
     const i0cats = a0.L.categories.filter(c => !c.prevu.length).map(c => c.key);       // sans poste : une case
     const i0postes = a0.L.categories.filter(c => c.prevu.length).map(c => c.key);       // avec postes : un ✎ qui déplie
-    v(`budget conso du cycle = ${BUDGET} (1 000 × ${NS} + 400 × ${NS} + 860 : les ${NS} semaines réelles du cycle)`, a0.L.budget === BUDGET && a0.budgetConso === BUDGET, JSON.stringify([a0.L.budget, a0.budgetConso]));
+    v(`budget conso du cycle = ${BUDGET} (1 000 × ${JC} / 7 + 400 × ${JC} / 7 + 860 : les ${JC} jours du cycle)`, a0.L.budget === BUDGET && Math.round(a0.budgetConso) === BUDGET, JSON.stringify([a0.L.budget, a0.budgetConso]));
     v('rien de déclaré → « estimé », reste = prorata du moteur', !a0.L.declare && a0.L.rythme === 'estime' && a0.L.reste === a0.prorata && a0.L.reste === a0.rav,
       JSON.stringify({ declare: a0.L.declare, reste: a0.L.reste, prorata: a0.prorata, rav: a0.rav }));
     v('  → chaque catégorie s\'affiche à son rythme attendu', Object.values(a0.cat).every(c => c.source === 'estime' && c.engage === c.theorique), JSON.stringify(a0.cat));
@@ -257,7 +263,7 @@ try {
     await compteur('alimentation', 8000);
     const r3 = await lire();
     v('au-delà du budget du cycle → « depasse », écart chiffré, reste 0',
-      r3.L.rythme === 'depasse' && r3.L.depassement === r3.L.engage - BUDGET && r3.L.reste === 0 && r3.cat.a.reste === 1000 * NS - 8000, JSON.stringify([r3.L.rythme, r3.L.depassement, r3.L.reste]));
+      r3.L.rythme === 'depasse' && r3.L.depassement === r3.L.engage - BUDGET && r3.L.reste === 0 && r3.cat.a.reste === Math.round(1000 * NS) - 8000, JSON.stringify([r3.L.rythme, r3.L.depassement, r3.L.reste]));
     await compteur('alimentation', 1000);
 
     /* ── G. Le cash mord : la carte ne promet pas plus que le compte ──── */
@@ -398,11 +404,12 @@ try {
     const vierge = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste-saisie]')].map(i => ({ v: i.value, p: i.placeholder })));
     const prevuP = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-postes] [data-pulse-poste]')].map(e => {
         const t = e.querySelector('[data-pulse-prevu]'); return t ? { t: t.textContent.replace(/\s/g, ''), dansCase: !!t.closest('label') || !!t.querySelector('input') } : null; }));
-    v('  → avant toute saisie, chaque case est VIDE (invite « 0 », pas d\'estimation) ; « Prévu : 600 DH » / « 400 DH » se lisent à côté',
-      vierge.length === 3 && vierge.every(x => x.v === '' && x.p === '0') && prevuP[0] && prevuP[0].t === 'Prévu:600DH' && prevuP[1] && prevuP[1].t === 'Prévu:400DH'
+    //  v37.65 : dimanche 11, la semaine en cours est le morceau du 8 au 11 (4 j) — prévu au prorata
+    v('  → avant toute saisie, chaque case est VIDE (invite « 0 », pas d\'estimation) ; « Prévu : 343 DH » / « 229 DH » (4 j sur 7) se lisent à côté',
+      vierge.length === 3 && vierge.every(x => x.v === '' && x.p === '0') && prevuP[0] && prevuP[0].t === 'Prévu:343DH' && prevuP[1] && prevuP[1].t === 'Prévu:229DH'
       && !prevuP[0].dansCase && !prevuP[1].dansCase, JSON.stringify([vierge, prevuP]));
-    const [pH, pL] = cA.prevu;                                            // HRI 600 → 600 × N ; L7M 400 → 400 × N sur le cycle (v37.29)
-    v('  → le budget du cycle de chaque poste s\'affiche (600 × ' + NS + ' / 400 × ' + NS + ')', pH.partCycle === 600 * NS && pL.partCycle === 400 * NS && pH.cle === 'alimentation::1', JSON.stringify([pH, pL]));
+    const [pH, pL] = cA.prevu;                                            // HRI 600 × 31 / 7 = 2 657 ; L7M : le reste des 4 429 de COURSES, 1 772
+    v('  → le budget du cycle de chaque poste s\'affiche (600 × ' + JC + ' / 7 = 2 657, L7M 1 772 : 4 429 au total)', pH.partCycle === Math.round(600 * NS) && pH.partCycle + pL.partCycle === Math.round(1000 * NS) && pH.cle === 'alimentation::1', JSON.stringify([pH, pL]));
     await page.click('[data-pulse-poste-saisie][data-poste="' + pH.cle + '"]');
     await page.keyboard.type('800');
     await page.keyboard.press('Enter');
@@ -462,10 +469,11 @@ try {
     v('aucune erreur JavaScript (postes)', erreurs.length === 0, erreurs[0] || '');
 
     /* ── L. v37.27 : PAR SEMAINE — en cours, passée, à venir ──────────── */
-    //  Au MERCREDI 14 : la semaine du 5 au 11 (dans le cycle) est ÉCOULÉE — v37.31 : ses lignes laissées
-    //  vides comptent leur prévu. Hri 600 + L7M 400 + SORTIES 400 + ESSENCE 860 ÷ 5 = 172 → 1 572.
+    //  Au MERCREDI 14 : le morceau du 8 au 11 (dans le cycle) est ÉCOULÉ — v37.31 : ses lignes laissées
+    //  vides comptent leur prévu. v37.65 : 4 jours sur 31 — Hri 343 + L7M 229 + SORTIES 228 + ESSENCE 111 → 911.
     await recharger(H14);
-    const PREVU_ECOULEE = 600 + 400 + 400 + Math.round(860 / 5);
+    const PREVU_ECOULEE = 343 + 229 + 228 + 111;
+    const M1 = { du: '8 oct.', au: '11 oct.', debut: '2026-10-08' }, M0 = { du: '5 oct.', au: '7 oct.', debut: '2026-10-05' }, M5 = { du: '2 nov.', au: '7 nov.' };
     await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); st.changerSemaine(0); await new Promise(r => setTimeout(r, 150)); }, ST);
     await tickets([]);
     const fr = (d) => d.getDate() + ' ' + ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][d.getMonth()];
@@ -482,8 +490,8 @@ try {
     await page.click('[data-semaine-aujourdhui]'); await page.waitForTimeout(250);
     v('rien déclaré : la semaine EN COURS à 0 DH, cases vides (invite « 0 »), totaux de ligne à 0 — aucune estimation',
       est0.total.startsWith('0DH') && est0.cases.length > 0 && est0.cases.every(x => x === '0') && est0.valeurs.every(x => x === '') && est0.lignes.length > 0 && est0.lignes.every(x => x === '0'), JSON.stringify(est0));
-    v(`  → la semaine ÉCOULÉE compte son prévu (${PREVU_ECOULEE} DH), ses cases le montrent (SORTIES 400, ESSENCE 172), avec la note`,
-      est1.total.startsWith(PREVU_ECOULEE + 'DH') && est1.note && JSON.stringify(est1.cases) === JSON.stringify([['sorties', '400', '1'], ['voiture', '172', '1']]), JSON.stringify(est1));
+    v(`  → le morceau ÉCOULÉ (du 8 au 11) compte son prévu (${PREVU_ECOULEE} DH), ses cases le montrent (SORTIES 228, ESSENCE 111), avec la note`,
+      est1.total.startsWith(PREVU_ECOULEE + 'DH') && est1.note && JSON.stringify(est1.cases) === JSON.stringify([['sorties', '228', '1'], ['voiture', '111', '1']]), JSON.stringify(est1));
     const n0 = await nav();
     v('barre de semaine : « Semaine du lundi au dimanche », en cours', n0.titre === 'Semaine du ' + sem(0).du + ' au ' + sem(0).au && n0.statut === 'en_cours' && !n0.aujourdhui, JSON.stringify([n0, sem(0)]));
     await page.click('[data-pulse-ouvrir][data-cat="alimentation"]');
@@ -491,30 +499,30 @@ try {
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('320'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const w0 = await lire();
-    v('saisie de la semaine en cours : 320 sur Hri → stocké sous le lundi, compté dans le cycle (+ 1 000 au prévu, semaine écoulée)',
-      w0.cat.a.engage === 320 + 1000 && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); const d = st.donneesAnnuelles[st.moisBudgetaire.an]; return Object.keys(d.consoRealiseeT0 || {}).includes(cle); }, 'S' + sem(0).lundi),
+    v('saisie de la semaine en cours : 320 sur Hri → stocké sous le lundi, compté dans le cycle (+ 572 au prévu, du 8 au 11)',
+      w0.cat.a.engage === 320 + 343 + 229 && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); const d = st.donneesAnnuelles[st.moisBudgetaire.an]; return Object.keys(d.consoRealiseeT0 || {}).includes(cle); }, 'S' + sem(0).lundi),
       JSON.stringify([w0.cat.a.engage, sem(0).lundi]));
-    //  ‹ : la semaine passée (dans le cycle) — écoulée : ses postes montrent leur prévu retenu
+    //  ‹ : le morceau passé (du 8 au 11, dans le cycle) — écoulé : ses postes montrent leur prévu retenu
     await page.click('[data-semaine-prec]');
     await page.waitForTimeout(250);
     const n1 = await nav();
     const vide = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste-saisie]')].map(i => [i.dataset.poste, i.value, i.dataset.defaut || '']));
-    v('‹ : la semaine passée (« passée », « Cette semaine » apparaît) : Hri 600 et L7M 400 au prévu, « Autre » vide',
-      n1.titre === 'Semaine du ' + sem(-1).du + ' au ' + sem(-1).au && n1.statut === 'passee' && n1.aujourdhui && !n1.hors
-      && JSON.stringify(vide) === JSON.stringify([['alimentation::1', '600', '1'], ['alimentation::2', '400', '1'], ['libre', '', '']]), JSON.stringify([n1, vide]));
+    v('‹ : « Semaine du 8 oct. au 11 oct. ✂️ 4 j » (« passée », « Cette semaine » apparaît) : Hri 343 et L7M 229 au prévu, « Autre » vide',
+      n1.titre === 'Semaine du ' + M1.du + ' au ' + M1.au + ' ✂️ 4 j' && n1.statut === 'passee' && n1.aujourdhui && !n1.hors
+      && JSON.stringify(vide) === JSON.stringify([['alimentation::1', '343', '1'], ['alimentation::2', '229', '1'], ['libre', '', '']]), JSON.stringify([n1, vide]));
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('410'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const w1 = await lire();
-    v('saisir 410 sur Hri la semaine passée : il remplace son prévu — 320 + 410 + L7M 400 (au prévu) = 1 130', w1.cat.a.engage === 1130, JSON.stringify(w1.cat.a.engage));
-    //  ‹‹ : deux semaines en arrière = le cycle précédent : dit, et ne change rien
+    v('saisir 410 sur Hri du 8 au 11 : il remplace son prévu — 320 + 410 + L7M 229 (au prévu) = 959', w1.cat.a.engage === 959, JSON.stringify(w1.cat.a.engage));
+    //  ‹‹ : le morceau d'avant (du 5 au 7, l'autre moitié de la semaine du 5) = le cycle précédent : dit, et ne change rien
     await page.click('[data-semaine-prec]');
     await page.waitForTimeout(250);
     const n2 = await nav();
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('999'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const w2 = await lire();
-    v('deux semaines en arrière : « cycle précédent », sa saisie ne change PAS le Reste à dépenser',
-      n2.hors && w2.cat.a.engage === 1130 && w2.L.reste === w1.L.reste && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); return Object.values(st.donneesAnnuelles).some(d => d.consoRealiseeT0 && d.consoRealiseeT0[cle]); }, 'S' + sem(-2).lundi),
+    v('‹‹ « Semaine du 5 oct. au 7 oct. ✂️ 3 j » : « cycle précédent », sa saisie ne change PAS le Reste à dépenser',
+      n2.hors && n2.titre === 'Semaine du ' + M0.du + ' au ' + M0.au + ' ✂️ 3 j' && w2.cat.a.engage === 959 && w2.L.reste === w1.L.reste && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); return Object.values(st.donneesAnnuelles).some(d => d.consoRealiseeT0 && d.consoRealiseeT0[cle]); }, 'S' + M0.debut),
       JSON.stringify([n2, w2.cat.a.engage, w1.L.reste, w2.L.reste]));
     //  › › › : la semaine en cours, puis à venir
     await page.click('[data-semaine-suiv]'); await page.click('[data-semaine-suiv]');
@@ -527,42 +535,42 @@ try {
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('150'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const w3 = await lire();
-    v('semaine à venir : « à venir », saisissable (un achat déjà payé d\'avance) : 1 130 + 150 = 1 280',
-      n3.statut === 'avenir' && n3.titre === 'Semaine du ' + sem(1).du + ' au ' + sem(1).au && w3.cat.a.engage === 1280, JSON.stringify([n3, w3.cat.a.engage]));
-    //  La frontière de FIN du cycle (7 nov.) : la semaine du 2 au 8 nov. a son jeudi (5) dedans, pas son dimanche
+    v('semaine à venir : « à venir », saisissable (un achat déjà payé d\'avance) : 959 + 150 = 1 109',
+      n3.statut === 'avenir' && n3.titre === 'Semaine du ' + sem(1).du + ' au ' + sem(1).au && w3.cat.a.engage === 1109, JSON.stringify([n3, w3.cat.a.engage]));
+    //  La frontière de FIN du cycle (7 nov.) : la semaine du 2 au 8 nov. est coupée — du 2 au 7 dans le cycle, le 8 dehors
     await page.click('[data-semaine-suiv]'); await page.click('[data-semaine-suiv]');
     await page.waitForTimeout(250);
     const n3b = await nav();
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('60'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const w3b = await lire();
-    v('semaine du 2 au 8 nov. (jeudi 5 dans le cycle, dimanche 8 dehors) : elle compte — 1 280 + 60 = 1 340',
-      n3b.titre === 'Semaine du ' + sem(3).du + ' au ' + sem(3).au && !n3b.hors && w3b.cat.a.engage === 1340, JSON.stringify([n3b, w3b.cat.a.engage]));
+    v('« Semaine du 2 nov. au 7 nov. ✂️ 6 j » (le dimanche 8 est au cycle suivant) : elle compte — 1 109 + 60 = 1 169',
+      n3b.titre === 'Semaine du ' + M5.du + ' au ' + M5.au + ' ✂️ 6 j' && !n3b.hors && w3b.cat.a.engage === 1169, JSON.stringify([n3b, w3b.cat.a.engage]));
     await page.click('[data-semaine-suiv]');
     await page.waitForTimeout(250);
     const n3c = await nav();
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('777'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
-    v('semaine du 9 au 15 nov. (jeudi 12 > fin du cycle) : « cycle suivant », ne change rien (1 340)', n3c.hors && (await lire()).cat.a.engage === 1340, JSON.stringify([n3c, (await lire()).cat.a.engage]));
+    v('« Le 8 nov. ✂️ 1 j » (l\'autre bout de la semaine du 2) : « cycle suivant », ne change rien (1 169)', n3c.hors && n3c.titre === 'Le 8 nov. ✂️ 1 j' && (await lire()).cat.a.engage === 1169, JSON.stringify([n3c, (await lire()).cat.a.engage]));
     await page.click('[data-semaine-aujourdhui]');
     await page.waitForTimeout(250);
     const n4 = await nav();
     v('« ↩ Cette semaine » ramène à la semaine en cours', n4.statut === 'en_cours' && !n4.aujourdhui, JSON.stringify(n4));
     //  Les tickets datés se rangent dans LEUR semaine
-    await tickets([{ date: iso(dans14(-IDX14 - 6)), montant: 275, cat: 'alimentation' }]);     // mardi de la semaine passée
+    await tickets([{ date: iso(dans14(-IDX14 - 3)), montant: 275, cat: 'alimentation' }]);     // vendredi 9 : le morceau passé (du 8 au 11)
     const wt = await page.evaluate((ST) => { const st = eval(ST); const c = st.liberteCycle.categories.find(x => x.key === 'alimentation'); return { cetteSemaine: c.sem.tickets }; }, ST);
     await page.click('[data-semaine-prec]');
     await page.waitForTimeout(250);
     const wt1 = await page.evaluate((ST) => { const st = eval(ST); const c = st.liberteCycle.categories.find(x => x.key === 'alimentation'); return { tickets: c.sem.tickets, engage: c.sem.engage, source: c.sem.source }; }, ST);
     //  v37.48 : un ticket non rangé sur une ligne ne vide plus les lignes de leur prévu — L7M (vide) garde ses 400
-    v('un ticket daté de la semaine passée n\'apparaît que dans CETTE semaine-là (max(410 saisis, 275) + L7M vide au prévu 400 = 810)',
-      wt.cetteSemaine === 0 && wt1.tickets === 275 && wt1.engage === 810 && wt1.source === 'compteur', JSON.stringify([wt, wt1]));
+    v('un ticket daté du morceau passé n\'apparaît que dans CE morceau-là (max(410 saisis, 275) + L7M vide au prévu 229 = 639)',
+      wt.cetteSemaine === 0 && wt1.tickets === 275 && wt1.engage === 639 && wt1.source === 'compteur', JSON.stringify([wt, wt1]));
     await tickets([]);
     await page.click('[data-semaine-aujourdhui]');
     await page.waitForTimeout(200);
     await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); await new Promise(r => setTimeout(r, 150)); }, ST);
     v('« effacer tout le cycle » vide aussi les semaines du cycle (mais pas celle du cycle précédent)',
-      await page.evaluate(({ ST, a, b }) => { const st = eval(ST); const cles = Object.values(st.donneesAnnuelles).flatMap(d => Object.keys(d.consoRealiseeT0 || {})); return !cles.includes('S' + a) && cles.includes('S' + b); }, { ST, a: sem(0).lundi, b: sem(-2).lundi }),
+      await page.evaluate(({ ST, a, b }) => { const st = eval(ST); const cles = Object.values(st.donneesAnnuelles).flatMap(d => Object.keys(d.consoRealiseeT0 || {})); return !cles.includes('S' + a) && cles.includes('S' + b); }, { ST, a: sem(0).lundi, b: M0.debut }),
       'les semaines du cycle devraient disparaître, celle du cycle précédent rester');
     v('aucune erreur JavaScript (semaines)', erreurs.length === 0, erreurs[0] || '');
 
@@ -606,9 +614,9 @@ try {
     const m1 = await lire();
     const tot1 = await page.evaluate(() => document.querySelector('[data-pulse-ouvrir][data-cat="alimentation"] [data-pulse-total]').textContent.replace(/\s/g, ''));
     const reste1 = await page.evaluate(() => document.querySelector('[data-pulse-ligne][data-cat="alimentation"] [data-pulse-reste]').textContent.replace(/\s/g, ''));
-    v('  → taper 250 sur Hri : seule cette case porte 250, les autres restent vides ; la ligne dit « Prévu : 1 000 DH · reste 750 »',
+    v('  → taper 250 sur Hri : seule cette case porte 250, les autres restent vides ; la ligne dit « Prévu : 572 DH · reste 322 » (du 8 au 11)',
       v1.find(x => x.cle === 'alimentation::1').v === '250' && v1.filter(x => x.cle !== 'alimentation::1').every(x => x.v === '' && x.p === '0') && tot1 === '250'
-      && reste1 === 'Prévu:1000DH·reste750', JSON.stringify([v1, tot1, reste1]));
+      && reste1 === 'Prévu:572DH·reste322', JSON.stringify([v1, tot1, reste1]));
     await page.hover('[data-pulse-cat][data-cat="alimentation"]'); await page.waitForTimeout(300);
     const rx1 = await page.evaluate(() => { const p = document.querySelector('[data-rayonx]'); return p && { total: p.querySelector('[data-rx-total]')?.textContent.replace(/\s/g, ''), reste: p.querySelector('[data-rx-reste]')?.textContent.replace(/\s/g, ''), prudence: !!p.querySelector('[data-rx-prudence]') }; });
     const cA1 = m1.L.categories.find(c => c.key === 'alimentation');
@@ -630,12 +638,12 @@ try {
     await page.click('[data-semaine-aujourdhui]'); await page.waitForTimeout(250);
     v('  → vider la case la rend vierge (invite « 0 ») ; la semaine à venir : toutes vierges',
       v2.every(x => x.v === '' && x.p === '0') && v3.length === v2.length && v3.every(x => x.v === '' && x.p === '0'), JSON.stringify([v2, v3]));
-    //  v37.31 : une semaine ÉCOULÉE (ici celle du 28 sept., cycle précédent) montre le prévu retenu
+    //  v37.31 : un morceau ÉCOULÉ (ici du 5 au 7 oct., cycle précédent, 3 j) montre le prévu retenu (3/7)
     await page.click('[data-semaine-prec]'); await page.waitForTimeout(250);
     const v4 = await page.evaluate(() => [...document.querySelectorAll('[data-meteo] input[data-saisie]')].map(i => [i.dataset.poste || i.dataset.cat, i.value, i.dataset.defaut || '']));
     await page.click('[data-semaine-aujourdhui]'); await page.waitForTimeout(250);
-    v('  → la semaine ÉCOULÉE : chaque case vide montre son prévu retenu (Hri 600, L7M 400, SORTIES 400, ESSENCE 172), « Autre » vide',
-      JSON.stringify(v4) === JSON.stringify([['alimentation::1', '600', '1'], ['alimentation::2', '400', '1'], ['libre', '', ''], ['sorties', '400', '1'], ['voiture', '172', '1']]), JSON.stringify(v4));
+    v('  → le morceau ÉCOULÉ du 5 au 7 (3 j) : chaque case vide montre son prévu retenu (Hri 257, L7M 171, SORTIES 171, ESSENCE 83), « Autre » vide',
+      JSON.stringify(v4) === JSON.stringify([['alimentation::1', '257', '1'], ['alimentation::2', '171', '1'], ['libre', '', ''], ['sorties', '171', '1'], ['voiture', '83', '1']]), JSON.stringify(v4));
     v('  → plus aucune fonction ne remplit les saisies à la place de l\'utilisateur',
       await page.evaluate((ST) => { const st = eval(ST); return typeof st.remplirConsoT0DepuisReel === 'undefined'; }, ST));
     await page.evaluate(async (ST) => { const st = eval(ST); st.resetConsoT0(); await new Promise(r => setTimeout(r, 150)); }, ST);

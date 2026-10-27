@@ -16,6 +16,9 @@
  *       le cycle = tenir le budget ;
  *     - l'éditeur : un sélecteur par ligne, la nouvelle ligne au rythme de la
  *       catégorie, le calcul du cycle et la valeur résumée qui suivent.
+ *
+ *   v37.65 — N = les jours du cycle ÷ 7 (31 jours = 4 sem. 3 j) : les semaines coupées par la paie
+ *   comptent pour leurs jours ; la promesse se tient MORCEAU par morceau (chacun son prévu).
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -51,19 +54,21 @@ if (!pw || !vueJs || !chartJs || !chromium) {
 }
 
 /* ── B. Le comptage de référence et le décor ──────────────────────────── */
-//  Chaque jour du cycle, un par un : combien de jeudis ?
-const semainesCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getDay() === 4) n++; return n; };
+//  Chaque jour du cycle, un par un : combien de jours ? (v37.65 : semaines = jours ÷ 7)
+const joursCycle = (mois, an, jdp) => { let n = 0; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) n++; return n; };
+const semainesCycle = (mois, an, jdp) => joursCycle(mois, an, jdp) / 7;
+const libSem = (j) => Math.floor(j / 7) + 'sem.' + (j % 7 ? (j % 7) + 'j' : '');
 const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-//  Les lundis des semaines du cycle M (celles dont le jeudi y tombe)
-const lundisCycle = (mois, an, jdp) => { const out = []; for (let d = new Date(an, mois - 2, jdp); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getDay() === 4) out.push(iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 3))); return out; };
+//  Les débuts des morceaux du cycle M : son premier jour, puis chaque lundi (v37.65)
+const debutsCycle = (mois, an, jdp) => { const out = []; for (let d = new Date(an, mois - 2, jdp), d0 = d.getTime(); d <= new Date(an, mois - 1, jdp - 1); d.setDate(d.getDate() + 1)) if (d.getTime() === d0 || d.getDay() === 1) out.push(iso(d)); return out; };
 const nf = (n) => new Intl.NumberFormat('fr-FR').format(n).replace(/\s/g, '');
 const sansEsp = (t) => String(t || '').replace(/\s/g, '');
 
 const JDP = 8;
-//  Deux horloges FIXES, deux cycles : 5 semaines (8 oct. → 7 nov. 2026) et 4 semaines (8 sept. → 7 oct. 2026)
+//  Deux horloges FIXES, deux cycles : 31 jours (8 oct. → 7 nov. 2026) et 30 jours (8 sept. → 7 oct. 2026)
 const SCENARIOS = [
-    { nom: 'cycle de 5 semaines', maintenant: new Date(2026, 9, 14, 10, 0, 0), mois: 11, an: 2026 },
-    { nom: 'cycle de 4 semaines', maintenant: new Date(2026, 8, 16, 10, 0, 0), mois: 10, an: 2026 },
+    { nom: 'cycle de 31 jours', maintenant: new Date(2026, 9, 14, 10, 0, 0), mois: 11, an: 2026 },
+    { nom: 'cycle de 30 jours', maintenant: new Date(2026, 8, 16, 10, 0, 0), mois: 10, an: 2026 },
 ];
 const fixture = (sc) => {
     const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
@@ -136,8 +141,8 @@ const cat = (L, k) => L.categories.find(c => c.key === k) || { sem: {} };
 
 try {
     for (const sc of SCENARIOS) {
-        const N = semainesCycle(sc.mois, sc.an, JDP);
-        console.log(`\n  ▸ ${sc.nom} — ${N} semaines réelles`);
+        const J = joursCycle(sc.mois, sc.an, JDP), N = J / 7, CRS = Math.round(COURSES(N));
+        console.log(`\n  ▸ ${sc.nom} — ${J} jours, ${N.toFixed(2)} semaines`);
         const { page, erreurs } = await ouvrir(sc);
 
         /* ── B. Le modèle et le coût du cycle ─────────────────────────── */
@@ -145,13 +150,14 @@ try {
             return [st.periodeDetail(d.alimentation.details[3], d.alimentation), st.periodeDetail(d.factures.details[0], d.factures)]; }, ST);
         v('B. sans rythme, une ligne hérite : « / sem » → semaine, « / mois » → cycle', JSON.stringify(her) === '["semaine","cycle"]', JSON.stringify(her));
         const L0 = await lire(page);
-        v(`  → COURSES = 250 × ${N} + 400 × ${N}/2 + 1 000 = ${nf(COURSES(N))} (et non ${nf(1650 * N)})`, cat(L0, 'alimentation').budget === COURSES(N), String(cat(L0, 'alimentation').budget));
-        v(`  → budget conso du cycle = ${nf(COURSES(N) + 400 * N + 860)} (factures exclues)`, L0.budget === COURSES(N) + 400 * N + 860, String(L0.budget));
+        v(`  → COURSES = 250 × ${J}/7 + 400 × ${J}/14 + 1 000 = ${nf(CRS)} (et non ${nf(Math.round(1650 * N))})`, cat(L0, 'alimentation').budget === CRS, String(cat(L0, 'alimentation').budget));
+        v(`  → budget conso du cycle = ${nf(CRS + Math.round(400 * N) + 860)} (factures exclues)`, L0.budget === CRS + Math.round(400 * N) + 860, String(L0.budget));
 
         /* ── C. La semaine : chaque ligne à son rythme ─────────────────── */
         const sem0 = cat(L0, 'alimentation').sem;
-        v(`C. ligne COURSES : « Prévu : 250 DH + ${nf(400 * N / 2 + 1000)} / cycle » (le /15 j et le /cycle à part)`,
-          sem0.prevuSemaine === 250 && sem0.prevuCycle === 400 * N / 2 + 1000 && sem0.budget === 250, JSON.stringify([sem0.prevuSemaine, sem0.prevuCycle, sem0.budget]));
+        const PC = Math.round(400 * N / 2 + 1000);
+        v(`C. ligne COURSES : « Prévu : 250 DH + ${nf(PC)} / cycle » (le /15 j et le /cycle à part)`,
+          sem0.prevuSemaine === 250 && sem0.prevuCycle === PC && sem0.budget === 250, JSON.stringify([sem0.prevuSemaine, sem0.prevuCycle, sem0.budget]));
         await (await page.$('[data-semaine-nav]')).scrollIntoViewIfNeeded();
         await page.click('[data-pulse-ouvrir][data-cat="alimentation"]'); await page.waitForTimeout(200);
         const postes = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-postes][data-cat="alimentation"] [data-pulse-poste]')]
@@ -161,10 +167,10 @@ try {
           vu.L7m === 'Prévu:150DH' && vu.khdra === 'Prévu:100DH' && vu.Psy === 'Prévu:400DH/15j' && vu.Hri === 'Prévu:1000DH/cycle', JSON.stringify(postes));
         const ligne = await page.evaluate(() => { const l = document.querySelector('[data-pulse-ligne][data-cat="alimentation"]');
             return [l?.querySelector('[data-pulse-reste]')?.textContent.replace(/\s+/g, ' ').trim(), l?.querySelector('[data-pulse-prevu-cycle]')?.textContent.replace(/\s+/g, ' ').trim()]; });
-        v(`  → la ligne le dit : « Prévu : 250 DH » puis « + ${nf(400 * N / 2 + 1000)} DH / cycle (Hri · Psy) »`,
-          ligne[0] === 'Prévu : 250 DH' && sansEsp(ligne[1]) === `+${nf(400 * N / 2 + 1000)}DH/cycle(Hri·Psy)` && /^\+ [\d\s\u202f]+ DH \/ cycle \(Hri · Psy\)$/.test(ligne[1]), JSON.stringify(ligne));
+        v(`  → la ligne le dit : « Prévu : 250 DH » puis « + ${nf(PC)} DH / cycle (Hri · Psy) »`,
+          ligne[0] === 'Prévu : 250 DH' && sansEsp(ligne[1]) === `+${nf(PC)}DH/cycle(Hri·Psy)` && /^\+ [\d\s\u202f]+ DH \/ cycle \(Hri · Psy\)$/.test(ligne[1]), JSON.stringify(ligne));
         //  La semaine du ravitaillement : Hri 1 000 + L7m 150 + khdra 100 — PRÉVU, pas dépassé
-        const lundi0 = await page.evaluate((ST) => eval(ST).liberteCycle.semaine.lundi, ST);
+        const lundi0 = await page.evaluate((ST) => eval(ST).liberteCycle.semaine.debut, ST);
         const saisir = (lundi, k, m) => page.evaluate(async ({ ST, lundi, k, m }) => { eval(ST).saisirSemaineConso(lundi, k, m); await new Promise(r => setTimeout(r, 60)); }, { ST, lundi, k, m });
         await saisir(lundi0, 'alimentation::3', 1000); await saisir(lundi0, 'alimentation::1', 150); await saisir(lundi0, 'alimentation::4', 100);
         await page.waitForTimeout(200);
@@ -180,28 +186,42 @@ try {
         await page.evaluate(async (ST) => { eval(ST).resetConsoT0(); await new Promise(r => setTimeout(r, 120)); }, ST);
 
         /* ── D. LA PROMESSE : chaque rythme tenu tout le cycle = budget tenu ── */
-        const lundis = lundisCycle(sc.mois, sc.an, JDP);
-        const promesse = await page.evaluate(async ({ ST, lundis }) => {
+        //  v37.65 : L7m et khdra à LEUR prévu dans chaque morceau (un morceau de 4 jours : 4/7) ;
+        //  Hri une fois ; Psy une semaine sur deux, autant de fois que de quinzaines ENTIÈRES.
+        const DEB = debutsCycle(sc.mois, sc.an, JDP), psyFois = Math.floor(N / 2);
+        const promesse = await page.evaluate(async ({ ST, psyFois }) => {
             const st = eval(ST);
             st.resetConsoT0(); await new Promise(r => setTimeout(r, 80));
-            lundis.forEach((l, i) => {
-                st.saisirSemaineConso(l, 'alimentation::1', 150); st.saisirSemaineConso(l, 'alimentation::4', 100);   // chaque semaine
-                if (i === 0) st.saisirSemaineConso(l, 'alimentation::3', 1000);                                        // une fois
-                if (i % 2 === 0 && i < 2 * Math.floor(lundis.length / 2)) st.saisirSemaineConso(l, 'alimentation::2', 400);   // une semaine sur deux
+            const morceaux = [];
+            for (let k = -6; k <= 6; k++) {
+                st.changerSemaine(0); st.changerSemaine(k); await new Promise(r => setTimeout(r, 30));
+                const s = st.liberteCycle.semaine;
+                if (!s.dansCycle) continue;
+                const postes = st.liberteCycle.categories.find(c => c.key === 'alimentation').sem.postes;
+                morceaux.push({ k, debut: s.debut, l7m: postes.find(p => p.cle === 'alimentation::1').budget, khdra: postes.find(p => p.cle === 'alimentation::4').budget });
+            }
+            let saisi = 0;
+            morceaux.forEach((m, i) => {
+                st.saisirSemaineConso(m.debut, 'alimentation::1', m.l7m); st.saisirSemaineConso(m.debut, 'alimentation::4', m.khdra); saisi += m.l7m + m.khdra;   // chaque morceau
+                if (i === 0) { st.saisirSemaineConso(m.debut, 'alimentation::3', 1000); saisi += 1000; }                                                     // une fois
+                if (i % 2 === 0 && i < 2 * psyFois) { st.saisirSemaineConso(m.debut, 'alimentation::2', 400); saisi += 400; }                                // une semaine sur deux
             });
             await new Promise(r => setTimeout(r, 120));
             const semaines = [];
-            for (let k = -6; k <= 6; k++) { st.changerSemaine(0); st.changerSemaine(k); await new Promise(r => setTimeout(r, 30)); const s = st.liberteCycle.semaine; if (s.dansCycle) semaines.push(st.liberteCycle.categories.find(c => c.key === 'alimentation').sem.reste); }
+            for (const m of morceaux) { st.changerSemaine(0); st.changerSemaine(m.k); await new Promise(r => setTimeout(r, 30)); semaines.push(st.liberteCycle.categories.find(c => c.key === 'alimentation').sem.reste); }
             st.changerSemaine(0); await new Promise(r => setTimeout(r, 60));
             const c = st.liberteCycle.categories.find(x => x.key === 'alimentation');
-            const r = { semaines, engage: c.reel, budget: c.budget, reste: c.resteReel };
+            const r = { debuts: morceaux.map(m => m.debut), l7m: morceaux.map(m => m.l7m), semaines, saisi, engage: c.reel, budget: c.budget, reste: c.resteReel };
             st.resetConsoT0(); await new Promise(r2 => setTimeout(r2, 80));
             return r;
-        }, { ST, lundis });
-        const psyFois = Math.floor(N / 2);
-        v(`D. L7m + khdra chaque semaine, Hri une fois, Psy ${psyFois} fois : aucune semaine « dépassée »`, promesse.semaines.length === N && promesse.semaines.every(x => x >= 0), JSON.stringify(promesse.semaines));
-        v(`  → le cycle : ${nf(250 * N + 1000 + 400 * psyFois)} engagés sur ${nf(COURSES(N))}${N % 2 ? ' (½ quinzaine de marge : 5 semaines)' : ' — tenu au dirham près'}`,
-          promesse.engage === 250 * N + 1000 + 400 * psyFois && promesse.reste === COURSES(N) - promesse.engage && promesse.reste >= 0, JSON.stringify(promesse));
+        }, { ST, psyFois });
+        v(`D. L7m + khdra à leur prévu dans chacun des ${DEB.length} morceaux, Hri une fois, Psy ${psyFois} fois : aucun morceau « dépassé »`,
+          JSON.stringify(promesse.debuts) === JSON.stringify(DEB) && promesse.semaines.every(x => x >= 0), JSON.stringify(promesse));
+        v(`  → L7m : 150 dans chaque semaine entière, le prorata dans les morceaux coupés, ${nf(Math.round(150 * N))} sur le cycle`,
+          promesse.l7m.slice(1, -1).every(x => x === 150) && promesse.l7m[0] < 150 && promesse.l7m.at(-1) < 150
+          && Math.abs(promesse.l7m.reduce((s, x) => s + x, 0) - 150 * N) <= 1, JSON.stringify(promesse.l7m));
+        v(`  → le cycle : ${nf(promesse.saisi)} engagés sur ${nf(CRS)} — la marge est le bout de quinzaine du Psy`,
+          promesse.engage === promesse.saisi && promesse.budget === CRS && promesse.reste === CRS - promesse.engage && promesse.reste >= 0 && promesse.reste < 400, JSON.stringify(promesse));
 
         if (sc === SCENARIOS[0]) {
             /* ── E. Les Rayons X : le rythme sur chaque étiquette ───────── */
@@ -211,8 +231,8 @@ try {
             const a = (nom) => rx && rx.tags.find(t => t.includes(nom + ':'));
             v('E. Rayons X : [Hri : 1 000 DH / cycle] [Psy : 400 DH / 15 j] [L7m : 150 DH / sem] [khdra : 100 DH / sem]',
               !!rx && a('Hri').endsWith('Hri:1000DH/cycle') && a('Psy').endsWith('Psy:400DH/15j') && a('L7m').endsWith('L7m:150DH/sem') && a('khdra').endsWith('khdra:100DH/sem'), JSON.stringify(rx));
-            v(`  → triées par poids dans le cycle (Hri, Psy, L7m, khdra) ; en-tête « cycle de ${N} semaines »`,
-              !!rx && rx.tags.map(t => t.replace(/^[^A-Za-z]+/, '').split(':')[0]).join() === 'Hri,Psy,L7m,khdra' && rx.entete === `cyclede${N}semaines`, JSON.stringify(rx));
+            v(`  → triées par poids dans le cycle (Hri, Psy, L7m, khdra) ; en-tête « cycle de ${J} jours (${libSem(J)}) »`,
+              !!rx && rx.tags.map(t => t.replace(/^[^A-Za-z]+/, '').split(':')[0]).join() === 'Hri,Psy,L7m,khdra' && rx.entete === `cyclede${J}jours(${libSem(J)})`, JSON.stringify(rx));
             await page.mouse.move(2, 2); await page.waitForTimeout(250);
             //  Le tri suit le POIDS dans le cycle, pas le montant affiché : L7m 250 / sem (1 250 sur 5
             //  semaines) passe devant Hri 1 000 / cycle — à montant égal, le plus gros montant d'abord.
@@ -229,8 +249,8 @@ try {
             const prev = await page.evaluate((ST) => { const st = eval(ST), an = st.moisBudgetaire.an, out = [];
                 for (let m = 1; m <= 12; m++) { const r = st.respirationDuMois(an, m); out.push({ m, courses: (r.lignes.conso.find(l => l.nom === 'COURSES') || {}).montant, factures: (r.lignes.mensuelles.find(l => l.nom === 'FACTURES') || {}).montant }); }
                 return out; }, ST);
-            v('F. Prévisionnel des 12 mois : COURSES ligne par ligne, avec les semaines de CHAQUE mois',
-              prev.every(p => p.courses === COURSES(semainesCycle(p.m, sc.an, JDP))), JSON.stringify(prev.filter(p => p.courses !== COURSES(semainesCycle(p.m, sc.an, JDP)))));
+            const ecF = prev.filter(p => Math.abs(p.courses - COURSES(semainesCycle(p.m, sc.an, JDP))) > 0.01);
+            v('F. Prévisionnel des 12 mois : COURSES ligne par ligne, avec les jours ÷ 7 de CHAQUE mois', prev.length === 12 && ecF.length === 0, JSON.stringify(ecF));
             v('  → FACTURES (lignes héritées au /cycle) : 399 chaque mois, comme avant', prev.every(p => p.factures === 399), JSON.stringify(prev.map(p => p.factures)));
             const surplus = await page.evaluate(async (ST) => {
                 const st = eval(ST), an = st.moisBudgetaire.an, hri = st.donneesAnnuelles[an].chargesVariables.alimentation.details[2];
@@ -244,7 +264,7 @@ try {
             }, ST);
             const deltas = surplus.cycle.filter(x => !x.isPast && !x.isCurrent).map(x => ({ m: x.mNum, d: Math.round(x.brut - surplus.semaine.find(y => y.mNum === x.mNum).brut) }));
             v('  → surplus du mois : Hri « /cycle » coûte 1 000 ; « /sem » coûterait 1 000 × N (écart 1 000 × (N − 1))',
-              deltas.length > 0 && deltas.every(x => x.d === 1000 * (semainesCycle(x.m, surplus.an, JDP) - 1)), JSON.stringify(deltas));
+              deltas.length > 0 && deltas.every(x => x.d === Math.round(1000 * (semainesCycle(x.m, surplus.an, JDP) - 1))), JSON.stringify(deltas));
             const mSuiv = sc.mois === 12 ? 1 : sc.mois + 1;
             const jl = await page.evaluate(async ({ ST, mSuiv }) => { const st = eval(ST); st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 150));
                 const lib = st.nomDuMois(mSuiv) + ' ' + st.moisBudgetaire.an;
@@ -268,9 +288,10 @@ try {
             let sa = 0; for (let m = 1; m <= 12; m++) sa += semainesCycle(m, sc.an, JDP);
             const nMoy = sa / 12, eq = Math.round((150 * nMoy + 400 * nMoy / 2 + 1100) / nMoy);
             const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-            v(`  → khdra passée à /cycle : enregistrée, COURSES = 150 × ${N} + 400 × ${N}/2 + 1 100, le calcul du cycle suit`,
-              apres.periode === 'cycle' && apres.budget === 150 * N + 200 * N + 1100 && apres.ligne === `${MOIS[sc.mois - 1]}:${N}sem.→${nf(150 * N + 200 * N + 1100)}DH`, JSON.stringify(apres));
-            v(`  → la valeur résumée = l'équivalent / sem sur ${sa} semaines (${eq}), plus la somme brute (1 650)`, apres.valeur === eq, JSON.stringify([apres.valeur, eq]));
+            const K = Math.round(150 * N + 200 * N + 1100);
+            v(`  → khdra passée à /cycle : enregistrée, COURSES = 150 × ${J}/7 + 400 × ${J}/14 + 1 100, le calcul du cycle suit`,
+              apres.periode === 'cycle' && apres.budget === K && apres.ligne === `${MOIS[sc.mois - 1]}:${libSem(J)}→${nf(K)}DH`, JSON.stringify(apres));
+            v(`  → la valeur résumée = l'équivalent / sem sur ${Math.round(sa * 7)} jours (${eq}), plus la somme brute (1 650)`, apres.valeur === eq, JSON.stringify([apres.valeur, eq]));
             await sel[3].selectOption('semaine'); await page.waitForTimeout(200);
             const ajout = await page.evaluate(async (ST) => {
                 const st = eval(ST), d = st.donneesAnnuelles[st.moisBudgetaire.an].chargesVariables;

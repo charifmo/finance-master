@@ -19,6 +19,12 @@
  *     D. « Autre » tapé : Samak garde son prévu ;
  *     E. corriger : Samak tapé 0 → 0 ; vider Œufs → 50 ; un ticket rangé sur Samak le remplace ;
  *     F. l'affichage de la semaine close et de la semaine en cours.
+ *
+ *   v37.65 — LES SEMAINES COUPÉES PAR LA PAIE : la paie tombe le jeudi 8 oct. ; le cycle commence donc
+ *   par un morceau de 4 jours (du 8 au 11), l'ex-« semaine du 5 ». Calculs à la main (31 jours) :
+ *     • COURSES = 725 × 31 / 7 + 1 000 = 4 211 ; SORTIES = 400 × 31 / 7 = 1 771 ; budget 5 982 ;
+ *     • du 8 au 11, rien saisi : Marjane 343, Œufs 28, Samak 43, SORTIES 228 — soit 642 au prévu
+ *       (COURSES 414) ; la semaine du 12 au 18, entière, garde ses 1 125.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -36,9 +42,9 @@ const section = async (nom, f) => { try { await f(); } catch (e) { v(`${nom} : e
 console.log('\n  SEMAINE SAISIE EN PARTIE : TAPÉ = COMPTÉ, VIDE = PRÉVU\n  ' + '─'.repeat(80));
 
 /* ── A. Statique ─────────────────────────────────────────────────────── */
-const corps = (html.match(/const defautsSemaine = \(lundiISO[^]*?\n {20}\};/) || [''])[0];
+const corps = (html.match(/const defautsSemaine = \(debutISO[^]*?\n {20}\};/) || [''])[0];
 v('A. le défaut d\'une semaine ne « règle plus en vrac » une catégorie à lignes', !!corps && !/nonVentile/.test(corps) && !/vals\[key\]/.test(corps), corps.slice(0, 120));
-v('  → la semaine en cours annonce sa clôture (note + projection)', /data-semaine-a-venir/.test(html) && /defautsSemaine\(lundiSel, true\)/.test(html));
+v('  → la semaine en cours annonce sa clôture (note + projection)', /data-semaine-a-venir/.test(html) && /defautsSemaine\(debutSel, true\)/.test(html));
 
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
@@ -56,9 +62,11 @@ if (!pw || !vueJs || !chartJs || !chromium) {
 
 /* ── Le décor ────────────────────────────────────────────────────────── */
 const JDP = 8;
-const S1 = '2026-10-05', S2 = '2026-10-12', S3 = '2026-10-19';
-const SEMAINE = 600 + 50 + 75 + 400;                         // 1 125
-const BUDGET = (600 + 50 + 75) * 5 + 1000 + 400 * 5;         // 6 625
+const S1 = '2026-10-08', S2 = '2026-10-12', S3 = '2026-10-19';   // v37.65 : le cycle commence le jeudi 8
+const SEMAINE = 600 + 50 + 75 + 400;                         // 1 125 (une semaine entière)
+const MORCEAU1 = { 'alimentation::1': 343, 'alimentation::2': 28, 'alimentation::3': 43, sorties: 228 };   // du 8 au 11 : 4 j sur 31
+const DEBUT = 343 + 28 + 43 + 228, COURSES1 = 343 + 28 + 43;   // 642, 414
+const BUDGET = 4211 + 1771;                                  // 5 982
 const fixture = () => {
     const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
     const base = fx.donneesAnnuelles[Object.keys(fx.donneesAnnuelles)[0]];
@@ -145,13 +153,13 @@ try {
         const { page, erreurs } = await ouvrir(new Date(2026, 9, 18, 21, 0, 0));
         const e = await etat(page);
         dimanche = e;
-        v(`B. dimanche 21 h : seule la semaine du 5 est close (rien saisi → ${nf(SEMAINE)} au prévu)`,
-          JSON.stringify(Object.keys(e.defauts)) === JSON.stringify([S1]) && trie(e.defauts[S1]) === trie({ 'alimentation::1': 600, 'alimentation::2': 50, 'alimentation::3': 75, sorties: 400 }),
+        v(`B. dimanche 21 h : seul le morceau du 8 au 11 est clos (rien saisi → ${nf(DEBUT)} au prévu, 4/7 d'une semaine)`,
+          JSON.stringify(Object.keys(e.defauts)) === JSON.stringify([S1]) && trie(e.defauts[S1]) === trie(MORCEAU1),
           JSON.stringify(e.defauts));
         v('  → semaine du 12 : COURSES = 45 + 180 = 225 (le ticket 100 non rangé : max(225, 100))',
-          e.semaine.lundi === S2 && e.semaine.statut === 'en_cours' && e.alimSem === 225, JSON.stringify([e.semaine.lundi, e.alimSem]));
-        v(`  → cycle : engagé ${nf(SEMAINE)} + 225 = 1 350, enveloppe ${nf(BUDGET)} − 1 350 = 5 275`,
-          e.engage === 1350 && e.budget === BUDGET && e.env === 5275, JSON.stringify([e.engage, e.budget, e.env]));
+          e.semaine.debut === S2 && e.semaine.statut === 'en_cours' && e.alimSem === 225, JSON.stringify([e.semaine.debut, e.alimSem]));
+        v(`  → cycle : engagé ${nf(DEBUT)} + 225 = ${nf(DEBUT + 225)}, enveloppe ${nf(BUDGET)} − ${nf(DEBUT + 225)} = ${nf(BUDGET - DEBUT - 225)}`,
+          e.engage === DEBUT + 225 && e.budget === BUDGET && e.env === BUDGET - DEBUT - 225, JSON.stringify([e.engage, e.budget, e.env]));
         v('  → la clôture annoncée : SORTIES 400, Samak 75 — soit 475 (Œufs et Marjane : tapés)',
           JSON.stringify(e.semaine.aVenir.map(l => [l.nom, l.montant])) === '[["SORTIES",400],["Samak",75]]' && e.semaine.aVenirTotal === 475,
           JSON.stringify([e.semaine.aVenir, e.semaine.aVenirTotal]));
@@ -170,23 +178,23 @@ try {
         v('C. lundi 9 h : la semaine du 12 se clôt — seul Samak (vide) et SORTIES reçoivent leur prévu',
           trie(e.defauts[S2]) === trie({ 'alimentation::3': 75, sorties: 400 }), JSON.stringify(e.defauts[S2]));
         const sem2 = await page.evaluate(async ({ ST }) => { const st = eval(ST); st.semaineDecalage = -1; await new Promise(r => setTimeout(r, 120));
-            const c = st.liberteCycle.categories.find(x => x.key === 'alimentation'); const out = { total: c.sem.engage, postes: Object.fromEntries(c.sem.postes.map(p => [p.nom, p.engage])), lundi: st.liberteCycle.semaine.lundi, aVenir: st.liberteCycle.semaine.aVenirTotal };
+            const c = st.liberteCycle.categories.find(x => x.key === 'alimentation'); const out = { total: c.sem.engage, postes: Object.fromEntries(c.sem.postes.map(p => [p.nom, p.engage])), lundi: st.liberteCycle.semaine.debut, aVenir: st.liberteCycle.semaine.aVenirTotal };
             st.semaineDecalage = 0; await new Promise(r => setTimeout(r, 120)); return out; }, { ST });
         v('  → ligne par ligne : Œufs 45, Marjane 180, Samak 75, Hri 0 — total 300',
           sem2.lundi === S2 && sem2.postes['Œufs'] === 45 && sem2.postes.Marjane === 180 && sem2.postes.Samak === 75 && sem2.postes.Hri === 0 && sem2.total === 300, JSON.stringify(sem2));
         v('  → une semaine close n\'a plus rien à annoncer (sa clôture est faite)', sem2.aVenir === 0, JSON.stringify(sem2));
-        v('  → cycle : COURSES 725 + 300 = 1 025, SORTIES 400 × 2 = 800, engagé 1 825',
-          e.alim === 1025 && e.sorties === 800 && e.engage === 1825, JSON.stringify([e.alim, e.sorties, e.engage]));
-        v('  → l\'engagé monte de 475 depuis dimanche soir : exactement la clôture annoncée ; enveloppe 5 275 − 475 = 4 800',
-          !!dimanche && e.engage - dimanche.engage === dimanche.semaine.aVenirTotal && e.env === 4800, JSON.stringify([dimanche && dimanche.engage, e.engage, e.env]));
+        v('  → cycle : COURSES 414 + 300 = 714, SORTIES 228 + 400 = 628, engagé 1 342',
+          e.alim === COURSES1 + 300 && e.sorties === 228 + 400 && e.engage === DEBUT + 300 + 400, JSON.stringify([e.alim, e.sorties, e.engage]));
+        v(`  → l'engagé monte de 475 depuis dimanche soir : exactement la clôture annoncée ; enveloppe ${nf(BUDGET - DEBUT - 225)} − 475 = ${nf(BUDGET - DEBUT - 700)}`,
+          !!dimanche && e.engage - dimanche.engage === dimanche.semaine.aVenirTotal && e.env === BUDGET - DEBUT - 700, JSON.stringify([dimanche && dimanche.engage, e.engage, e.env]));
     });
 
     /* ── D. « Autre » est hors de la liste : il ne vide pas les lignes ── */
     await section('D', async () => {
         await saisir(page, S2, 'alimentation', 900);
         const e = await etat(page);
-        v('D. « Autre » 900 la semaine du 12 : Samak garde son prévu — COURSES 1 025 + 900 = 1 925',
-          e.defauts[S2]['alimentation::3'] === 75 && e.alim === 1925, JSON.stringify([e.defauts[S2], e.alim]));
+        v('D. « Autre » 900 la semaine du 12 : Samak garde son prévu — COURSES 714 + 900 = 1 614',
+          e.defauts[S2]['alimentation::3'] === 75 && e.alim === COURSES1 + 300 + 900, JSON.stringify([e.defauts[S2], e.alim]));
         await saisir(page, S2, 'alimentation', '');
     });
 
@@ -194,13 +202,13 @@ try {
     await section('E', async () => {
         await saisir(page, S2, 'alimentation::3', 0);
         let e = await etat(page);
-        v('E. Samak tapé 0 (« rien dépensé ») : plus de prévu — COURSES 725 + 225 = 950',
-          !('alimentation::3' in (e.defauts[S2] || {})) && e.alim === 950, JSON.stringify([e.defauts[S2], e.alim]));
+        v('E. Samak tapé 0 (« rien dépensé ») : plus de prévu — COURSES 414 + 225 = 639',
+          !('alimentation::3' in (e.defauts[S2] || {})) && e.alim === COURSES1 + 225, JSON.stringify([e.defauts[S2], e.alim]));
         await saisir(page, S2, 'alimentation::3', '');
         await saisir(page, S2, 'alimentation::2', '');
         e = await etat(page);
-        v('  → vider Œufs lui rend son prévu (50) : COURSES 725 + 180 + 50 + 75 = 1 030',
-          e.defauts[S2]['alimentation::2'] === 50 && e.alim === 1030, JSON.stringify([e.defauts[S2], e.alim]));
+        v('  → vider Œufs lui rend son prévu (50) : COURSES 414 + 180 + 50 + 75 = 719',
+          e.defauts[S2]['alimentation::2'] === 50 && e.alim === COURSES1 + 180 + 50 + 75, JSON.stringify([e.defauts[S2], e.alim]));
         await saisir(page, S2, 'alimentation::2', 45);
         await page.evaluate(async ({ ST }) => { const st = eval(ST), an = st.moisBudgetaire.an;
             const samak = st.donneesAnnuelles[an].chargesVariables.alimentation.details[2].categorieId;

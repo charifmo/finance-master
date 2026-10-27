@@ -272,20 +272,21 @@ function cfo_snapshot($fd, $yr) {
    4. CALCULS MÉTIER (reliquat, net mensuel isolé du compte courant)
    ══════════════════════════════════════════════════════════════════════════ */
 
-/*  v37.29 — Les semaines RÉELLES d'un cycle (miroir de semainesDuCycle, index.html).
+/*  v37.65 — Les semaines d'un cycle = ses JOURS ÷ 7 (miroir de semainesDuCycle, index.html).
     Le cycle du mois budgétaire M court du jour de paie de M−1 à la veille du jour de
-    paie de M ; une semaine lui appartient si son JEUDI y tombe. 4 ou 5, jamais 4,3. */
-function cfo_semaines_cycle(int $m, int $an, int $jdp): int {
+    paie de M ; une semaine coupée par la paie compte dans chaque cycle pour ses jours
+    (avant : la règle du jeudi, 4 ou 5). 31 jours = 4 sem. 3 j ; l'année = 365 ÷ 7. */
+function cfo_jours_cycle(int $m, int $an, int $jdp): int {
     if ($jdp < 1) $jdp = 27;
     $debut = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->setDate($an, $m - 1, $jdp)->setTime(12, 0);
     $fin   = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->setDate($an, $m, $jdp - 1)->setTime(12, 0);
-    $jeudi = $debut->modify('+' . ((4 - (int)$debut->format('w') + 7) % 7) . ' days');
-    $n = 0;
-    while ($jeudi <= $fin && $n < 6) { $n++; $jeudi = $jeudi->modify('+7 days'); }
-    return $n ?: 4;
+    return (int)$debut->diff($fin)->days + 1;
 }
-function cfo_semaines_annee(int $an, int $jdp): int {
-    $s = 0; for ($m = 1; $m <= 12; $m++) $s += cfo_semaines_cycle($m, $an, $jdp);
+function cfo_semaines_cycle(int $m, int $an, int $jdp): float {
+    return cfo_jours_cycle($m, $an, $jdp) / 7;
+}
+function cfo_semaines_annee(int $an, int $jdp): float {
+    $s = 0.0; for ($m = 1; $m <= 12; $m++) $s += cfo_semaines_cycle($m, $an, $jdp);
     return $s;
 }
 function cfo_jour_de_paie($fd): int {
@@ -355,7 +356,7 @@ function cfo_compute_reliquat($fd, $yr) {
     foreach (ovals(oget($y, 'revenus', onew())) as $o)      $sumRev += (float)(oget($o, 'base', 0) ?: 0);
     foreach (ovals(oget($y, 'chargesFixes', onew())) as $o) $sumFix += (float)(oget($o, 'valeur', 0) ?: 0);
     foreach (ovals(oget($y, 'chargesVariables', onew())) as $o) {
-        // v37.29 : un mois MOYEN de l'année = ses semaines réelles ÷ 12 (plus × 4,3)
+        // v37.29 : un mois MOYEN de l'année = ses semaines ÷ 12 (v37.65 : 365 jours ÷ 7)
         // v37.30 : et chaque ligne de détail avec SON rythme
         $t = 0.0; for ($mm = 1; $mm <= 12; $mm++) $t += cfo_cout_variable_cycle($o, $mm, (int)$yr, cfo_jour_de_paie($fd), false);
         $sumVar += $t / 12;

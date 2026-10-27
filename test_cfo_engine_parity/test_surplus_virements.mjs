@@ -167,8 +167,11 @@ const releveCourant = (page) => page.evaluate(async (ST) => {
     await new Promise(r => setTimeout(r, 80));
     const par = {};
     (st.journalHybridePourReleve.entries || []).filter(e => (e.compteKey === 'cpt_1' || e.compteKey === 'cpt_2') && (e.type === 'credit' || e.type === 'debit')).forEach(e => {
-        const m = Number(String(e.cycle).split('-')[0]); par[m] = (par[m] || 0) + (e.type === 'credit' ? 1 : -1) * Math.round(e.montant); });
+        const m = Number(String(e.cycle).split('-')[0]); par[m] = (par[m] || 0) + (e.type === 'credit' ? 1 : -1) * Number(e.montant); });
     st.moisSelectionnes.splice(0); st.anneesSelectionnees.splice(0);
+    //  v37.65 : les lignes de charges variables, au prorata des jours, portent des centimes — le mouvement
+    //  du mois se lit sur leur somme exacte, arrondie une fois (et non ligne par ligne)
+    Object.keys(par).forEach(m => { par[m] = Math.round(par[m]); });
     return par;
 }, ST);
 

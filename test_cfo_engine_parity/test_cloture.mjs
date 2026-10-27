@@ -18,6 +18,10 @@
  *        catégorie sans ligne, rouvrir, « effacer tout le cycle », clôture rechargée ;
  *     P. PILOTAGE — 🔒 d'une case à moitié réglée (eau 54 / 300), « + ajouter » après clôture,
  *        dépassement, décocher = rouvrir, close à 0, charge fixe avec avance, revenu reçu en partie.
+ *
+ *   v37.65 — LES SEMAINES COUPÉES PAR LA PAIE : le cycle (31 jours) commence le jeudi 8 par un morceau
+ *   de 4 jours (du 8 au 11), l'ex-« semaine du 5 ». Calculs à la main : budget 4 211 + 1 771 = 5 982 ;
+ *   du 8 au 11, rien saisi : Marjane 343, Œufs 28, Samak 43, SORTIES 228 — soit 642 au prévu.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -60,8 +64,9 @@ if (!pw || !vueJs || !chartJs || !chromium) {
 
 /* ── Le décor ────────────────────────────────────────────────────────── */
 const JDP = 8;
-const S1 = '2026-10-05', S2 = '2026-10-12';
-const BUDGET = (600 + 50 + 75) * 5 + 1000 + 400 * 5;         // 6 625
+const S1 = '2026-10-08', S2 = '2026-10-12';                  // v37.65 : le cycle commence le jeudi 8
+const BUDGET = 4211 + 1771;                                  // 5 982 : (725 × 31 / 7 + 1 000) + 400 × 31 / 7
+const DEBUT = 343 + 28 + 43 + 228;                           // 642 : du 8 au 11 (4 j), au prévu
 let clotureChargee = null;                                    // consoClotureT0 servi au chargement (M10)
 const fixture = () => {
     const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
@@ -149,21 +154,21 @@ try {
     const { page, erreurs } = await ouvrir();
     await section('M1', async () => {
         const e = await meteo(page);
-        v(`M1. départ : la semaine du 5 au prévu (1 125) — engagé 1 125, enveloppe ${BUDGET} − 1 125 = 5 500`,
-          e.engage === 1125 && e.eco === 0 && e.env === 5500 && e.lundi === S2, JSON.stringify(e));
+        v(`M1. départ : le morceau du 8 au 11 au prévu (642) — engagé 642, enveloppe ${BUDGET} − 642 = 5 340`,
+          e.engage === DEBUT && e.eco === 0 && e.env === BUDGET - DEBUT && e.lundi === S2, JSON.stringify(e));
     });
     await section('M2', async () => {
         await saisir(page, S2, 'alimentation::2', 30);
         let e = await meteo(page);
-        v('M2. Œufs 30 tapés cette semaine : engagé 1 155, enveloppe 5 470 (les 20 restants attendus)', e.engage === 1155 && e.env === 5470, JSON.stringify(e));
+        v('M2. Œufs 30 tapés cette semaine : engagé 672, enveloppe 5 310 (les 20 restants attendus)', e.engage === DEBUT + 30 && e.env === BUDGET - DEBUT - 30, JSON.stringify(e));
         if (!(await cliquerMeteo(page, '[data-pulse-poste-saisie][data-poste="alimentation::2"]'))) await cliquerMeteo(page, '[data-pulse-ouvrir][data-cat="alimentation"]');
         const ok = await cliquerMeteo(page, '[data-pulse-cloturer][data-poste="alimentation::2"]');
         e = await meteo(page);
-        v('  → 🔒 Œufs (cette semaine) : 20 libérés — engagé 1 155 inchangé, enveloppe 5 470 − 20 = 5 450',
-          ok && e.oeufs.clos === true && e.oeufs.eco === 20 && e.engage === 1155 && e.eco === 20 && e.env === 5450, JSON.stringify([ok, e]));
+        v('  → 🔒 Œufs (cette semaine) : 20 libérés — engagé 672 inchangé, enveloppe 5 310 − 20 = 5 290',
+          ok && e.oeufs.clos === true && e.oeufs.eco === 20 && e.engage === DEBUT + 30 && e.eco === 20 && e.env === BUDGET - DEBUT - 50, JSON.stringify([ok, e]));
         v('  → rangé pour la SEMAINE du 12 : consoClotureT0["S2026-10-12"]', JSON.stringify(e.stock) === '{"S2026-10-12":{"alimentation::2":true}}', JSON.stringify(e.stock));
-        v('  → le reste à dépenser, le reste par catégorie et par compte suivent (5 450)',
-          e.reste === 5450 && e.parCat === '5450' && e.parCompte === '{"courant":5450}', JSON.stringify([e.reste, e.parCat, e.parCompte]));
+        v('  → le reste à dépenser, le reste par catégorie et par compte suivent (5 290)',
+          e.reste === 5290 && e.parCat === '5290' && e.parCompte === '{"courant":5290}', JSON.stringify([e.reste, e.parCat, e.parCompte]));
         const t = await texteMeteo(page, '[data-pulse-poste][data-poste="alimentation::2"] [data-pulse-prevu]');
         const l = await texteMeteo(page, '[data-pulse-ligne][data-cat="alimentation"] [data-pulse-libere]');
         v('  → la ligne le dit : « 🔒 20 libérés » ; la catégorie aussi', !!t && sansEsp(t).includes('🔒20libérés') && !!l && sansEsp(l) === '🔒20libérés', JSON.stringify([t, l]));
@@ -172,57 +177,57 @@ try {
         const actif = await page.evaluate(() => { const i = [...document.querySelectorAll('[data-pulse-poste-saisie][data-poste="alimentation::2"]')].find(e => e.offsetParent !== null); return i ? !i.disabled && !i.readOnly : null; });
         await saisir(page, S2, 'alimentation::2', 70);
         const e = await meteo(page);
-        v('M3. après clôture, la case reste ouverte : Œufs 70 — engagé 1 195, rien de libéré, enveloppe 5 430',
-          actif === true && e.oeufs.clos === true && e.oeufs.eco === 0 && e.oeufs.exces === 20 && e.engage === 1195 && e.env === 5430, JSON.stringify([actif, e]));
+        v('M3. après clôture, la case reste ouverte : Œufs 70 — engagé 712, rien de libéré, enveloppe 5 270',
+          actif === true && e.oeufs.clos === true && e.oeufs.eco === 0 && e.oeufs.exces === 20 && e.engage === DEBUT + 70 && e.env === BUDGET - DEBUT - 70, JSON.stringify([actif, e]));
         const t = await texteMeteo(page, '[data-pulse-poste][data-poste="alimentation::2"] [data-pulse-poste-depasse]');
         v('  → elle le dit : « dépassement +20 »', !!t && sansEsp(t) === 'dépassement+20', String(t));
     });
     await section('M4', async () => {
-        await saisir(page, S1, 'alimentation::2', 45);
+        await saisir(page, S1, 'alimentation::2', 25);
         let e = await meteo(page);
-        v('M4. semaine du 5 écoulée, Œufs 45 tapés (pas clos) : engagé 1 125 − 50 + 45 + 70 = 1 190, enveloppe 5 435',
-          e.engage === 1190 && e.env === 5435, JSON.stringify(e));
+        v('M4. du 8 au 11 (écoulé), Œufs 25 tapés sur 28 prévus (pas clos) : engagé 642 − 28 + 25 + 70 = 709, enveloppe 5 273',
+          e.engage === DEBUT - 28 + 25 + 70 && e.env === BUDGET - (DEBUT - 28 + 25 + 70), JSON.stringify(e));
         await basculer(page, S1, 'alimentation::2', 'semaine');
         e = await meteo(page);
-        v('  → 🔒 Œufs pour la semaine du 5 : ses 5 restants libérés — enveloppe 5 430', e.engage === 1190 && e.eco === 5 && e.env === 5430, JSON.stringify(e));
+        v('  → 🔒 Œufs du 8 au 11 : ses 3 restants libérés — enveloppe 5 270', e.engage === 709 && e.eco === 3 && e.env === 5270, JSON.stringify(e));
         await basculer(page, S1, 'alimentation::3', 'semaine');
         e = await meteo(page);
-        v('  → 🔒 Samak (vide) pour la semaine du 5 : plus « au prévu » (0 compté), ses 75 libérés — engagé 1 115',
-          !('alimentation::3' in e.defS1) && e.defS1.sorties === 400 && e.engage === 1115 && e.eco === 80 && e.env === 5430, JSON.stringify(e));
+        v('  → 🔒 Samak (vide) du 8 au 11 : plus « au prévu » (0 compté), ses 43 libérés — engagé 666',
+          !('alimentation::3' in e.defS1) && e.defS1.sorties === 228 && e.engage === 666 && e.eco === 46 && e.env === 5270, JSON.stringify(e));
     });
     await section('M5', async () => {
         await saisir(page, S2, 'alimentation::4', 600);
         let e = await meteo(page);
-        v('M5. Hri (/ cycle) 600 cette semaine : engagé 1 715, enveloppe 6 625 − 1 715 − 80 = 4 830', e.engage === 1715 && e.env === 4830, JSON.stringify(e));
+        v('M5. Hri (/ cycle) 600 cette semaine : engagé 1 266, enveloppe 5 982 − 1 266 − 46 = 4 670', e.engage === 1266 && e.env === 4670, JSON.stringify(e));
         const ok = await cliquerMeteo(page, '[data-pulse-cloturer][data-poste="alimentation::4"]');
         e = await meteo(page);
-        v('  → 🔒 Hri : close pour le CYCLE — 400 libérés, enveloppe 4 430',
-          ok && e.hri.clos === true && e.hri.eco === 400 && e.eco === 480 && e.env === 4430 && e.stock['C11-2026'] && e.stock['C11-2026']['alimentation::4'] === true, JSON.stringify([ok, e]));
+        v('  → 🔒 Hri : close pour le CYCLE — 400 libérés, enveloppe 4 270',
+          ok && e.hri.clos === true && e.hri.eco === 400 && e.eco === 446 && e.env === 4270 && e.stock['C11-2026'] && e.stock['C11-2026']['alimentation::4'] === true, JSON.stringify([ok, e]));
         const t = await texteMeteo(page, '[data-pulse-poste][data-poste="alimentation::4"] [data-pulse-prevu]');
         v('  → « 🔒 400 libérés » ; la ligne de COURSES ne compte que la semaine (20 → 0 : Œufs dépassé)', !!t && sansEsp(t).includes('🔒400libérés') && e.alimEcoS === 0, JSON.stringify([t, e.alimEcoS]));
         await saisir(page, S2, 'alimentation::4', 1100);
         e = await meteo(page);
-        v('  → Hri 1 100 après clôture : dépassement +100, plus rien de libéré — enveloppe 6 625 − 2 215 − 80 = 4 330',
-          e.hri.exces === 100 && e.hri.eco === 0 && e.engage === 2215 && e.env === 4330, JSON.stringify(e));
+        v('  → Hri 1 100 après clôture : dépassement +100, plus rien de libéré — enveloppe 5 982 − 1 766 − 46 = 4 170',
+          e.hri.exces === 100 && e.hri.eco === 0 && e.engage === 1766 && e.env === 4170, JSON.stringify(e));
     });
     await section('M6', async () => {
         const ok = await cliquerMeteo(page, '[data-pulse-cloturer][data-poste="sorties"]');
         let e = await meteo(page);
-        v('M6. SORTIES (sans ligne) close pour la semaine, rien tapé : 400 libérés — enveloppe 3 930',
-          ok && e.sorties.clos === true && e.sorties.eco === 400 && e.env === 3930, JSON.stringify([ok, e]));
+        v('M6. SORTIES (sans ligne) close pour la semaine, rien tapé : 400 libérés — enveloppe 3 770',
+          ok && e.sorties.clos === true && e.sorties.eco === 400 && e.env === 3770, JSON.stringify([ok, e]));
         const l = await texteMeteo(page, '[data-pulse-ligne][data-cat="sorties"] [data-pulse-libere]');
         v('  → « 🔒 400 libérés » sur sa ligne', !!l && sansEsp(l) === '🔒400libérés', String(l));
         const lignes = await page.evaluate((ST) => { const st = eval(ST); return st.consoResteParCategorie.map(l => { const c = st.consoCategoriesT0.find(x => x.key === l.key); return [l.key, l.montant, c.budget - c.engage - c.eco]; }); }, ST);
-        v('  → le reste par catégorie : SORTIES perd ses 400 libérés, COURSES n\'éponge rien', lignes.length === 2 && lignes.every(([, m, x]) => m === x) && lignes.find(l => l[0] === 'sorties')[1] === 2000 - 400 - 400,
+        v('  → le reste par catégorie : SORTIES perd ses 400 libérés (1 771 − 228 − 400), COURSES n\'éponge rien', lignes.length === 2 && lignes.every(([, m, x]) => m === x) && lignes.find(l => l[0] === 'sorties')[1] === 1771 - 228 - 400,
           JSON.stringify(lignes));
         await cliquerMeteo(page, '[data-pulse-cloturer][data-poste="sorties"]');
         e = await meteo(page);
-        v('  → un second 🔒 la rouvre : enveloppe 4 330', e.sorties.clos === false && e.env === 4330 && !('sorties' in (e.stock['S2026-10-12'] || {})), JSON.stringify(e));
+        v('  → un second 🔒 la rouvre : enveloppe 4 170', e.sorties.clos === false && e.env === 4170 && !('sorties' in (e.stock['S2026-10-12'] || {})), JSON.stringify(e));
     });
     await section('M7', async () => {
         await page.evaluate(async (ST) => { eval(ST).resetConsoT0(); await new Promise(r => setTimeout(r, 150)); }, ST);
         const e = await meteo(page);
-        v('M7. « effacer tout le cycle » efface aussi ses cases closes : retour à 1 125 / 5 500', e.engage === 1125 && e.eco === 0 && e.env === 5500 && JSON.stringify(e.stock) === '{}', JSON.stringify(e));
+        v('M7. « effacer tout le cycle » efface aussi ses cases closes : retour à 642 / 5 340', e.engage === DEBUT && e.eco === 0 && e.env === BUDGET - DEBUT && JSON.stringify(e.stock) === '{}', JSON.stringify(e));
         v('aucune erreur JavaScript (Météo)', erreurs.length === 0, erreurs[0] || '');
     });
     await page.close();
@@ -231,11 +236,12 @@ try {
         clotureChargee = { 'S2026-10-05': { sorties: true } };
         const { page: p2, erreurs: e2 } = await ouvrir();
         const e = await meteo(p2);
-        v('M8. rechargée depuis le serveur : SORTIES close la semaine du 5 — engagé 725, 400 libérés, enveloppe 5 500',
-          e.engage === 725 && e.eco === 400 && e.env === 5500 && JSON.stringify(e.stock) === '{"S2026-10-05":{"sorties":true}}', JSON.stringify(e));
+        //  v37.65 : une clôture d'avant la v37.65 (clé du lundi 5 ; le jeudi 8 est le jour de paie) est re-rangée au 8
+        v('M8. rechargée depuis le serveur (ancienne clé du lundi 5) : re-rangée au jeudi 8 — SORTIES close du 8 au 11 : engagé 414, 228 libérés, enveloppe 5 340',
+          e.engage === DEBUT - 228 && e.eco === 228 && e.env === BUDGET - DEBUT && JSON.stringify(e.stock) === '{"S2026-10-08":{"sorties":true}}', JSON.stringify(e));
         const exp = await p2.evaluate((ST) => { const st = eval(ST); const x = typeof st.getExportData === 'function' ? st.getExportData() : { donneesAnnuelles: st.donneesAnnuelles };
             return JSON.stringify(JSON.parse(JSON.stringify(x)).donneesAnnuelles[2026].consoClotureT0); }, ST);
-        v('  → et repart telle quelle à la sauvegarde', exp === '{"S2026-10-05":{"sorties":true}}', exp);
+        v('  → et repart ainsi à la sauvegarde', exp === '{"S2026-10-08":{"sorties":true}}', exp);
         v('aucune erreur JavaScript (rechargement)', e2.length === 0, e2[0] || '');
         clotureChargee = null;
         await p2.close();
