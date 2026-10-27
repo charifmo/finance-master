@@ -44,7 +44,7 @@ v('  → les restes « dû − réglé » passent tous par resteDuItem (plus auc
   !/Math\.max\(0, (\w+) - getPaidAmount\(\w+, \1/.test(html.replace(/const resteDuItem = [^\n]*/, '')) && (html.match(/resteDuItem\(/g) || []).length === 19,
   String((html.match(/resteDuItem\(/g) || []).length));
 v('  → un 🔒 sur chaque ligne à traiter, chaque poste de la Météo, chaque catégorie sans poste',
-  /data-cloturer @click="cloturerItem\(t\.ref, cyclePilotage\)"/.test(html) && (html.match(/data-pulse-cloturer/g) || []).length === 2);
+  /data-cloturer @click="cloturerItem\(t\.ref, cyclePilotage\)"/.test(html) && (html.match(/data-pulse-cloturer/g) || []).length === 3);   // v37.66 : + les postes du cycle
 v('  → les trois Météo écoutent le 🔒', (html.match(/@cloturer="basculerClotureConso"/g) || []).length === 3);
 v('  → « Déjà validé » : on peut toujours ajouter, aucun champ désactivé', /data-valide-ajout/.test(html) && !/data-valide-ajout[^>]*:?disabled/.test(html));
 
@@ -236,12 +236,12 @@ try {
         clotureChargee = { 'S2026-10-05': { sorties: true } };
         const { page: p2, erreurs: e2 } = await ouvrir();
         const e = await meteo(p2);
-        //  v37.65 : une clôture d'avant la v37.65 (clé du lundi 5 ; le jeudi 8 est le jour de paie) est re-rangée au 8
-        v('M8. rechargée depuis le serveur (ancienne clé du lundi 5) : re-rangée au jeudi 8 — SORTIES close du 8 au 11 : engagé 414, 228 libérés, enveloppe 5 340',
-          e.engage === DEBUT - 228 && e.eco === 228 && e.env === BUDGET - DEBUT && JSON.stringify(e.stock) === '{"S2026-10-08":{"sorties":true}}', JSON.stringify(e));
+        //  v37.66 : une clôture sous la clé du lundi 5 désigne les jours d'avant la paie (5-7 oct., cycle précédent) : elle reste là
+        v('M8. rechargée depuis le serveur (clé du lundi 5) : reste au 5, cycle précédent — novembre inchangé : engagé 642, rien de libéré, enveloppe 5 340',
+          e.engage === DEBUT && e.eco === 0 && e.env === BUDGET - DEBUT && JSON.stringify(e.stock) === '{"S2026-10-05":{"sorties":true}}', JSON.stringify(e));
         const exp = await p2.evaluate((ST) => { const st = eval(ST); const x = typeof st.getExportData === 'function' ? st.getExportData() : { donneesAnnuelles: st.donneesAnnuelles };
             return JSON.stringify(JSON.parse(JSON.stringify(x)).donneesAnnuelles[2026].consoClotureT0); }, ST);
-        v('  → et repart ainsi à la sauvegarde', exp === '{"S2026-10-08":{"sorties":true}}', exp);
+        v('  → et repart ainsi à la sauvegarde', exp === '{"S2026-10-05":{"sorties":true}}', exp);
         v('aucune erreur JavaScript (rechargement)', e2.length === 0, e2[0] || '');
         clotureChargee = null;
         await p2.close();

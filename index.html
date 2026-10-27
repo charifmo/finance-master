@@ -767,7 +767,7 @@
 
                     <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @cloturer="basculerClotureConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" lien="Pointer le réalisé"
                                       @aller="appMode = 'reel'; activeTab = 'pilotage'"
-                                      @revenir="pilotageViewedCycle = null" @retirer-virement="retirerVirementPrevu"></meteo-financiere>
+                                      @revenir="pilotageViewedCycle = null" @retirer-virement="retirerVirementPrevu" @frise="friseOuverte = true"></meteo-financiere>
 
                     <!-- v37.18 : FOCUS BANCAIRE — un clic, et l'écran ne parle plus que de ce compte -->
                     <div v-if="comptesFocus.length > 1" data-focus-bar data-focus-ou="previsionnel" class="space-y-2">
@@ -3656,7 +3656,7 @@
                 <div class="mb-4">
                     <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @cloturer="basculerClotureConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" lien="Pointer le réalisé"
                                       @aller="appMode = 'reel'; activeTab = 'pilotage'"
-                                      @revenir="pilotageViewedCycle = null" @retirer-virement="retirerVirementPrevu"></meteo-financiere>
+                                      @revenir="pilotageViewedCycle = null" @retirer-virement="retirerVirementPrevu" @frise="friseOuverte = true"></meteo-financiere>
                 </div>
 
                 <!-- ━━ BILAN (Cards) ━━ -->
@@ -5110,7 +5110,7 @@
                     <meteo-financiere :meteo="meteoFinanciere" :format-mad="formatMAD" @saisie="saisirSemaineConso" @cloturer="basculerClotureConso" @semaine="changerSemaine" @retirer="retirerSaisiesCycle" @effacer="resetConsoT0" :chips="false"
                                       :lien="isMobile ? null : 'Voir le budget prévu'"
                                       @aller="appMode = 'previsionnel'; activeTab = 'pilotageTheo'"
-                                      @revenir="pilotageViewedCycle = null" @retirer-virement="retirerVirementPrevu"></meteo-financiere>
+                                      @revenir="pilotageViewedCycle = null" @retirer-virement="retirerVirementPrevu" @frise="friseOuverte = true"></meteo-financiere>
 
                     <!-- v37.18 : FOCUS BANCAIRE — un clic, et l'écran ne parle plus que de ce compte -->
                     <div v-if="comptesFocus.length > 1" data-focus-bar data-focus-ou="realise" class="space-y-2">
@@ -7520,6 +7520,75 @@
             </div>
         </div>
 
+        <!-- 📈 v37.66 : LA FRISE DU CYCLE, à la demande — l'avancement de chaque catégorie et de chaque poste, morceau par morceau -->
+        <div v-if="friseOuverte && friseCycle" data-frise class="fixed inset-0 bg-black/50 z-[10000] flex items-center justify-center p-2 md:p-4" @click.self="friseOuverte = false">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col">
+                <div class="flex items-start justify-between gap-3 px-3 md:px-5 py-3 border-b border-slate-100">
+                    <div class="min-w-0">
+                        <p class="text-sm md:text-base font-black text-slate-800" data-frise-titre>📈 Frise du cycle · {{ friseCycle.du }} → {{ friseCycle.au }} ({{ friseCycle.jours }} j)</p>
+                        <p class="text-[11px] font-semibold text-slate-500 leading-snug">Jour {{ friseCycle.aujJ }} sur {{ friseCycle.jours }}. Une colonne = un morceau de semaine (lundi → dimanche) ; ✂️ = coupé par la paie. Chaque case : réel / prévu.</p>
+                    </div>
+                    <button type="button" data-frise-fermer @click="friseOuverte = false" aria-label="Fermer la frise" class="shrink-0 w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black">✕</button>
+                </div>
+                <div class="overflow-y-auto px-2 md:px-5 py-3 space-y-3">
+                    <div v-if="friseCycle.alertes.length" data-frise-alertes class="rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3 py-2 space-y-0.5">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-rose-700">À surveiller</p>
+                        <p v-for="(a, i) in friseCycle.alertes" :key="'fa' + i" data-frise-alerte class="text-[11px] md:text-xs font-bold text-rose-900 leading-snug">{{ a }}</p>
+                    </div>
+                    <p v-if="friseCycle.quinzaine" data-frise-quinzaine class="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-[11px] md:text-xs font-bold text-amber-900 leading-snug">{{ friseCycle.quinzaine }}</p>
+                    <p v-if="!friseCycle.alertes.length" data-frise-rien class="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-[11px] md:text-xs font-bold text-emerald-800">✓ Aucun dépassement ce cycle.</p>
+                    <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 gap-y-1 items-center">
+                        <span></span>
+                        <div class="relative flex h-8 rounded-lg overflow-hidden ring-1 ring-slate-200" data-frise-axe>
+                            <div v-for="m in friseCycle.morceaux" :key="'fm' + m.debut" data-frise-morceau :data-debut="m.debut" :data-coupe="m.coupe ? '1' : null" :title="m.titre" :style="{ width: m.part + '%' }"
+                                 :class="['flex items-center justify-center text-[9px] md:text-[10px] font-black border-r border-white leading-none text-center',
+                                          m.coupe ? 'bg-amber-100 text-amber-900' : (m.etat === 'passe' ? 'bg-slate-200 text-slate-600' : (m.etat === 'encours' ? 'bg-sky-200 text-sky-900' : 'bg-slate-50 text-slate-500'))]">{{ m.coupe ? '✂️' : '' }}{{ m.label }}</div>
+                            <span data-frise-auj class="absolute inset-y-0 w-0.5 bg-rose-500" :style="{ left: friseCycle.aujPct + '%' }" title="Aujourd’hui"></span>
+                        </div>
+                    </div>
+                    <div v-for="c in friseCycle.categories" :key="'fc' + c.key" data-frise-categorie :data-cat="c.key" class="rounded-xl ring-1 ring-slate-200 p-2 md:p-2.5 space-y-1">
+                        <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 items-center">
+                            <p class="min-w-0"><span class="block truncate text-[12px] md:text-[13px] font-black text-slate-800">{{ c.label }}</span>
+                               <span :class="['block text-[10px] font-bold tabular-nums', c.depasse ? 'text-rose-600' : 'text-slate-500']" data-frise-cat-total>{{ formatMAD(c.engage) }} / {{ formatMAD(c.budget) }}{{ c.estime ? ' (estimé)' : '' }}</span></p>
+                            <div class="relative h-3 rounded-full bg-slate-100 overflow-hidden" :title="'Engagé ' + c.pct + ' % du budget ; rythme attendu à ce jour : ' + c.pctAttendu + ' %'">
+                                <span :class="['absolute inset-y-0 left-0 rounded-full', c.depasse ? 'bg-rose-400' : 'bg-emerald-400']" :style="{ width: c.pct + '%' }"></span>
+                                <span class="absolute inset-y-0 w-0.5 bg-slate-700" :style="{ left: c.pctAttendu + '%' }"></span>
+                            </div>
+                        </div>
+                        <div v-for="l in c.lignes" :key="'fl' + l.cle" data-frise-ligne :data-poste="l.cle" :data-unite="l.unite" class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 items-center">
+                            <p class="min-w-0 truncate text-[11px] font-semibold text-slate-600 pl-1">{{ l.emoji }} {{ l.nom }} <span class="text-slate-400">{{ l.unite === 'semaine' ? '/ sem' : (l.unite === 'quinzaine' ? '/ 15 j' : '/ cycle') }}</span></p>
+                            <div v-if="l.cellules" class="flex rounded-md overflow-hidden ring-1 ring-slate-200">
+                                <span v-for="(x, i) in l.cellules" :key="'fx' + i" data-frise-case :data-etat="x.depasse && !x.avenir ? 'depasse' : (x.avenir ? 'avenir' : (x.auPrevu ? 'auprevu' : (x.encours ? 'encours' : 'tenu')))" :style="{ width: x.part + '%' }" :title="x.titre + ' : ' + x.reel + ' / ' + x.prevu + ' DH' + (x.auPrevu ? ' (au prévu, rien tapé)' : '')"
+                                      :class="['h-6 flex items-center justify-center text-[9px] md:text-[10px] font-bold tabular-nums border-r border-white leading-none',
+                                               x.avenir ? 'bg-slate-50 text-slate-400' : (x.depasse ? 'bg-rose-200 text-rose-900' : (x.auPrevu ? 'bg-emerald-50 text-emerald-700 italic' : (x.encours ? 'bg-sky-100 text-sky-900' : 'bg-emerald-200 text-emerald-900')))]">{{ x.avenir ? x.prevu : x.reel + '/' + x.prevu }}</span>
+                            </div>
+                            <div v-else class="min-w-0">
+                                <div class="relative h-6 rounded-md bg-slate-100 ring-1 ring-slate-200 overflow-hidden" :title="l.engage + ' / ' + l.enveloppe + ' DH sur le cycle'">
+                                    <span :class="['absolute inset-y-0 left-0', l.depasse ? 'bg-rose-300' : 'bg-violet-200']" :style="{ width: l.pct + '%' }"></span>
+                                    <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-700 tabular-nums">{{ l.engage }} / {{ l.enveloppe }} DH sur le cycle{{ l.fois ? ' · ≈ ' + l.fois + '×' : '' }}</span>
+                                    <span v-for="(s, k) in l.seances" :key="'fs' + k" data-frise-seance :data-etat="s.etat" :title="(s.etat === 'paye' ? 'Payé le ' : (s.etat === 'suivant' ? 'Prochaine ≈ ' + s.quand + ' : au cycle suivant' : 'Prochaine ≈ ')) + (s.etat === 'suivant' ? '' : s.quand)"
+                                          :class="['absolute top-0.5 bottom-0.5 w-2 -ml-1 rounded-full ring-2', s.etat === 'paye' ? 'bg-violet-600 ring-white' : (s.etat === 'suivant' ? 'bg-white ring-amber-500' : 'bg-white ring-violet-500')]" :style="{ left: Math.min(99, s.pos) + '%' }"></span>
+                                </div>
+                                <p v-if="l.alerte && l.alerte.niveau !== 'info'" data-frise-alerte-ligne :class="['mt-0.5 text-[10px] font-bold leading-snug', l.alerte.niveau === 'depasse' ? 'text-rose-600' : (l.alerte.niveau === 'info' ? 'text-amber-700' : 'text-slate-500')]">{{ l.alerte.texte }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[10px] font-semibold text-slate-500 leading-relaxed" data-frise-legende>
+                        <span class="inline-block w-3 h-3 align-middle rounded bg-emerald-200"></span> tenu ·
+                        <span class="inline-block w-3 h-3 align-middle rounded bg-sky-100"></span> en cours ·
+                        <span class="inline-block w-3 h-3 align-middle rounded bg-emerald-50 ring-1 ring-emerald-200"></span> au prévu (rien tapé, morceau écoulé) ·
+                        <span class="inline-block w-3 h-3 align-middle rounded bg-rose-200"></span> dépassé ·
+                        <span class="inline-block w-3 h-3 align-middle rounded bg-slate-50 ring-1 ring-slate-200"></span> à venir (prévu) ·
+                        <span class="inline-block w-3 h-3 align-middle rounded bg-amber-100"></span> ✂️ coupé par la paie ·
+                        <span class="inline-block w-2 h-2 align-middle rounded-full bg-violet-600"></span> séance payée ·
+                        <span class="inline-block w-2 h-2 align-middle rounded-full ring-2 ring-violet-500"></span> prochaine ·
+                        <span class="inline-block w-2 h-2 align-middle rounded-full ring-2 ring-amber-500"></span> au cycle suivant ·
+                        trait noir : le rythme attendu à ce jour.
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <!-- v17.31 : Modale Relevé de Compte -->
         <!-- v17.43 : Modal Relevé multi-onglets + global + mode évolution -->
         <div v-if="showReleveModal" class="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center p-4" @click.self="fermerReleve()">
@@ -7847,9 +7916,9 @@
         const MeteoFinanciere = {
             props: { meteo: { type: Object, required: true }, formatMad: { type: Function, required: true },
                      lien: { type: String, default: null }, chips: { type: Boolean, default: true } },
-            emits: ['aller', 'revenir', 'effacer', 'semaine', 'saisie', 'retirer', 'cloturer', 'retirer-virement'],
+            emits: ['aller', 'revenir', 'effacer', 'semaine', 'saisie', 'retirer', 'cloturer', 'retirer-virement', 'frise'],
             components: { 'mono-compte': MonoCompte },
-            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: { ...(etatUI['meteo.postes'] || {}) }, caseActive: null, noteCoupe: false }; },
+            data() { return { rx: null, rxEpingle: false, rxStyle: {}, rxTousPostes: false, ouvertes: { ...(etatUI['meteo.postes'] || {}) }, caseActive: null }; },
             computed: {
                 fond() {
                     return this.meteo.etat === 'orage' ? 'from-rose-600 via-red-700 to-slate-900'
@@ -7904,7 +7973,7 @@
                 //  invite, on tape le vrai montant ; ressortie sans rien taper, elle le retrouve.
                 entrerCase(e, cle, defaut) { this.caseActive = cle; if (!(defaut > 0)) e.target.select(); },
                 sortirCase(cle) { if (this.caseActive === cle) this.caseActive = null; },
-                anneauSem(c) { return c.sem.pct; },
+                anneauSem(c) { return (c.sem.hebdo || c.sem).pct; },
                 //  v37.26 : saisie poste par poste
                 ouverte(k) { return !!this.ouvertes[k]; },
                 basculerOuverte(k) { this.ouvertes = { ...this.ouvertes, [k]: !this.ouvertes[k] }; etatUI['meteo.postes'] = { ...this.ouvertes }; this.fermer(); },
@@ -8179,9 +8248,8 @@
                     <button type="button" data-semaine-prec @click="$emit('semaine', -1)" aria-label="Semaine précédente" title="Semaine précédente"
                             class="shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-xl bg-black/25 ring-1 ring-white/30 hover:ring-white/70 hover:bg-black/35 text-white text-lg font-black leading-none outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors">‹</button>
                     <div class="min-w-0 flex-1 text-center leading-tight">
-                        <p class="text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] text-white/85" data-semaine-titre>{{ sm.jours === 1 ? 'Le ' + sm.du : 'Semaine du ' + sm.du + ' au ' + sm.au }} <button v-if="sm.coupe" type="button" data-semaine-coupe-badge @click="noteCoupe = !noteCoupe" :aria-expanded="noteCoupe ? 'true' : 'false'"
-                                :title="'Semaine coupée par la paie : seulement ' + sm.jours + ' jour(s) dans ce cycle, prévu au prorata (' + sm.jours + '/7)'"
-                                class="ml-1 normal-case tracking-normal font-bold text-amber-200 rounded-full ring-1 ring-amber-200/50 px-1.5 hover:bg-amber-200/10">✂️ {{ sm.jours }} j</button></p>
+                        <p class="text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] text-white/85" data-semaine-titre>{{ sm.titre }}<span v-if="sm.coupe" data-semaine-coupe-badge :title="'La paie coupe cette semaine : ' + sm.jours + ' jour(s) ici, prévu au prorata (' + sm.jours + '/7)'"
+                                class="normal-case tracking-normal font-bold text-amber-200"> · {{ sm.jours }} j</span></p>
                         <p class="mt-1 flex items-center justify-center gap-1.5 text-[10px] md:text-[11px] font-semibold text-white/60 tabular-nums">
                             <span data-semaine-statut :data-statut="sm.statut" :class="['rounded-full px-1.5 py-px text-[9px] font-black uppercase tracking-wider ring-1', statutClasse]">{{ statutTexte }}</span>
                             <span v-if="sm.rang" data-semaine-rang class="font-bold text-white/70" :title="'Ce cycle compte ' + sm.joursCycle + ' jours (' + sm.nbLib + ') en ' + sm.nb + ' morceaux : son budget = le prévu de la semaine × ' + sm.joursCycle + ' ÷ 7'">sem. {{ sm.rang }}/{{ sm.nb }}</span>
@@ -8195,14 +8263,11 @@
                     <button v-if="sm.decalage !== 0" type="button" data-semaine-aujourdhui @click="$emit('semaine', 0)"
                             class="text-[10px] font-black text-white/85 hover:text-white underline decoration-dotted underline-offset-2">↩ Cette semaine</button>
                     <span v-else></span>
+                    <button type="button" data-ouvrir-frise @click="$emit('frise')" title="La frise du cycle : avancement, morceaux de semaine, dépassements"
+                            class="text-[10px] font-black text-white/85 hover:text-white underline decoration-dotted underline-offset-2">📈 Frise du cycle</button>
                     <button v-if="p.compteur" type="button" data-liberte-effacer @click="$emit('effacer')" title="Effacer toutes les saisies du cycle (toutes ses semaines)"
                             class="text-[10px] font-bold text-white/40 hover:text-white/80 underline decoration-dotted underline-offset-2">↩ effacer tout le cycle</button>
                 </div>
-                <!-- v37.65 : une semaine coupée par la paie se saisit en deux morceaux, chacun dans son cycle —
-                     au téléphone, la note se déplie d'une touche sur « ✂️ N j » (la Météo tient dans un écran) -->
-                <p v-if="sm.coupe && sm.autre" data-semaine-coupee :class="['mb-2 rounded-lg bg-amber-300/15 ring-1 ring-amber-200/40 px-2.5 py-1.5 text-[10px] font-semibold text-white/90 leading-snug', noteCoupe ? '' : 'hidden md:block']">
-                    ✂️ Semaine coupée par la paie : ici, seulement {{ sm.jours === 1 ? 'le ' + sm.du : 'du ' + sm.du + ' au ' + sm.au }} ({{ sm.jours }} j) — tapez ce qui est parti ces jours-là ; {{ sm.autre.jours === 1 ? 'le ' + sm.autre.du : 'du ' + sm.autre.du + ' au ' + sm.autre.au }} se saisit dans le cycle {{ sm.autre.rel === 'precedent' ? 'précédent (‹)' : 'suivant (›)' }}. Prévu au prorata : {{ sm.jours }}/7 de la semaine.
-                </p>
                 <p v-if="!sm.dansCycle" data-semaine-hors class="mb-2 rounded-lg bg-white/[0.07] ring-1 ring-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/75 leading-snug">
                     ℹ️ {{ sm.coupe ? 'Ces jours appartiennent' : 'Cette semaine appartient' }} au cycle {{ sm.cycleRel === 'precedent' ? 'précédent' : 'suivant' }} : {{ sm.coupe ? 'ils ne changent' : 'elle ne change' }} pas le Reste à dépenser ci-dessus.
                 </p>
@@ -8234,12 +8299,12 @@
                                 </span>
                                 <span class="block mt-0.5 text-[10px] md:text-[11px] font-semibold text-white/55 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis" data-pulse-reste>
                                     <span data-pulse-prevu>Prévu : {{ chiffre(c.sem.prevuSemaine) }} DH</span>
-                                    <template v-if="c.sem.declare"> · <template v-if="c.sem.reste >= 0">reste <span class="font-black text-white/90">{{ chiffre(c.sem.reste) }}</span></template><span v-else class="font-black text-rose-200">dépassé de {{ chiffre(-c.sem.reste) }}</span></template>
+                                    <template v-if="c.sem.declare"> · <template v-if="c.sem.hebdo.reste >= 0">reste <span class="font-black text-white/90">{{ chiffre(c.sem.hebdo.reste) }}</span></template><span v-else class="font-black text-rose-200">dépassé de {{ chiffre(-c.sem.hebdo.reste) }}</span></template>
                                     <template v-if="c.sem.tickets > 0"> · 🧾 {{ chiffre(c.sem.tickets) }}</template>
                                     <template v-if="c.sem.defaut > 0"> · <span class="text-emerald-200" data-pulse-defaut>✓ au prévu</span></template>
                                     <template v-if="c.sem.ecoS > 0"> · <span class="font-black text-white/85" data-pulse-libere>🔒 {{ chiffre(c.sem.ecoS) }} libérés</span></template>
                                 </span>
-                                <span v-if="c.sem.prevuCycle > 0" data-pulse-prevu-cycle class="block text-[10px] font-semibold text-white/50 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ '+ ' + chiffre(c.sem.prevuCycle) + ' DH / cycle (' + c.sem.postes.filter(p => p.unite !== 'semaine').map(p => p.nom).join(' · ') + ')' }}</span>
+                                <span v-if="c.sem.prevuCycle > 0" data-pulse-prevu-cycle class="block text-[10px] font-semibold text-white/50 tabular-nums leading-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ '+ ' + chiffre(c.sem.prevuCycle) + ' DH sur le cycle (' + c.sem.postes.filter(p => p.unite !== 'semaine').map(p => p.nom).join(' · ') + ') ↓' }}</span>
                             </span>
                         </button>
                         <!-- Avec des postes : le total de la semaine se LIT, on déplie pour saisir poste par poste -->
@@ -8248,7 +8313,7 @@
                                 :class="['shrink-0 flex items-center gap-1.5 rounded-lg ring-1 px-2.5 py-1 md:py-1.5 shadow-inner transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white',
                                          ouverte(c.key) ? 'bg-black/45 ring-white/80' : 'bg-black/35 ring-white/50 hover:ring-white/70']">
                             <span aria-hidden="true" class="text-[11px] text-white/60">✎</span>
-                            <span class="text-[13px] md:text-sm font-black tabular-nums text-white" data-pulse-total>{{ chiffre(c.sem.engage) }}</span>
+                            <span class="text-[13px] md:text-sm font-black tabular-nums text-white" data-pulse-total>{{ chiffre(c.sem.hebdo.engage) }}</span>
                             <span class="text-[10px] font-bold text-white/45">DH</span>
                             <span aria-hidden="true" :class="['text-[10px] text-white/75 transition-transform', ouverte(c.key) ? 'rotate-180' : '']">▾</span>
                         </button>
@@ -8276,7 +8341,7 @@
                     <!-- ✍️ Les postes de la semaine : une case chacun -->
                     <div v-if="c.sem.postes.length && ouverte(c.key)" data-pulse-postes :data-cat="c.key" class="mt-1 ml-3 md:ml-5 pl-2 md:pl-3 border-l-2 border-white/20 space-y-0.5">
                         <p class="px-1.5 pt-0.5 text-[10px] font-semibold text-white/45 leading-snug">Dépensé cette semaine sur chaque poste<span class="hidden md:inline"> · <span class="text-white/70">+50</span> ajoute 50 · <span class="text-white/70">Entrée</span> passe au suivant</span></p>
-                        <div v-for="d in c.sem.postes" :key="'po_' + d.cle" data-pulse-poste :data-poste="d.cle" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
+                        <div v-for="d in c.sem.postes.filter(x => x.unite === 'semaine')" :key="'po_' + d.cle" data-pulse-poste :data-poste="d.cle" class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
                             <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }}</span>
@@ -8314,6 +8379,33 @@
                     </div>
                     </div>
                 </div>
+                <!-- 📅 v37.66 : les postes du CYCLE (/ 15 j, / cycle) — une enveloppe pour tout le cycle, tapée quand ça arrive -->
+                <details v-if="p.postesCycle && p.postesCycle.length && sm.dansCycle" data-pulse-cycle :open="uiOuvert('meteo.cycle', false)" @toggle="uiFixer('meteo.cycle', $event.target.open)" class="mt-3 rounded-xl bg-black/15 ring-1 ring-white/15 p-2 md:p-2.5">
+                    <summary data-pulse-cycle-resume class="cursor-pointer px-1.5 text-[10px] md:text-[11px] font-black uppercase tracking-[0.14em] text-white/85">📅 Sur tout le cycle <span class="normal-case tracking-normal font-semibold text-white/60">· {{ p.postesCycle.length }} poste{{ p.postesCycle.length > 1 ? 's' : '' }} à la quinzaine ou au cycle · {{ chiffre(p.postesCycle.reduce((s, d) => s + d.cycleEngage, 0)) }} / {{ chiffre(p.postesCycle.reduce((s, d) => s + d.cyclePrevu, 0)) }} DH</span></summary>
+                    <p class="px-1.5 mt-1 text-[10px] font-semibold text-white/60 leading-snug">{{ p.cycleDu }} → {{ p.cycleAu }} : une enveloppe pour tout le cycle — tapez le montant la semaine où c'est payé.<template v-if="p.postesCycle.some(d => d.unite === 'quinzaine')"> <span class="text-amber-200" data-pulse-cycle-quinzaine>« / 15 j » : ≈ {{ p.postesCycle.find(d => d.unite === 'quinzaine').fois }} fois sur ce cycle — une fois de plus dépasserait l'enveloppe ; après le {{ p.cycleAu }}, elle compte au cycle suivant.</span></template></p>
+                    <div v-for="d in p.postesCycle" :key="'pcy_' + d.cle" data-pulse-poste data-pulse-poste-cycle :data-poste="d.cle" :data-cat="d.cat" class="mt-1 flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
+                        <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }} <span class="font-semibold text-white/45">· {{ d.catLabel }}</span></span>
+                            <span class="block truncate text-[10px] font-semibold text-white/55 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">{{ chiffre(d.prevu) }} DH {{ d.unite === 'quinzaine' ? '/ 15 j (≈ ' + d.fois + '×)' : '/ cycle' }} · <span class="text-white/80" data-pulse-cycle-engage>{{ chiffre(d.cycleEngage) }} / {{ chiffre(d.cyclePrevu) }}</span><template v-if="d.exces > 0"> · <span class="font-black text-rose-200" data-pulse-poste-depasse>dépassement +{{ chiffre(d.exces) }}</span></template><template v-else-if="d.clos"> · <span class="font-black text-white/85" data-pulse-poste-clos>🔒 {{ d.eco > 0 ? chiffre(d.eco) + ' libérés' : 'clôturé' }}</span></template><template v-else> · reste {{ chiffre(d.resteCycle) }}</template></span>
+                            <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.depasse ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pct + '%' }"></span></span>
+                            <span v-if="d.alerte && d.alerte.niveau !== 'info'" data-pulse-cycle-alerte :data-niveau="d.alerte.niveau"
+                                  :class="['block mt-0.5 text-[10px] font-bold leading-snug', d.alerte.niveau === 'depasse' ? 'text-rose-200' : (d.alerte.niveau === 'info' ? 'text-amber-200' : 'text-white/60')]">{{ d.alerte.texte }}</span>
+                        </span>
+                        <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner"
+                               :title="'Payé cette semaine pour ' + d.nom + ' (déjà ' + chiffre(d.cycleEngage) + ' DH ce cycle)'">
+                            <span class="sr-only">Payé cette semaine pour {{ d.nom }}</span>
+                            <input :key="'ic_' + d.cle + sm.debut" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="d.cat"
+                                   :value="d.declare ? d.saisi : ''" placeholder="0"
+                                   @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="entrerCase($event, d.cle, 0); fermer()" @blur="sortirCase(d.cle)" @keydown.enter.prevent="$event.target.blur()"
+                                   class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
+                            <span class="text-[10px] font-bold text-white/45">DH</span>
+                        </label>
+                        <button type="button" data-pulse-cloturer :data-poste="d.cle" :aria-pressed="d.clos ? 'true' : 'false'" :title="titreCloture(d.nom, d.unite, d.clos)"
+                                @click="$emit('cloturer', sm.debut, d.cle, d.unite); fermer()"
+                                :class="['shrink-0 w-6 h-6 grid place-items-center rounded-md text-[10px] transition', d.clos ? 'bg-white/25 ring-1 ring-white/60' : 'opacity-35 hover:opacity-100 hover:bg-white/10']">🔒</button>
+                    </div>
+                </details>
                 <button v-if="p.horsBudget > 0" type="button" data-rx-ancre data-pulse-hors
                         @pointerenter="survolEntree($event, 'hors', 'hors')" @pointerleave="survolSortie($event)" @click="basculer($event, 'hors', 'hors')"
                         class="hidden md:inline-block mt-3 text-[10px] font-semibold text-white/50 hover:text-white/80 underline decoration-dotted underline-offset-2 text-left">+ {{ formatMad(p.horsBudget) }} saisis hors budget conso (factures…) : non comptés ici</button>
@@ -8514,8 +8606,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.65 Semaines";
+                    const CURRENT_VERSION = "37.66 Frise";
                     const CHANGELOG = [
+        { version: "37.66 Frise", date: "2026-10-27", changes: [
+            "↩️ VOS SAISIES D'AVANT LA PAIE RESTENT DANS LEUR CYCLE (schéma 21) — « Pourquoi il y a déjà de l'info rentrée sur ce cycle alors qu'il vient de commencer ? Ce sont des infos d'hier et d'avant. » La v37.65 avait re-rangé la saisie du lundi 26 oct. (semaine où tombe la paie du mardi 27) sous le jour de paie : elle comptait dans le nouveau cycle. C'était une erreur : ce qui a été tapé avant la paie concerne les jours d'avant. Ces saisies (et leurs cases closes) reviennent au lundi, une seule fois, au chargement — seulement pour les données passées par la v37.65 ; rien d'autre ne bouge.",
+            "UN TITRE QUI DIT CE QU'ON VOIT — « Début du cycle · mar. 27 oct. → dim. 1 nov. · 6 j », « Cycle précédent · lun. 26 oct. · 1 j », « Fin du cycle · … » : plus de note « semaine coupée » à déchiffrer. La semaine ne montre plus que ses postes « / sem » (son anneau, son reste et son prévu aussi) ; les postes « / 15 j » et « / cycle » ont leur bloc « 📅 Sur tout le cycle » (replié, mémorisé) : enveloppe du cycle, engagé, reste, saisie et clôture.",
+            "LES SÉANCES TOUTES LES 2 SEMAINES — un cycle de 31 jours en couvre ≈ 2,2 : après la dernière séance payée, la prochaine (+ 14 jours) est annoncée. Avant la paie et plus grosse que le reste de l'enveloppe : « ⚠️ Prochaine séance ≈ 23 nov. : elle dépasserait l'enveloppe de 314 DH » ; après la paie : « ↪ … au cycle suivant » ; sinon « couverte ». Une seule note pour le bloc quand rien n'est encore payé.",
+            "📈 LA FRISE DU CYCLE (à la demande, bouton « Frise du cycle » de la Météo) — l'axe du cycle avec ses morceaux de semaine (coupés par la paie signalés) et le trait d'aujourd'hui ; pour chaque catégorie, son engagé sur son budget et l'attendu à date ; pour chaque sous-catégorie « / sem », une case par morceau (tenu, en cours, au prévu, dépassé, à venir) ; pour les postes « / 15 j » et « / cycle », la barre de l'enveloppe et les séances (payées, prévues, au cycle suivant). En tête : les dépassements et chevauchements. Rien n'est calculé tant qu'elle est fermée.",
+            "PREUVE — nouvelle suite « Sur tout le cycle, séances à la quinzaine, frise du cycle » : 24 contrôles (paie le 27, jeudi 12 nov., calculs faits à la main : Psy 400 / 15 j → enveloppe 886, payé 27 oct. et 9 nov., prochaine ≈ 23 nov. → 314 DH de trop). Rejouée sur la v37.65 : 8 en échec. Défauts réintroduits exprès (8 : séance à 7 jours, jamais « dépasserait », jamais « au cycle suivant », frise calculée fermée, info affichée ligne par ligne, case jamais dépassée, Psy laissé dans la semaine, trait d’aujourd’hui décalé d’un jour) : tous attrapés. La suite « Semaines coupées » vérifie maintenant que la saisie du 26 oct. reste en octobre (schéma 20 rendu au lundi, schéma 19 et 21 intouchés).",
+        ] },
         { version: "37.65 Semaines", date: "2026-10-27", changes: [
             "✂️ LES SEMAINES COUPÉES PAR LA PAIE — « Ce n'est pas clair quoi rentrer et jusqu'à quand : l'appli me propose le réalisé sur une semaine même si elle est partagée entre 2 cycles, ce qui fausse les choses. » Depuis la v37.27, une semaine appartenait EN ENTIER au cycle de son jeudi : paie le mardi 27 oct., la semaine du 26 oct. au 1ᵉʳ nov. comptait en novembre lundi 26 compris (payé avec l'argent d'octobre), et celle du 23 au 29 nov. aussi, alors que la paie suivante tombe le 27. Désormais une semaine coupée par la paie se saisit en DEUX MORCEAUX, chacun dans son cycle : « Le 26 oct. ✂️ 1 j » (octobre), puis « Semaine du 27 oct. au 1 nov. ✂️ 6 j » (novembre). ‹ › passent d'un morceau à l'autre ; une note dit quoi taper et jusqu'à quand (au téléphone, une touche sur « ✂️ 6 j » la déplie : la Météo tient toujours dans un écran).",
             "UN CYCLE = SES JOURS — un poste « / sem » coûte valeur × jours du cycle ÷ 7 (31 jours = « 4 sem. 3 j », 30 jours = « 4 sem. 2 j ») ; une charge « / mois » se répartit sur les jours. Le prévu d'un morceau est au prorata de ses jours (6 jours = 6/7) ; une semaine entière garde pile son prévu (600) et les morceaux coupés se partagent l'arrondi par les plus forts restes : tenir son prévu à chaque morceau = tenir le budget du cycle, au dirham près (514 + 600 + 600 + 600 + 343 = 2 657). Sur l'année : 365 jours ÷ 7.",
@@ -15057,7 +15156,7 @@
                         }
                     };
 
-                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 20, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 21, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value });
                     // v17.19 : Auto-Save debounce 2s
                     let _autoSaveTimer = null;
 
@@ -15535,15 +15634,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return data;
                     };
 
-                    // ── v37.65 : LES SEMAINES COUPÉES PAR LA PAIE (schéma 20) ──────────
-                    //  Une saisie de semaine était rangée sous 'S' + son lundi et appartenait au
-                    //  cycle de son JEUDI. Désormais 'S' + le premier jour du MORCEAU. Paie un mardi,
-                    //  un mercredi ou un jeudi : l'ancienne clé du lundi désignait la partie d'APRÈS
-                    //  la paie (le jeudi y tombe) — elle devient 'S' + le jour de paie et reste dans
-                    //  son cycle. Paie un vendredi, un samedi, un dimanche : la clé du lundi désigne
-                    //  déjà la partie d'avant, rien ne bouge. Saisies et cases closes.
+                    // ── v37.66 : LES SAISIES D'AVANT LA PAIE, DANS LE CYCLE QUI FINIT (schéma 21) ──
+                    //  Une saisie de semaine est rangée sous 'S' + le premier jour de son morceau ; la
+                    //  clé du lundi d'une semaine coupée par la paie désigne les jours d'AVANT la paie.
+                    //  La v37.65 (schéma 20) avait re-rangé ces clés sous le jour de paie (mardi,
+                    //  mercredi ou jeudi), dans le cycle suivant — or elles étaient tapées avant la
+                    //  paie (« des infos rentrées hier et avant »). Elles reviennent au lundi, si
+                    //  rien n'y est déjà. Données d'avant le schéma 20 : rien ne bouge.
                     const migrerSemainesCoupees = (data) => {
-                        if (!data || (data._schemaVersion || 0) >= 20) return 0;
+                        if (!data || (data._schemaVersion || 0) !== 20) return 0;
                         const jdp = Number((data.soldesInitiaux || {}).jourDePaie) || 27;
                         const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
                         const estPaie = (d) => [0, -1].some(k => new Date(d.getFullYear(), d.getMonth() + k, jdp).getTime() === d.getTime());
@@ -15554,16 +15653,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             Object.keys(r).forEach(k => {
                                 const m = /^S(\d{4})-(\d{2})-(\d{2})$/.exec(k);
                                 if (!m || !r[k] || typeof r[k] !== 'object') return;
-                                const lundi = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-                                if (lundi.getDay() !== 1) return;
-                                for (let i = 1; i <= 3; i++) {
-                                    const d = new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + i);
-                                    if (!estPaie(d)) continue;
-                                    const nk = 'S' + ymd(d);
-                                    r[nk] = Object.assign({}, r[nk] && typeof r[nk] === 'object' ? r[nk] : {}, r[k]);
-                                    delete r[k]; n++;
-                                    break;
-                                }
+                                const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                                if (d.getDay() < 2 || d.getDay() > 4 || !estPaie(d)) return;
+                                const lk = 'S' + ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() - 1)));
+                                if (r[lk]) return;
+                                r[lk] = r[k]; delete r[k]; n++;
                             });
                         }));
                         return n;
@@ -15789,8 +15883,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             patchV151(data);
                             sanitizeEpargneKeys(data);
                             migrateEpargneToArray(data); // v17.15 : objet → tableau avant safeMerge
-                            const _nSemCoupees = migrerSemainesCoupees(data);   // v37.65 : schéma 20
-                            if (_nSemCoupees) addLog('✅ Semaines coupées par la paie : ' + _nSemCoupees + ' saisie(s) re-rangée(s) sous le jour de paie, dans leur cycle.', 'success');
+                            const _nSemCoupees = migrerSemainesCoupees(data);   // v37.66 : schéma 21
+                            if (_nSemCoupees) addLog('✅ Semaines coupées par la paie : ' + _nSemCoupees + ' saisie(s) d\'avant la paie rendue(s) au cycle qui finit.', 'success');
                             // v18.50 : Sanitize null entries in epargne arrays (occur after CFO deletion)
                             Object.values(data.donneesAnnuelles || {}).forEach(yr => {
                                 if (Array.isArray(yr.epargne)) yr.epargne = yr.epargne.filter(ep => ep != null);
@@ -19772,6 +19866,31 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                        La jauge compare l'engagé au « rythme attendu » du moteur
                        (consoTheoriqueAJour) : en avance / tenu / dépassé, sans dater.
                        ═══════════════════════════════════════════════════════════════ */
+                    /*  v37.66 — UN POSTE À LA QUINZAINE QUI DÉBORDE. Ses paiements du cycle (les morceaux où il
+                        est tapé, ses tickets datés) ; la prochaine séance 14 jours après la dernière : couverte,
+                        au-delà de l'enveloppe, ou au cycle suivant. Rien de payé : l'enveloppe en séances
+                        (jours ÷ 14) dit si une séance de plus dépasserait.
+                        → { paiements: [ISO], prochaine: ISO|null, alerte: { niveau, texte }|null } */
+                    const quinzaineDuPoste = (cat, p, nSem) => {
+                        const { debut, fin } = consoT0Fenetre.value, d1 = _ymd(fin);
+                        const lib = (iso) => { const t = _decaler(iso, 0); return t.getDate() + ' ' + _MOIS_COURTS[t.getMonth()]; };
+                        const paiements = [];
+                        morceauxEntre(debut, fin).forEach(s => { const iso = _ymd(s.debut); if (Number((_valeursSemaine(iso) || {})[p.cle] || 0) > 0) paiements.push(iso); });
+                        ((_ticketsCycle.value.parCle[cat] || {}).tx || []).forEach(t => { if (p.categorieId && t.categorieId === p.categorieId && t.date) paiements.push(t.date); });
+                        paiements.sort();
+                        if (p.unite !== 'quinzaine' || !(p.prevu > 0)) return { paiements, prochaine: null, alerte: null };
+                        const reste = p.cyclePrevu - p.cycleEngage;
+                        if (!paiements.length) {
+                            const fois = nSem / 2, n = Math.floor(fois + 1e-9);
+                            if (fois - n < 0.05) return { paiements, prochaine: null, alerte: null };
+                            const depasse = Math.round((n + 1) * p.prevu - p.cyclePrevu);
+                            return { paiements, prochaine: null, alerte: { niveau: 'info', texte: '≈ ' + String(Math.round(fois * 10) / 10).replace('.', ',') + ' séances ce cycle : une ' + (n + 1) + 'ᵉ avant le ' + lib(d1) + ' dépasserait l\u2019enveloppe de ' + depasse + ' DH' } };
+                        }
+                        const prochaine = _ymd(_decaler(paiements[paiements.length - 1], 14));
+                        if (prochaine > d1) return { paiements, prochaine, alerte: { niveau: 'suivant', texte: '↪ Prochaine séance ≈ ' + lib(prochaine) + ' : au cycle suivant' } };
+                        if (reste + 0.5 < p.prevu) return { paiements, prochaine, alerte: { niveau: 'depasse', texte: '⚠️ Prochaine séance ≈ ' + lib(prochaine) + ' : elle dépasserait l\u2019enveloppe de ' + Math.round(p.prevu - Math.max(0, reste)) + ' DH' } };
+                        return { paiements, prochaine, alerte: { niveau: 'ok', texte: '↪ Prochaine séance ≈ ' + lib(prochaine) + ' : couverte' } };
+                    };
                     const liberteCycle = computed(() => {
                         calculationTick.value;
                         const mb = moisBudgetaire.value;
@@ -19913,6 +20032,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 reste: semBudget - engS - ecoS, pct: semBudget > 0 ? Math.min(100, Math.round(engS / semBudget * 100)) : (engS > 0 ? 100 : 0),
                                 source: declS ? (saisiS === 0 && ticketsS === 0 && defautS > 0 ? 'defaut' : (ticketsS > saisiS ? 'tickets' : 'compteur')) : 'vide',
                                 postes: postesSem, nb: gS.tx.length,
+                                //  v37.66 : la SEMAINE seule (lignes « / sem », « Autre », catégorie sans ligne) —
+                                //  les postes à la quinzaine et au cycle ont leur bloc, « Sur tout le cycle »
+                                hebdo: (() => {
+                                    const engCycle = postesSem.filter(p => p.unite !== 'semaine').reduce((s, p) => s + Math.max(p.saisi, p.tickets), 0);
+                                    const e = declS ? Math.max(0, engS - engCycle) : 0;
+                                    return { budget: prevuSemaine, engage: e, reste: prevuSemaine - e - ecoS,
+                                             pct: prevuSemaine > 0 ? Math.min(100, Math.round(e / prevuSemaine * 100)) : (e > 0 ? 100 : 0) };
+                                })(),
                                 //  Les saisies de CYCLE d'avant la saisie hebdomadaire, toujours comptées
                                 cycleAvant: Object.keys(baseCycle).filter(k => k === c.key || k.startsWith(c.key + '::')).reduce((s, k) => s + (Number(baseCycle[k]) || 0), 0),
                             };
@@ -19954,6 +20081,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             compte: infoCompte(cleVar),
                             horsBudget: Math.round(T.horsTotal), horsBudgetTx: T.hors.slice().sort(_parDateDesc),
                             categories,
+                            //  v37.66 : les postes du CYCLE (/ 15 j, / cycle), toutes catégories — une enveloppe chacun
+                            postesCycle: categories.flatMap(c => c.sem.postes.filter(p => p.unite !== 'semaine')
+                                .map(p => ({ ...p, cat: c.key, catLabel: c.label, fois: p.unite === 'quinzaine' ? String(Math.round(nSem / 2 * 10) / 10).replace('.', ',') : '1',
+                                             resteCycle: Math.max(0, p.cyclePrevu - p.cycleEngage), categorieId: ((c.prevu || []).find(x => x.cle === p.cle) || {}).categorieId || null,
+                                             ...quinzaineDuPoste(c.key, { ...p, categorieId: ((c.prevu || []).find(x => x.cle === p.cle) || {}).categorieId || null }, nSem) }))),
+                            cycleDu: (() => { const t = consoT0Fenetre.value.debut; return t.getDate() + ' ' + _MOIS_COURTS[t.getMonth()]; })(),
+                            cycleAu: (() => { const t = consoT0Fenetre.value.fin; return t.getDate() + ' ' + _MOIS_COURTS[t.getMonth()]; })(),
                             semaine: (() => {
                                 const sb = categories.reduce((s, c) => s + c.sem.budget, 0), se = categories.reduce((s, c) => s + c.sem.engage, 0);
                                 const lib = (iso) => { const t = _decaler(iso, 0); return t.getDate() + ' ' + _MOIS_COURTS[t.getMonth()]; };
@@ -19965,6 +20099,15 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                          jours: mSel.jours, coupe: mSel.coupe,
                                          autre: !mSel.coupe ? null : { du: lib(autreDebut), au: lib(autreFin), jours: Math.round((_decaler(autreFin, 0) - _decaler(autreDebut, 0)) / 864e5) + 1,
                                                                         rel: debutSel > lundiSel ? 'precedent' : 'suivant' },
+                                         //  v37.66 : le titre dit ce qu'on voit — début / fin du cycle, cycle précédent / suivant
+                                         titre: (() => {
+                                             const jr = (iso) => ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'][_decaler(iso, 0).getDay()] + ' ' + lib(iso);
+                                             const plage = mSel.jours === 1 ? jr(debutSel) : jr(debutSel) + ' → ' + jr(finSel);
+                                             if (!dans) return (debutSel < _ymd(debut) ? 'Cycle précédent · ' : 'Cycle suivant · ') + plage;
+                                             if (mSel.coupe && mSel.rang === 1) return 'Début du cycle · ' + plage;
+                                             if (mSel.coupe && mSel.rang === mSel.nb) return 'Fin du cycle · ' + plage;
+                                             return 'Semaine du ' + lib(debutSel) + ' au ' + lib(finSel);
+                                         })(),
                                          //  v37.65 : la clôture du morceau — le dimanche soir, ou la veille de la paie
                                          cloture: finSel === dimSel ? 'Dimanche soir' : 'Le ' + lib(finSel) + ' au soir (veille de paie)',
                                          statut: decal === 0 ? 'en_cours' : (decal < 0 ? 'passee' : 'avenir'),
@@ -19985,6 +20128,78 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                          budget: sb, engage: se, reste: sb - se - categories.reduce((s, c) => s + (c.sem.ecoS || 0), 0), pct: sb > 0 ? Math.min(100, Math.round(se / sb * 100)) : 0 };
                             })(),
                         };
+                    });
+                    /*  v37.66 — LA FRISE DU CYCLE, calculée à la demande (seulement la frise ouverte) :
+                        l'axe (morceaux, jour J), chaque catégorie (engagé / budget, rythme attendu), chaque
+                        poste de la semaine morceau par morceau (réel / prévu), chaque poste du cycle (son
+                        enveloppe, ses séances), et les dépassements en tête. */
+                    const friseOuverte = ref(false);
+                    const friseCycle = computed(() => {
+                        if (!friseOuverte.value) return null;
+                        calculationTick.value;
+                        const L = liberteCycle.value, mb = moisBudgetaire.value, d = donneesAnnuelles.value[consoT0Annee.value] || {};
+                        const { debut, fin } = consoT0Fenetre.value, ms = morceauxEntre(debut, fin), J = ms.length ? ms[0].total : 1;
+                        const nSem = semainesDuCycle(mb.mois, mb.an);
+                        const lib = (dt) => dt.getDate() + ' ' + _MOIS_COURTS[dt.getMonth()];
+                        const libIso = (iso) => lib(_decaler(iso, 0));
+                        const auj = new Date(), a0 = new Date(auj.getFullYear(), auj.getMonth(), auj.getDate()), aujIso = _ymd(a0);
+                        const aujJ = Math.max(0, Math.min(J, Math.round((a0 - debut) / 864e5) + 1));
+                        const pos = (iso) => Math.round((_decaler(iso, 0) - debut) / 864e5) / J * 100;
+                        const morceaux = ms.map(m => {
+                            const iso = _ymd(m.debut), f = _ymd(m.fin);
+                            return { debut: iso, fin: f, jours: m.jours, coupe: m.coupe, part: m.jours / J * 100,
+                                     label: m.debut.getDate() + (m.jours > 1 ? '–' + m.fin.getDate() : '') + ' ' + _MOIS_COURTS[m.fin.getMonth()],
+                                     titre: (m.jours > 1 ? 'Du ' + lib(m.debut) + ' au ' + lib(m.fin) : 'Le ' + lib(m.debut)) + ' · ' + m.jours + ' j' + (m.coupe ? ' (coupé par la paie)' : ''),
+                                     etat: f < aujIso ? 'passe' : (iso > aujIso ? 'avenir' : 'encours'),
+                                     vals: _valeursSemaine(iso), T: _lireTickets(iso, f), defs: defautsSemaine(iso), m };
+                        });
+                        const alertes = [];
+                        const categories = (L.categories || []).map(c => {
+                            const cv = (d.chargesVariables || {})[c.key] || {};
+                            const budget = Math.round(budgetCategorieRevise(cv));
+                            const prevus = morceaux.map(m => prevuHebdoLignes(c.key, cv, budget, nSem, m.m));
+                            const cellule = (cle, catId, i) => {
+                                const m = morceaux[i], g = m.T.parCle[c.key] || { total: 0, parPoste: {} };
+                                const tape = Object.prototype.hasOwnProperty.call(m.vals, cle), sai = Number(m.vals[cle] || 0);
+                                const tk = cle === c.key ? Number(g.total || 0) : (catId ? Number(g.parPoste[catId] || 0) : 0);
+                                const prevu = Math.round(Number(prevus[i][cle] || 0)), defaut = Math.round(Number(m.defs[cle] || 0));
+                                const auPrevu = !tape && tk <= 0 && defaut > 0;
+                                const reel = Math.round(Math.max(sai, tk) + (auPrevu ? defaut : 0));
+                                return { prevu, reel, auPrevu, etat: m.etat, avenir: m.etat === 'avenir' && !tape && tk <= 0, encours: m.etat === 'encours', depasse: reel > prevu + 0.5, part: m.part, titre: m.titre };
+                            };
+                            const lignes = [];
+                            const hebdo = (c.prevu || []).filter(p => p.unite === 'semaine');
+                            if (hebdo.length) hebdo.forEach(p => lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: 'semaine', cellules: morceaux.map((m, i) => cellule(p.cle, p.categorieId, i)) }));
+                            else if (!(c.prevu || []).length) lignes.push({ cle: c.key, nom: c.label, emoji: '', unite: 'semaine', cellules: morceaux.map((m, i) => cellule(c.key, null, i)) });
+                            (L.postesCycle || []).filter(p => p.cat === c.key).forEach(p => {
+                                const seances = [];
+                                if (p.unite === 'quinzaine' && p.prevu > 0) {
+                                    p.paiements.forEach(iso => seances.push({ pos: pos(iso), quand: libIso(iso), etat: 'paye' }));
+                                    let iso = p.paiements.length ? _ymd(_decaler(p.paiements[p.paiements.length - 1], 14)) : null;
+                                    for (let k = 0; iso && k < 3; k++, iso = _ymd(_decaler(iso, 14))) {
+                                        const hors = iso > _ymd(fin);
+                                        seances.push({ pos: hors ? 100 : pos(iso), quand: libIso(iso), etat: hors ? 'suivant' : 'prevue' });
+                                        if (hors) break;
+                                    }
+                                } else p.paiements.forEach(iso => seances.push({ pos: pos(iso), quand: libIso(iso), etat: 'paye' }));
+                                lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, enveloppe: p.cyclePrevu, engage: p.cycleEngage, depasse: p.exces > 0, fois: p.unite === 'quinzaine' ? p.fois : null,
+                                              pct: p.cyclePrevu > 0 ? Math.min(100, Math.round(p.cycleEngage / p.cyclePrevu * 100)) : (p.cycleEngage > 0 ? 100 : 0), seances, alerte: p.alerte });
+                                if (p.exces > 0) alertes.push('🔴 ' + p.nom + ' (' + c.label + ') : ' + Math.round(p.cycleEngage) + ' DH sur une enveloppe de ' + Math.round(p.cyclePrevu) + ' — dépassement de ' + Math.round(p.exces) + ' DH');
+                                else if (p.alerte && p.alerte.niveau === 'depasse') alertes.push(p.alerte.texte.replace('⚠️ ', '⚠️ ' + p.nom + ' : '));
+                            });
+                            lignes.forEach(l => (l.cellules || []).forEach(x => { if (x.depasse && x.etat !== 'avenir' && !x.auPrevu) alertes.push('🟠 ' + l.nom + ' : ' + x.reel + ' DH pour ' + x.prevu + ' prévus (' + x.titre + ')'); }));
+                            const engage = Math.round(c.engage || 0);
+                            if (engage > c.budget) alertes.unshift('🔴 ' + c.label + ' : ' + engage + ' DH engagés pour un budget de ' + c.budget + ' DH — dépassement de ' + (engage - c.budget) + ' DH');
+                            return { key: c.key, label: c.label, budget: c.budget, engage, estime: !c.declare && !L.declare,
+                                     pct: c.budget > 0 ? Math.min(100, Math.round(engage / c.budget * 100)) : 0,
+                                     pctAttendu: c.budget > 0 ? Math.min(100, Math.round((c.theorique || 0) / c.budget * 100)) : 0,
+                                     depasse: engage > c.budget, lignes };
+                        });
+                        //  Une seule note pour les postes « toutes les 2 semaines » (au lieu d'une par poste)
+                        const nQ = (L.postesCycle || []).filter(p => p.unite === 'quinzaine').length, fois = nSem / 2;
+                        const quinzaine = !nQ ? null : '⏱️ ' + nQ + ' poste' + (nQ > 1 ? 's' : '') + ' « toutes les 2 semaines » : ce cycle de ' + J + ' jours en couvre ≈ ' + String(Math.round(fois * 10) / 10).replace('.', ',') + ' fois'
+                            + (fois - Math.floor(fois + 1e-9) >= 0.05 ? ' — une ' + (Math.floor(fois + 1e-9) + 1) + 'ᵉ fois avant le ' + lib(fin) + ' dépasserait leur enveloppe ; après le ' + lib(fin) + ', elle compte au cycle suivant.' : '.');
+                        return { du: lib(debut), au: lib(fin), jours: J, aujJ, aujPct: aujJ / J * 100, morceaux: morceaux.map(({ vals, T, defs, m, ...x }) => x), categories, alertes, quinzaine };
                     });
                     //  🔒 Le Sanctuaire : exactement la liste et le total de l'Urgence.
                     const sanctuaireHebdo = computed(() => {
@@ -24285,7 +24500,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire

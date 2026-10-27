@@ -160,15 +160,21 @@ try {
           sem0.prevuSemaine === 250 && sem0.prevuCycle === PC && sem0.budget === 250, JSON.stringify([sem0.prevuSemaine, sem0.prevuCycle, sem0.budget]));
         await (await page.$('[data-semaine-nav]')).scrollIntoViewIfNeeded();
         await page.click('[data-pulse-ouvrir][data-cat="alimentation"]'); await page.waitForTimeout(200);
+        //  v37.66 : la semaine ne garde que ses postes « / sem » ; Psy et Hri vont dans « Sur tout le cycle »
+        await page.evaluate(() => { const d = [...document.querySelectorAll('[data-pulse-cycle]')].find(e => e.offsetParent !== null); if (d) d.open = true; }); await page.waitForTimeout(200);
         const postes = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-postes][data-cat="alimentation"] [data-pulse-poste]')]
             .map(e => [e.querySelector('.truncate')?.textContent.trim(), e.querySelector('[data-pulse-prevu]')?.textContent.replace(/\s/g, '')]).filter(x => x[1]));
-        const vu = Object.fromEntries(postes);
-        v('  → chaque poste dit son rythme : L7m 150 · khdra 100 · Psy 400 / 15 j · Hri 1 000 / cycle',
-          vu.L7m === 'Prévu:150DH' && vu.khdra === 'Prévu:100DH' && vu.Psy === 'Prévu:400DH/15j' && vu.Hri === 'Prévu:1000DH/cycle', JSON.stringify(postes));
+        const cyc = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-cycle] [data-pulse-poste-cycle][data-cat="alimentation"]')].filter(e => e.offsetParent !== null)
+            .map(e => [e.querySelector('.truncate')?.firstChild?.textContent.trim(), e.querySelector('[data-pulse-prevu]')?.textContent.replace(/\s/g, '')]));
+        const vu = Object.fromEntries(postes), vc = Object.fromEntries(cyc);
+        v('  → la semaine : L7m 150 · khdra 100 ; sur tout le cycle : Psy 400 / 15 j (≈ ' + String(Math.round(N / 2 * 10) / 10).replace('.', ',') + '×) · Hri 1 000 / cycle',
+          JSON.stringify(Object.keys(vu)) === '["L7m","khdra"]' && vu.L7m === 'Prévu:150DH' && vu.khdra === 'Prévu:100DH'
+          && (vc.Psy || '').startsWith('400DH/15j(≈' + String(Math.round(N / 2 * 10) / 10).replace('.', ',') + '×)·0/' + nf(Math.round(400 * N / 2)))
+          && (vc.Hri || '').startsWith('1000DH/cycle·0/1000'), JSON.stringify([postes, cyc]));
         const ligne = await page.evaluate(() => { const l = document.querySelector('[data-pulse-ligne][data-cat="alimentation"]');
             return [l?.querySelector('[data-pulse-reste]')?.textContent.replace(/\s+/g, ' ').trim(), l?.querySelector('[data-pulse-prevu-cycle]')?.textContent.replace(/\s+/g, ' ').trim()]; });
-        v(`  → la ligne le dit : « Prévu : 250 DH » puis « + ${nf(PC)} DH / cycle (Hri · Psy) »`,
-          ligne[0] === 'Prévu : 250 DH' && sansEsp(ligne[1]) === `+${nf(PC)}DH/cycle(Hri·Psy)` && /^\+ [\d\s\u202f]+ DH \/ cycle \(Hri · Psy\)$/.test(ligne[1]), JSON.stringify(ligne));
+        v(`  → la ligne le dit : « Prévu : 250 DH » puis « + ${nf(PC)} DH sur le cycle (Hri · Psy) ↓ »`,
+          ligne[0] === 'Prévu : 250 DH' && sansEsp(ligne[1]) === `+${nf(PC)}DHsurlecycle(Hri·Psy)↓` && /^\+ [\d\s\u202f]+ DH sur le cycle \(Hri · Psy\) ↓$/.test(ligne[1]), JSON.stringify(ligne));
         //  La semaine du ravitaillement : Hri 1 000 + L7m 150 + khdra 100 — PRÉVU, pas dépassé
         const lundi0 = await page.evaluate((ST) => eval(ST).liberteCycle.semaine.debut, ST);
         const saisir = (lundi, k, m) => page.evaluate(async ({ ST, lundi, k, m }) => { eval(ST).saisirSemaineConso(lundi, k, m); await new Promise(r => setTimeout(r, 60)); }, { ST, lundi, k, m });
@@ -179,7 +185,7 @@ try {
         v('  → la semaine du ravitaillement (Hri 1 000 + 250) : prévu 1 250, reste 0 — pas de faux dépassement',
           s1.engage === 1250 && s1.budget === 1250 && s1.reste === 0 && !hri1.depasse && hri1.cycleEngage === 1000 && hri1.pct === 100, JSON.stringify([s1.engage, s1.budget, s1.reste, hri1]));
         const texteHri = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste]')].find(e => e.textContent.includes('Hri'))?.querySelector('[data-pulse-prevu]')?.textContent.replace(/\s+/g, ' ').trim());
-        v('  → le poste Hri : « 1 000 DH / cycle · 1 000 ce cycle » (espaces compris)', sansEsp(texteHri) === 'Prévu:1000DH/cycle·1000cecycle' && /DH \/ cycle · /.test(texteHri), String(texteHri));
+        v('  → le poste Hri (sur tout le cycle) : « 1 000 DH / cycle · 1 000 / 1 000 · reste 0 » (espaces compris)', sansEsp(texteHri) === '1000DH/cycle·1000/1000·reste0' && /DH \/ cycle · /.test(texteHri), String(texteHri));
         await saisir(lundi0, 'alimentation::3', 1200); await page.waitForTimeout(150);
         const s2 = cat(await lire(page), 'alimentation').sem;
         v('  → Hri à 1 200 (enveloppe 1 000) : là, c\'est un VRAI dépassement de 200', s2.reste === -200 && s2.postes.find(p => p.nom === 'Hri').depasse, JSON.stringify([s2.reste]));

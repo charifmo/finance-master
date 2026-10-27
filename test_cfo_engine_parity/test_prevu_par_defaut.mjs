@@ -191,8 +191,9 @@ try {
             marques: [...document.querySelectorAll('[data-pulse-poste-defaut], [data-pulse-defaut]')].length,
             courses: document.querySelector('[data-pulse-ouvrir][data-cat="alimentation"] [data-pulse-total]')?.textContent.replace(/\s/g, '') }));
         const c1 = await vue();
-        v('C. semaine du 12 au 18 : chaque case vide montre son prévu (Marjane 600, L7m 400, SORTIES 400, ESSENCE 194), Hri et « Autre » vides',
-          JSON.stringify(c1.cases) === JSON.stringify([['alimentation::1', '600', '1'], ['alimentation::2', '400', '1'], ['alimentation::3', '', ''], ['libre', '', ''], ['sorties', '400', '1'], ['voiture', '194', '1']]),
+        //  v37.66 : Hri (/ cycle) a quitté les lignes de la semaine pour le bloc « Sur tout le cycle », en dernier
+        v('C. semaine du 12 au 18 : chaque case vide montre son prévu (Marjane 600, L7m 400, SORTIES 400, ESSENCE 194), « Autre » et Hri (cycle) vides',
+          JSON.stringify(c1.cases) === JSON.stringify([['alimentation::1', '600', '1'], ['alimentation::2', '400', '1'], ['libre', '', ''], ['sorties', '400', '1'], ['voiture', '194', '1'], ['alimentation::3', '', '']]),
           JSON.stringify(c1.cases));
         v(`  → la note le dit (« … comptent leur prévu (${nf(SEMAINE)} DH) … 0 si rien n'a été dépensé »), total ${nf(SEMAINE)} DH, COURSES 1 000`,
           !!c1.note && c1.note.includes('comptent leur prévu') && sansEsp(c1.note).includes(nf(SEMAINE) + 'DH') && c1.total.startsWith(nf(SEMAINE) + 'DH') && c1.courses === '1000' && c1.marques >= 4, JSON.stringify(c1));

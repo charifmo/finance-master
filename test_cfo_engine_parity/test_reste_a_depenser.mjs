@@ -507,8 +507,8 @@ try {
     await page.waitForTimeout(250);
     const n1 = await nav();
     const vide = await page.evaluate(() => [...document.querySelectorAll('[data-pulse-poste-saisie]')].map(i => [i.dataset.poste, i.value, i.dataset.defaut || '']));
-    v('‹ : « Semaine du 8 oct. au 11 oct. ✂️ 4 j » (« passée », « Cette semaine » apparaît) : Hri 343 et L7M 229 au prévu, « Autre » vide',
-      n1.titre === 'Semaine du ' + M1.du + ' au ' + M1.au + ' ✂️ 4 j' && n1.statut === 'passee' && n1.aujourdhui && !n1.hors
+    v('‹ : « Début du cycle · jeu. 8 oct. → dim. 11 oct. · 4 j » (« passée », « Cette semaine » apparaît) : Hri 343 et L7M 229 au prévu, « Autre » vide',
+      n1.titre === 'Début du cycle · jeu. 8 oct. → dim. 11 oct. · 4 j' && n1.statut === 'passee' && n1.aujourdhui && !n1.hors
       && JSON.stringify(vide) === JSON.stringify([['alimentation::1', '343', '1'], ['alimentation::2', '229', '1'], ['libre', '', '']]), JSON.stringify([n1, vide]));
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('410'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
@@ -521,8 +521,8 @@ try {
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::1"]'); await page.keyboard.type('999'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const w2 = await lire();
-    v('‹‹ « Semaine du 5 oct. au 7 oct. ✂️ 3 j » : « cycle précédent », sa saisie ne change PAS le Reste à dépenser',
-      n2.hors && n2.titre === 'Semaine du ' + M0.du + ' au ' + M0.au + ' ✂️ 3 j' && w2.cat.a.engage === 959 && w2.L.reste === w1.L.reste && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); return Object.values(st.donneesAnnuelles).some(d => d.consoRealiseeT0 && d.consoRealiseeT0[cle]); }, 'S' + M0.debut),
+    v('‹‹ « Cycle précédent · lun. 5 oct. → mer. 7 oct. · 3 j » : « cycle précédent », sa saisie ne change PAS le Reste à dépenser',
+      n2.hors && n2.titre === 'Cycle précédent · lun. 5 oct. → mer. 7 oct. · 3 j' && w2.cat.a.engage === 959 && w2.L.reste === w1.L.reste && await page.evaluate((cle) => { const st = eval('document.querySelector("#app").__vue_app__._instance.setupState'); return Object.values(st.donneesAnnuelles).some(d => d.consoRealiseeT0 && d.consoRealiseeT0[cle]); }, 'S' + M0.debut),
       JSON.stringify([n2, w2.cat.a.engage, w1.L.reste, w2.L.reste]));
     //  › › › : la semaine en cours, puis à venir
     await page.click('[data-semaine-suiv]'); await page.click('[data-semaine-suiv]');
@@ -544,14 +544,14 @@ try {
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('60'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const w3b = await lire();
-    v('« Semaine du 2 nov. au 7 nov. ✂️ 6 j » (le dimanche 8 est au cycle suivant) : elle compte — 1 109 + 60 = 1 169',
-      n3b.titre === 'Semaine du ' + M5.du + ' au ' + M5.au + ' ✂️ 6 j' && !n3b.hors && w3b.cat.a.engage === 1169, JSON.stringify([n3b, w3b.cat.a.engage]));
+    v('« Fin du cycle · lun. 2 nov. → sam. 7 nov. · 6 j » (le dimanche 8 est au cycle suivant) : elle compte — 1 109 + 60 = 1 169',
+      n3b.titre === 'Fin du cycle · lun. 2 nov. → sam. 7 nov. · 6 j' && !n3b.hors && w3b.cat.a.engage === 1169, JSON.stringify([n3b, w3b.cat.a.engage]));
     await page.click('[data-semaine-suiv]');
     await page.waitForTimeout(250);
     const n3c = await nav();
     await page.click('[data-pulse-poste-saisie][data-poste="alimentation::2"]'); await page.keyboard.type('777'); await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
-    v('« Le 8 nov. ✂️ 1 j » (l\'autre bout de la semaine du 2) : « cycle suivant », ne change rien (1 169)', n3c.hors && n3c.titre === 'Le 8 nov. ✂️ 1 j' && (await lire()).cat.a.engage === 1169, JSON.stringify([n3c, (await lire()).cat.a.engage]));
+    v('« Cycle suivant · dim. 8 nov. · 1 j » (l\'autre bout de la semaine du 2) : « cycle suivant », ne change rien (1 169)', n3c.hors && n3c.titre === 'Cycle suivant · dim. 8 nov. · 1 j' && (await lire()).cat.a.engage === 1169, JSON.stringify([n3c, (await lire()).cat.a.engage]));
     await page.click('[data-semaine-aujourdhui]');
     await page.waitForTimeout(250);
     const n4 = await nav();

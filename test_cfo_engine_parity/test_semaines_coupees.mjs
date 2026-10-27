@@ -14,8 +14,9 @@
  *       va au plus fort reste (5,71), pas au premier morceau.
  *     A. statique · B. les morceaux d'un cycle · C. la carte, le jour de paie · D. saisir chaque morceau dans
  *     son cycle · E. les tickets du cycle = ceux de ses jours · F. le Relevé coupé à la veille de la paie ·
- *     G. les saisies déjà faites restent dans leur cycle (schéma 20) ·
- *     H. au téléphone, la note se déplie d'une touche (la Météo tient dans un écran).
+ *     G. v37.66 : les saisies faites AVANT la paie restent au cycle qui finit (schéma 21 : la v37.65 les avait
+ *        re-rangées au jour de paie, elles reviennent au lundi) ·
+ *     H. le titre dit ce qu'on voit (« Début du cycle », « Cycle précédent ») ; plus de note à déplier.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -35,8 +36,8 @@ console.log('\n  SEMAINES COUPÉES PAR LA PAIE : CHAQUE MORCEAU DANS SON CYCLE\n
 /* ── A. Statique ─────────────────────────────────────────────────────── */
 v('A. plus de « règle du jeudi » : aucun calcul ne cherche le jeudi d\'une semaine',
   !/\(4 - debut\.getDay\(\) \+ 7\) % 7/.test(html) && !/_jeudiISO/.test(html));
-v('  → un cycle compte ses jours (÷ 7) ; schéma 20 ; les anciennes saisies re-rangées',
-  /const semainesDuCycle = \(mois, an\) => joursDuCycle\(mois, an\) \/ 7;/.test(html) && /_schemaVersion: 20,/.test(html) && /const _nSemCoupees = migrerSemainesCoupees\(data\);/.test(html));
+v('  → un cycle compte ses jours (÷ 7) ; schéma 21 ; les saisies d\'avant la paie rendues au cycle qui finit',
+  /const semainesDuCycle = \(mois, an\) => joursDuCycle\(mois, an\) \/ 7;/.test(html) && /_schemaVersion: 21,/.test(html) && /const _nSemCoupees = migrerSemainesCoupees\(data\);/.test(html));
 const php = fs.readFileSync(path.join(RACINE, 'cfo_intent_engine.php'), 'utf8');
 v('  → le serveur (recalcul de secours) suit la même règle', /return cfo_jours_cycle\(\$m, \$an, \$jdp\) \/ 7;/.test(php) && !/\$jeudi/.test(php));
 
@@ -91,7 +92,7 @@ const fixture = () => {
         //  Des saisies faites avant la v37.65 (clé = le lundi, règle du jeudi)
         d.consoRealiseeT0 = an !== '2026' ? {} : {
             'S2026-10-19': { [MARJANE]: 590 },          // semaine entière du cycle d'octobre : ne bouge pas
-            'S2026-10-26': { [RESTO]: 150 },            // paie le MARDI 27 : c'était la partie d'après la paie (le jeudi 29 y tombe)
+            'S2026-10-26': { [RESTO]: 150 },            // tapé AVANT la paie (mardi 27) : les jours d'avant la paie, cycle d'octobre
             'S2026-11-23': { [ESSENCE]: 0 },            // paie le VENDREDI 27 nov. : c'était déjà la partie d'avant
         };
         d.consoClotureT0 = an !== '2026' ? {} : { 'S2026-10-26': { [ESSENCE]: true } };
@@ -181,10 +182,9 @@ try {
           c.debut === '2026-10-27' && c.fin === '2026-11-01' && c.jours === 6 && c.coupe && c.rang === 1 && c.nb === 5 && c.dans && c.statut === 'en_cours', JSON.stringify(c));
         v('  → prévus au prorata de 6 jours : Marjane 514, Resto 343, Essence 257, Pain 8 (600, 400, 300, 10 × 6/7)',
           c.marjane.budget === 514 && c.resto.budget === 343 && c.essence.budget === 257 && c.pain.budget === 8 && c.budget === 1122, JSON.stringify([c.marjane, c.resto, c.essence, c.pain, c.budget]));
-        const t = await texte(page, '[data-semaine-titre]'), n = await texte(page, '[data-semaine-coupee]');
-        v('  → l\'écran : « Semaine du 27 oct. au 1 nov. ✂️ 6 j »', t.length === 1 && /^Semaine du 27 oct\. au 1 nov\. ✂️ 6 j$/.test(t[0]), t[0]);
-        v('  → et dit quoi taper, jusqu\'à quand : « seulement du 27 oct. au 1 nov. (6 j) … le 26 oct. se saisit dans le cycle précédent (‹) »',
-          n.length === 1 && /seulement du 27 oct\. au 1 nov\. \(6 j\) — tapez ce qui est parti ces jours-là ; le 26 oct\. se saisit dans le cycle précédent \(‹\)\. Prévu au prorata : 6\/7 de la semaine\./.test(n[0]), n[0]);
+        const t = await texte(page, '[data-semaine-titre]'), n = await page.$$('[data-semaine-coupee]');
+        v('  → l\'écran : « Début du cycle · mar. 27 oct. → dim. 1 nov. · 6 j »', t.length === 1 && t[0] === 'Début du cycle · mar. 27 oct. → dim. 1 nov. · 6 j', t[0]);
+        v('  → plus de note « semaine coupée » qui embrouillait : le titre dit les dates à taper', n.length === 0, String(n.length));
     });
 
     /* ── D. Saisir chaque morceau dans son cycle ─────────────────────── */
@@ -201,7 +201,7 @@ try {
           p.debut === '2026-10-26' && p.fin === '2026-10-26' && p.jours === 1 && !p.dans && p.rel === 'precedent' && p.rang === null && p.marjane.budget === 86
           && p.cloture === 'Le 26 oct. au soir (veille de paie)' && p.autre && p.autre.rel === 'suivant', JSON.stringify(p));
         const t = await texte(page, '[data-semaine-titre]');
-        v('  → l\'écran : « Le 26 oct. ✂️ 1 j »', t.length === 1 && t[0] === 'Le 26 oct. ✂️ 1 j', t[0]);
+        v('  → l\'écran : « Cycle précédent · lun. 26 oct. · 1 j »', t.length === 1 && t[0] === 'Cycle précédent · lun. 26 oct. · 1 j', t[0]);
         const eng0 = await page.evaluate((ST) => eval(ST).consoEngageeT0, ST);
         await page.evaluate((ST) => eval(ST).saisirSemaineConso('2026-10-26', 'alimentation::1', 70), ST); await page.waitForTimeout(250);
         const eng1 = await page.evaluate((ST) => eval(ST).consoEngageeT0, ST);
@@ -242,39 +242,40 @@ try {
           R.length === 5 && R[0] === '🛒 Charges variables — semaine en cours (jusqu’au 1 nov.)' && R[4] === '🛒 Charges variables — semaine du 23 nov. au 26 nov.', R.join(' | '));
     });
 
-    /* ── G. Les saisies déjà faites restent dans leur cycle ──────────────── */
+    /* ── G. Les saisies faites avant la paie restent au cycle qui finit ────── */
     await section('G', async () => {
         const G = await page.evaluate((ST) => { const d = eval(ST).donneesAnnuelles[2026]; return JSON.parse(JSON.stringify({ r: d.consoRealiseeT0, c: d.consoClotureT0 })); }, ST);
-        v('G. paie le mardi 27 oct. : la saisie « S2026-10-26 » (Resto 150) devient « S2026-10-27 » — toujours en novembre',
-          !G.r['S2026-10-26'] || !('sorties::1' in G.r['S2026-10-26']) ? (G.r['S2026-10-27'] || {})['sorties::1'] === 150 : false, JSON.stringify(G.r));
-        v('  → sa case close aussi ; la semaine du 19 oct. et celle du 23 nov. (paie un vendredi) ne bougent pas',
-          (G.c['S2026-10-27'] || {})['voiture::1'] === true && !G.c['S2026-10-26'] && (G.r['S2026-10-19'] || {})['alimentation::1'] === 590 && (G.r['S2026-11-23'] || {})['voiture::1'] === 0, JSON.stringify(G));
+        v('G. la saisie « S2026-10-26 » (Resto 150, tapée avant la paie) reste le 26 — au cycle d\'octobre',
+          (G.r['S2026-10-26'] || {})['sorties::1'] === 150 && !('sorties::1' in (G.r['S2026-10-27'] || {})), JSON.stringify(G.r));
+        v('  → sa case close aussi ; la semaine du 19 oct. et celle du 23 nov. ne bougent pas',
+          (G.c['S2026-10-26'] || {})['voiture::1'] === true && !G.c['S2026-10-27'] && (G.r['S2026-10-19'] || {})['alimentation::1'] === 590 && (G.r['S2026-11-23'] || {})['voiture::1'] === 0, JSON.stringify(G));
         const c = await carte(page);
-        v('  → la carte du 27 oct. la montre : Resto 150', c.resto.saisi === 150, JSON.stringify(c.resto));
+        v('  → la carte du 27 oct. (novembre) ne la compte pas : Resto 0', c.resto.saisi === 0, JSON.stringify(c.resto));
+        await naviguer(page, -1);
+        const p = await carte(page);
+        await naviguer(page, 0);
+        v('  → ‹ « Cycle précédent · lun. 26 oct. » : Resto 150', p.resto.saisi === 150 && p.debut === '2026-10-26', JSON.stringify(p.resto));
         await page.waitForTimeout(2600);
         const dernier = envois.length ? JSON.parse(envois[envois.length - 1]) : null;
-        v('  → l\'envoi au VPS porte le schéma 20 (re-rangé une seule fois)', !!dernier && dernier._schemaVersion === 20 && !!dernier.donneesAnnuelles['2026'].consoRealiseeT0['S2026-10-27'], dernier ? String(dernier._schemaVersion) : 'aucun envoi');
-        const deux = await page.evaluate((ST) => {
-            const st = eval(ST);
-            const neuf = { _schemaVersion: 20, soldesInitiaux: { jourDePaie: 27 }, donneesAnnuelles: { 2026: { consoRealiseeT0: { 'S2026-10-26': { x: 1 } } } } };
-            const vieux = { soldesInitiaux: { jourDePaie: 27 }, donneesAnnuelles: { 2026: { consoRealiseeT0: { 'S2026-10-26': { x: 1 } } } } };
-            return [st.migrerSemainesCoupees(neuf), Object.keys(neuf.donneesAnnuelles[2026].consoRealiseeT0), st.migrerSemainesCoupees(vieux), Object.keys(vieux.donneesAnnuelles[2026].consoRealiseeT0)];
+        v('  → l\'envoi au VPS porte le schéma 21', !!dernier && dernier._schemaVersion === 21 && !!dernier.donneesAnnuelles['2026'].consoRealiseeT0['S2026-10-26'], dernier ? String(dernier._schemaVersion) : 'aucun envoi');
+        const trois = await page.evaluate((ST) => {
+            const st = eval(ST), D = (v, k) => ({ ...(v ? { _schemaVersion: v } : {}), soldesInitiaux: { jourDePaie: 27 }, donneesAnnuelles: { 2026: { consoRealiseeT0: { [k]: { x: 1 } }, consoClotureT0: { [k]: { x: true } } } } });
+            const v20 = D(20, 'S2026-10-27'), v19 = D(0, 'S2026-10-26'), v21 = D(21, 'S2026-10-27');
+            const n = [st.migrerSemainesCoupees(v20), st.migrerSemainesCoupees(v19), st.migrerSemainesCoupees(v21)];
+            return { n, v20: [Object.keys(v20.donneesAnnuelles[2026].consoRealiseeT0), Object.keys(v20.donneesAnnuelles[2026].consoClotureT0)],
+                     v19: Object.keys(v19.donneesAnnuelles[2026].consoRealiseeT0), v21: Object.keys(v21.donneesAnnuelles[2026].consoRealiseeT0) };
         }, ST);
-        v('  → des données au schéma 20 : « le 26 oct. » reste le 26 ; au schéma 19 : re-rangé au 27',
-          JSON.stringify(deux) === JSON.stringify([0, ['S2026-10-26'], 1, ['S2026-10-27']]), JSON.stringify(deux));
+        v('  → schéma 20 (re-rangé par la v37.65) : rendu au lundi 26 (saisies et cases closes) ; schéma 19 et 21 : rien ne bouge',
+          JSON.stringify(trois) === JSON.stringify({ n: [2, 0, 0], v20: [['S2026-10-26'], ['S2026-10-26']], v19: ['S2026-10-26'], v21: ['S2026-10-27'] }), JSON.stringify(trois));
     });
     await page.context().close();
 
-    /* ── H. Au téléphone : la note se déplie d'une touche ───────────────── */
+    /* ── H. Au téléphone : le titre suffit, rien à déplier ─────────────────── */
     if (twCss) await section('H', async () => {
         const tel = await ouvrirPage(new Date(2026, 9, 27, 10, 0, 0), { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-        const visible = () => tel.evaluate(() => { const n = [...document.querySelectorAll('[data-semaine-coupee]')].find(e => e.closest('[data-meteo]') && e.closest('[data-meteo]').offsetParent !== null);
-            return n ? n.offsetParent !== null : null; });
-        const avant = await visible();
-        await tel.evaluate(() => { const b = [...document.querySelectorAll('[data-semaine-coupe-badge]')].find(e => e.offsetParent !== null); b.scrollIntoView({ block: 'center' }); });
-        await tel.tap('[data-meteo] [data-semaine-coupe-badge] >> visible=true'); await tel.waitForTimeout(250);
-        const apres = await visible();
-        v('H. téléphone : la note « semaine coupée » est repliée ; une touche sur « ✂️ 6 j » la déplie', avant === false && apres === true, JSON.stringify([avant, apres]));
+        const t = await texte(tel, '[data-semaine-titre]');
+        v('H. téléphone : « Début du cycle · mar. 27 oct. → dim. 1 nov. · 6 j », sans note à déplier',
+          t.length === 1 && t[0] === 'Début du cycle · mar. 27 oct. → dim. 1 nov. · 6 j' && !(await tel.$('[data-semaine-coupee]')), JSON.stringify(t));
         await tel.context().close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
