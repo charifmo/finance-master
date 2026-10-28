@@ -607,14 +607,18 @@ function cfo_arg_spec(): array {
         'fixed_amount'   => ['type'=>'number','aliases'=>array_merge($A_MONTANT,['montant_fixe','monthly_amount','mensuel']),'desc'=>"Montant mensuel fixe (DH). Exclusif avec percentage_of_reliquat."],
         'percentage_of_reliquat' => ['type'=>'number','aliases'=>['percentage','pourcentage','pct','percent','part_du_reliquat'],'desc'=>"Pourcentage du net mensuel du compte courant. Le backend calcule mois par mois : ne fournis alors AUCUN montant."],
         'source_account' => ['type'=>'string','aliases'=>['source','compte_source','account','depuis','from_account','compte'],'desc'=>"Compte débité (nom approximatif accepté, résolu côté serveur). Défaut : courant."],
+        'destination_account' => ['type'=>'string','aliases'=>['destination','vers','compte_destination','to_account','linked_account','compte_cible','compte_epargne'],'desc'=>"Compte qui REÇOIT l'argent (nom approximatif accepté). Sans lui : hérité de la même épargne ou déduit de son nom ; à défaut l'ajout est refusé — demande alors à l'utilisateur sur quel compte arrive l'argent."],
         'exceptions'     => ['type'=>'raw','aliases'=>['exceptions_mensuelles','overrides'],'desc'=>"Exceptions mensuelles [{moisDebut,moisFin,nouvelleValeur}]."],
     ]],
 
-    'update_recurring_savings' => ['desc'=>"Modifie le montant (et/ou le nom) d'un virement d'épargne EXISTANT.",
+    'update_recurring_savings' => ['desc'=>"Modifie un virement d'épargne EXISTANT, sur place : montant, nom, compte source et/ou compte de destination. Pour changer le compte d'où part (ou où arrive) une épargne, utilise CETTE fonction — ne supprime pas la ligne pour la recréer.",
+        'au_moins_un' => ['amount', 'new_name', 'source_account', 'destination_account'],
         'params'=>[
         'name'     => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['poche','savings_name']),'desc'=>"Ligne d'épargne visée."],
-        'amount'   => ['type'=>'number','required'=>true,'aliases'=>array_merge($A_MONTANT,['fixed_amount','montant_fixe','nouveau_montant']),'desc'=>"Nouveau montant mensuel (REMPLACE)."],
+        'amount'   => ['type'=>'number','aliases'=>array_merge($A_MONTANT,['fixed_amount','montant_fixe','nouveau_montant']),'desc'=>"Nouveau montant mensuel (REMPLACE)."],
         'new_name' => ['type'=>'string','aliases'=>['nouveau_nom','rename','nouveau_libelle'],'desc'=>"Renomme la ligne."],
+        'source_account' => ['type'=>'string','aliases'=>['source','compte_source','depuis','from_account'],'desc'=>"Nouveau compte débité."],
+        'destination_account' => ['type'=>'string','aliases'=>['destination','vers','compte_destination','to_account','linked_account','compte_cible'],'desc'=>"Nouveau compte qui reçoit l'argent."],
     ]],
 
     'remove_recurring_savings' => ['desc'=>"Supprime un virement d'épargne récurrent.",
@@ -939,6 +943,8 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
             //   Studio). Résolu une seule fois, hors de la boucle années : la cible ne
             //   change pas d'une année à l'autre dans un même appel.
             $srcResolution = cfo_resolve_source_compte(oget($a, 'source_account', null), $ctx['financeData']);
+            //  v37.70 : le compte qui REÇOIT — sans lui, la ligne devenait une poche fantôme
+            $dstResolution = cfo_resolve_destination_epargne(oget($a, 'destination_account', null), $ctx['financeData']);
             foreach ($yrs as $yr) {
                 $pct = oget($a, 'percentage_of_reliquat', null);
                 if ($pct !== null && $pct !== '') {
@@ -958,6 +964,7 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
                     }
                     $out[] = cfo_obj(['action'=>'add','category'=>'epargne','target'=>oget($a,'name'),'label'=>oget($a,'name'),
                         'amount'=>0,'sourceCompte'=>$srcResolution['key'],'sourceCompteAvertissement'=>$srcResolution['warning'],
+                        'linkedAccountId'=>$dstResolution['id'],'destinationAvertissement'=>$dstResolution['warning'],
                         'years'=>[$yr], 'exceptions'=>$exceptions,'notes'=>oget($a,'notes')]);
                     continue;
                 }
@@ -966,6 +973,7 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
                 $amount = is_numeric($fixed) ? $fixed + 0 : $num('amount');
                 $ch = cfo_obj(['action'=>'add','category'=>'epargne','target'=>oget($a,'name'),'label'=>oget($a,'name'),
                     'amount'=>$amount,'sourceCompte'=>$srcResolution['key'],'sourceCompteAvertissement'=>$srcResolution['warning'],
+                    'linkedAccountId'=>$dstResolution['id'],'destinationAvertissement'=>$dstResolution['warning'],
                     'years'=>[$yr],'notes'=>oget($a,'notes')]);
                 if (is_array(oget($a, 'exceptions'))) oset($ch, 'exceptions', oget($a, 'exceptions'));
                 $out[] = $ch;
@@ -973,9 +981,22 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
             return $out;
         }
 
-        case 'update_recurring_savings':
-            return [cfo_obj(['action'=>'modify','category'=>'epargne','target'=>oget($a,'name'),
-                'amount'=>$num('amount'),'label'=>oget($a,'new_name'),'years'=>$yrs])];
+        case 'update_recurring_savings': {
+            //  v37.70 : sur place — montant facultatif, source et destination modifiables
+            $amt = oget($a, 'amount', null);
+            $ch = cfo_obj(['action'=>'modify','category'=>'epargne','target'=>oget($a,'name'),
+                'amount'=>is_numeric($amt) ? $amt + 0 : null,'label'=>oget($a,'new_name'),'years'=>$yrs]);
+            if (oget($a, 'source_account', null) !== null) {
+                $s = cfo_resolve_source_compte(oget($a, 'source_account'), $ctx['financeData']);
+                oset($ch, 'sourceCompte', $s['key']); if ($s['warning']) oset($ch, 'sourceCompteAvertissement', $s['warning']);
+            }
+            if (oget($a, 'destination_account', null) !== null) {
+                $d = cfo_resolve_destination_epargne(oget($a, 'destination_account'), $ctx['financeData']);
+                if ($d['id'] !== null) oset($ch, 'linkedAccountId', $d['id']);
+                if ($d['warning']) oset($ch, 'destinationAvertissement', $d['warning']);
+            }
+            return [$ch];
+        }
 
         case 'remove_recurring_savings':
             return [cfo_obj(['action'=>'remove','category'=>'epargne','target'=>oget($a,'name'),'years'=>$yrs])];
@@ -1299,6 +1320,62 @@ function cfo_resolve_source_compte($raw, $fd): array {
 }
 
 /**
+ * v37.70 — UNE ÉPARGNE VA TOUJOURS SUR UN VRAI COMPTE.
+ *   Sans linkedAccountId, l'application fait d'une épargne une poche virtuelle ep_<id> : l'argent quitte
+ *   la source sans arriver sur aucun compte (doublons dans le patrimoine, total gonflé). Ces fonctions
+ *   résolvent, héritent ou déduisent la destination — même règle que rattacherEpargnes (index.html).
+ */
+function cfo_mots_compte($s): array {
+    static $vides = ['compte','epargne','de','du','des','la','le','les','l','d','et','pour','vers','poche','alimentation','virement','versement','objectif'];
+    $n = preg_replace('/[^a-z0-9]+/', ' ', cfo_norm_str((string)$s));
+    return array_values(array_filter(explode(' ', $n), fn($w) => strlen($w) > 1 && !in_array($w, $vides, true)));
+}
+function cfo_compte_par_cle($k, $fd) {
+    $s = (string)$k; if ($s === '') return null;
+    $comptes = oget($fd, 'comptes'); if (!is_array($comptes)) return null;
+    if ($s === 'courant') { foreach ($comptes as $c) if (is_object($c) && in_array(oget($c,'type'), ['courant','liquide'], true)) return $c; return null; }
+    $id = strpos($s, 'cpt_') === 0 ? substr($s, 4) : $s;
+    foreach ($comptes as $c) if (is_object($c) && (string)oget($c,'id') === $id) return $c;
+    return null;
+}
+function cfo_cle_compte_epargne($k, $fd): ?string { $c = cfo_compte_par_cle($k, $fd); return $c ? 'cpt_' . (string)oget($c,'id') : null; }
+function cfo_nom_compte_epargne($k, $fd): ?string { $c = cfo_compte_par_cle($k, $fd); return $c ? (string)(oget($c,'label') ?: oget($c,'nom')) : null; }
+function cfo_resolve_destination_epargne($raw, $fd): array {
+    if ($raw === null || $raw === '') return ['id' => null, 'warning' => null];
+    $res = cfo_resolve_compte($raw, $fd);
+    if (!empty($res['resolved'])) { $c = cfo_compte_par_cle($res['key'], $fd); if ($c) return ['id' => oget($c,'id'), 'warning' => null]; }
+    return ['id' => null, 'warning' => 'destination_account "'.$raw.'" non reconnu parmi les comptes. '.($res['error'] ?? '')];
+}
+function cfo_deduire_destination_epargne($fd, $label, $id, $source): ?array {
+    $src = cfo_cle_compte_epargne($source ?: 'courant', $fd);
+    $da = oget($fd, 'donneesAnnuelles'); $lignes = [];
+    if (is_object($da)) foreach (okeys($da) as $an) {
+        $y = oget($da, (string)$an); $pool = is_object($y) ? oget($y, 'epargne') : null;
+        if (is_array($pool)) foreach ($pool as $e) if (is_object($e)) $lignes[] = [$an, $e];
+    }
+    $nomN = implode(' ', cfo_mots_compte($label));
+    foreach ([fn($e) => $id !== null && (string)oget($e,'id') === (string)$id,
+              fn($e) => $nomN !== '' && implode(' ', cfo_mots_compte(oget($e,'nom') ?: oget($e,'label',''))) === $nomN] as $pareil) {
+        foreach ($lignes as [$an, $e]) {
+            $l = oget($e, 'linkedAccountId', null);
+            if ($l === null || $l === '' || !$pareil($e)) continue;
+            $k = cfo_cle_compte_epargne($l, $fd);
+            if ($k !== null && $k !== $src) return ['id' => oget(cfo_compte_par_cle($l, $fd), 'id'), 'comment' => 'même épargne en ' . $an];
+        }
+    }
+    $mots = cfo_mots_compte($label); $cands = [];
+    $comptes = oget($fd, 'comptes');
+    if (is_array($comptes)) foreach ($comptes as $c) {
+        if (!is_object($c)) continue;
+        $m = cfo_mots_compte(oget($c,'label') ?: oget($c,'nom',''));
+        if (!count($m) || count(array_diff($m, $mots))) continue;
+        if ('cpt_' . (string)oget($c,'id') === $src) continue;
+        $cands[] = $c;
+    }
+    return count($cands) === 1 ? ['id' => oget($cands[0],'id'), 'comment' => 'nom du compte'] : null;
+}
+
+/**
  * v36.0 — COHÉRENCE DES DEUX SCHÉMAS D'OBJECTIF.
  *   L'application lit un Smart Goal en v19 (libelle, montant_cible,
  *   montant_actuel, versement_mensuel) avec repli sur le schéma historique
@@ -1464,7 +1541,12 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
                 case 'charge_variable':
                     if ($subTarget) return [$o(['type'=>'update_charge_variable_detail','key'=>$resolvedKey,'sub_key'=>$subTarget,'montant'=>$amt])];
                     return [$o(['type'=>'update_charge_variable','key'=>$resolvedKey,'valeur'=>$amt,'periode'=>$period ?: null,'label'=>$newLabel ?: null])];
-                case 'epargne':     return [$o(['type'=>'update_epargne','key'=>$resolvedKey,'valeur'=>$amt,'label'=>$newLabel ?: null])];
+                case 'epargne': {
+                    $op = $o(['type'=>'update_epargne','key'=>$resolvedKey,'valeur'=>$amt,'label'=>$newLabel ?: null]);
+                    foreach (['sourceCompte', 'linkedAccountId', 'sourceCompteAvertissement', 'destinationAvertissement'] as $f)   // v37.70
+                        if (oget($change, $f, null) !== null) oset($op, $f, oget($change, $f));
+                    return [$op];
+                }
                 case 'studio':      return [$o(['type'=>'set_projet_studio','annee'=>$annee,'key'=>oget($change,'studio_key') ?: ($resolvedKey ?: 'travaux'),'valeur'=>$amt])];
                 case 'solde':       return [$o(['type'=>'set_solde_initial','key'=>oget($change,'balance_key') ?: ($resolvedKey ?: 'courant'),'valeur'=>$amt])];
                 // v35.6 : $resolvedKey vient désormais de cfo_resolve_compte()/cfo_resolve_goal()
@@ -1501,6 +1583,7 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
                     if (oget($change,'sourceCompte')) oset($op, 'sourceCompte', oget($change,'sourceCompte'));
                     if (oget($change,'sourceCompteAvertissement')) oset($op, 'sourceCompteAvertissement', oget($change,'sourceCompteAvertissement'));
                     if (oget($change,'linkedAccountId', null) !== null) oset($op, 'linkedAccountId', oget($change,'linkedAccountId'));
+                    if (oget($change,'destinationAvertissement')) oset($op, 'destinationAvertissement', oget($change,'destinationAvertissement'));
                     if (is_array(oget($change,'exceptions'))) oset($op, 'exceptions', oget($change,'exceptions'));
                     return [$op];
                 }
@@ -1846,11 +1929,27 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
                     $log['status']='skip'; $log['reason']='Objectif epargne deja existant: '.$lbl; break 2;
                 }
             }
+            //  v37.70 : UNE ÉPARGNE VA TOUJOURS SUR UN VRAI COMPTE. Donnée → héritée / déduite → sinon refus.
+            $srcAdd = cfo_pick_str($op,['sourceCompte']) ?: 'courant';
+            $lie = oget($op,'linkedAccountId', null);
+            $dedu = null;
+            if ($lie === null || $lie === '') { $dedu = cfo_deduire_destination_epargne($fd, $lbl, null, $srcAdd); $lie = $dedu ? $dedu['id'] : null; }
+            if ($lie === null || $lie === '') {
+                $log['status']='error';
+                $log['reason']='compte de destination manquant pour « '.$lbl.' » : indique destination_account (le compte qui reçoit l argent). Sans lui, l épargne deviendrait une poche fantôme qui n arrive sur aucun compte.'
+                    . (oget($op,'destinationAvertissement') ? ' ('.oget($op,'destinationAvertissement').')' : '');
+                break;
+            }
+            if (cfo_cle_compte_epargne($lie, $fd) === cfo_cle_compte_epargne($srcAdd, $fd)) {
+                $log['status']='error'; $log['reason']='« '.$lbl.' » partirait et arriverait sur le même compte : choisis un autre compte de destination.'; break;
+            }
             $newId = cfo_uid();
             $newEp = cfo_obj(['id'=>$newId,'nom'=>$lbl,'label'=>$lbl,'valeur'=>$v,
-                'sourceCompte'=>cfo_pick_str($op,['sourceCompte']) ?: 'courant',
+                'sourceCompte'=>$srcAdd,
                 'exceptions'=>[], 'showExceptions'=>false]);
-            oset($newEp, 'linkedAccountId', (oget($op,'linkedAccountId', null) !== null) ? oget($op,'linkedAccountId') : null);
+            oset($newEp, 'linkedAccountId', $lie);
+            if ($dedu) $log['destination_deduite'] = $dedu['comment'];
+            $log['destination'] = cfo_nom_compte_epargne($lie, $fd);
             // Exceptions inline { moisDebut, moisFin, nouvelleValeur } (+ alias anglais)
             if (is_array(oget($op,'exceptions'))) {
                 $exs = oget($newEp,'exceptions');
@@ -1897,6 +1996,23 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             $ch = [];
             if ($v !== null)   { $ch['valeur'] = ['avant'=>oget($ep,'valeur'),'apres'=>$v]; oset($ep,'valeur',$v); }
             if ($lbl !== null) { $ch['label']  = ['avant'=>oget($ep,'nom') ?: oget($ep,'label'),'apres'=>$lbl]; oset($ep,'nom',$lbl); oset($ep,'label',$lbl); }
+            //  v37.70 : la source et la destination se changent SUR PLACE (la ligne garde son id, ses exceptions)
+            //  — vérifiées AVANT toute écriture : un refus ne laisse rien de modifié
+            $nsrc = cfo_pick_str($op, ['sourceCompte']);
+            $ndst = oget($op, 'linkedAccountId', null); if ($ndst === '') $ndst = null;
+            $srcF = $nsrc !== null ? $nsrc : (oget($ep,'sourceCompte') ?: 'courant');
+            $dstF = $ndst !== null ? $ndst : oget($ep,'linkedAccountId', null);
+            if ($dstF !== null && $dstF !== '' && cfo_cle_compte_epargne($dstF, $fd) !== null && cfo_cle_compte_epargne($dstF, $fd) === cfo_cle_compte_epargne($srcF, $fd)) {
+                $log['status']='error'; $log['reason']='la ligne partirait et arriverait sur le même compte : choisis un autre compte.'; break;
+            }
+            if ($nsrc !== null) { $ch['sourceCompte'] = ['avant'=>oget($ep,'sourceCompte'),'apres'=>$nsrc]; oset($ep,'sourceCompte',$nsrc); }
+            if ($ndst !== null) { $ch['destination'] = ['avant'=>cfo_nom_compte_epargne(oget($ep,'linkedAccountId'), $fd),'apres'=>cfo_nom_compte_epargne($ndst, $fd)]; oset($ep,'linkedAccountId',$ndst); }
+            //  …et une ligne restée sans destination est rattachée quand il n'y a aucun doute
+            $lieU = oget($ep,'linkedAccountId', null);
+            if ($lieU === null || $lieU === '') {
+                $d = cfo_deduire_destination_epargne($fd, oget($ep,'nom') ?: oget($ep,'label',''), oget($ep,'id'), oget($ep,'sourceCompte') ?: 'courant');
+                if ($d) { oset($ep,'linkedAccountId',$d['id']); $ch['destination'] = ['avant'=>null,'apres'=>cfo_nom_compte_epargne($d['id'], $fd),'deduite'=>$d['comment']]; }
+            }
             if (!count($ch)) { $log['status']='error'; $log['reason']='aucun champ fourni'; break; }
             // v36.1 : une ligne sans nom doit quand même être nommable dans le
             //   relevé — sinon la phrase de confirmation dit « cible : "" ».

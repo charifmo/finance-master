@@ -101,6 +101,14 @@ _RE_TRACKER = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\..*\.trackerRealise$')
 # nombre d'exceptions, libellés, comptes) reste comparée au caractère près.
 CAS_SEMAINES_REELLES = {'set_recurring_savings % du reliquat'}
 _RE_SEMAINES_REELLES = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\.epargne\[\d+\]\.exceptions\[\d+\]\.nouvelleValeur$')
+
+# v37.70 — UNE ÉPARGNE VA TOUJOURS SUR UN VRAI COMPTE.
+# Le JS de référence crée une ligne d'épargne SANS compte de destination quand on ne lui en donne pas
+# (linkedAccountId = null) : l'application en fait une poche virtuelle où l'argent n'arrive jamais —
+# c'est le bug corrigé (« Urgence » en poche à côté du vrai « Compte urgence »). Le PHP lit
+# destination_account (ou le déduit, ou refuse) : son linkedAccountId renseigné là où le JS laisse null
+# est la CORRECTION. Seul ce cas précis est toléré : JS null, PHP renseigné.
+_RE_EPARGNE_LIEN = re.compile(r'^etat\.donneesAnnuelles\.\d{4}\.epargne\[\d+\]\.linkedAccountId$')
 cas_courant = None
 
 def diff(a, b, p=""):
@@ -125,6 +133,8 @@ def diff(a, b, p=""):
             for i, (x, y) in enumerate(zip(a, b)): out += diff(x, y, "%s[%d]" % (p, i))
     elif a != b:
         # v37.29 : montant d'une exception mensuelle du cas « % du reliquat » (voir plus haut)
+        if a is None and b is not None and _RE_EPARGNE_LIEN.match(p):   # v37.70 (voir plus haut)
+            return out
         if not (cas_courant in CAS_SEMAINES_REELLES and _RE_SEMAINES_REELLES.match(p)):
             out.append("%s: JS=%r PHP=%r" % (p, a, b))
     return out

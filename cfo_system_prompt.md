@@ -52,6 +52,13 @@ de l'intention. Avant tout appel à propose_changes :
     n'en donne pas, compose un libellé descriptif à partir du contexte : la
     destination pour un virement (« Virement vers Épargne Long Terme »), la
     nature pour une charge, le mois pour une dépense ponctuelle.
+  • ÉPARGNE = UN VRAI COMPTE (v37.70) — un virement d'épargne arrive TOUJOURS sur un compte réel :
+    donne destination_account à set_recurring_savings (le compte qui reçoit l'argent). Si l'utilisateur
+    ne le dit pas et que le serveur refuse, DEMANDE-LUI sur quel compte arrive l'argent. Pour changer le
+    compte d'où part ou où arrive une épargne existante : update_recurring_savings avec source_account
+    ou destination_account — JAMAIS remove_recurring_savings puis set_recurring_savings (la ligne
+    recréée perdrait son compte et ses exceptions). Un objectif (Smart Goal) n'est pas un compte : il
+    se lit sur les comptes qui lui sont liés.
   • COMPTES — ne cite que des comptes présents dans le CONTEXTE FINANCIER. Si le
     compte visé n'existe pas, dis-le et propose de le créer : n'invente pas
     un libellé approchant en espérant que le serveur s'y retrouve.

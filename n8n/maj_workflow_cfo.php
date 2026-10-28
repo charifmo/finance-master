@@ -77,9 +77,21 @@ if ($argc >= 4 && is_readable($argv[3])) {
         $telegram = ['avant' => null, 'apres' => null, 'note' => count($cfo) ? 'plusieurs identifiants Telegram « CFO » : rien changé' : 'aucun identifiant Telegram « CFO » : rien changé'];
     }
 }
+//  v37.70 : le schéma de l'outil « Tool: Intent Compiler » (les fonctions et paramètres que le modèle peut
+//  envoyer) suit celui du dépôt, généré depuis le moteur par tools_schema.php — sinon un nouveau paramètre
+//  (destination_account) reste inconnu du modèle.
+$schemaAvant = null; $schemaApres = null;
+$depot = json_decode((string)@file_get_contents(dirname($ici) . '/super_agent_cfo_audio.json'), true);
+$iI = $noeud($wf, 'Tool: Intent Compiler');
+if ($iI !== null && is_array($depot)) {
+    foreach ($depot['nodes'] ?? [] as $n) if (($n['name'] ?? '') === 'Tool: Intent Compiler' && isset($n['parameters']['inputSchema'])) $schemaApres = $n['parameters']['inputSchema'];
+    $schemaAvant = $wf['nodes'][$iI]['parameters']['inputSchema'] ?? null;
+    if ($schemaApres !== null) $wf['nodes'][$iI]['parameters']['inputSchema'] = $schemaApres;
+}
 $apres = json_encode([$code, '={{ $json.system_message }}']);
 $telegramChange = $telegram && $telegram['apres'] && $telegram['avant'] !== [$telegram['apres']];
 
 file_put_contents($argv[2], json_encode($wf, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
 echo json_encode(['id' => $wf['id'] ?? null, 'nom' => $wf['name'] ?? null, 'actif' => !empty($wf['active']), 'base' => $base,
-                  'telegram' => $telegram, 'deja_a_jour' => $avant === $apres && !$telegramChange], JSON_UNESCAPED_UNICODE), "\n";
+                  'telegram' => $telegram, 'schema_outil' => $schemaApres === null ? 'non trouvé' : ($schemaAvant === $schemaApres ? 'à jour' : 'mis à jour'),
+                  'deja_a_jour' => $avant === $apres && !$telegramChange && ($schemaApres === null || $schemaAvant === $schemaApres)], JSON_UNESCAPED_UNICODE), "\n";

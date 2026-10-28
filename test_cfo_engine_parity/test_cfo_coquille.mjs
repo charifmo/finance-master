@@ -141,6 +141,15 @@ try {
         const st3 = JSON.parse(fs.readFileSync(path.join(tmp, 'sante3.json'), 'utf8'));
         v('  → rejoué : déjà à jour ; deux identifiants « CFO » possibles : rien n\'est rebranché (pas de devinette)',
           rt2.deja_a_jour === true && rt3.telegram.apres === null && st3.nodes.filter(n => n.credentials && n.credentials.telegramApi).every(n => n.credentials.telegramApi.id === 'santeID'), JSON.stringify([rt2, rt3.telegram]));
+        //  Le schéma de l'outil « Tool: Intent Compiler » suit celui du dépôt (nouveaux paramètres connus du modèle)
+        const vieux = JSON.parse(JSON.stringify(avant));
+        vieux.nodes.find(n => n.name === 'Tool: Intent Compiler').parameters.inputSchema = '{"type":"object","properties":{}}';
+        fs.writeFileSync(path.join(tmp, 'vieux.json'), JSON.stringify([vieux]));
+        const rs = JSON.parse(execFileSync(php, [path.join(RACINE, 'n8n/maj_workflow_cfo.php'), path.join(tmp, 'vieux.json'), path.join(tmp, 'vieux_sortie.json')], { encoding: 'utf8' }));
+        const sv = JSON.parse(fs.readFileSync(path.join(tmp, 'vieux_sortie.json'), 'utf8'));
+        const schemaDepot = JSON.parse(lire('super_agent_cfo_audio.json')).nodes.find(n => n.name === 'Tool: Intent Compiler').parameters.inputSchema;
+        v('  → schéma de l\'outil Intent Compiler resynchronisé sur le dépôt (destination_account connu du modèle)',
+          rs.schema_outil === 'mis à jour' && sv.nodes.find(n => n.name === 'Tool: Intent Compiler').parameters.inputSchema === schemaDepot && schemaDepot.includes('destination_account'), JSON.stringify(rs));
         const depot = JSON.parse(lire('super_agent_cfo_audio.json'));
         v('  → le fichier du dépôt est déjà à jour (même code que celui installé)',
           depot.nodes.find(n => n.name === 'Build Agent Input').parameters.jsCode === b && depot.nodes.find(n => n.name === 'AI Agent').parameters.options.systemMessage === '={{ $json.system_message }}', '');

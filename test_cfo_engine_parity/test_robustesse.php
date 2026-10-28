@@ -39,8 +39,8 @@ $CAS = [
     ['objectif'=>'Voyage Paris','montant'=>'5 000 DH','annee'=>'2027'],
     ['name'=>'Voyage Paris']],
 'set_recurring_savings' => [
-    ['name'=>'Long Terme CTO','fixed_amount'=>7000,'source_account'=>'courant','years'=>[2027]],
-    ['nom'=>'Long Terme CTO','montant'=>'7 000 DH','compte_source'=>'courant','annee'=>'2027'],
+    ['name'=>'Long Terme CTO','fixed_amount'=>7000,'source_account'=>'courant','destination_account'=>'Depenses Annuels','years'=>[2027]],   // v37.70 : toujours un compte de destination
+    ['nom'=>'Long Terme CTO','montant'=>'7 000 DH','compte_source'=>'courant','vers'=>'depenses annuels','annee'=>'2027'],
     ['fixed_amount'=>7000]],
 'update_recurring_savings' => [
     ['name'=>'Fonds Urgence','amount'=>2500,'years'=>[2027]],
