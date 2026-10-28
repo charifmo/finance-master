@@ -368,7 +368,9 @@ n8n_importer_et_publier() {   # $1 = fichier workflow (un seul) sur l'hote, $2 =
   n8n_cmd import:workflow --input=/tmp/fm_cfo.json || return 1
   docker exec -u root "${N8N_CONTAINER}" rm -f /tmp/fm_cfo.json >/dev/null 2>&1 || true
   if [[ -n "$2" ]]; then
-    if n8n_cmd --help 2>&1 | grep -q 'publish:workflow'; then
+    # (aide lue d'abord dans une variable : avec pipefail, « | grep -q » coupe n8n et fausse le test)
+    local aide; aide="$(n8n_cmd --help 2>&1 || true)"
+    if grep -q 'publish:workflow' <<<"${aide}"; then
       n8n_cmd publish:workflow --id="$2" || warn "publish:workflow a echoue : publiez le workflow dans l'interface n8n."
     else
       n8n_cmd update:workflow --id="$2" --active=true || warn "activation a echoue : activez le workflow dans l'interface n8n."
