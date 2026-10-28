@@ -5150,6 +5150,9 @@
                             </select>
                             <button @click="cloturerCycle()" title="Sauvegarder l'état du cycle dans l'historique"
                                     class="text-[10px] font-black px-2.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-600 hover:border-purple-500 hover:text-purple-700 transition-colors whitespace-nowrap">💾 Clôturer</button>
+                            <!-- v37.76 : « le bouton du visualiseur de cycle et semaines doit être visible » -->
+                            <button type="button" data-ouvrir-frise-entete @click="friseOuverte = true" title="La frise du cycle : avancement, morceaux de semaine, dépassements"
+                                    class="text-[11px] font-black px-3 py-2 rounded-lg bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 transition-colors whitespace-nowrap">📈 Cycle et semaines</button>
                         </div>
                     </div>
 
@@ -6186,6 +6189,17 @@
                                         </li>
                                     </ul>
                                     <p v-if="apprentissageVue.oublis" class="text-gray-500 mt-1">{{ apprentissageVue.oublis }} libellé(s) oublié(s) · <button type="button" data-apprentissage-reapprendre @click="reapprendreTout()" class="text-blue-700 hover:underline">tout réapprendre</button></p>
+                                </div>
+                                <!-- v37.76 : les variantes entrées au dictionnaire -->
+                                <div data-apprentissage-variantes>
+                                    <p class="font-black text-gray-700 mb-1">🔤 Variantes ajoutées au dictionnaire · {{ apprentissageVue.variantes.length }}</p>
+                                    <p v-if="!apprentissageVue.variantes.length" class="text-gray-500 italic">Corrigez une catégorie, validez une opération en suspens : son commerçant entre ici (« carrefour » → Super marché), et « Carrefour Market Gueliz » sera rangé sans demander à l’IA.</p>
+                                    <ul class="max-h-60 overflow-y-auto divide-y divide-gray-100">
+                                        <li v-for="x in apprentissageVue.variantes" :key="'apv_' + x.mot" data-apprentissage-variante :data-mot="x.mot" class="py-1 flex items-start gap-2">
+                                            <span class="flex-1">« {{ x.mot }} » → <b>{{ x.label }}</b> <span class="text-gray-400">· {{ x.src === 'vous' ? 'votre correction' : 'IA, réponse sûre' }}<template v-if="x.n > 1"> · {{ x.n }}×</template><template v-if="x.ex"> · ex. « {{ x.ex }} »</template></span></span>
+                                            <button type="button" data-apprentissage-oublier-variante @click="oublierVariante(x.mot)" class="text-red-600 hover:underline shrink-0" title="Oublier cette variante">🗑</button>
+                                        </li>
+                                    </ul>
                                 </div>
                                 <div data-apprentissage-noms>
                                     <p class="font-black text-gray-700 mb-1">🏷️ Noms des commerçants (imports) · {{ apprentissageVue.noms.length }}</p>
@@ -8338,7 +8352,7 @@
                             class="text-[10px] font-black text-white/85 hover:text-white underline decoration-dotted underline-offset-2">↩ Cette semaine</button>
                     <span v-else></span>
                     <button type="button" data-ouvrir-frise @click="$emit('frise')" title="La frise du cycle : avancement, morceaux de semaine, dépassements"
-                            class="text-[10px] font-black text-white/85 hover:text-white underline decoration-dotted underline-offset-2">📈 Frise du cycle</button>
+                            class="rounded-full bg-white text-slate-900 px-2.5 py-0.5 text-[10px] font-black shadow-sm hover:bg-emerald-100">📈 Voir le cycle et ses semaines</button>
                     <button v-if="p.compteur" type="button" data-liberte-effacer @click="$emit('effacer')" title="Effacer toutes les saisies du cycle (toutes ses semaines)"
                             class="text-[10px] font-bold text-white/40 hover:text-white/80 underline decoration-dotted underline-offset-2">↩ effacer tout le cycle</button>
                 </div>
@@ -8680,8 +8694,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.75 Vos comptes";
+                    const CURRENT_VERSION = "37.76 Dictionnaire";
                     const CHANGELOG = [
+        { version: "37.76 Dictionnaire", date: "2026-10-28", changes: [
+            "🛒 CARREFOUR VA DANS « SUPER MARCHÉ », SANS IA — « Il n'a pas su ajouter Carrefour à Supermarché ! » Le dictionnaire traduisait bien « carrefour » en « supermarché »… qui touchait deux de vos lignes par le début du mot (« Super marché » et une autre ligne « Super marché … » dans une autre catégorie) : ex aequo, la note tombait sous le seuil, l'opération partait à l'IA. La ligne qui s'écrit EXACTEMENT comme le mot (« Super marché » = « supermarché ») passe désormais devant : rangée, sûre, sans un token. Même chose pour BIM, Acima, Label'Vie, Kazyon, Hanout…",
+            "📚 UN DICTIONNAIRE BEAUCOUP PLUS RICHE — enseignes du Maroc et variantes darija pour 19 thèmes : supermarchés, fast-food et livraison, restaurants, cafés, mode, sport, maison et électroménager, téléphone (Orange Maroc, IAM, inwi), abonnements (Spotify, Shahid, Apple, Google Play…), IA et logiciels, analyses (les libellés bancaires tronqués « LAB D AN… »), pharmacie, voyages (Airbnb, Booking, RAM, Ryanair…), jouets, bébé, cadeaux, stations-service, transport, impôts et administration.",
+            "🔤 VOS VARIANTES ENTRENT AU DICTIONNAIRE — « Une fois que je corrige quelque chose de l'IA ou de suspendu, il l'ajoute au dictionnaire sous variantes. » Une correction de catégorie (journal, « À catégoriser »), une opération en suspens validée telle quelle, ou une réponse SÛRE de l'IA : le commerçant (le premier mot qui le nomme — pas « paiement », ni une ville) entre au dictionnaire, vers votre catégorie. « Carrefour Market Gueliz » profite de « carrefour » appris, même si l'opération d'origine a été supprimée. Votre correction l'emporte toujours sur l'IA, et vos choix ne sont plus mis en doute par le dictionnaire. Chaque variante est listée dans « Ce que l'appli a appris », avec 🗑 pour l'oublier.",
+            "✅ UNE OPÉRATION EN SUSPENS ENREGISTRÉE SANS CHANGER SA CATÉGORIE EST VALIDÉE — avant, elle restait « à vérifier ». Un libellé inconnu rangé d'office « par défaut » n'est jamais validé ainsi : il ne devine rien.",
+            "📈 LA FRISE DU CYCLE, EN VUE — « Le bouton pour accéder au visualiseur de cycle et semaines doit être visible. » Un bouton « 📈 Cycle et semaines » dans l'en-tête du Pilotage, et un vrai bouton « Voir le cycle et ses semaines » dans la Météo (au lieu d'un petit lien souligné).",
+            "PREUVE — nouvelle suite « Dictionnaire et variantes » : Carrefour et cinq autres enseignes rangés sûrs malgré « Super marché Karim » ; une correction devient une variante, survit à la suppression de l'opération, s'affiche et s'oublie ; une opération en suspens validée et apprise, jamais un rangement par défaut ; une réponse sûre de l'IA apprise, une réponse moyenne non, votre correction la remplace et l'IA ne l'écrase plus ; votre choix devant le dictionnaire ; la frise. Rejouée sur la v37.75 : en échec ; défauts réintroduits exprès : attrapés.",
+        ] },
         { version: "37.75 Vos comptes", date: "2026-10-28", changes: [
             "🏦 VOS COMPTES, D'UN COUP D'ŒIL — « Cet écran n'est pas révélateur de l'état de mes comptes pour ce cycle : ajouter la somme sur chaque compte à l'instant. » Dans la Météo du Pilotage, « Fin de cycle » devient « Vos comptes » : pour chaque compte réel (plus seulement ceux qui paient quelque chose ce cycle), trois colonnes — AUJOURD'HUI (le solde réel), AU PLUS BAS d'ici la fin du cycle (et le jour), FIN DE CYCLE. Un compte qui plonge en cours de cycle puis remonte avant la fin ne passe plus inaperçu.",
             "🔁 LES VIREMENTS À PRÉVOIR, EN GRAND — une case blanche, un virement par ligne : le montant, VERS quel compte, DEPUIS quel compte (ou « aucun compte ne couvre seul ce montant — à répartir »), avant quelle date, et jusqu'où le compte descendrait sans lui. Tous les comptes concernés y figurent, plus de « (+ 1 autre compte) ».",
@@ -10246,6 +10268,46 @@
                         { t: '👔 Pressing', v: ['pressing', 'blanchisserie', 'menage'], f: 82,
                           m: 'pressing|blanchisserie|teinturerie|بريسينغ' },
                     ];
+                    //  v37.76 — LE DICTIONNAIRE ENRICHI : enseignes du Maroc, variantes darija, libellés bancaires tronqués.
+                    //  Chaque entrée complète le thème qui porte ce début de titre (m = mots, k = enseignes, même collées).
+                    const DICO_ENRICHI = {
+                        '🛒 Courses': { m: 'carrefour market|carrefour express|marjane market|marjane|carrefour|bim|acima|kazyon|aswak|aswak assalam|label vie|labelvie|atacadao|hanouti|supermarket|grocery|moul hanout|mol hanout|mul hanout|7anout|super marche|hyper|hyper marche|مرجان|كارفور|بيم|اسواق السلام|حانوت',
+                                        k: 'carrefourmarket|carrefourexpress|marjanemarket|kazyon|aswak|hanouti|labelvie' },
+                        '🍔 Fast-food': { m: 'jumia food|chicken|shawarma|chawarma|panini|sandwich|sandwichs|snack|bocadillo|crepe|crepes|crep|pizzeria|burger house|nuggets|frites|hot dog|شوارما|سندويتش|بيتزا',
+                                          k: 'jumiafood|burgerhouse' },
+                        '🍽️ Restaurant': { m: 'tajine|tagine|tanjia|rotisserie|grillade|mechoui|trattoria|steakhouse|fruits de mer|طاجين|طنجية|مشوي' },
+                        '☕ Café': { m: 'jus|juice|smoothie|milkshake|the a la menthe|caffe|coffee|columbus|tim hortons|dunkin|عصير',
+                                    k: 'columbus|timhortons|dunkin' },
+                        '👕 Vêtements': { m: 'h&m|mango|lc waikiki|waikiki|defacto|max fashion|celio|jules|shein|chaussure|chaussures|sbbat|sebbat|sabbat|jean|jeans|veste|pantalon|chemise|robe|jellaba|djellaba|caftan|kaftan|babouche|babouches|حوايج|سباط|جلابة|قفطان',
+                                          k: 'lcwaikiki|maxfashion|celio|shein' },
+                        '🏋️ Sport': { m: 'decathlon|intersport|go sport|nike|adidas|puma|abonnement salle',
+                                      k: 'decathlon|intersport|gosport|adidas' },
+                        '🛋️ Maison': { m: 'mr bricolage|virgin|darty|electromenager|electro menager|meuble|meubles|tapis|zarbiya|zerbiya|vaisselle|quincaillerie|droguerie|peinture|plombier|plomberie|electricien|serrurier|ampoule|matelas|rideaux|زربية|ماطلة',
+                                       k: 'mrbricolage|virginmegastore|darty' },
+                        '📱 Téléphone': { m: 'orange maroc|orange ma|iam|maroc telecom|itissalat|inwi|recharge|jawal|forfait|pass internet|اتصالات|انوي|اورونج',
+                                          k: 'orangemaroc|maroctelecom|inwi' },
+                        '📺 Abonnements': { m: 'spotify|deezer|anghami|youtube premium|disney|disney plus|shahid|osn|starzplay|amazon prime|prime video|apple music|apple com|apple tv|icloud|google one|google play|google storage|play store|app store|canal plus|beinsports|bein sports|abonnement|شاهد',
+                                            k: 'spotify|anghami|shahid|starzplay|primevideo|icloud|googleplay|googleone|appstore|applecom|beinsports|canalplus' },
+                        '🤖 IA': { m: 'openai|anthropic|claude|claude ai|midjourney|copilot|gemini|perplexity|cursor|github|notion|canva|adobe',
+                                   k: 'openai|anthropic|midjourney|perplexity|copilot|github|canva' },
+                        '🔬 Analyses': { m: 'lab|labo d analyses|laboratoire d analyses|biologie|biologiste|bilan sanguin' },
+                        '💊 Pharmacie': { m: 'parapharmacie|parapharma|para pharmacie|pharmacie de garde|pharmacien|فرمسيان|صيدلية' },
+                        '✈️ Voyage': { m: 'royal air maroc|ram|airbnb|booking|booking com|hotel|riad|ryanair|air arabia|easyjet|transavia|expedia|agoda|vueling|valise|visa|فندق|رياض',
+                                       k: 'airbnb|bookingcom|ryanair|airarabia|easyjet|transavia|expedia|agoda|vueling|royalairmaroc' },
+                        '🧸 Jouets': { m: 'toys r us|toysrus|lego|playmobil|king jouet|jouet|jouets|poupee|لعب', k: 'toysrus|kingjouet|playmobil' },
+                        '🍼 Bébé': { m: 'pampers|couche|couches|lait bebe|lait infantile|bledina|nido|aptamil|guigoz|mustela|chicco|biberon|lingettes|حفاضات',
+                                     k: 'pampers|aptamil|guigoz|mustela|chicco|bledina' },
+                        '🎁 Cadeaux': { m: 'cadeau|cadeaux|hdiya|hadiya|l hdiya|fleurs|fleuriste|anniversaire|mariage|bouquet|هدية|ورد' },
+                        '⛽ Station-service': { m: 'afriquia|shell|total|totalenergies|winxo|petrom|ziz|oilibya|vivo|station essence', k: 'afriquia|totalenergies|winxo|petrom|oilibya' },
+                        '🚕 Transport': { m: 'roadster|yango|lime|tram casa|casa tram|busway|alsa|ctm|supratours|oncf|al boraq', k: 'yango|supratours|careem|indrive|heetch' },
+                        '🧾 Impôts': { m: 'vignette|dgi|impot|impots|taxe|amende|timbre|timbres|tribunal|commune|moqata3a|mqata3a|passeport|cnie|carte grise|ضريبة|مقاطعة|تنبر' },
+                    };
+                    DICO_CATEGORIES.forEach(r => {
+                        const e = Object.entries(DICO_ENRICHI).find(([p]) => r.t.startsWith(p));
+                        if (!e) return;
+                        if (e[1].m) r.m += '|' + e[1].m;
+                        if (e[1].k) r.k = (r.k ? r.k + '|' : '') + e[1].k;
+                    });
                     const _DICO = DICO_CATEGORIES.map((r, i) => {
                         const tous = [...new Set(r.m.split('|').map(x => _analyseLibelle(x).bruts.join(' ')).filter(Boolean))];
                         return { i, theme: r.t, vers: r.v, force: r.f, tous,
@@ -10290,6 +10352,9 @@
                         const n = _analyseLibelle(cible).toks.join(' ');
                         if (!n) return [];
                         let hits = cats.filter(c => c.phrase === n);                                      // le libellé entier
+                        //  v37.76 : la même chose, espaces ôtés — « Super marché » EST « supermarche » ; « Super marché … » d’une autre catégorie
+                        //  ne l'est pas (avant, les deux répondaient par le début du mot : ex aequo, doute, l'IA)
+                        if (!hits.length) { const nc = n.replace(/ /g, ''); hits = cats.filter(c => c.phrase.replace(/ /g, '') === nc); }
                         if (!hits.length) hits = n.includes(' ') ? cats.filter(c => (' ' + c.phrase + ' ').includes(' ' + n + ' '))
                                                               : cats.filter(c => c.mots.includes(n));         // un mot du libellé
                         if (!hits.length && n.length >= 5 && !n.includes(' '))                            // exceptionnel → exceptionnelle
@@ -10336,7 +10401,7 @@
                         if (!p.apprentissage || typeof p.apprentissage !== 'object') p.apprentissage = {};
                         const a = p.apprentissage;
                         if (a.actif === undefined) a.actif = true;
-                        ['noms', 'actions', 'oublis'].forEach(k => { if (!a[k] || typeof a[k] !== 'object' || Array.isArray(a[k])) a[k] = {}; });
+                        ['noms', 'actions', 'oublis', 'variantes'].forEach(k => { if (!a[k] || typeof a[k] !== 'object' || Array.isArray(a[k])) a[k] = {}; });
                         return a;
                     };
                     const apprentissageActif = computed(() => { calculationTick.value; return _apprLu().actif !== false; });
@@ -10423,6 +10488,13 @@
                                 x.p / total >= 0.75 ? (x.vous ? (total >= 2 ? 88 : 80) : (total >= 2 ? 72 : 62)) : 50,
                                 x.vous ? 'vous' : 'appris', 'des mots déjà rangés ici'));
                         }
+                        //  1 bis. v37.76 : VOS VARIANTES — le commerçant d'une correction, d'une opération en suspens validée,
+                        //  d'une réponse sûre de l'IA : « carrefour » appris range « Carrefour Market Gueliz »
+                        if (apprentissageActif.value) {
+                            const vv = _apprLu().variantes || {};
+                            A.toks.forEach(w => { const e = vv[w]; if (e && e.c) proposer(e.c, e.src === 'vous' ? 93 : 84, e.src === 'vous' ? 'vous' : 'appris',
+                                '« ' + w + ' » : ' + (e.src === 'vous' ? 'votre correction' : 'appris d’une réponse sûre de l’IA')); });
+                        }
                         //  2. Vos libellés : le mot tapé EST une de vos lignes — sauf s'il appartient à
                         //  une expression du dictionnaire (« eau minerale » n'est pas votre ligne « eau »)
                         const regles = _reglesDuLibelle(A);
@@ -10455,7 +10527,8 @@
                             .sort((a, b) => b.note - a.note || (parentDe(b.id) ? 1 : 0) - (parentDe(a.id) ? 1 : 0));
                         const best = liste[0];
                         const rival = liste.find(p => !famille(p.id, best.id));
-                        const proche = !!rival && rival.note >= best.note - _CAT_MARGE;
+                        //  v37.76 : VOS choix (corrections, variantes) ne sont pas mis en doute par le dictionnaire ni par l'historique automatique
+                        const proche = !!rival && rival.note >= best.note - _CAT_MARGE && !(best.source === 'vous' && ['règle', 'appris'].includes(rival.source));
                         const sur = best.note >= _CAT_SEUIL_SUR && !proche;
                         let id = best.id;
                         //  Deux lignes sœurs se disputent : leur catégorie mère, elle, est juste
@@ -10818,7 +10891,8 @@
                             const conf = ['haute', 'moyenne', 'basse'].includes(r.confiance) ? r.confiance : 'moyenne';
                             u.categorieId = r.id; u.categorieSource = 'ia'; u.iaConfiance = conf;
                             if (r.raison) u.iaRaison = String(r.raison).slice(0, 120);
-                            if (conf === 'haute' && u.source !== 'banque') delete u.aVerifier; else u.aVerifier = true;   // v37.53 : la banque, en suspens
+                            if (conf === 'haute' && u.source !== 'banque') delete u.aVerifier; else u.aVerifier = true;
+                            if (conf === 'haute') retenirVariante(u.libelle, r.id, 'ia');   // v37.76 : la prochaine fois, sans l'IA   // v37.53 : la banque, en suspens
                             calculationTick.value++;
                             handleDataChange();
                         } catch (e) {
@@ -10854,6 +10928,7 @@
                         if (!t || !catId) return;
                         const avant = { libelle: t.libelle, categorieId: t.categorieId };
                         t.categorieId = catId; t.categorieSource = 'vous';
+                        retenirVariante(t.libelle, catId, 'vous');   // v37.76
                         if (avant.categorieId !== catId) _retenirCorrection(t, avant);   // v37.60
                         delete t.aVerifier; delete t.iaConfiance;
                         calculationTick.value++;
@@ -10917,14 +10992,31 @@
                             const [v, n] = Object.entries(e.c || {}).sort((p, q) => q[1] - p[1] || (q[0] === e.dernier ? 1 : 0) - (p[0] === e.dernier ? 1 : 0))[0] || [];
                             return v ? { k, nom: e.nom || e.brut || k, action: _LIB_ACTION(v), n, t: e.t || '' } : null;
                         }).filter(Boolean).sort((p, q) => String(q.t).localeCompare(String(p.t)));
-                        return { actif: a.actif !== false, categories, noms, actions, oublis: Object.keys(a.oublis || {}).length,
-                                 total: categories.length + noms.length + actions.length };
+                        const variantes = Object.entries(a.variantes || {}).map(([mot, e]) => ({ mot, label: _libCat(e.c), src: e.src, n: e.n || 1, t: e.t || '', ex: e.ex || '' }))
+                            .sort((p, q) => String(q.t).localeCompare(String(p.t)) || p.mot.localeCompare(q.mot));
+                        return { actif: a.actif !== false, categories, noms, actions, variantes, oublis: Object.keys(a.oublis || {}).length,
+                                 total: categories.length + noms.length + actions.length + variantes.length };
                     });
                     const _apprModifie = () => { calculationTick.value++; handleDataChange(); };
                     const basculerApprentissage = () => { const a = _appr(); a.actif = a.actif === false; _apprModifie(); };
-                    const oublierCategorieApprise = (cle) => { _appr().oublis[cle] = true; _apprModifie(); };
+                    const oublierCategorieApprise = (cle) => { _appr().oublis[cle] = true; const w = _motVariante(cle); if (w) delete _appr().variantes[w]; _apprModifie(); };   // v37.76 : et sa variante
                     const oublierNomAppris = (k) => { delete _appr().noms[k]; _apprModifie(); };
                     const oublierActionApprise = (k) => { delete _appr().actions[k]; _apprModifie(); };
+                    //  v37.76 : le mot qui nomme le commerçant — le premier qui n'est ni un mot de banque, ni une ville, ni un nombre
+                    const _MOTS_BANQUE = new Set(['paiement', 'retrait', 'gab', 'virement', 'vir', 'prelevement', 'prlv', 'frais', 'com', 'commission', 'achat',
+                        'tpe', 'ecom', 'web', 'www', 'sarl', 'ste', 'store', 'shop', 'market', 'maroc', 'marrakech', 'casablanca', 'casa', 'rabat', 'tanger',
+                        'agadir', 'fes', 'meknes', 'oujda', 'kenitra', 'tetouan', 'sidi', 'hay', 'bd', 'av', 'rue', 'nouveau', 'divers']);
+                    const _motVariante = (libelle) => _analyseLibelle(libelle).toks.find(w => w.length >= 3 && /\p{L}{3}/u.test(w) && !_MOTS_BANQUE.has(w) && !_MOTS_LABEL_FAIBLES.has(w)) || null;
+                    const retenirVariante = (libelle, catId, src) => {
+                        if (!apprentissageActif.value || !catId || catId === 'cat_misc') return null;
+                        const w = _motVariante(libelle);
+                        if (!w) return null;
+                        const a = _appr(), e = a.variantes[w];
+                        if (e && e.src === 'vous' && src !== 'vous') return null;          // votre correction l'emporte sur l'IA
+                        a.variantes[w] = { c: catId, src: src === 'vous' ? 'vous' : 'ia', n: e && e.c === catId ? (e.n || 1) + 1 : 1, t: _ymd(new Date()), ex: String(libelle || '').slice(0, 60) };
+                        return w;
+                    };
+                    const oublierVariante = (w) => { delete _appr().variantes[w]; _apprModifie(); };
                     const reapprendreTout = () => { _appr().oublis = {}; _apprModifie(); };
                     const reglesCategorisation = computed(() => {
                         const cats = _categoriesCandidates.value;
@@ -11173,7 +11265,10 @@
                             t.date = b.datetime.slice(0, 10);
                             t.mois = Number(b.datetime.slice(5, 7));
                         }
-                        if (b.categorieId && b.categorieId !== t.categorieId) { t.categorieId = b.categorieId; t.categorieSource = 'vous'; delete t.aVerifier; delete t.iaConfiance; }
+                        if (b.categorieId && b.categorieId !== t.categorieId) { t.categorieId = b.categorieId; t.categorieSource = 'vous'; delete t.aVerifier; delete t.iaConfiance; retenirVariante(t.libelle, b.categorieId, 'vous'); }
+                        //  v37.76 : en suspens (import, IA pas sûre) et enregistrée sans changer de catégorie : validée — et apprise
+                        //  (pas un rangement « par défaut » : il ne devine rien)
+                        else if (b.categorieId && b.categorieId !== 'cat_misc' && t.aVerifier && t.categorieSource !== 'défaut') { t.categorieSource = 'vous'; delete t.aVerifier; delete t.iaConfiance; retenirVariante(t.libelle, b.categorieId, 'vous'); }
                         const cpt = b.compteId === '' ? null : ((comptes.value || []).find(c => String(c.id) === String(b.compteId)) || {}).id;
                         t.compteId = cpt === undefined ? t.compteId : cpt;
                         const note = String(b.note || '').trim();
@@ -24904,7 +24999,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,
-                        apprentissageVue, apprentissageActif, basculerApprentissage, oublierCategorieApprise, oublierNomAppris, oublierActionApprise, reapprendreTout, appliquerAuxSimilaires,
+                        apprentissageVue, apprentissageActif, basculerApprentissage, oublierCategorieApprise, oublierNomAppris, oublierActionApprise, retenirVariante, oublierVariante, reapprendreTout, appliquerAuxSimilaires,
                         iaLecons, signauxLecons, analyseLecons, leconsGardees, analyserLeconsIA, garderLeconIA, ecarterLeconIA, basculerLeconAppliquee, supprimerLeconIA, suggererNoteIA, utiliserNoteIA,
                         showSaisieQuickModal, openSaisieQuickModal, closeSaisieQuickModal, validerSaisieFormFromQuick,
                         saisieCompteAppris, saisieErreur, saisieAnnonce, annulerDerniereSaisie, saisieDejaVue, saisieNbCycle, libelleSaisieModifie, montantSaisieModifie,

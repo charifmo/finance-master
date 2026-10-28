@@ -6,7 +6,7 @@
   de l'IA ou quelque chose de suspendu, il ajoute ça au dictionnaire sous variantes. »
 
   1. « carrefour » était bien traduit vers « supermarche »… qui touchait DEUX de vos lignes par le début
-     du mot (« Super marché » et « Super marché Charif ») : ex aequo, note 67, sous le seuil — doute, donc
+     du mot (« Super marché » et une autre ligne « Super marché … » dans une autre catégorie) : ex aequo, note 67, sous le seuil — doute, donc
      l'IA. La ligne dont le libellé s'écrit EXACTEMENT comme le mot du dictionnaire (« Super marché » =
      « supermarche », espaces ôtés) passe désormais devant : rangé, sûr, sans IA.
   2. Le dictionnaire s'enrichit : enseignes du Maroc (supermarchés, mode, maison, sport, voyages,
@@ -37,7 +37,7 @@ sub('cible : forme collée',
 """                        let hits = cats.filter(c => c.phrase === n);                                      // le libellé entier
 """,
 """                        let hits = cats.filter(c => c.phrase === n);                                      // le libellé entier
-                        //  v37.76 : la même chose, espaces ôtés — « Super marché » EST « supermarche » ; « Super marché Charif »
+                        //  v37.76 : la même chose, espaces ôtés — « Super marché » EST « supermarche » ; « Super marché … » d’une autre catégorie
                         //  ne l'est pas (avant, les deux répondaient par le début du mot : ex aequo, doute, l'IA)
                         if (!hits.length) { const nc = n.replace(/ /g, ''); hits = cats.filter(c => c.phrase.replace(/ /g, '') === nc); }
 """)
@@ -156,7 +156,8 @@ sub('journal : correction ou suspens validé',
 """,
 """                        if (b.categorieId && b.categorieId !== t.categorieId) { t.categorieId = b.categorieId; t.categorieSource = 'vous'; delete t.aVerifier; delete t.iaConfiance; retenirVariante(t.libelle, b.categorieId, 'vous'); }
                         //  v37.76 : en suspens (import, IA pas sûre) et enregistrée sans changer de catégorie : validée — et apprise
-                        else if (b.categorieId && b.categorieId !== 'cat_misc' && t.aVerifier) { t.categorieSource = 'vous'; delete t.aVerifier; delete t.iaConfiance; retenirVariante(t.libelle, b.categorieId, 'vous'); }
+                        //  (pas un rangement « par défaut » : il ne devine rien)
+                        else if (b.categorieId && b.categorieId !== 'cat_misc' && t.aVerifier && t.categorieSource !== 'défaut') { t.categorieSource = 'vous'; delete t.aVerifier; delete t.iaConfiance; retenirVariante(t.libelle, b.categorieId, 'vous'); }
 """)
 sub('IA sûre',
 """if (conf === 'haute' && u.source !== 'banque') delete u.aVerifier; else u.aVerifier = true;""",
@@ -167,7 +168,7 @@ sub('IA sûre',
 sub('frise : en-tête du Pilotage',
 """                                    class="text-[10px] font-black px-2.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-600 hover:border-purple-500 hover:text-purple-700 transition-colors whitespace-nowrap">💾 Clôturer</button>""",
 """                                    class="text-[10px] font-black px-2.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-600 hover:border-purple-500 hover:text-purple-700 transition-colors whitespace-nowrap">💾 Clôturer</button>
-                            <!-- v37.75 : « le bouton du visualiseur de cycle et semaines doit être visible » -->
+                            <!-- v37.76 : « le bouton du visualiseur de cycle et semaines doit être visible » -->
                             <button type="button" data-ouvrir-frise-entete @click="friseOuverte = true" title="La frise du cycle : avancement, morceaux de semaine, dépassements"
                                     class="text-[11px] font-black px-3 py-2 rounded-lg bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 transition-colors whitespace-nowrap">📈 Cycle et semaines</button>""")
 sub('frise : dans la Météo',
@@ -176,5 +177,12 @@ sub('frise : dans la Météo',
 """                    <button type="button" data-ouvrir-frise @click="$emit('frise')" title="La frise du cycle : avancement, morceaux de semaine, dépassements"
                             class="rounded-full bg-white text-slate-900 px-2.5 py-0.5 text-[10px] font-black shadow-sm hover:bg-emerald-100">📈 Voir le cycle et ses semaines</button>""")
 
+sub('vos choix devant le dictionnaire',
+"""const proche = !!rival && rival.note >= best.note - _CAT_MARGE;""",
+"""//  v37.76 : VOS choix (corrections, variantes) ne sont pas mis en doute par le dictionnaire ni par l'historique automatique
+                        const proche = !!rival && rival.note >= best.note - _CAT_MARGE && !(best.source === 'vous' && ['règle', 'appris'].includes(rival.source));""")
+sub('oublier une catégorie apprise oublie sa variante',
+"""const oublierCategorieApprise = (cle) => { _appr().oublis[cle] = true; _apprModifie(); };""",
+"""const oublierCategorieApprise = (cle) => { _appr().oublis[cle] = true; const w = _motVariante(cle); if (w) delete _appr().variantes[w]; _apprModifie(); };   // v37.76 : et sa variante""")
 io.open(F, 'w', encoding='utf-8').write(src)
 print('✔ v37.76 : dictionnaire enrichi, la ligne exacte d’abord, vos variantes apprises, frise du cycle en vue')
