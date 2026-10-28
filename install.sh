@@ -115,6 +115,9 @@ fix_permissions() {
   fi
   chown -R "${WEB_USER}:${WEB_GROUP}" "${FINANCE_DIR}"
   chmod -R 775 "${FINANCE_DIR}"
+  # v37.69 : ces droits ne doivent pas passer pour des modifications locales aux yeux de git
+  #   (sinon le git pull suivant refuse : « Your local changes would be overwritten »)
+  if [[ -d "${FINANCE_DIR}/.git" ]]; then git -C "${FINANCE_DIR}" config core.fileMode false 2>/dev/null || true; fi
 
   # finance_data.json doit etre writable par PHP
   if [[ -f "${FINANCE_DIR}/finance_data.json" ]]; then
