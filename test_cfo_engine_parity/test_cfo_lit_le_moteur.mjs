@@ -40,7 +40,7 @@ console.log('\n  LE CFO LIT LE MOTEUR · ANNULER 50 PAS PERSISTANTS\n  ' + '─'
 v('A. le résumé du CFO ne lit plus le champ mort sourceCompte des charges',
   !/compte_source: _getLabel\(v\.sourceCompte/.test(html) && /payee_depuis: nom\(compteDeFlux\('fixe', v\)\)/.test(html) && /payee_depuis: nom\(compteDeFlux\('variable', v\)\)/.test(html));
 v('  → schéma 22 ; la lecture voyage avec les données ; Annuler : 50 retours',
-  /_schemaVersion: 22,/.test(html) && /_lectureCFO: _lectureCFOSure\(\)/.test(html) && /const UNDO_MAX = 50;/.test(html));
+  /_schemaVersion: (2[2-9]|[3-9]\d),/.test(html) && /_lectureCFO: _lectureCFOSure\(\)/.test(html) && /const UNDO_MAX = 50;/.test(html));
 
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
@@ -157,6 +157,10 @@ try {
 
     /* ── C. Alimentation du Courant ───────────────────────────────────── */
     await section('C', async () => {
+        //  v37.68 : le chargement remet le salaire des années suivantes sur son compte (correction approuvée) ;
+        //  on le renvoie ici sur le Courant pour 2027, comme une modification faite après coup
+        await page.evaluate((ST) => { eval(ST).donneesAnnuelles[2027].revenus.salaire.destinationCompte = 'courant'; }, ST);
+        await page.waitForTimeout(400);
         let A = (await lecture()).alimentation_du_courant;
         const [dec, jan, fev] = A.cycles_suivants;
         v('C. décembre : le Courant encaisse 2 000, paie 3 000 + 1 000 → 2 000 à virer depuis « Compte Salaire »',
@@ -191,8 +195,8 @@ try {
         await page.waitForTimeout(2600);
         const E = enregistre ? JSON.parse(enregistre) : null;
         const d = E && E.donneesAnnuelles['2026'];
-        v('E. enregistré : schéma 22, plus de sourceCompte sur les charges (ni leurs postes) ; l\'épargne garde le sien',
-          !!E && E._schemaVersion === 22 && !Object.values(d.chargesFixes).some(c => 'sourceCompte' in c) && !Object.values(d.chargesVariables).some(c => 'sourceCompte' in c || (c.details || []).some(p => 'sourceCompte' in p))
+        v('E. enregistré : schéma 22 ou plus, plus de sourceCompte sur les charges (ni leurs postes) ; l\'épargne garde le sien',
+          !!E && E._schemaVersion >= 22 && !Object.values(d.chargesFixes).some(c => 'sourceCompte' in c) && !Object.values(d.chargesVariables).some(c => 'sourceCompte' in c || (c.details || []).some(p => 'sourceCompte' in p))
           && d.epargne[0].sourceCompte === 'courant' && d.chargesFixes.syndic.compte === 'cpt_901', E ? String(E._schemaVersion) : 'rien enregistré');
         v('  → la lecture du CFO voyage avec les données (pour Telegram, qui lit ce fichier brut)',
           !!E && E._lectureCFO && E._lectureCFO.alimentation_du_courant.virement_permanent_conseille === 2100 && E._lectureCFO.charges_fixes[0].payee_depuis === 'Compte Salaire', E ? JSON.stringify(Object.keys(E._lectureCFO || {})) : '');

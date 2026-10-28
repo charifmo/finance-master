@@ -8606,8 +8606,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.67 CFO lucide";
+                    const CURRENT_VERSION = "37.68 Ménage";
                     const CHANGELOG = [
+        { version: "37.68 Ménage", date: "2026-10-28", changes: [
+            "🧾 UN EN-TÊTE DE COMPTE N'EST PAS UNE OPÉRATION — à l'import d'une capture bancaire, l'intitulé du compte suivi de son solde (« Compte chèque 5 … »), que l'OCR retrouve au milieu de la liste quand l'écran défile, était lu comme une opération : c'était arrivé cinq fois, dont une « dépense » de plusieurs milliers de DH classée Frais bancaire qui mangeait le reste à dépenser du cycle. Une ligne dont le libellé commence par « Compte chèque » ou « Compte courant » n'est plus jamais une opération ; le solde de l'en-tête, lui, est toujours lu.",
+            "🧹 CORRECTIONS APPROUVÉES, APPLIQUÉES UNE FOIS AU CHARGEMENT (schéma 23) — l'opération importée par erreur que vous avez désignée est retirée (repérée par une empreinte : ni son montant ni son libellé ne figurent dans le code) et sa ligne du registre bancaire passe « ignorée », pour ne pas revenir au prochain import ; les années suivantes, qui envoyaient le salaire et la bonification sur le Compte Courant, les envoient sur le compte où ils arrivent vraiment, et l'« épargne » qui renvoyait du Courant vers ce compte (le trajet inverse) est retirée. Le journal technique dit ce qui a été corrigé.",
+            "PREUVE — nouvelle suite « En-têtes de compte, corrections approuvées » : 12 contrôles (décor fictif). Rejouée sur la v37.67 : 7 en échec. Huit défauts réintroduits exprès (en-tête gardé, registre non ignoré, correction rejouée, épargne inverse gardée, toutes les épargnes retirées, Courant désigné par son identifiant non reconnu, schéma non relevé, empreinte sans le montant) : tous attrapés. Vérifié sur les vraies données : la fausse opération retirée (le reste à dépenser du cycle revient au réel), salaire et bonification 2027-2030 sur le compte du salaire, le virement inverse retiré, plus d'alerte pour le CFO.",
+        ] },
         { version: "37.67 CFO lucide", date: "2026-10-27", changes: [
             "🧭 LE CFO LIT, IL NE CALCULE PLUS — « Pourquoi le CFO se trompe ? D'où il prend ces infos ? Pourquoi il dit que toutes ces charges sont prises du compte courant alors que non ? » Le résumé envoyé au CFO lisait sourceCompte, un champ abandonné depuis la v20 (les charges suivent le compte par défaut de leur nature, ou leur propre compte) : il valait « courant » sur chaque ligne. Il donnait aussi le montant de base sans les exceptions (un crédit suspendu toute l’année comptait encore) et le montant « / semaine » brut, que le modèle multipliait par 4,33. Désormais chaque ligne porte le compte du moteur (payée depuis / arrive sur), le montant de CE cycle (exceptions comprises) et, pour les charges variables, le budget du cycle (jours ÷ 7, rythmes des postes compris), avec une règle de lecture qui interdit de recalculer.",
             "💸 COMBIEN VIRER SUR LE COURANT — nouveau bloc « alimentation du Courant », lu dans le journal du Relevé : pour le cycle en cours et les 3 suivants, ce que le Courant encaisse lui-même (loyers, CNSS), ce qui en sort (charges variables, épargnes, dépenses ponctuelles), ce qu'il reçoit déjà par virement, et le virement à faire depuis le compte du salaire ; le virement permanent conseillé est le plus gros des 3 prochains cycles, arrondi à la centaine. Si le salaire n'arrive pas sur le même compte selon les années, l'appli le signale.",
@@ -15224,7 +15229,7 @@
 
                     //  v37.67 : _lectureCFO voyage avec les données — le CFO sur Telegram lit ce fichier brut.
                     const _lectureCFOSure = () => { try { return _lectureCFO(); } catch (e) { return null; } };
-                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 22, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value, _lectureCFO: _lectureCFOSure() });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 23, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value, _lectureCFO: _lectureCFOSure() });
                     // v17.19 : Auto-Save debounce 2s
                     let _autoSaveTimer = null;
 
@@ -15792,6 +15797,49 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return n;
                     };
 
+                    // ── v37.68 : CORRECTIONS APPROUVÉES PAR L'UTILISATEUR (schéma 23), une seule fois ──
+                    //  a. les opérations importées qu'il a désignées comme fausses — par empreinte (date | ligne du
+                    //     registre | montant) : rien de ses données n'est écrit dans le code ;
+                    //  b. le salaire et la bonification des années suivantes suivent le compte de cette année quand
+                    //     ces années les envoyaient sur le Courant ; l'« épargne » Courant → ce compte est retirée.
+                    const _empreinte = (s) => { let h = 0x811c9dc5; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0; return h.toString(16).padStart(8, '0'); };
+                    const OPERATIONS_RETIREES = new Set(['04ed9c20']);
+                    const corrigerDonneesApprouvees = (data) => {
+                        const n = { operations: 0, revenus: 0, epargnes: 0 };
+                        if (!data || (data._schemaVersion || 0) >= 23) return n;
+                        const A = data.donneesAnnuelles || {};
+                        Object.values(A).forEach(a => {
+                            if (!a || !Array.isArray(a.transactionsReelles)) return;
+                            a.transactionsReelles = a.transactionsReelles.filter(t => {
+                                if (!t || !OPERATIONS_RETIREES.has(_empreinte(t.date + '|' + (t.banqueHash || '') + '|' + Number(t.montant).toFixed(2)))) return true;
+                                const r = a.banqueOperations && t.banqueHash && a.banqueOperations[t.banqueHash];
+                                if (r) { r.s = 'ignoree'; delete r.x; r.r = 'En-tête de compte lu comme une opération (v37.68)'; }
+                                n.operations++;
+                                return false;
+                            });
+                        });
+                        const si = data.soldesInitiaux || {}, an0 = Number(si.anneeActuelle) || new Date().getFullYear();
+                        const cc = (data.comptes || []).find(c => c.type === 'courant' || c.type === 'liquide');
+                        const estCourant = (k) => !k || k === 'courant' || (cc && String(k) === 'cpt_' + cc.id);
+                        const ref = (A[an0] || {}).revenus || {};
+                        ['salaire', 'bonif'].forEach(cle => {
+                            const dest = ref[cle] && ref[cle].destinationCompte;
+                            if (estCourant(dest)) return;
+                            const id = String(dest).replace(/^cpt_/, '');
+                            Object.keys(A).filter(y => Number(y) > an0).forEach(y => {
+                                const r = ((A[y] || {}).revenus || {})[cle];
+                                if (!r || !estCourant(r.destinationCompte)) return;
+                                r.destinationCompte = dest; n.revenus++;
+                                if (Array.isArray(A[y].epargne)) A[y].epargne = A[y].epargne.filter(e => {
+                                    const inverse = e && estCourant(e.sourceCompte) && String(e.linkedAccountId) === id;
+                                    if (inverse) n.epargnes++;
+                                    return !inverse;
+                                });
+                            });
+                        });
+                        return n;
+                    };
+
                     // ── Patch v15.1 : corrige soldeInitial→solde + inclureLiquidite ──
                     const patchV151 = (data) => {
                         if ((data._patchVersion || 0) >= 151) return data;
@@ -16014,6 +16062,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             migrateEpargneToArray(data); // v17.15 : objet → tableau avant safeMerge
                             const _nSemCoupees = migrerSemainesCoupees(data);   // v37.66 : schéma 21
                             purgerSourceCompteCharges(data);                    // v37.67 : schéma 22
+                            const _corr = corrigerDonneesApprouvees(data);      // v37.68 : schéma 23
+                            if (_corr.operations) addLog('🧹 ' + _corr.operations + ' opération(s) importée(s) par erreur retirée(s) (en-tête de compte lu comme une dépense).', 'success');
+                            if (_corr.revenus) addLog('🏦 Salaire et bonification des années suivantes remis sur le compte où ils arrivent (' + _corr.revenus + ' ligne(s))' + (_corr.epargnes ? ', ' + _corr.epargnes + ' virement(s) inverse(s) retiré(s)' : '') + '.', 'success');
                             if (_nSemCoupees) addLog('✅ Semaines coupées par la paie : ' + _nSemCoupees + ' saisie(s) d\'avant la paie rendue(s) au cycle qui finit.', 'success');
                             // v18.50 : Sanitize null entries in epargne arrays (occur after CFO deletion)
                             Object.values(data.donneesAnnuelles || {}).forEach(yr => {
@@ -23439,6 +23490,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const BQ_MOIS = { janvier: 1, janv: 1, jan: 1, fevrier: 2, fevr: 2, fev: 2, mars: 3, mar: 3, avril: 4, avr: 4, mai: 5, juin: 6,
                                       juillet: 7, juil: 7, aout: 8, septembre: 9, sept: 9, sep: 9, octobre: 10, oct: 10, novembre: 11, nov: 11, decembre: 12, dec: 12 };
                     const bqNorm = (s) => String(s || '').toLowerCase().replace(/œ/g, 'oe').normalize('NFD').replace(/\p{M}/gu, '');
+                    //  v37.68 : « Compte chèque 5 … 7 526,28 » — l'intitulé du compte et son solde, que l'OCR retrouve
+                    //  au milieu de la liste quand l'écran défile : jamais une opération.
+                    const BQ_ENTETE_COMPTE = /^compte\s*(cheque|courant)\b/;
                     //  « févr », « déc », « août » : les accents tolérés dans le texte brut
                     const _bqMotif = (m) => m.replace(/a/g, '[aàâä]').replace(/e/g, '[eéèêë]').replace(/i/g, '[iîï]').replace(/o/g, '[oôö]').replace(/u/g, '[uùûü]');
                     const BQ_RE_MOIS = Object.keys(BQ_MOIS).sort((a, b) => b.length - a.length).map(_bqMotif).join('|');
@@ -23685,7 +23739,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             const op = { date: dateAchat || dateOp, dateOp: dateOp || dateAchat, dateAchat, libelle, montant: signe * m.v, brut: o.libs.join(' / ') };
                             if (!dateOp) op.sansDateOp = true;       // v37.54 : la date comptable n'a pas été lue (jour illisible)
                             return op;
-                        });
+                        }).filter(o => !BQ_ENTETE_COMPTE.test(bqNorm(o.libelle).trim()));   // v37.68 : un en-tête de compte
                         //  v37.60 : une date cachée (sous le bouton « Remonter ») — la liste est rangée par date : celle de
                         //  l'opération suivante (sinon de la précédente), signalée « déduite »
                         if (essais[0].tt === 'L') operations.forEach((o, i) => {
@@ -24642,7 +24696,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.20 : pulse hebdomadaire
                         liberteCycle, sanctuaireHebdo, consoCompteurRenseigne, saisirCompteurConso,
                         // v37.29 : semaines réelles du cycle
-                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines, morceauxDuCycle, morceauDe, joursDuCycle, libSemaines, partDuMorceau, migrerSemainesCoupees, purgerSourceCompteCharges, _lectureCFO, _buildPayloadCFO, UNDO_MAX,
+                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines, morceauxDuCycle, morceauDe, joursDuCycle, libSemaines, partDuMorceau, migrerSemainesCoupees, purgerSourceCompteCharges, corrigerDonneesApprouvees, OPERATIONS_RETIREES, _empreinte, _lectureCFO, _buildPayloadCFO, UNDO_MAX,
                         // v37.50 : un compte par ligne
                         compteDeLaCharge, resteAPayerFixesParCompte, resteAPayerFacturesParCompte, enveloppeConsoParCompte,
                         // v37.30 : un rythme par ligne de détail
