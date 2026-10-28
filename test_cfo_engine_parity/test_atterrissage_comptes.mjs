@@ -179,13 +179,13 @@ try {
     let e = await lire(page);
     v('C. le moteur du Relevé atterrit où le calcul à la main l\'attend (Courant, Assafa, Livret, Bourse, Coffre)',
       e.moteur.cpt_1 === -2905 && e.moteur.cpt_2 === 649 && e.moteur.cpt_3 === 52500 && e.moteur.cpt_4 === 9500 && e.moteur.cpt_5 === 400, JSON.stringify(e.moteur));
-    v('  → la liste : Courant puis Assafa — le courant d\'abord, même rangé second', cles(e.liste) === 'cpt_1,cpt_2', JSON.stringify(e.liste));
+    v('  → la liste : Courant d\'abord (même rangé second), puis Assafa, le Livret, le Coffre — v37.75 : chaque compte liquide', cles(e.liste) === 'cpt_1,cpt_2,cpt_3,cpt_5', JSON.stringify(e.liste));
     const [co, as] = e.liste || [{}, {}];
     v('  → « CO Courant − 2 905 DH », en rouge', co.nom === 'Courant' && co.mono === 'CO' && co.montant === attendu(-2905) && co.signe === 'negatif' && co.rouge && !co.vert, JSON.stringify(co));
     v('  → « AS Assafa + 649 DH », en vert — visible bien qu\'il ne soit pas à découvert',
       as.nom === 'Assafa' && as.mono === 'AS' && as.montant === attendu(649) && as.signe === 'positif' && as.vert && !as.rouge && as.h > 0, JSON.stringify(as));
-    v('  → absents : le Livret (ne fait que recevoir), la Bourse (non liquide), le Coffre (immobile), la poche Voyage',
-      !/cpt_3|cpt_4|cpt_5|ep_/.test(cles(e.liste)), cles(e.liste));
+    v('  → absents : la Bourse (non liquide), la poche Voyage (virtuelle) — v37.75 : le Livret et le Coffre y sont, à leur solde',
+      !/cpt_4|ep_/.test(cles(e.liste)) && e.liste[2].montant === attendu(52500) && e.liste[3].montant === attendu(400), cles(e.liste));
     v(`  → l'en-tête donne la date de fin de cycle (« le ${e.dateFin} »)`, e.date === 'le ' + e.dateFin && /^\d+ \S+$/.test(e.dateFin || ''), String(e.date));
     v('  → le bloc rouge, inchangé : Courant seul, − 2 905 DH, virement depuis le Livret',
       e.etat === 'orage' && cles(e.bloc) === 'cpt_1' && e.bloc[0].montant === '−' + nf(2905) + 'DH' && /^➜ Virer 2\s?905 DH depuis .*Livret Réserve avant le /.test(e.bloc[0].sauvetage), JSON.stringify(e.bloc));
@@ -199,21 +199,21 @@ try {
     /* ══ D. CIEL SANS DÉCOUVERT : la liste reste ══════════════════════ */
     await solde(page, 1, 5000);                 // Courant : 5 000 − 3 000 = + 2 000
     e = await lire(page);
-    v('D. aucun découvert : plus de bloc rouge, et la liste est toujours là', e.bloc.length === 0 && e.etat !== 'orage' && cles(e.liste) === 'cpt_1,cpt_2', JSON.stringify([e.etat, e.bloc, cles(e.liste)]));
+    v('D. aucun découvert : plus de bloc rouge, et la liste est toujours là', e.bloc.length === 0 && e.etat !== 'orage' && cles(e.liste) === 'cpt_1,cpt_2,cpt_3,cpt_5', JSON.stringify([e.etat, e.bloc, cles(e.liste)]));
     v('  → « Courant + 2 000 DH » et « Assafa + 649 DH », en vert', e.liste[0].montant === attendu(2000) && e.liste[1].montant === attendu(649) && e.liste.every(l => l.vert && l.signe === 'positif'), JSON.stringify(e.liste));
 
     /* ══ E. ASSAFA DANS LE ROUGE : l'ordre ne bouge pas ════════════════ */
     await solde(page, 2, 5000);                 // Assafa : 5 000 − 6 000 = − 1 000
     e = await lire(page);
     v('E. Assafa à − 1 000 : la liste garde son ordre (Courant, Assafa), Assafa passe au rouge',
-      cles(e.liste) === 'cpt_1,cpt_2' && e.liste[1].montant === attendu(-1000) && e.liste[1].rouge && e.liste[0].vert, JSON.stringify(e.liste));
+      cles(e.liste) === 'cpt_1,cpt_2,cpt_3,cpt_5' && e.liste[1].montant === attendu(-1000) && e.liste[1].rouge && e.liste[0].vert, JSON.stringify(e.liste));
     v('  → le bloc rouge nomme Assafa, − 1 000 DH, avec son virement', cles(e.bloc) === 'cpt_2' && e.bloc[0].montant === '−' + nf(1000) + 'DH' && /^➜ Virer /.test(e.bloc[0].sauvetage), JSON.stringify(e.bloc));
 
     /* ══ F. UN COMPTE NON LIQUIDE DANS LE ROUGE : il entre dans la liste ══ */
     await solde(page, 2, 6649); await solde(page, 4, 100);     // Bourse : 100 − 500 = − 400
     e = await lire(page);
     v('F. la Bourse finit à − 400 : elle rejoint la liste (le bloc rouge la nomme, la liste aussi)',
-      cles(e.liste) === 'cpt_1,cpt_2,cpt_4' && e.liste[2].montant === attendu(-400) && e.liste[2].rouge && cles(e.bloc) === 'cpt_4', JSON.stringify([e.liste, e.bloc]));
+      cles(e.liste) === 'cpt_1,cpt_2,cpt_3,cpt_4,cpt_5' && e.liste[3].montant === attendu(-400) && e.liste[3].rouge && cles(e.bloc) === 'cpt_4', JSON.stringify([e.liste, e.bloc]));
     v('  → tout compte du bloc rouge figure dans la liste, au même montant',
       e.bloc.every(b => (e.liste.find(l => l.cle === b.cle) || {}).montant === b.montant), JSON.stringify([e.liste, e.bloc]));
 
@@ -229,7 +229,7 @@ try {
         st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 300)); }, ST);
     e = await lire(page);
     v('H. le Livret paie l\'assurance (1 200) : il entre, à sa place (Courant, Assafa, Livret), à 51 300',
-      cles(e.liste) === 'cpt_1,cpt_2,cpt_3' && e.liste[2].nom === 'Livret Réserve' && e.liste[2].montant === attendu(52500 - 1200), JSON.stringify(e.liste));
+      cles(e.liste) === 'cpt_1,cpt_2,cpt_3,cpt_5' && e.liste[2].nom === 'Livret Réserve' && e.liste[2].montant === attendu(52500 - 1200), JSON.stringify(e.liste));
 
     /* ══ I. UN COURANT IMMOBILE : il reste en tête ══════════════════════ */
     await page.evaluate(async (ST) => { const st = eval(ST); const d = st.donneesAnnuelles[st.moisBudgetaire.an];
@@ -237,14 +237,14 @@ try {
         st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 300)); }, ST);
     e = await lire(page);
     v('I. le courant ne paie plus rien ce cycle : il ouvre quand même la liste, à son solde (+ 5 000)',
-      cles(e.liste) === 'cpt_1,cpt_2' && e.liste[0].montant === attendu(5000), JSON.stringify(e.liste));
+      cles(e.liste) === 'cpt_1,cpt_2,cpt_3,cpt_5' && e.liste[0].montant === attendu(5000), JSON.stringify(e.liste));
     v('aucune erreur JavaScript (bureau)', erreurs.length === 0, erreurs[0] || '');
     await page.close();
 
     /* ══ J. TÉLÉPHONE : la liste entre le verdict et la carte, sans débordement ══ */
     const mo = await ouvrir(SC, { viewport: { width: 384, height: 832 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     e = await lire(mo.page);
-    v('J. téléphone : Courant − 2 905, Assafa + 649', cles(e.liste) === 'cpt_1,cpt_2' && e.liste[0].montant === attendu(-2905) && e.liste[1].montant === attendu(649), JSON.stringify(e.liste));
+    v('J. téléphone : Courant − 2 905, Assafa + 649', cles(e.liste) === 'cpt_1,cpt_2,cpt_3,cpt_5' && e.liste[0].montant === attendu(-2905) && e.liste[1].montant === attendu(649), JSON.stringify(e.liste));
     if (twCss) v('  → bloc rouge, verdict, liste, puis « Reste à dépenser » : dans cet ordre, de haut en bas',
       e.pos.bloc.bas <= e.pos.titre.haut && e.pos.titre.bas <= e.pos.liste.haut && e.pos.liste.bas <= e.pos.carte.haut && e.pos.liste.droite <= e.pos.meteo.droite, JSON.stringify(e.pos));
     v('  → pas de défilement horizontal ; aucune erreur JavaScript', e.debord <= 0 && mo.erreurs.length === 0, JSON.stringify([e.debord, mo.erreurs[0]]));

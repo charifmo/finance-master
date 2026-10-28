@@ -116,5 +116,6 @@ suite "Attijari « Mes comptes » : le compte reconnu (n°, solde, empreinte)"  
 suite "Un virement à faire se programme, il ne change pas les soldes (moteur du CFO)"  php test_cfo_engine_parity/test_virement_programme.php
 suite "Attente du CFO : chronomètre et vraies étapes (zéro token), virement vers le Courant"  node test_cfo_engine_parity/test_attente_cfo.mjs
 suite "Jour exact : chocs et virements du Calendrier Pluriannuel, cycle suivant après la paie"  node test_cfo_engine_parity/test_jour_exact.mjs
+suite "Vos comptes : aujourd’hui, au plus bas, fin de cycle ; virements à prévoir ; version à jour"  node test_cfo_engine_parity/test_comptes_cycle.mjs
 
 echo "✅ Toutes les suites passent."
