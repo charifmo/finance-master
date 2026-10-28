@@ -356,9 +356,14 @@ n8n_exporter_tout() {   # $1 = fichier de sortie sur l'hote
 }
 
 n8n_importer_et_publier() {   # $1 = fichier workflow (un seul) sur l'hote, $2 = id
+  # n8n tourne sous un autre utilisateur que root dans son conteneur : le fichier doit
+  # lui etre lisible (mktemp le cree en 600, et docker cp garde ces droits).
+  chmod 644 "$1"
+  docker exec -u root "${N8N_CONTAINER}" rm -f /tmp/fm_cfo.json >/dev/null 2>&1 || true
   docker cp "$1" "${N8N_CONTAINER}:/tmp/fm_cfo.json" >/dev/null || return 1
+  docker exec -u root "${N8N_CONTAINER}" chmod 644 /tmp/fm_cfo.json >/dev/null 2>&1 || true
   n8n_cmd import:workflow --input=/tmp/fm_cfo.json || return 1
-  docker exec "${N8N_CONTAINER}" rm -f /tmp/fm_cfo.json >/dev/null 2>&1 || true
+  docker exec -u root "${N8N_CONTAINER}" rm -f /tmp/fm_cfo.json >/dev/null 2>&1 || true
   if [[ -n "$2" ]]; then
     if n8n_cmd --help 2>&1 | grep -q 'publish:workflow'; then
       n8n_cmd publish:workflow --id="$2" || warn "publish:workflow a echoue : publiez le workflow dans l'interface n8n."
