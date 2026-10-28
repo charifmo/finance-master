@@ -190,7 +190,8 @@ let contexte_erreur = null;
 try {
   const r = await this.helpers.httpRequest({
     method: 'POST', url: CONTEXTE_URL, headers: { ...authHeaders }, json: true, timeout: 8000,
-    body: { question: normalized.question, historique: history_text, finance_data: _sourceContexte || null }
+    //  v37.73 : session_id → le VPS note l'étape « contexte » (suivi de l'attente dans l'appli, zéro token)
+    body: { question: normalized.question, historique: history_text, finance_data: _sourceContexte || null, session_id: normalized.session_id || null }
   });
   if (r && typeof r.system_message === 'string' && r.system_message.length > 200) {
     system_message = r.system_message;

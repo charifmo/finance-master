@@ -114,5 +114,6 @@ suite "Une épargne va toujours sur un vrai compte (appli)"  node test_cfo_engin
 suite "Une épargne va toujours sur un vrai compte (moteur du CFO)"  php test_cfo_engine_parity/test_epargne_compte.php
 suite "Attijari « Mes comptes » : le compte reconnu (n°, solde, empreinte)"  node test_cfo_engine_parity/test_attijari_mes_comptes.mjs
 suite "Un virement à faire se programme, il ne change pas les soldes (moteur du CFO)"  php test_cfo_engine_parity/test_virement_programme.php
+suite "Attente du CFO : chronomètre et vraies étapes (zéro token), virement vers le Courant"  node test_cfo_engine_parity/test_attente_cfo.mjs
 
 echo "✅ Toutes les suites passent."

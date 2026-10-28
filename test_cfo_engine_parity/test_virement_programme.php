@@ -47,7 +47,7 @@ v('  → le relevé dit « soldes_touches : false », de / vers en clair', strpo
 // 4. Virement permanent : plusieurs mois
 [$r, $fd] = $compiler('[{"function":"plan_transfer","args":{"from_account":"Compte Salaire","to_account":"courant","amount":14100,"months":[11,12],"day":28}}]');
 v('4. virement permanent (mois 11 et 12, le 28) : deux virements programmés vers le Courant',
-  count($vir($fd)) === 2 && array_map(fn($x) => $x->mois, $vir($fd)) === [11, 12] && $vir($fd)[0]->destinationCompte === 'cpt_acc_cc', json_encode($vir($fd)));
+  count($vir($fd)) === 2 && array_map(fn($x) => $x->mois, $vir($fd)) === [11, 12] && $vir($fd)[0]->destinationCompte === 'courant', json_encode($vir($fd)));   // v37.73 : le Courant s'écrit « courant » (clé de l'écran)
 
 // 5. Garde-fous
 [$r, $fd] = $compiler('[{"function":"plan_transfer","args":{"from_account":"Compte Courant","to_account":"Compte Courant","amount":500,"month":12}}]');

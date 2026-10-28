@@ -22,7 +22,10 @@
 // pas, le CFO marche quand même (avec la version installée).
 // ============================================================================
 
-const CFO_CONTEXTE_VERSION = '37.69';
+const CFO_CONTEXTE_VERSION = '37.73';
+//  v37.73 : suivi des étapes, lu par l'appli pendant l'attente — facultatif, son absence ne casse rien
+if (is_readable(__DIR__ . '/cfo_etapes.php')) require_once __DIR__ . '/cfo_etapes.php';
+if (!function_exists('cfo_etape_noter')) { function cfo_etape_noter(string $sid, string $code, string $libelle = ''): void {} }
 
 function cfo_consignes(): string {
     $f = __DIR__ . '/cfo_system_prompt.md';
@@ -126,6 +129,8 @@ function cfo_contexte_reponse(array $entree): array {
         $out['finance_data_json'] = json_encode($p['contexte'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $out['exercice_expose'] = $p['exercice'];
     }
+    if (!empty($entree['session_id']))
+        cfo_etape_noter((string)$entree['session_id'], 'contexte', 'Vos chiffres transmis au CFO' . ($out['exercice_expose'] ? ' (exercice ' . $out['exercice_expose'] . ')' : ''));
     return $out;
 }
 

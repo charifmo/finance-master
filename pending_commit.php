@@ -67,6 +67,9 @@ register_shutdown_function(function () {
 });
 
 require_once __DIR__ . '/cfo_intent_engine.php';
+//  v37.73 : suivi des étapes du CFO (zéro token) — facultatif, son absence ne casse jamais une simulation
+if (is_readable(__DIR__ . '/cfo_etapes.php')) require_once __DIR__ . '/cfo_etapes.php';
+if (!function_exists('cfo_etape_noter')) { function cfo_etape_noter(string $sid, string $code, string $libelle = ''): void {} }
 
 function sanitize_session_id($s) {
     $clean = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string)$s);
@@ -165,6 +168,7 @@ if ($method === 'GET') {
     }
     $raw = file_get_contents($f);
     if ($raw === false) { http_response_code(500); echo json_encode(['error' => 'Read failed']); exit; }
+    cfo_etape_noter($sid, 'validation', 'Votre OUI : simulation relue pour écriture');
     echo $raw;
     exit;
 }
@@ -189,6 +193,7 @@ if ($method === 'POST') {
     if (isset($body->action) && $body->action === 'cancel_pending') {
         $existed = file_exists($f);
         if ($existed) { @unlink($f); }
+        cfo_etape_noter($sid, 'annulation', 'Simulation annulée');
         echo json_encode(['status'=>'cancelled','session_id'=>$sid,'was_pending'=>$existed,'cancelled_at'=>date('c')]);
         exit;
     }
@@ -255,6 +260,7 @@ if ($method === 'POST') {
 
         // Hors catalogue / clarification : rien n'a été muté, rien à enregistrer.
         if (!$internal) {
+            cfo_etape_noter($sid, 'simulation', 'Simulation : ' . (($res['status'] ?? '') === 'error' ? 'refusée par le moteur (' . ($res['error'] ?? '?') . ')' : 'précision demandée'));
             $res['state_source'] = $stateSource;
             echo json_encode($res, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
             exit;
@@ -276,6 +282,10 @@ if ($method === 'POST') {
             else { $res['pending_saved'] = true; $res['pending_bytes'] = $bytes; }
         }
 
+        $_ok = (int)($res['ops_summary']['success'] ?? 0); $_ko = (int)($res['ops_summary']['errors'] ?? 0);
+        cfo_etape_noter($sid, 'simulation', $res['pending_saved']
+            ? 'Simulation prête : ' . $_ok . ' opération(s)' . ($_ko ? ', ' . $_ko . ' refusée(s)' : '')
+            : 'Simulation refusée' . ($_ko ? ' : ' . $_ko . ' opération(s) en erreur' : ''));
         $res['session_id']  = $sid;
         $res['state_source'] = $stateSource;
         $res['ttl_sec']     = $ttlSeconds;

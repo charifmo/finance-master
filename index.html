@@ -126,6 +126,19 @@
             to { opacity: 1; transform: translateY(0) scale(1); }
         }
     </style>
+    <!-- v37.73 — L'ATTENTE DU CFO : chronomètre, barre qui court, étapes qui apparaissent -->
+    <style id="v3773-attente-cfo">
+        .cfo-barre { position: relative; height: 4px; border-radius: 9999px; background: #f5d0fe; overflow: hidden; }
+        .cfo-barre > span { position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 9999px;
+            background: linear-gradient(90deg, #d946ef, #7c3aed); animation: cfoBarre 1.4s ease-in-out infinite; }
+        @keyframes cfoBarre { 0% { left: -40%; } 100% { left: 100%; } }
+        .cfo-cerveau { animation: cfoRespire 1.8s ease-in-out infinite; }
+        @keyframes cfoRespire { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(217, 70, 239, .35); }
+                                50% { transform: scale(1.06); box-shadow: 0 0 0 6px rgba(217, 70, 239, 0); } }
+        .cfo-attente-phrase, .cfo-etape { animation: cfoApparait .35s ease-out; }
+        @keyframes cfoApparait { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .cfo-barre > span, .cfo-cerveau, .cfo-attente-phrase, .cfo-etape { animation: none; } .cfo-barre > span { left: 0; width: 100%; opacity: .5; } }
+    </style>
     <!-- v37.44 — LISIBILITÉ DE L'INTERFACE DE BUREAU (audit : tailles, contrastes) -->
     <style id="v3744-lisibilite">
         /*  Plus aucun texte de 7 à 9 px sur un écran de bureau : 7-8 px → 10 px, 9 px → 10,5 px.
@@ -288,13 +301,19 @@
                                     </div>
                                 </template>
 
-                                <div v-if="cfoLoading" class="flex gap-3 md:gap-4">
-                                    <div class="shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-sm shadow-sm select-none">🧠</div>
-                                    <div class="flex items-center gap-2 pt-2">
-                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse"></span>
-                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.2s"></span>
-                                        <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.4s"></span>
-                                        <span class="text-sm text-slate-500 font-bold ml-1">Le CFO analyse…</span>
+                                <div v-if="cfoLoading" class="flex gap-3 md:gap-4" data-cfo-attente>
+                                    <div class="cfo-cerveau shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-sm shadow-sm select-none">🧠</div>
+                                    <div class="flex-1 min-w-0 max-w-md rounded-2xl border border-fuchsia-100 bg-white px-4 py-3 shadow-sm">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <span :key="cfoAttente.actif" class="cfo-attente-phrase text-sm font-bold text-slate-700">{{ cfoAttente.actif }}</span>
+                                            <span data-cfo-chrono class="shrink-0 font-mono text-sm font-black text-fuchsia-600 tabular-nums">{{ cfoAttente.chrono }}</span>
+                                        </div>
+                                        <div class="cfo-barre mt-2"><span></span></div>
+                                        <ol class="mt-2 space-y-1">
+                                            <li v-for="(e, i) in cfoAttente.etapes" :key="e.code + i" data-cfo-etape class="cfo-etape flex items-center gap-2 text-xs text-slate-500">
+                                                <span class="text-emerald-500 font-black">✓</span><span class="flex-1 min-w-0 truncate">{{ e.libelle }}</span><span class="font-mono text-slate-400 tabular-nums">{{ e.a }}</span>
+                                            </li>
+                                        </ol>
                                     </div>
                                 </div>
                             </div>
@@ -4107,11 +4126,20 @@
                                     </div>
                                 </div>
                             </template>
-                            <div v-if="cfoLoading" class="flex gap-2.5 items-center">
-                                <div class="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-xs">🧠</div>
-                                <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse"></span>
-                                <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.2s"></span>
-                                <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" style="animation-delay: 0.4s"></span>
+                            <div v-if="cfoLoading" class="flex gap-3 md:gap-4" data-cfo-attente>
+                                <div class="cfo-cerveau shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white flex items-center justify-center text-sm shadow-sm select-none">🧠</div>
+                                <div class="flex-1 min-w-0 max-w-md rounded-2xl border border-fuchsia-100 bg-white px-4 py-3 shadow-sm">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span :key="cfoAttente.actif" class="cfo-attente-phrase text-sm font-bold text-slate-700">{{ cfoAttente.actif }}</span>
+                                        <span data-cfo-chrono class="shrink-0 font-mono text-sm font-black text-fuchsia-600 tabular-nums">{{ cfoAttente.chrono }}</span>
+                                    </div>
+                                    <div class="cfo-barre mt-2"><span></span></div>
+                                    <ol class="mt-2 space-y-1">
+                                        <li v-for="(e, i) in cfoAttente.etapes" :key="e.code + i" data-cfo-etape class="cfo-etape flex items-center gap-2 text-xs text-slate-500">
+                                            <span class="text-emerald-500 font-black">✓</span><span class="flex-1 min-w-0 truncate">{{ e.libelle }}</span><span class="font-mono text-slate-400 tabular-nums">{{ e.a }}</span>
+                                        </li>
+                                    </ol>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -8606,8 +8634,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.72 Virements";
+                    const CURRENT_VERSION = "37.73 Attente CFO";
                     const CHANGELOG = [
+        { version: "37.73 Attente CFO", date: "2026-10-28", changes: [
+            "⏱️ UN CHRONOMÈTRE AU LIEU DE « LE CFO ANALYSE… » — « Un timer est mieux, et une animation dynamique. » Pendant que le CFO travaille : le temps écoulé au dixième de seconde, une barre qui court, une phrase qui suit ce qu'il fait (il lit vos chiffres, il pèse les options, il rédige…) et la liste des étapes déjà franchies, chacune avec son instant. Sur le bureau comme sur le téléphone.",
+            "🧭 SES VRAIES ÉTAPES, SANS UN TOKEN — « Aussi tracker les étapes si ce n'est pas consommateur de tokens. » Le CFO passe déjà par votre serveur aux moments qui comptent ; chaque passage y laisse maintenant une ligne : vos chiffres transmis (et l'exercice), la simulation (prête, refusée, ou une précision demandée), votre OUI relu pour écriture, une annulation. L'appli relit ces lignes pendant l'attente. Le modèle n'en voit rien : aucun token de plus. À faire une fois sur le VPS : git pull puis install.sh cfo (le nœud n8n transmet l'identifiant de conversation).",
+            "🔄 LE VIREMENT VERS LE COMPTE COURANT S'AFFICHAIT SANS DESTINATION — le virement programmé par le CFO vers le Courant était bien compté dans les soldes, mais la case « vers » restait vide : le moteur écrivait le Courant sous son numéro de compte, l'écran ne le connaît que sous « Courant ». Le moteur écrit désormais « Courant », et les virements déjà enregistrés sont remis d'aplomb au chargement.",
+            "PREUVE — nouvelle suite « Attente du CFO » : étapes notées par le VPS (contexte, simulation, OUI relu, annulation), relues dans l'ordre avec leur âge, filtrées par conversation ; chronomètre et étapes affichés dans l'appli pendant une vraie attente, puis retirés à la réponse ; virement vers le Courant affiché « Courant » (moteur et chargement). Rejouée sur la v37.72 : en échec ; défauts réintroduits exprès : attrapés.",
+        ] },
         { version: "37.72 Virements", date: "2026-10-28", changes: [
             "🔒 UN VIREMENT À FAIRE SE PROGRAMME, IL NE CHANGE PAS LES SOLDES D'AUJOURD'HUI — « C'est le CFO qui faisait ce problème en changeant le compte courant au lieu d'initier dans le futur un transfert vers le compte concerné. » Deux fois, le CFO a « réglé » un besoin de trésorerie à venir en modifiant les soldes actuels de deux comptes — la seconde fois depuis un autre compte que l'option choisie. Aucun de ces virements n'avait eu lieu à la banque. Son moteur refuse désormais toute correction de solde qui n'est pas déclarée déjà faite à la banque, et le refus lui dit quoi faire à la place.",
             "📅 PROGRAMMER UN VIREMENT — nouvelle fonction du CFO : un virement futur entre deux comptes, à son mois et à son jour (un ou plusieurs mois pour un virement permanent), inscrit au calendrier des virements : le Relevé, la Météo et l'atterrissage le comptent à sa date, et aucun solde ne bouge. Ses consignes : un virement à faire se programme ; l'option choisie est exécutée telle quelle, vérifiée dans le relevé de la simulation avant de demander OUI.",
@@ -11571,6 +11605,48 @@
                     const cfoMessages = ref(_loadCFOHistory()); // { role: 'user'|'agent', content: string, time: 'HH:MM' }
                     const cfoInput = ref('');
                     const cfoLoading = ref(false);
+                    //  v37.73 : l'attente du CFO — chronomètre + étapes notées par le VPS (cfo_etapes.php).
+                    //  Aucune question au modèle : on relit un fichier que le VPS écrit quand le CFO y passe.
+                    const cfoAttente = reactive({ chrono: '0,0 s', actif: 'Envoi de la question au CFO…', etapes: [] });
+                    const CFO_ETAPES_URL = '/finance/cfo_etapes.php';
+                    const CFO_PHRASES = {
+                        envoi: ['Envoi de la question au CFO…', 'Le CFO reçoit votre question…'],
+                        contexte: ['Le CFO lit vos chiffres…', 'Il croise comptes, charges et calendrier…', 'Il pèse les options…', 'Il prépare sa réponse…'],
+                        simulation: ['Simulation faite — le CFO rédige sa réponse…', 'Il vérifie le résultat de la simulation…'],
+                        validation: ['Écriture en cours sur le serveur…', 'Le CFO rédige le compte rendu…'],
+                        annulation: ['Simulation annulée — le CFO vous répond…'],
+                    };
+                    const _cfoDuree = (ms) => {
+                        const s = Math.max(0, ms) / 1000;
+                        if (s < 60) return s.toFixed(1).replace('.', ',') + ' s';
+                        return Math.floor(s / 60) + ' min ' + String(Math.floor(s % 60)).padStart(2, '0') + ' s';
+                    };
+                    let _cfoAttenteT0 = 0, _cfoChronoId = null, _cfoSondageId = null, _cfoDernierCode = 'envoi';
+                    const _cfoPhrase = () => {
+                        const liste = CFO_PHRASES[_cfoDernierCode] || CFO_PHRASES.contexte;
+                        return liste[Math.floor((Date.now() - _cfoAttenteT0) / 4000) % liste.length];
+                    };
+                    const _cfoSonder = async () => {
+                        try {
+                            const r = await fetch(CFO_ETAPES_URL + '?session_id=' + encodeURIComponent(cfoSessionId.value) + '&t=' + Date.now(), { cache: 'no-store' });
+                            if (!r.ok || !cfoLoading.value) return;
+                            const j = await r.json(), ecoule = Date.now() - _cfoAttenteT0;
+                            //  seules les étapes nées depuis l'envoi (marge 1,5 s) : âge relatif, l'horloge du VPS n'a pas à être à l'heure
+                            const vues = (Array.isArray(j.etapes) ? j.etapes : []).filter(e => e && e.code && e.libelle && e.il_y_a_ms <= ecoule + 1500);
+                            cfoAttente.etapes = [{ code: 'envoi', libelle: 'Question envoyée', a: '0,0 s' }]
+                                .concat(vues.map(e => ({ code: e.code, libelle: e.libelle, a: _cfoDuree(ecoule - e.il_y_a_ms) })));
+                            if (vues.length) _cfoDernierCode = vues[vues.length - 1].code;
+                        } catch (_) { /* VPS muet : le chronomètre continue seul */ }
+                    };
+                    const _cfoAttenteDemarrer = () => {
+                        _cfoAttenteT0 = Date.now(); _cfoDernierCode = 'envoi';
+                        cfoAttente.etapes = [{ code: 'envoi', libelle: 'Question envoyée', a: '0,0 s' }];
+                        cfoAttente.chrono = '0,0 s'; cfoAttente.actif = _cfoPhrase();
+                        clearInterval(_cfoChronoId); clearInterval(_cfoSondageId);
+                        _cfoChronoId = setInterval(() => { cfoAttente.chrono = _cfoDuree(Date.now() - _cfoAttenteT0); cfoAttente.actif = _cfoPhrase(); }, 100);
+                        _cfoSondageId = setInterval(_cfoSonder, 1500);
+                    };
+                    const _cfoAttenteArreter = () => { clearInterval(_cfoChronoId); clearInterval(_cfoSondageId); _cfoChronoId = _cfoSondageId = null; };
                     const chatFullScreen = ref(false);
                     const showCfoModal   = ref(false); // v26.95 : widget modal flottant CFO
                     const cfoMaximized   = ref(false); // v27.1 : plein écran du widget
@@ -12006,6 +12082,7 @@
                         const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
                         cfoMessages.value.push({ role: 'user', content: question, time });
                         cfoLoading.value = true;
+                        _cfoAttenteDemarrer();   // v37.73
                         scrollCFOToBottom();
                         try {
                             const res = await fetch(cfoWebhookUrl.value, {
@@ -12030,6 +12107,7 @@
                         } catch (e) {
                             cfoMessages.value.push({ role: 'agent', content: '<b style="color:#b91c1c">❌ Erreur de connexion au CFO</b><br/><span style="font-size:11px;color:#6b7280">' + (e.message || e) + '</span>', time: '--:--' });
                         } finally {
+                            _cfoAttenteArreter();   // v37.73
                             cfoLoading.value = false;
                             scrollCFOToBottom();
                             // v37.7 : l'agent a pu écrire sur le VPS pendant ce tour.
@@ -15891,6 +15969,20 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const _MOTS_VIDES_COMPTE = new Set(['compte', 'epargne', 'de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'et', 'pour', 'vers', 'poche', 'alimentation', 'virement', 'versement', 'objectif']);
                     const _motsCompte = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]+/g, ' ')
                         .split(' ').filter(w => w.length > 1 && !_MOTS_VIDES_COMPTE.has(w));
+                    //  v37.73 : un virement vers (ou depuis) le Compte Courant enregistré « cpt_<id du Courant> »
+                    //  (moteur du CFO ≤ v37.72) s'affichait sans compte : l'écran ne connaît le Courant que sous « courant ».
+                    const virementsVersCourant = (data) => {
+                        let n = 0;
+                        const cc = (Array.isArray(data && data.comptes) ? data.comptes : []).find(c => c && (c.type === 'courant' || c.type === 'liquide'));
+                        if (!cc) return n;
+                        const cle = 'cpt_' + cc.id;
+                        Object.values(data.donneesAnnuelles || {}).forEach(an => (Array.isArray(an && an.virementsInternes) ? an.virementsInternes : []).forEach(v => {
+                            if (!v) return;
+                            if (v.sourceCompte === cle) { v.sourceCompte = 'courant'; n++; }
+                            if (v.destinationCompte === cle) { v.destinationCompte = 'courant'; n++; }
+                        }));
+                        return n;
+                    };
                     const rattacherEpargnes = (data) => {
                         const faits = [];
                         if (!data || typeof data !== 'object') return faits;
@@ -16145,6 +16237,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             purgerSourceCompteCharges(data);                    // v37.67 : schéma 22
                             const _corr = corrigerDonneesApprouvees(data);      // v37.68 : schéma 23
                             const _rat = rattacherEpargnes(data);               // v37.70 : à chaque chargement
+                            const _vcc = virementsVersCourant(data);            // v37.73 : à chaque chargement
+                            if (_vcc) addLog('🔄 ' + _vcc + ' virement(s) programmé(s) vers le Compte Courant : destination rétablie à l\'écran.', 'success');
                             if (_rat.length) addLog('🔗 ' + _rat.length + ' épargne(s) sans compte de destination rattachée(s) : ' + _rat.map(r => r.epargne + ' ' + r.an + ' → ' + r.compte).join(' · ') + '.', 'success');
                             if (_corr.soldes) addLog('↩️ ' + _corr.soldes + ' solde(s) remis comme avant les transferts enregistrés par le CFO sans avoir eu lieu à la banque.', 'success');
                             if (_corr.operations) addLog('🧹 ' + _corr.operations + ' opération(s) importée(s) par erreur retirée(s) (en-tête de compte lu comme une dépense).', 'success');
@@ -24704,7 +24798,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         isMobile, activeMobileTab, mobileMonthOpen, toggleMobileMonth,
                         // v37.32 : l'interface se souvient (localStorage, par appareil)
                         uiOuvert, uiBasculer, uiFixer,
-                        cfoMessages, cfoInput, cfoLoading, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, showCfoModal, cfoMaximized, startDragCfoWidget, brieferCFO, consulterCFO, envoyerCFO, garantirMemoire, saveCFOWebhook, resetCFOSession,
+                        cfoMessages, cfoInput, cfoLoading, cfoAttente, cfoSessionId, cfoWebhookUrl, cfoWebhookInput, cfoChatContainer, chatFullScreen, showCfoModal, cfoMaximized, startDragCfoWidget, brieferCFO, consulterCFO, envoyerCFO, garantirMemoire, saveCFOWebhook, resetCFOSession,
                         // v37.11 — barre de prompt
                         cfoChatContainerMobile, grandirChampCFO, toucheCFO,
                         forceUpdateCalculations, handleDataChange, serverSyncStatus, serverLastSync, serverLogs, saveToServer, testConnection, menuDonnees, etatSauvegarde, syncStatus, authDrive, saveToDrive, disconnectDrive: () => { syncStatus.value = 'disconnected'; }, showDriveHelp, gConfig, restaurerDefaut,
@@ -24798,7 +24892,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.20 : pulse hebdomadaire
                         liberteCycle, sanctuaireHebdo, consoCompteurRenseigne, saisirCompteurConso,
                         // v37.29 : semaines réelles du cycle
-                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines, morceauxDuCycle, morceauDe, joursDuCycle, libSemaines, partDuMorceau, migrerSemainesCoupees, purgerSourceCompteCharges, corrigerDonneesApprouvees, rattacherEpargnes, undoInfo, OPERATIONS_RETIREES, SOLDES_A_CORRIGER, _empreinte, _lectureCFO, _buildPayloadCFO, UNDO_MAX,
+                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines, morceauxDuCycle, morceauDe, joursDuCycle, libSemaines, partDuMorceau, migrerSemainesCoupees, purgerSourceCompteCharges, corrigerDonneesApprouvees, rattacherEpargnes, virementsVersCourant, undoInfo, OPERATIONS_RETIREES, SOLDES_A_CORRIGER, _empreinte, _lectureCFO, _buildPayloadCFO, UNDO_MAX,
                         // v37.50 : un compte par ligne
                         compteDeLaCharge, resteAPayerFixesParCompte, resteAPayerFacturesParCompte, enveloppeConsoParCompte,
                         // v37.30 : un rythme par ligne de détail

@@ -1953,6 +1953,10 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             if (cfo_cle_compte_epargne($src, $fd) === cfo_cle_compte_epargne($dst, $fd)) { $log['status']='error'; $log['reason']='même compte au départ et à l arrivée'; break; }
             if (!is_array(oget($y,'virementsInternes'))) oset($y,'virementsInternes',[]);
             $pool = oget($y,'virementsInternes');
+            //  v37.73 : le Compte Courant s'écrit « courant » — c'est la seule clé que l'écran des virements connaît
+            $_cc = null;
+            foreach ((oget($fd, 'comptes') ?: []) as $c) if (is_object($c) && in_array(oget($c, 'type'), ['courant', 'liquide'], true)) { $_cc = 'cpt_' . oget($c, 'id'); break; }
+            if ($_cc !== null) { if ($src === $_cc) $src = 'courant'; if ($dst === $_cc) $dst = 'courant'; }
             $vir = cfo_obj(['id'=>cfo_uid(),'mois'=>$m,'sourceCompte'=>$src,'destinationCompte'=>$dst,'montant'=>$mt + 0]);
             if ($j !== null && (int)$j >= 1 && (int)$j <= 31) oset($vir,'jourPrevu',(int)$j);
             $pool[] = $vir; oset($y,'virementsInternes',$pool);

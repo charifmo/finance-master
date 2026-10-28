@@ -50,6 +50,7 @@ for (const f of ['cfo_contexte.php', 'cfo_system_prompt.md']) fs.copyFileSync(pa
 const port = await portLibre();
 const srv = spawn(php, ['-S', '127.0.0.1:' + port, '-t', doc], { stdio: 'ignore' });
 for (let i = 0; i < 50; i++) { try { await fetch(`http://127.0.0.1:${port}/finance/cfo_contexte.php`); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
+const VERSION_CTX = /CFO_CONTEXTE_VERSION = '([\d.]+)'/.exec(fs.readFileSync(path.join(RACINE, 'cfo_contexte.php'), 'utf8'))[1];   // v37.73 : suit le fichier
 const URL0 = `http://127.0.0.1:${port}/finance/cfo_contexte.php`;
 
 //  Un JSON brut de serveur (fictif), tel que Telegram le charge
@@ -79,7 +80,7 @@ try {
     let viaVps = null;
     await section('B', async () => {
         const g = await (await fetch(URL0)).json();
-        v('B. GET : les consignes du dépôt, telles quelles (version 37.69)', g.version === '37.69' && g.system_message === consignes, String(g.version));
+        v('B. GET : les consignes du dépôt, telles quelles (version de cfo_contexte.php)', g.version === VERSION_CTX && g.system_message === consignes, String(g.version));
         const r = await poster({ question: 'combien virer ?', historique: '', finance_data: brut });
         const c = JSON.parse(r.finance_data_json);
         viaVps = c;
@@ -184,7 +185,7 @@ try {
         const o = await executer(code, normalized);
         const cv = JSON.parse(o.finance_data_json);
         v('D. VPS joignable : consignes (mises à jour par un git pull) et contexte du VPS, lecture_moteur en tête',
-          o.contexte_source === 'vps 37.69' && o.system_message === majVps && Object.keys(cv)[0] === 'lecture_moteur' && o.exercice_expose === 2026 && o.contexte_erreur === null, JSON.stringify([o.contexte_source, o.contexte_erreur]));
+          o.contexte_source === 'vps ' + VERSION_CTX && o.system_message === majVps && Object.keys(cv)[0] === 'lecture_moteur' && o.exercice_expose === 2026 && o.contexte_erreur === null, JSON.stringify([o.contexte_source, o.contexte_erreur]));
         v('  → les outils gardent le JSON complet (finance_data intact)', o.finance_data === brut || JSON.stringify(o.finance_data) === JSON.stringify(brut), '');
         srv.kill();
         await new Promise(r => setTimeout(r, 300));
