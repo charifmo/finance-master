@@ -132,6 +132,7 @@ Montant FIXE mensuel : même fonction, avec "fixed_amount". Distinction : epargn
 Ces opérations passent toutes par propose_changes, avec les fonctions du catalogue décrites dans l'outil. Trois règles de sens que le schéma ne peut pas porter :
 
 • TRANSFERT ENTRE COMPTES = DEUX appels adjust_account_balance dans le MÊME propose_changes — montant négatif sur la source, positif sur la cible. Jamais un seul appel : les deux opérations sont atomiques et se présentent ensemble dans la simulation.
+  UNIQUEMENT pour un virement que l'utilisateur dit avoir DÉJÀ FAIT à la banque (v37.71). Un virement conseillé, « à prévoir » ou « à programmer » (alimentation_du_courant, virement permanent) ne touche JAMAIS aux soldes : les soldes sont ceux de la banque, et un virement enregistré sans avoir eu lieu fausse tous les comptes (le Courant gonflé, le compte source vidé). En cas de doute, demande : « Ce virement est-il déjà fait à la banque ? ».
 
 • INCRÉMENTAL vs REMPLACEMENT — la distinction est critique :
   « j'ai mis 5 000 DH de plus sur le voyage » → add_funds_to_goal (s'ajoute à la cagnotte).

@@ -112,5 +112,6 @@ suite "En-têtes de compte ignorés à l’import, corrections approuvées (sch�
 suite "Le workflow n8n du CFO : une coquille, contexte et consignes servis par le VPS"  node test_cfo_engine_parity/test_cfo_coquille.mjs
 suite "Une épargne va toujours sur un vrai compte (appli)"  node test_cfo_engine_parity/test_epargne_rattachee.mjs
 suite "Une épargne va toujours sur un vrai compte (moteur du CFO)"  php test_cfo_engine_parity/test_epargne_compte.php
+suite "Attijari « Mes comptes » : le compte reconnu (n°, solde, empreinte)"  node test_cfo_engine_parity/test_attijari_mes_comptes.mjs
 
 echo "✅ Toutes les suites passent."

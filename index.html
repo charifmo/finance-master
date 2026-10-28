@@ -8606,8 +8606,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.70 Un compte";
+                    const CURRENT_VERSION = "37.71 Attijari";
                     const CHANGELOG = [
+        { version: "37.71 Attijari", date: "2026-10-28", changes: [
+            "🏦 LA CAPTURE ATTIJARI « MES COMPTES » RECONNUE — « Pourquoi il ne reconnaît pas le compte Attijari ? » Sur cet écran, la liste des opérations n'a d'autre titre que son mois (« Octobre 2026 ») : faute de titre reconnu, l'en-tête était coupé au total « Mes comptes », et le n° du compte et le solde du compte chèque, lus juste en dessous, tombaient dans la liste — « sans RIB visible, à quel compte l'associer ? ». Un mois seul sur sa ligne marque désormais le début de la liste : le n° est lu, la capture est rattachée toute seule à son compte.",
+            "LE SOLDE SUIVI LU — quand le compte suit le total « Mes comptes » et que l'OCR le lit collé (« 987600DH »), la troisième lecture (seuil local) est lancée aussi : le solde suivi est proposé à l'application, pas seulement celui du compte chèque.",
+            "UNE EMPREINTE PLUS TOLÉRANTE — une empreinte mémorisée (« pad compte cheque », un « pad » lu sur l'icône) reconnaît le même intitulé de la même banque à un mot parasite près ; une empreinte vide ne reconnaît jamais rien.",
+            "💸 LE CFO NE DÉPLACE PLUS DE SOLDES POUR UN VIREMENT À PRÉVOIR — ses consignes réservent les transferts entre comptes (ajustement des deux soldes) aux virements que vous dites déjà faits à la banque. Un virement conseillé ou à programmer ne touche jamais aux soldes ; en cas de doute, il demande si le virement est fait.",
+            "PREUVE — nouvelle suite « Attijari « Mes comptes » » : 12 contrôles (écran OCR fictif, n° et montants inventés). Rejouée sur la v37.70 : 6 en échec. Défauts réintroduits exprès (mois non reconnu comme titre, empreinte stricte, tolérance sans limite) : attrapés. Les quatre suites bancaires existantes passent sans changement. Vérifié sur votre capture réelle : compte reconnu par son n°, solde « Mes comptes » proposé.",
+        ] },
         { version: "37.70 Un compte", date: "2026-10-28", changes: [
             "🔗 UNE ÉPARGNE VA TOUJOURS SUR UN VRAI COMPTE — « Pourquoi cette duplication de comptes ? Toujours cette confusion entre objectif et compte : je veux une résolution une fois pour toutes. » Les virements d'épargne avaient été recréés pour partir du compte du salaire, mais SANS compte de destination. Une épargne sans destination devenait une « poche » virtuelle : l'argent quittait la source sans arriver sur aucun compte, le patrimoine projeté affichait une poche « Urgence » à côté du vrai « Compte urgence », et l'Épargne Long Terme passait sous zéro (elle paie le syndic sans plus rien recevoir). À chaque chargement, une épargne sans compte est désormais rattachée quand il n'y a aucun doute : la même épargne reliée dans une autre année, sinon l'unique compte dont le nom figure dans le sien (« Epargne urgence » → « Compte urgence »), jamais son propre compte source.",
             "PLUS DE PIÈGE DANS L'ÉCRAN — le sélecteur « Vers : » ne propose plus « 🎯 Enveloppe virtuelle » comme un choix normal : une épargne sans compte s'affiche « ⚠️ Aucun compte — à choisir », en rouge ; une poche restée sans compte se nomme « 🎯 … (sans compte) » partout, pour ne jamais passer pour un compte bancaire.",
@@ -23567,6 +23574,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                     const BQ_DATE_GAB = /(^|\s)(\d{2})[ \/](\d{2}) \d{2}h\d{2}\b/gi;      // « AWBGAB … E 14 10 09H01 », « … 07/10 08H08 »
                     //  Les titres qui ouvrent la liste des opérations
                     const BQ_TITRES = /dernieres operations|transactions recentes|total des mouvements|derniers mouvements|historique des operations|liste des operations|mes operations/;
+                    //  v37.71 : Attijari mobile « Mes comptes » — la liste n'a d'autre titre que son mois (« Octobre 2026 »)
+                    const BQ_TITRE_MOIS = /^(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\s+20\d\d$/;
                     //  Les lignes d'interface qui ne sont jamais une opération
                     const BQ_BRUIT = /^(voir (tout|plus)|tout voir|afficher plus|accueil|comptes?|mes comptes|operations|virements?|paiements?|cartes?|plus|menu|profil|services|filtrer|rechercher|aujourd ?hui|hier|historique|releve|date|libelle|montant|debit|credit|solde|transferts?|mon compte|parametres|deconnexion)( (comptes?|virements?|cartes?|plus|operations|transferts?|services|profil))*$/;
                     //  v37.54 : une barre de menu (« VIREMENTS PAIEMENTS RECHARGES RIB », « Accueil Comptes Cartes Menu ») n'est jamais un libellé
@@ -23718,7 +23727,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const lignes = _bqLignes(texte);
                         const toks = lignes.map(_bqLigne);
                         //  En-tête (comptes, soldes, RIB) | opérations : coupées au titre de la liste
-                        let iTitre = lignes.findIndex(l => BQ_TITRES.test(bqNorm(l)));
+                        let iTitre = lignes.findIndex(l => BQ_TITRES.test(bqNorm(l)) || BQ_TITRE_MOIS.test(bqNorm(l).trim()));
                         if (iTitre < 0) {
                             //  Pas de titre : l'en-tête s'arrête au premier solde annoncé (« Solde », « Compte chèque »…)
                             const k = lignes.findIndex(l => /solde|mes comptes|compte (cheque|courant)|disponible/.test(bqNorm(l)));
@@ -23943,7 +23952,17 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         if (parId.length === 1) return { compteId: parId[0].id, via: 'identifiant', question: null };
                         if (parId.length > 1) return { compteId: null, via: null, question: 'ambigu', candidats: parId.map(c => c.id) };
                         if ((a.identifiants || []).length) return { compteId: null, via: null, question: 'identifiant' };
-                        const parEmp = (comptes.value || []).filter(c => (c.empreintes || []).includes(a.signature));
+                        //  v37.71 : même banque, même intitulé à un mot parasite près (« pad compte cheque » ↔ « compte cheque »,
+                        //  l'OCR lit parfois l'icône) ; une empreinte sans intitulé (« attijari| ») ne reconnaît rien
+                        const _motsEmp = (s) => String(s || '').split(' ').filter(Boolean);
+                        const empPareille = (x, y) => {
+                            if (x === y) return !/\|$/.test(String(x));
+                            const [bx, ix] = String(x || '').split('|'), [by, iy] = String(y || '').split('|');
+                            if (!bx || bx !== by || !ix || !iy) return false;
+                            const mx = _motsEmp(ix), my = _motsEmp(iy), [c, l] = mx.length <= my.length ? [mx, my] : [my, mx];
+                            return c.length >= 2 && l.length - c.length <= 1 && c.every(w => l.includes(w));
+                        };
+                        const parEmp = (comptes.value || []).filter(c => (c.empreintes || []).some(e => empPareille(e, a.signature)));
                         if (parEmp.length === 1) return { compteId: parEmp[0].id, via: 'empreinte', question: null };
                         return { compteId: null, via: null, question: parEmp.length > 1 ? 'ambigu' : 'empreinte', candidats: parEmp.map(c => c.id) };
                     };
@@ -24117,7 +24136,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         await lire(1, 2, 'rgb', '0');
                         //  Un téléphone dont aucun solde n'a été lu (un texte clair sur un bandeau coloré, que le seuil global
                         //  noie avec son fond) : une troisième lecture au seuil local (Sauvola) — pour l'en-tête seulement
-                        if (img.height > img.width * 1.4 && !textes.some(t => Object.keys(bqAnalyser(t).soldes).length)) {
+                        //  v37.71 : …ou quand « Mes comptes » est à l'écran sans montant lisible (« 987600DH ») — c'est le solde
+                        //  que suivent certains comptes Attijari, et le compte chèque lu au-dessous ne le remplace pas
+                        const _mesComptesManque = (t) => /mes comptes/.test(bqNorm(t)) && bqAnalyser(t).soldes.mesComptes == null;
+                        if (img.height > img.width * 1.4 && (!textes.some(t => Object.keys(bqAnalyser(t).soldes).length) || textes.every(_mesComptesManque))) {
                             await lire(2, 3, 'rgb', '2');
                             textes.enTete = 2;
                         }
