@@ -397,7 +397,16 @@ installer_cfo() {
   mkdir -p "${CFO_SAUVEGARDES}"
   cp "${ici}" "${CFO_SAUVEGARDES}/n8n_workflows_$(date +%Y%m%d_%H%M%S).json"
   ok "Sauvegarde des workflows : ${CFO_SAUVEGARDES}/"
-  resume="$(php "${dir}/n8n/maj_workflow_cfo.php" "${ici}" "${patch}")" || die "Mise a jour du workflow impossible (voir message ci-dessus)."
+  # La liste des identifiants (noms et types seulement : le contenu reste chiffre) — pour
+  # rebrancher les noeuds Telegram sur le bot du CFO s'ils pointent sur un autre bot.
+  local creds; creds="$(mktemp)"
+  local dansc="/tmp/fm_creds_$$.json"
+  if n8n_cmd export:credentials --all --output="${dansc}" >/dev/null 2>&1; then
+    docker exec "${N8N_CONTAINER}" cat "${dansc}" > "${creds}" 2>/dev/null || true
+    docker exec -u root "${N8N_CONTAINER}" rm -f "${dansc}" >/dev/null 2>&1 || true
+  fi
+  resume="$(php "${dir}/n8n/maj_workflow_cfo.php" "${ici}" "${patch}" "${creds}")" || { rm -f "${creds}"; die "Mise a jour du workflow impossible (voir message ci-dessus)."; }
+  rm -f "${creds}"
   log "Workflow : ${resume}"
   if grep -q '"deja_a_jour":true' <<<"${resume}"; then
     ok "Le workflow du CFO est deja a jour. Rien a faire."

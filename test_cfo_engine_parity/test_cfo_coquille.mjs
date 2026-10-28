@@ -123,6 +123,24 @@ try {
           && apres.nodes[iA].parameters.options.systemMessage === '={{ $json.system_message }}' && apres.nodes[iA].parameters.options.maxIterations === avant.nodes[iA].parameters.options.maxIterations, '');
         const res2 = JSON.parse(execFileSync(php, [path.join(RACINE, 'n8n/maj_workflow_cfo.php'), path.join(tmp, 'sortie.json'), path.join(tmp, 'sortie2.json')], { encoding: 'utf8' }));
         v('  → rejoué : « déjà à jour », fichier identique', res2.deja_a_jour === true && fs.readFileSync(path.join(tmp, 'sortie.json'), 'utf8') === fs.readFileSync(path.join(tmp, 'sortie2.json'), 'utf8'), JSON.stringify(res2));
+        //  Le bot Telegram : workflow branché sur un autre bot (« santé ») → rebranché sur l'identifiant « CFO »
+        const sante = JSON.parse(JSON.stringify(avant));
+        sante.nodes.forEach(n => { if (n.credentials && n.credentials.telegramApi) n.credentials.telegramApi = { id: 'santeID', name: 'Telegram santé  account' }; });
+        fs.writeFileSync(path.join(tmp, 'sante.json'), JSON.stringify([sante]));
+        fs.writeFileSync(path.join(tmp, 'creds.json'), JSON.stringify([{ id: 'santeID', name: 'Telegram santé  account', type: 'telegramApi', data: 'chiffré' },
+            { id: 'CFOV2TelegramAPI', name: 'CFO V2 Telegram API', type: 'telegramApi', data: 'chiffré' }, { id: 'pg', name: 'charif_finance_db', type: 'postgres', data: 'chiffré' }]));
+        const rt = JSON.parse(execFileSync(php, [path.join(RACINE, 'n8n/maj_workflow_cfo.php'), path.join(tmp, 'sante.json'), path.join(tmp, 'sante_sortie.json'), path.join(tmp, 'creds.json')], { encoding: 'utf8' }));
+        const st = JSON.parse(fs.readFileSync(path.join(tmp, 'sante_sortie.json'), 'utf8'));
+        const tg = st.nodes.filter(n => n.credentials && n.credentials.telegramApi).map(n => n.credentials.telegramApi.id);
+        v('  → branché sur « Telegram santé » : les 4 nœuds Telegram rebranchés sur « CFO V2 Telegram API », les autres identifiants intacts',
+          tg.length === 4 && tg.every(x => x === 'CFOV2TelegramAPI') && rt.telegram.apres === 'CFO V2 Telegram API' && JSON.stringify(rt.telegram.avant) === '["Telegram santé  account"]'
+          && JSON.stringify(st.nodes.filter(n => n.credentials && !n.credentials.telegramApi).map(n => n.credentials)) === JSON.stringify(avant.nodes.filter(n => n.credentials && !n.credentials.telegramApi).map(n => n.credentials)), JSON.stringify(rt.telegram));
+        const rt2 = JSON.parse(execFileSync(php, [path.join(RACINE, 'n8n/maj_workflow_cfo.php'), path.join(tmp, 'sante_sortie.json'), path.join(tmp, 'sante2.json'), path.join(tmp, 'creds.json')], { encoding: 'utf8' }));
+        fs.writeFileSync(path.join(tmp, 'creds2.json'), JSON.stringify([{ id: 'a', name: 'CFO A', type: 'telegramApi' }, { id: 'b', name: 'CFO B', type: 'telegramApi' }]));
+        const rt3 = JSON.parse(execFileSync(php, [path.join(RACINE, 'n8n/maj_workflow_cfo.php'), path.join(tmp, 'sante.json'), path.join(tmp, 'sante3.json'), path.join(tmp, 'creds2.json')], { encoding: 'utf8' }));
+        const st3 = JSON.parse(fs.readFileSync(path.join(tmp, 'sante3.json'), 'utf8'));
+        v('  → rejoué : déjà à jour ; deux identifiants « CFO » possibles : rien n\'est rebranché (pas de devinette)',
+          rt2.deja_a_jour === true && rt3.telegram.apres === null && st3.nodes.filter(n => n.credentials && n.credentials.telegramApi).every(n => n.credentials.telegramApi.id === 'santeID'), JSON.stringify([rt2, rt3.telegram]));
         const depot = JSON.parse(lire('super_agent_cfo_audio.json'));
         v('  → le fichier du dépôt est déjà à jour (même code que celui installé)',
           depot.nodes.find(n => n.name === 'Build Agent Input').parameters.jsCode === b && depot.nodes.find(n => n.name === 'AI Agent').parameters.options.systemMessage === '={{ $json.system_message }}', '');

@@ -2,7 +2,7 @@
 // ============================================================================
 // v37.69 — MET À JOUR LE WORKFLOW « Super-Agent CFO » EXPORTÉ DE n8n
 // ----------------------------------------------------------------------------
-//   php n8n/maj_workflow_cfo.php <export.json> <sortie.json>
+//   php n8n/maj_workflow_cfo.php <export.json> <sortie.json> [identifiants.json]
 //
 // <export.json> : la sortie de « n8n export:workflow --all » (ou un seul workflow).
 // Repère le workflow du CFO (nœuds Normalize Input + Build Agent Input + AI Agent ;
@@ -55,8 +55,31 @@ $avant = json_encode([$wf['nodes'][$iB]['parameters']['jsCode'] ?? null, $wf['no
 $wf['nodes'][$iB]['parameters']['jsCode'] = $code;
 if (!isset($wf['nodes'][$iA]['parameters']['options']) || !is_array($wf['nodes'][$iA]['parameters']['options'])) $wf['nodes'][$iA]['parameters']['options'] = [];
 $wf['nodes'][$iA]['parameters']['options']['systemMessage'] = '={{ $json.system_message }}';
+//  v37.69 : le bot Telegram du CFO. Telegram n'accepte qu'UN workflow par bot : un workflow CFO branché
+//  sur un autre bot (« Telegram santé ») lui vole ses messages et laisse le bot CFO sans réponse. Avec la
+//  liste des identifiants de n8n (3e argument), les nœuds Telegram sont rebranchés sur l'identifiant
+//  Telegram dont le nom contient « CFO » — seulement s'il existe, et s'il est unique.
+$telegram = null;
+if ($argc >= 4 && is_readable($argv[3])) {
+    $creds = json_decode((string)file_get_contents($argv[3]), true);
+    $creds = is_array($creds) ? (isset($creds['id']) ? [$creds] : $creds) : [];
+    $cfo = array_values(array_filter($creds, fn($c) => is_array($c) && ($c['type'] ?? '') === 'telegramApi' && stripos((string)($c['name'] ?? ''), 'cfo') !== false));
+    if (count($cfo) === 1) {
+        $cible = ['id' => (string)$cfo[0]['id'], 'name' => (string)$cfo[0]['name']];
+        $avantT = [];
+        foreach ($wf['nodes'] as $i => $n) {
+            if (stripos((string)($n['type'] ?? ''), 'telegram') === false || !isset($n['credentials']['telegramApi'])) continue;
+            $avantT[] = (string)($n['credentials']['telegramApi']['name'] ?? '?');
+            $wf['nodes'][$i]['credentials']['telegramApi'] = $cible;
+        }
+        $telegram = ['avant' => array_values(array_unique($avantT)), 'apres' => $cible['name']];
+    } else {
+        $telegram = ['avant' => null, 'apres' => null, 'note' => count($cfo) ? 'plusieurs identifiants Telegram « CFO » : rien changé' : 'aucun identifiant Telegram « CFO » : rien changé'];
+    }
+}
 $apres = json_encode([$code, '={{ $json.system_message }}']);
+$telegramChange = $telegram && $telegram['apres'] && $telegram['avant'] !== [$telegram['apres']];
 
 file_put_contents($argv[2], json_encode($wf, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
 echo json_encode(['id' => $wf['id'] ?? null, 'nom' => $wf['name'] ?? null, 'actif' => !empty($wf['active']), 'base' => $base,
-                  'deja_a_jour' => $avant === $apres], JSON_UNESCAPED_UNICODE), "\n";
+                  'telegram' => $telegram, 'deja_a_jour' => $avant === $apres && !$telegramChange], JSON_UNESCAPED_UNICODE), "\n";
