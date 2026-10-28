@@ -1664,6 +1664,9 @@
                                         <input type="number" v-model.number="depense.montant" @input="handleDataChange" :disabled="depense.parts && depense.parts.length > 0" :class="['w-24 text-right font-black bg-transparent outline-none', depense.parts && depense.parts.length ? 'text-gray-400' : (depense.montant < 0 ? 'text-green-600' : 'text-red-600')]"/>
                                         <span v-if="depense.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase">Injection Banque</span>
                                         <span v-if="depense.parts && depense.parts.length" class="text-[8px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-black uppercase">✂️ {{depense.parts.length}} parties</span>
+                                        <!-- v37.74 : jour exact du mois -->
+                                        <label class="flex items-center gap-1 shrink-0" title="Jour exact du mois — vide : sans jour précis"><span class="text-[10px] font-black text-gray-400">📅 j.</span><input data-jour-exact type="number" min="1" :max="joursDuMoisCal(depense.mois, anneeAffichage)" :value="depense.jourPrevu || ''" @change="fixerJourExact(depense, $event.target.value, depense.mois, anneeAffichage); $event.target.value = depense.jourPrevu || ''" placeholder="—" class="w-12 text-center font-black text-xs bg-white border border-gray-200 rounded-lg px-1 py-1.5 outline-none focus:ring-2 focus:ring-blue-300"/></label>
+                                        <span v-if="jourApresPaie(depense)" data-jour-cycle-suivant :title="'Le ' + depense.jourPrevu + ' tombe après la paie (le ' + jourDePaieCal() + ') : compté dans le cycle suivant'" class="text-[8px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-black whitespace-nowrap">après paie → {{ cycleSuivantNom(depense.mois) }}</span>
                                         <!-- Source (masqué si parts) -->
                                         <select v-if="!depense.parts || !depense.parts.length" v-model="depense.sourceCompte" @change="handleDataChange" class="bg-gray-100 text-gray-700 px-2 py-1.5 rounded-lg font-bold text-[10px] outline-none cursor-pointer border border-gray-200" title="Compte source">
                                             <option value="courant">💳 Courant</option>
@@ -1712,6 +1715,8 @@
                                             <option v-for="c in comptesSelectOptions" :key="'vdst_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
                                             <option v-for="ep in epargneNonLiee" :key="'vdep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                         </select>
+                                        <label class="flex items-center gap-1 shrink-0" title="Jour exact du mois — vide : sans jour précis"><span class="text-[10px] font-black text-gray-400">📅 j.</span><input data-jour-exact type="number" min="1" :max="joursDuMoisCal(vir.mois, anneeAffichage)" :value="vir.jourPrevu || ''" @change="fixerJourExact(vir, $event.target.value, vir.mois, anneeAffichage); $event.target.value = vir.jourPrevu || ''" placeholder="—" class="w-12 text-center font-black text-xs bg-white border border-gray-200 rounded-lg px-1 py-1.5 outline-none focus:ring-2 focus:ring-blue-300"/></label>
+                                        <span v-if="jourApresPaie(vir)" data-jour-cycle-suivant :title="'Le ' + vir.jourPrevu + ' tombe après la paie (le ' + jourDePaieCal() + ') : compté dans le cycle suivant'" class="text-[8px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-black whitespace-nowrap">après paie → {{ cycleSuivantNom(vir.mois) }}</span>
                                         <input type="number" v-model.number="vir.montant" @input="handleDataChange" min="0" class="w-24 text-right font-black text-indigo-700 bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none text-xs"/>
                                         <span class="text-[9px] text-gray-400 font-bold shrink-0">DH</span>
                                         <button title="Supprimer" aria-label="Supprimer" @click="supprimerVirementInterne(vir.id, anneeAffichage)" class="text-red-400 hover:text-red-600 px-1 font-bold text-sm shrink-0">✕</button>
@@ -3810,6 +3815,11 @@
                             <div v-if="choc.montant < 0" class="mt-2">
                                 <span class="text-[9px] bg-green-200 text-green-800 px-2 py-1 rounded font-black uppercase tracking-widest">✅ Injection Banque</span>
                             </div>
+                            <!-- v37.74 : jour exact du mois (mobile) -->
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <label class="flex items-center gap-1 shrink-0" title="Jour exact du mois — vide : sans jour précis"><span class="text-[9px] font-black uppercase tracking-widest text-gray-500">📅 j.</span><input data-jour-exact type="number" min="1" :max="joursDuMoisCal(choc.mois, anneeAffichage)" :value="choc.jourPrevu || ''" @change="fixerJourExact(choc, $event.target.value, choc.mois, anneeAffichage); $event.target.value = choc.jourPrevu || ''" placeholder="—" class="w-20 p-3 text-center border rounded-lg font-black bg-white outline-none text-sm"/></label>
+                                <span v-if="jourApresPaie(choc)" data-jour-cycle-suivant :title="'Le ' + choc.jourPrevu + ' tombe après la paie (le ' + jourDePaieCal() + ') : compté dans le cycle suivant'" class="text-[10px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-black whitespace-nowrap">après paie → {{ cycleSuivantNom(choc.mois) }}</span>
+                            </div>
                             <!-- v17.22 : Source Compte dynamique (mobile) -->
                             <div class="mt-2">
                                 <label class="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1 block">Source Compte</label>
@@ -3877,6 +3887,10 @@
                                             <option v-for="ep in epargneNonLiee" :key="'mvdep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                         </select>
                                     </div>
+                                </div>
+                                <div class="mb-2 flex flex-wrap items-center gap-2">
+                                    <label class="flex items-center gap-1 shrink-0" title="Jour exact du mois — vide : sans jour précis"><span class="text-[9px] font-black uppercase tracking-widest text-gray-500">📅 j.</span><input data-jour-exact type="number" min="1" :max="joursDuMoisCal(vir.mois, anneeAffichage)" :value="vir.jourPrevu || ''" @change="fixerJourExact(vir, $event.target.value, vir.mois, anneeAffichage); $event.target.value = vir.jourPrevu || ''" placeholder="—" class="w-20 p-3 text-center border rounded-lg font-black bg-white outline-none text-sm"/></label>
+                                    <span v-if="jourApresPaie(vir)" data-jour-cycle-suivant :title="'Le ' + vir.jourPrevu + ' tombe après la paie (le ' + jourDePaieCal() + ') : compté dans le cycle suivant'" class="text-[10px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-black whitespace-nowrap">après paie → {{ cycleSuivantNom(vir.mois) }}</span>
                                 </div>
                                 <input type="number" v-model.number="vir.montant" @input="handleDataChange" min="0" placeholder="Montant (DH)" class="w-full p-3 text-sm font-black text-indigo-700 text-right border border-indigo-200 rounded-lg bg-indigo-50 outline-none min-h-[44px]"/>
                             </div>
@@ -8634,8 +8648,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.73 Attente CFO";
+                    const CURRENT_VERSION = "37.74 Jour exact";
                     const CHANGELOG = [
+        { version: "37.74 Jour exact", date: "2026-10-28", changes: [
+            "📅 LE JOUR EXACT DANS LE CALENDRIER PLURIANNUEL — « Il faut ajouter une case jour exact du mois. » Chaque choc et chaque virement interne a maintenant sa case « 📅 j. », sur le bureau comme sur le téléphone. Vide : sans jour précis, comme avant. Le Relevé, la Météo et les cycles savaient déjà placer un flux à son jour — mais on ne pouvait pas le saisir : un nouveau choc prenait en silence le jour de sa création, un virement tombait le 20.",
+            "🗓️ BORNÉE AU MOIS — 31 saisi en novembre devient le 30 ; février compte 28 ou 29 jours selon l'année. Une case vidée retire le jour (le flux redevient « sans jour précis »).",
+            "💶 APRÈS LA PAIE, ON LE VOIT — un jour au moins égal à votre jour de paie fait compter le flux dans le cycle suivant (la règle existait déjà dans les calculs, elle n'était écrite nulle part) : la ligne l'affiche, « après paie → Décembre ». C'est aussi le cas des chocs déjà créés un jour de fin de mois.",
+            "PREUVE — nouvelle suite « Jour exact » (16 contrôles) : cases présentes et préremplies, saisie, borne du mois, case vidée, 0 refusé, passage au cycle suivant pour les chocs et les virements, téléphone. Rejouée sur la v37.73 : en échec ; défauts réintroduits exprès (pas de borne, case vidée qui laisse le jour, badge absent) : attrapés.",
+        ] },
         { version: "37.73 Attente CFO", date: "2026-10-28", changes: [
             "⏱️ UN CHRONOMÈTRE AU LIEU DE « LE CFO ANALYSE… » — « Un timer est mieux, et une animation dynamique. » Pendant que le CFO travaille : le temps écoulé au dixième de seconde, une barre qui court, une phrase qui suit ce qu'il fait (il lit vos chiffres, il pèse les options, il rédige…) et la liste des étapes déjà franchies, chacune avec son instant. Sur le bureau comme sur le téléphone.",
             "🧭 SES VRAIES ÉTAPES, SANS UN TOKEN — « Aussi tracker les étapes si ce n'est pas consommateur de tokens. » Le CFO passe déjà par votre serveur aux moments qui comptent ; chaque passage y laisse maintenant une ligne : vos chiffres transmis (et l'exercice), la simulation (prête, refusée, ou une précision demandée), votre OUI relu pour écriture, une annulation. L'appli relit ces lignes pendant l'attente. Le modèle n'en voit rien : aucun token de plus. À faire une fois sur le VPS : git pull puis install.sh cfo (le nœud n8n transmet l'identifiant de conversation).",
@@ -16511,6 +16531,21 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const ajouterDepense = (m, a) => { if(donneesAnnuelles.value[a]) donneesAnnuelles.value[a].depensesIrregulieres.push({ id: Date.now(), mois: m, annee: a, nom: 'Nouveau', montant: 0, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle', jourPrevu: new Date().getDate() }); handleDataChange(); };
                     const supprimerDepense = (id) => { if(donneesAnnuelles.value[anneeAffichage.value]) donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres = donneesAnnuelles.value[anneeAffichage.value].depensesIrregulieres.filter(d => d.id !== id); handleDataChange(); };
                     // v17.96 : Virements internes CRUD
+                    //  v37.74 : le jour exact d'un choc ou d'un virement, saisi dans le Calendrier Pluriannuel.
+                    //  Vide = sans jour précis ; borné au mois (31 → 30 en novembre, 28/29 en février).
+                    const joursDuMoisCal = (m, a) => new Date(Number(a) || 2026, Number(m) || 1, 0).getDate();
+                    const fixerJourExact = (item, valeur, m, a) => {
+                        if (!item) return;
+                        const n = parseInt(valeur, 10);
+                        if (!Number.isFinite(n) || n < 1) delete item.jourPrevu;
+                        else item.jourPrevu = Math.min(n, joursDuMoisCal(m, a));
+                        handleDataChange();
+                    };
+                    //  Règle du jour de paie (getDepensesCycle / getVirementsCycle) : un jour ≥ jour de paie
+                    //  appartient au cycle suivant. L'écran le dit au lieu de le laisser deviner.
+                    const jourApresPaie = (item) => !!(item && Number(item.jourPrevu) && Number(item.jourPrevu) >= Number(jourDePaie.value));
+                    const jourDePaieCal = () => jourDePaie.value;
+                    const cycleSuivantNom = (m) => nomDuMois(Number(m) === 12 ? 1 : Number(m) + 1);
                     const getVirementsMois = (m, a) => (donneesAnnuelles.value[a]?.virementsInternes || []).filter(v => v.mois === m);
                     //  v37.35 : les virements d'un CYCLE, avec la règle des flux exceptionnels —
                     //  sans jour, un virement du mois M appartient au cycle M ; avec un jour au
@@ -24859,7 +24894,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         addObjectifEpargne, deleteObjectifEpargne,
                         comptesSelectOptions,
                         detailsComptesFinal, soldesProjetesJournal, getCompteLabel, getCompteIcone, getNomCompte,
-                        getVirementsMois, getVirementsCycle, resumesMois, ajouterVirementInterne, supprimerVirementInterne, isEpLinked, getEpLinkedId,
+                        getVirementsMois, getVirementsCycle, resumesMois, ajouterVirementInterne, supprimerVirementInterne, joursDuMoisCal, fixerJourExact, jourApresPaie, jourDePaieCal, cycleSuivantNom, isEpLinked, getEpLinkedId,
                         canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
                         // v37.12 — suivi d'exécution par cycle
                         cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, dateReelleCycle,
