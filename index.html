@@ -8606,8 +8606,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.71 Attijari";
+                    const CURRENT_VERSION = "37.72 Virements";
                     const CHANGELOG = [
+        { version: "37.72 Virements", date: "2026-10-28", changes: [
+            "🔒 UN VIREMENT À FAIRE SE PROGRAMME, IL NE CHANGE PAS LES SOLDES D'AUJOURD'HUI — « C'est le CFO qui faisait ce problème en changeant le compte courant au lieu d'initier dans le futur un transfert vers le compte concerné. » Deux fois, le CFO a « réglé » un besoin de trésorerie à venir en modifiant les soldes actuels de deux comptes — la seconde fois depuis un autre compte que l'option choisie. Aucun de ces virements n'avait eu lieu à la banque. Son moteur refuse désormais toute correction de solde qui n'est pas déclarée déjà faite à la banque, et le refus lui dit quoi faire à la place.",
+            "📅 PROGRAMMER UN VIREMENT — nouvelle fonction du CFO : un virement futur entre deux comptes, à son mois et à son jour (un ou plusieurs mois pour un virement permanent), inscrit au calendrier des virements : le Relevé, la Météo et l'atterrissage le comptent à sa date, et aucun solde ne bouge. Ses consignes : un virement à faire se programme ; l'option choisie est exécutée telle quelle, vérifiée dans le relevé de la simulation avant de demander OUI.",
+            "↩️ LES SOLDES REMIS — les deux transferts enregistrés par le CFO sont annulés une fois au chargement (schéma 24), compte par compte, seulement si le solde est exactement celui qu'ils ont laissé : le Courant revient au solde de votre banque, « depenses annuels » aussi, et ASSAFA récupère ce qui lui avait été retiré. Le journal technique le dit.",
+            "PREUVE — nouvelle suite « Un virement à faire se programme » (moteur du CFO, 11 contrôles) : correction de solde refusée sans « déjà fait en banque », acceptée quand c'est le cas, virement programmé sans toucher aux soldes, virement permanent sur plusieurs mois, garde-fous. Rejouée sur la v37.71 : 8 en échec ; trois défauts réintroduits exprès (verrou absent, virement qui touche les soldes, un seul mois) : attrapés. Suite « corrections approuvées » complétée (soldes corrigés au dirham près, jamais rejoués). Vérifié sur vos données : Courant et « depenses annuels » reviennent exactement aux soldes de votre banque.",
+        ] },
         { version: "37.71 Attijari", date: "2026-10-28", changes: [
             "🏦 LA CAPTURE ATTIJARI « MES COMPTES » RECONNUE — « Pourquoi il ne reconnaît pas le compte Attijari ? » Sur cet écran, la liste des opérations n'a d'autre titre que son mois (« Octobre 2026 ») : faute de titre reconnu, l'en-tête était coupé au total « Mes comptes », et le n° du compte et le solde du compte chèque, lus juste en dessous, tombaient dans la liste — « sans RIB visible, à quel compte l'associer ? ». Un mois seul sur sa ligne marque désormais le début de la liste : le n° est lu, la capture est rattachée toute seule à son compte.",
             "LE SOLDE SUIVI LU — quand le compte suit le total « Mes comptes » et que l'OCR le lit collé (« 987600DH »), la troisième lecture (seuil local) est lancée aussi : le solde suivi est proposé à l'application, pas seulement celui du compte chèque.",
@@ -15249,7 +15255,7 @@
 
                     //  v37.67 : _lectureCFO voyage avec les données — le CFO sur Telegram lit ce fichier brut.
                     const _lectureCFOSure = () => { try { return _lectureCFO(); } catch (e) { return null; } };
-                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 23, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value, _lectureCFO: _lectureCFOSure() });
+                    const getExportData = () => ({ version: CURRENT_VERSION, _schemaVersion: 24, soldesInitiaux: soldesInitiaux.value, donneesAnnuelles: donneesAnnuelles.value, gConfig: gConfig.value, comptes: comptes.value, parametres: parametres.value, wealthGoals: wealthGoals.value, masterAssets: masterAssets.value, studioExpl: studioExpl.value, _lectureCFO: _lectureCFOSure() });
                     // v17.19 : Auto-Save debounce 2s
                     let _autoSaveTimer = null;
 
@@ -15831,9 +15837,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     //     ces années les envoyaient sur le Courant ; l'« épargne » Courant → ce compte est retirée.
                     const _empreinte = (s) => { let h = 0x811c9dc5; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0; return h.toString(16).padStart(8, '0'); };
                     const OPERATIONS_RETIREES = new Set(['04ed9c20']);
+                    //  v37.72 (schéma 24) : les deux transferts que le CFO a enregistrés sur les soldes du jour au lieu de les
+                    //  programmer (aucun n'a eu lieu à la banque) — annulés compte par compte, SEULEMENT si le solde du compte
+                    //  est exactement celui qu'ils ont laissé : empreinte de « id | solde » → correction à appliquer.
+                    const SOLDES_A_CORRIGER = { '0491cf7e': -7898, '40cc44ec': 267, 'a5666a32': 7631 };
                     const corrigerDonneesApprouvees = (data) => {
                         const n = { operations: 0, revenus: 0, epargnes: 0 };
-                        if (!data || (data._schemaVersion || 0) >= 23) return n;
+                        if (!data || (data._schemaVersion || 0) >= 24) return n;
+                        (Array.isArray(data.comptes) ? data.comptes : []).forEach(c => {
+                            const d = c && SOLDES_A_CORRIGER[_empreinte(String(c.id) + '|' + Math.round(Number(c.solde) || 0))];
+                            if (d) { c.solde = Math.round(Number(c.solde) || 0) + d; n.soldes = (n.soldes || 0) + 1; }
+                        });
+                        if ((data._schemaVersion || 0) >= 23) return n;   // les corrections v37.68 (schéma 23) ne se rejouent pas
                         const A = data.donneesAnnuelles || {};
                         Object.values(A).forEach(a => {
                             if (!a || !Array.isArray(a.transactionsReelles)) return;
@@ -16131,6 +16146,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const _corr = corrigerDonneesApprouvees(data);      // v37.68 : schéma 23
                             const _rat = rattacherEpargnes(data);               // v37.70 : à chaque chargement
                             if (_rat.length) addLog('🔗 ' + _rat.length + ' épargne(s) sans compte de destination rattachée(s) : ' + _rat.map(r => r.epargne + ' ' + r.an + ' → ' + r.compte).join(' · ') + '.', 'success');
+                            if (_corr.soldes) addLog('↩️ ' + _corr.soldes + ' solde(s) remis comme avant les transferts enregistrés par le CFO sans avoir eu lieu à la banque.', 'success');
                             if (_corr.operations) addLog('🧹 ' + _corr.operations + ' opération(s) importée(s) par erreur retirée(s) (en-tête de compte lu comme une dépense).', 'success');
                             if (_corr.revenus) addLog('🏦 Salaire et bonification des années suivantes remis sur le compte où ils arrivent (' + _corr.revenus + ' ligne(s))' + (_corr.epargnes ? ', ' + _corr.epargnes + ' virement(s) inverse(s) retiré(s)' : '') + '.', 'success');
                             if (_nSemCoupees) addLog('✅ Semaines coupées par la paie : ' + _nSemCoupees + ' saisie(s) d\'avant la paie rendue(s) au cycle qui finit.', 'success');
@@ -24782,7 +24798,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         // v37.20 : pulse hebdomadaire
                         liberteCycle, sanctuaireHebdo, consoCompteurRenseigne, saisirCompteurConso,
                         // v37.29 : semaines réelles du cycle
-                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines, morceauxDuCycle, morceauDe, joursDuCycle, libSemaines, partDuMorceau, migrerSemainesCoupees, purgerSourceCompteCharges, corrigerDonneesApprouvees, rattacherEpargnes, undoInfo, OPERATIONS_RETIREES, _empreinte, _lectureCFO, _buildPayloadCFO, UNDO_MAX,
+                        semainesDuCycle, semainesDeLAnnee, cyclesSemaines, morceauxDuCycle, morceauDe, joursDuCycle, libSemaines, partDuMorceau, migrerSemainesCoupees, purgerSourceCompteCharges, corrigerDonneesApprouvees, rattacherEpargnes, undoInfo, OPERATIONS_RETIREES, SOLDES_A_CORRIGER, _empreinte, _lectureCFO, _buildPayloadCFO, UNDO_MAX,
                         // v37.50 : un compte par ligne
                         compteDeLaCharge, resteAPayerFixesParCompte, resteAPayerFacturesParCompte, enveloppeConsoParCompte,
                         // v37.30 : un rythme par ligne de détail

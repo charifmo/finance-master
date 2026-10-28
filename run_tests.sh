@@ -113,5 +113,6 @@ suite "Le workflow n8n du CFO : une coquille, contexte et consignes servis par l
 suite "Une épargne va toujours sur un vrai compte (appli)"  node test_cfo_engine_parity/test_epargne_rattachee.mjs
 suite "Une épargne va toujours sur un vrai compte (moteur du CFO)"  php test_cfo_engine_parity/test_epargne_compte.php
 suite "Attijari « Mes comptes » : le compte reconnu (n°, solde, empreinte)"  node test_cfo_engine_parity/test_attijari_mes_comptes.mjs
+suite "Un virement à faire se programme, il ne change pas les soldes (moteur du CFO)"  php test_cfo_engine_parity/test_virement_programme.php
 
 echo "✅ Toutes les suites passent."

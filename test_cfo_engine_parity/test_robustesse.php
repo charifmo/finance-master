@@ -90,10 +90,14 @@ $CAS = [
     ['label'=>'Livret Vert','balance'=>12000,'years'=>[2027]],
     ['nom'=>'Livret Vert','solde'=>'12 000 DH','annee'=>'2027'],
     ['balance'=>12000]],
-'adjust_account_balance' => [
-    ['account'=>'Compte Courant','amount'=>1500,'years'=>[2027]],
-    ['compte'=>'Compte Courant','montant'=>'1 500 DH','annee'=>2027],
+'adjust_account_balance' => [   // v37.72 : seulement pour une opération déjà faite à la banque
+    ['account'=>'Compte Courant','amount'=>1500,'deja_fait_en_banque'=>true,'years'=>[2027]],
+    ['compte'=>'Compte Courant','montant'=>'1 500 DH','deja_fait'=>'oui','annee'=>2027],
     ['account'=>'Compte Courant']],
+'plan_transfer' => [            // v37.72 : un virement à faire se programme
+    ['from_account'=>'Compte Courant','to_account'=>'Depenses Annuels','amount'=>1500,'month'=>12,'day'=>28,'years'=>[2027]],
+    ['depuis'=>'courant','vers'=>'depenses annuels','montant'=>'1 500 DH','mois'=>'12','jour'=>'28','annee'=>'2027'],
+    ['from_account'=>'Compte Courant']],
 'set_initial_balance' => [
     ['account'=>'courant','amount'=>60000,'years'=>[2027]],
     ['compte'=>'courant','solde'=>'60 000 DH','annee'=>'2027'],

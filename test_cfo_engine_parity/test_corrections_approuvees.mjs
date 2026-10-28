@@ -29,7 +29,7 @@ console.log('\n  EN-TÊTES DE COMPTE · CORRECTIONS APPROUVÉES (SCHÉMA 23)\n  
 /* ── A. Statique ─────────────────────────────────────────────────────── */
 v('A. le parseur écarte les en-têtes de compte ; schéma 23 ; la correction est appelée au chargement',
   /const BQ_ENTETE_COMPTE = \/\^compte\\s\*\(cheque\|courant\)\\b\/;/.test(html) && /\.filter\(o => !BQ_ENTETE_COMPTE\.test\(bqNorm\(o\.libelle\)\.trim\(\)\)\)/.test(html)
-  && /_schemaVersion: 23,/.test(html) && /const _corr = corrigerDonneesApprouvees\(data\);/.test(html));
+  && /_schemaVersion: (2[3-9]|[3-9]\d),/.test(html) && /const _corr = corrigerDonneesApprouvees\(data\);/.test(html));
 v('  → aucune donnée réelle dans le code : une empreinte de 8 caractères par opération retirée',
   /const OPERATIONS_RETIREES = new Set\(\['[0-9a-f]{8}'\]\);/.test(html));
 
@@ -152,6 +152,22 @@ try {
           C.revB === 'courant' && JSON.stringify(C.nb) === '{"operations":0,"revenus":0,"epargnes":0}' && C.nc.revenus === 0 && C.nc.epargnes === 0 && C.epC === 3, JSON.stringify([C.nb, C.nc, C.epC]));
     });
 
+    /* ── C2. v37.72 : les soldes laissés par des transferts jamais faits à la banque ── */
+    await section('C2', async () => {
+        const R = await page.evaluate((ST) => {
+            const st = eval(ST);
+            st.SOLDES_A_CORRIGER[st._empreinte('cc|5000')] = -1200;          // fictif : « cc » laissé à 5 000 par un faux transfert
+            const D = (v) => ({ _schemaVersion: v, soldesInitiaux: { anneeActuelle: 2026 }, comptes: [{ id: 'cc', type: 'liquide', solde: 5000 }, { id: 900, type: 'liquide', solde: 5000 }],
+                donneesAnnuelles: { 2026: { revenus: {}, transactionsReelles: [{ id: 1, date: '2026-11-02', banqueHash: 'bqtest01', montant: 6543.21 }], banqueOperations: {} } } });
+            const a = D(23), na = st.corrigerDonneesApprouvees(a), b = D(24), nb = st.corrigerDonneesApprouvees(b), c = D(23); c.comptes[0].solde = 5001; const nc = st.corrigerDonneesApprouvees(c);
+            return { a: a.comptes.map(x => x.solde), na, txA: a.donneesAnnuelles[2026].transactionsReelles.length, b: b.comptes.map(x => x.solde), nb, c: c.comptes.map(x => x.solde), nc };
+        }, ST);
+        v('C2. un solde exactement celui laissé par le faux transfert : corrigé (5 000 → 3 800), l\'autre compte intact',
+          JSON.stringify(R.a) === '[3800,5000]' && R.na.soldes === 1, JSON.stringify([R.a, R.na]));
+        v('  → au schéma 23, les corrections v37.68 ne se rejouent pas (l\'opération reste)', R.txA === 1 && R.na.operations === 0, JSON.stringify(R));
+        v('  → déjà au schéma 24, ou solde différent d\'un dirham : rien ne bouge', JSON.stringify(R.b) === '[5000,5000]' && JSON.stringify(R.c) === '[5001,5000]' && !R.nc.soldes, JSON.stringify([R.b, R.c]));
+    });
+
     /* ── D. Au chargement ──────────────────────────────────────────────── */
     await section('D', async () => {
         const D = await page.evaluate((ST) => { const st = eval(ST), d = st.donneesAnnuelles;
@@ -165,7 +181,7 @@ try {
         await page.evaluate((ST) => { eval(ST).donneesAnnuelles[2026].revenus.studio.base = 1; }, ST);
         await page.waitForTimeout(2800);
         const e = envois.length ? JSON.parse(envois[envois.length - 1]) : null;
-        v('  → l\'enregistrement porte le schéma 23 (la correction ne se rejouera pas)', !!e && e._schemaVersion === 23, e ? String(e._schemaVersion) : 'aucun envoi');
+        v('  → l\'enregistrement porte le schéma 23 ou plus (la correction ne se rejouera pas)', !!e && e._schemaVersion >= 23, e ? String(e._schemaVersion) : 'aucun envoi');
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

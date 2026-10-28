@@ -37,7 +37,7 @@ echo "  " . str_repeat('─', 78) . "\n";
 
 // 1. Nom approximatif accepté, sur chaque poche
 $fd = etat();
-$r = run('[{"function":"adjust_account_balance","args":{"account":"CTO","amount":300}}]', $fd);
+$r = run('[{"function":"adjust_account_balance","args":{"account":"CTO","amount":300,"deja_fait_en_banque":true}}]', $fd);
 verdict('compte : "CTO" résolu', 'ok', $r['status']);
 verdict('  → cible rapportée', 'Bourse / CTO', $r['resolutions'][0]['resolu'] ?? '?');
 
@@ -63,14 +63,14 @@ verdict('  → l\'homonyme plus long n\'a pas bougé', 500000, (int)$touche);
 // 2bis. Homonymes vraiment ex æquo → blocage, jamais un choix au hasard
 $fd = etat();
 $avant = md5((string)json_encode($fd));
-$r = run('[{"function":"adjust_account_balance","args":{"account":"Livret","amount":100}}]', $fd);
+$r = run('[{"function":"adjust_account_balance","args":{"account":"Livret","amount":100,"deja_fait_en_banque":true}}]', $fd);
 verdict('compte ambigu "Livret" → bloqué', 'needs_clarification', $r['status']);
 verdict('  → aucune écriture', $avant, md5((string)json_encode($fd)));
 verdict('  → ambiguïté signalée', true, (bool)($r['clarifications_needed'][0]['ambiguous'] ?? false));
 
 // 3. Cible introuvable → refus, zéro écriture, suggestions
 foreach ([
-    'compte'   => '[{"function":"adjust_account_balance","args":{"account":"Zzz","amount":10}}]',
+    'compte'   => '[{"function":"adjust_account_balance","args":{"account":"Zzz","amount":10,"deja_fait_en_banque":true}}]',
     'objectif' => '[{"function":"add_funds_to_goal","args":{"name":"Zzz","amount":10}}]',
     'actif'    => '[{"function":"update_asset_valuation","args":{"asset_name":"Zzz","new_value":10}}]',
 ] as $poche => $json) {
