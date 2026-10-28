@@ -109,5 +109,6 @@ suite "Semaines coupées par la paie : chaque morceau dans son cycle"  node test
 suite "Sur tout le cycle, séances à la quinzaine, frise du cycle"      node test_cfo_engine_parity/test_frise_cycle.mjs
 suite "Le CFO lit le moteur (comptes, exceptions, virement vers le Courant), Annuler 50 pas"  node test_cfo_engine_parity/test_cfo_lit_le_moteur.mjs
 suite "En-têtes de compte ignorés à l’import, corrections approuvées (schéma 23)"  node test_cfo_engine_parity/test_corrections_approuvees.mjs
+suite "Le workflow n8n du CFO : une coquille, contexte et consignes servis par le VPS"  node test_cfo_engine_parity/test_cfo_coquille.mjs
 
 echo "✅ Toutes les suites passent."

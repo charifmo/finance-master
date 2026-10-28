@@ -16,6 +16,8 @@
 #  Usage :  sudo bash install.sh        (tout)
 #           sudo bash install.sh php    (extensions PHP seulement)
 #           sudo bash install.sh securite  (controle anti-hameconnage, lecture seule)
+#           sudo bash install.sh cfo       (v37.69 : workflow CFO -> coquille, une fois)
+#           sudo bash install.sh cfo-retour (remet le workflow CFO d'avant)
 # ==============================================================================
 set -euo pipefail
 
@@ -335,6 +337,97 @@ PHP
 }
 
 # -----------------------------------------------------------------------------
+# v37.69 — Le workflow « Super-Agent CFO » devient une coquille
+#   sudo bash install.sh cfo         : met a jour le workflow DANS n8n (une fois)
+#   sudo bash install.sh cfo-retour  : remet la version d'avant (derniere sauvegarde)
+# Ne change que deux noeuds (Build Agent Input, AI Agent) : identifiants et autres
+# noeuds intacts. Ensuite, le contexte et les consignes du CFO viennent du VPS
+# (cfo_contexte.php + cfo_system_prompt.md) : un git pull suffit pour les faire evoluer.
+# -----------------------------------------------------------------------------
+CFO_SAUVEGARDES="/var/backups/finance"
+
+n8n_cmd() { docker exec "${N8N_CONTAINER}" n8n "$@"; }
+
+n8n_exporter_tout() {   # $1 = fichier de sortie sur l'hote
+  local dans="/tmp/fm_export_$$.json"
+  n8n_cmd export:workflow --all --output="${dans}" >/dev/null 2>&1 || return 1
+  docker exec "${N8N_CONTAINER}" cat "${dans}" > "$1" 2>/dev/null || return 1
+  docker exec "${N8N_CONTAINER}" rm -f "${dans}" >/dev/null 2>&1 || true
+}
+
+n8n_importer_et_publier() {   # $1 = fichier workflow (un seul) sur l'hote, $2 = id
+  docker cp "$1" "${N8N_CONTAINER}:/tmp/fm_cfo.json" >/dev/null || return 1
+  n8n_cmd import:workflow --input=/tmp/fm_cfo.json || return 1
+  docker exec "${N8N_CONTAINER}" rm -f /tmp/fm_cfo.json >/dev/null 2>&1 || true
+  if [[ -n "$2" ]]; then
+    if n8n_cmd --help 2>&1 | grep -q 'publish:workflow'; then
+      n8n_cmd publish:workflow --id="$2" || warn "publish:workflow a echoue : publiez le workflow dans l'interface n8n."
+    else
+      n8n_cmd update:workflow --id="$2" --active=true || warn "activation a echoue : activez le workflow dans l'interface n8n."
+    fi
+  fi
+  log "Redemarrage de n8n (prise en compte du workflow)..."
+  docker restart "${N8N_CONTAINER}" >/dev/null
+  local i
+  for i in $(seq 1 60); do
+    curl -fsS "http://127.0.0.1:${N8N_PORT}/healthz" >/dev/null 2>&1 && return 0
+    sleep 2
+  done
+  warn "n8n ne repond pas encore sur /healthz : verifiez dans quelques instants."
+}
+
+installer_cfo() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker ps --format '{{.Names}}' | grep -qx "${N8N_CONTAINER}"; then
+    die "Conteneur ${N8N_CONTAINER} introuvable."
+  fi
+  command -v php >/dev/null 2>&1 || die "php introuvable sur l'hote."
+  local ici patch resume id
+  local dir; dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  [[ -f "${dir}/n8n/maj_workflow_cfo.php" ]] || die "n8n/maj_workflow_cfo.php absent : faites d'abord git pull."
+  ici="$(mktemp)"; patch="$(mktemp)"
+  n8n_exporter_tout "${ici}" || die "Export des workflows impossible (n8n export:workflow)."
+  mkdir -p "${CFO_SAUVEGARDES}"
+  cp "${ici}" "${CFO_SAUVEGARDES}/n8n_workflows_$(date +%Y%m%d_%H%M%S).json"
+  ok "Sauvegarde des workflows : ${CFO_SAUVEGARDES}/"
+  resume="$(php "${dir}/n8n/maj_workflow_cfo.php" "${ici}" "${patch}")" || die "Mise a jour du workflow impossible (voir message ci-dessus)."
+  log "Workflow : ${resume}"
+  if grep -q '"deja_a_jour":true' <<<"${resume}"; then
+    ok "Le workflow du CFO est deja a jour. Rien a faire."
+  else
+    id="$(php -r '$r=json_decode($argv[1],true); echo $r["id"] ?? "";' "${resume}")"
+    n8n_importer_et_publier "${patch}" "${id}" || die "Import dans n8n impossible."
+    local verif; verif="$(mktemp)"
+    if n8n_exporter_tout "${verif}" && grep -q 'BUILD AGENT INPUT v3' "${verif}"; then
+      ok "Workflow du CFO mis a jour dans n8n (contexte et consignes servis par le VPS)."
+    else
+      warn "Mise a jour non retrouvee dans l'export : ouvrez le workflow dans n8n pour verifier."
+    fi
+    rm -f "${verif}"
+  fi
+  if curl -fsS -o /dev/null "http://127.0.0.1/finance/cfo_contexte.php" 2>/dev/null || [[ -f "${FINANCE_DIR}/cfo_contexte.php" ]]; then
+    ok "cfo_contexte.php present sur le VPS."
+  else
+    warn "cfo_contexte.php absent de ${FINANCE_DIR} : le CFO utilisera sa copie de secours."
+  fi
+  rm -f "${ici}" "${patch}"
+}
+
+retour_cfo() {
+  local der; der="$(ls -1t "${CFO_SAUVEGARDES}"/n8n_workflows_*.json 2>/dev/null | head -1 || true)"
+  [[ -n "${der}" ]] || die "Aucune sauvegarde dans ${CFO_SAUVEGARDES}."
+  local un id; un="$(mktemp)"
+  id="$(php -r '
+    $l = json_decode(file_get_contents($argv[1]), true); if (isset($l["nodes"])) $l = [$l];
+    foreach ($l as $w) { $n = array_column($w["nodes"] ?? [], "name");
+      if (in_array("Build Agent Input", $n, true) && in_array("AI Agent", $n, true) && !empty($w["active"])) {
+        file_put_contents($argv[2], json_encode($w, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); echo $w["id"] ?? ""; exit(0); } }
+    exit(1);' "${der}" "${un}")" || die "Workflow du CFO introuvable dans ${der}."
+  n8n_importer_et_publier "${un}" "${id}" || die "Import impossible."
+  ok "Workflow du CFO remis comme dans ${der}."
+  rm -f "${un}"
+}
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 main() {
@@ -345,6 +438,14 @@ main() {
   fi
   if [[ "${1:-}" == "securite" ]]; then
     verifier_securite
+    return 0
+  fi
+  if [[ "${1:-}" == "cfo" ]]; then
+    installer_cfo
+    return 0
+  fi
+  if [[ "${1:-}" == "cfo-retour" ]]; then
+    retour_cfo
     return 0
   fi
   install_php_extensions
