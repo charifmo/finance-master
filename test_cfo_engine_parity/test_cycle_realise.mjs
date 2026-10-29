@@ -310,7 +310,7 @@ try {
             tiroirsFermes: [...document.querySelectorAll('#pilotage-inbox [data-tiroir]')].map(d => !d.open),
             //  Une ligne de la file (tâche ou entrée) = UN badge de date, daté ou « sans date »
             lignesSansUnBadge: [...document.querySelectorAll('#pilotage-inbox [data-tache], #pilotage-inbox [data-entree]')]
-                .filter(r => [...r.querySelectorAll('span')].filter(e => /^📅\s*(j\.\d+|sans date)$/.test((e.textContent || '').trim())).length !== 1).length,
+                .filter(r => [...r.querySelectorAll('span')].filter(e => /^📅\s*(\d{1,2} [a-zéû.]+|sans date)$/.test((e.textContent || '').trim())).length !== 1).length,
             nbLignes: document.querySelectorAll('#pilotage-inbox [data-tache], #pilotage-inbox [data-entree]').length,
             sansDate: st.tachesSansDate,
             // Compté DANS la section « À traiter » : ailleurs, d'autres badges
@@ -320,7 +320,7 @@ try {
                 const section = titre && titre.closest('div.rounded-2xl');
                 if (!section) return 0;
                 return [...section.querySelectorAll('span')]
-                    .filter(e => /^📅\s*(j\.\d+|sans date)$/.test((e.textContent || '').trim())).length;
+                    .filter(e => /^📅\s*(\d{1,2} [a-zéû.]+|sans date)$/.test((e.textContent || '').trim())).length;
             })(),
             nbTachesRendues: (() => {
                 const titre = [...document.querySelectorAll('span')].find(e => /À traiter —/.test(e.textContent || ''));

@@ -120,5 +120,6 @@ suite "Vos comptes : aujourd’hui, au plus bas, fin de cycle ; virements à pr�
 suite "Dictionnaire et variantes : Carrefour sûr, vos corrections apprises, frise visible"  node test_cfo_engine_parity/test_dictionnaire_variantes.mjs
 suite "Le cycle se lit comme le Relevé : dates, pourquoi du point bas, dépassements, zoom"  node test_cfo_engine_parity/test_cycle_lisible.mjs
 suite "Le journal règle sa ligne du Pilotage (factures, fixes, épargne)"  node test_cfo_engine_parity/test_journal_regle.mjs
+suite "Des dates, partout : plus aucun « j.N » ni « J−N »"  node test_cfo_engine_parity/test_dates_partout.mjs
 
 echo "✅ Toutes les suites passent."
