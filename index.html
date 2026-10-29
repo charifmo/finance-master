@@ -7970,6 +7970,8 @@
             <p v-if="c.aVirer > 0 && c.pourquoi" class="mt-1.5 rounded-lg bg-white/80 ring-1 ring-rose-100 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 leading-snug" data-radar-pourquoi>
                 <b class="text-rose-800">Pourquoi ?</b> {{ c.pourquoi.depuis === c.pourquoi.jusque ? 'Le ' + c.pourquoi.depuis : 'Du ' + c.pourquoi.depuis + ' au ' + c.pourquoi.jusque }}, {{ formatMad(c.pourquoi.sorties) }} de sorties<template v-if="c.pourquoi.principales.length"> ({{ c.pourquoi.principales.map(x => x.libelle + ' ' + formatMad(x.montant)).join(', ') }})</template>
                 <template v-if="c.pourquoi.entrees.length"> avant les prochaines entrées : {{ c.pourquoi.entrees.map(x => x.libelle + ' ' + formatMad(x.montant) + ' le ' + x.quand).join(', ') }}</template><template v-else> — et plus aucune entrée prévue d’ici le {{ radar.horizon }}</template>
+                <span v-if="c.pourquoi.apresCycle" class="block mt-0.5 text-slate-500" data-radar-apres-cycle>⏭️ C’est au début du cycle suivant, après le {{ c.pourquoi.finCycle }} : le Relevé de ce cycle s’arrête avant.</span>
+                <span v-if="c.pourquoi.avancer" class="block mt-0.5 font-black text-emerald-700" data-radar-avancer>💡 Avancez « {{ c.pourquoi.avancer.libelle }} » ({{ formatMad(c.pourquoi.avancer.montant) }}) du {{ c.pourquoi.avancer.de }} au {{ c.pourquoi.avancer.a }} : le compte ne passe plus sous zéro.</span>
             </p>
         </li>
     </ul>
@@ -8250,6 +8252,8 @@
                                 <p v-if="b.depuis" class="flex items-center gap-1.5 min-w-0" data-meteo-virement-depuis><span class="text-slate-500 shrink-0">depuis</span> <mono-compte :c="b.depuis"></mono-compte> <b class="truncate">{{ b.depuis.label }}</b></p>
                                 <p v-else class="text-rose-700" data-meteo-virement-depuis>depuis : aucun compte ne couvre seul ce montant — à répartir</p>
                                 <p class="text-slate-600" data-meteo-virement-quand>avant le <b>{{ b.avantLe }}</b> — sans lui, {{ b.compte.tag }} descendrait à <b class="text-rose-700 whitespace-nowrap">{{ formatMad(b.pointBas) }}</b> le {{ b.datePointBas }}</p>
+                                <p v-if="b.pourquoi && b.pourquoi.apresCycle" class="text-[11px] font-black text-indigo-700" data-meteo-virement-apres-cycle>⏭️ C’est au début du cycle suivant, après le {{ b.pourquoi.finCycle }} — « Vos comptes » et le Relevé de ce cycle s’arrêtent avant.</p>
+                                <p v-if="b.pourquoi && b.pourquoi.avancer" class="text-[11px] font-black text-emerald-700" data-meteo-virement-avancer>💡 Plutôt : avancez « {{ b.pourquoi.avancer.libelle }} » ({{ formatMad(b.pourquoi.avancer.montant) }}) du {{ b.pourquoi.avancer.de }} au {{ b.pourquoi.avancer.a }} — le compte ne passe plus sous zéro.</p>
                                 <p v-if="b.pourquoi" class="text-[11px] text-slate-500 font-semibold" data-meteo-virement-pourquoi>Pourquoi : {{ formatMad(b.pourquoi.sorties) }} de sorties {{ b.pourquoi.depuis === b.pourquoi.jusque ? 'le ' + b.pourquoi.depuis : 'du ' + b.pourquoi.depuis + ' au ' + b.pourquoi.jusque }}<template v-if="b.pourquoi.entrees.length">, avant {{ b.pourquoi.entrees.map(x => x.libelle + ' le ' + x.quand).join(', ') }}</template></p>
                             </div>
                         </div>
@@ -8714,8 +8718,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.79 Dates";
+                    const CURRENT_VERSION = "37.80 Même jour";
                     const CHANGELOG = [
+        { version: "37.80 Même jour", date: "2026-10-29", changes: [
+            "🔁 LE MÊME JOUR, L'ARGENT ARRIVE AVANT DE PARTIR — « Pourquoi c'est désynchronisé ? » Le Relevé de ce cycle finissait positif, la grande case réclamait un virement : elle regarde plus loin, jusqu'au 26 déc. Le 27 nov., la paie ouvre le cycle suivant, son premier morceau de semaine part du Courant dès le 27… et le virement d'Assafa n'arrivait que le 28 — sous zéro un seul jour. Désormais, le même jour, les entrées (salaire, virement reçu) passent avant les dépenses : un virement posé le jour de paie couvre les dépenses de ce jour.",
+            "⏭️ LA GRANDE CASE DIT OÙ ELLE REGARDE — quand le compte passe sous zéro après la fin du cycle affiché : « c'est au début du cycle suivant, après le 26 nov. — Vos comptes et le Relevé de ce cycle s'arrêtent avant ». Même mention dans Sécurité des comptes.",
+            "💡 ET QUEL VIREMENT AVANCER — quand la première entrée qui suit le creux est un virement qui suffit, et que le creux tombe après la paie : « Plutôt : avancez ce virement du 28 nov. au 27 nov. — le compte ne passe plus sous zéro ». Jamais avant la paie : rien ne dit alors que l'argent du virement est déjà là.",
+            "PREUVE — nouvelle suite « Le même jour » : creux du 27 nov. reproduit (fin de cycle positive), « après le cycle » et « avancez du 28 au 27 nov. » dans le radar et la grande case, virement posé le 27 : plus de creux, plus de case. Rejouée sur la v37.79 : en échec ; défauts réintroduits exprès : attrapés.",
+        ] },
         { version: "37.79 Dates", date: "2026-10-29", changes: [
             "📅 PLUS AUCUN « J.X » — « Il faut enlever de partout ces J-X ! » Après le Relevé, les derniers « j.6 » et « 📅 j.18 » deviennent des dates : badges des lignes du Pilotage (« 📅 6 nov. »), Respiration et atterrissage du Pilotage théorique, charges fixes échues, épargne au téléphone. Le mois vient du cycle : un jour au moins égal au jour de paie appartient au mois précédent (le cycle de décembre court du 27 nov. au 26 déc.).",
             "🗓️ LE CALENDRIER SE LIT COMME UNE DATE — la case de jour d'un choc ou d'un virement : « 📅 le [1] déc. » au lieu de « 📅 j. [1] ».",
@@ -18204,7 +18214,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
 
                             // ── Flux futurs (paye:false) ── soldes[compte] += flux → Solde = soldes[compte] ──
                             const dispLegs = _viewLegs(_mkLegs(cyc.m, cyc.a, isCurrent ? 'remaining' : 'full', isCurrent));
-                            dispLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu));
+                            //  v37.80 : le même jour, les entrées d'abord (salaire, virement reçu), puis les sorties
+                            dispLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu) || ((y.type === 'credit') - (x.type === 'credit')));
                             dispLegs.forEach(l => {
                                 const soldeCompteApres = _apply(l.account, l.montant, l.type);
                                 entries.push({ libelle: l.libelle, montant: l.montant, type: l.type, jourPrevu: l.jourPrevu, etat: 'prevu', soldeApres: soldeCompteApres, compteKey: l.account, soldeCompteApres, cycle: cyc.m + '-' + cyc.a });
@@ -19823,7 +19834,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const deb = [];
                                 for (let q = iBas - 1; q >= 0 && lignes[q].type === 'debit'; q--) deb.push(lignes[q]);
                                 const ent = lignes.slice(iBas).filter(p => p.type === 'credit').slice(0, 3);
+                                //  v37.80 : le point bas tombe-t-il APRÈS le cycle affiché ? et la première entrée qui suit
+                                //  est-elle un virement qui suffit — à avancer au jour où le compte passe sous zéro ?
+                                const _finCycle = (consoT0Fenetre.value || {}).fin;
+                                const _dBas = lignes[iBas - 1].date;
+                                //  avancer : seulement après la paie (le compte passe sous zéro APRÈS la fin du cycle — le donneur a
+                                //  reçu le salaire) ; avant, rien ne dit que l'argent du virement est déjà là
+                                const _apresPaie = !!(_finCycle && dateNeg && dateNeg > _finCycle);
+                                const _vir = _apresPaie && ent[0] && /^🔄/.test(String(ent[0].libelle || '')) && ent[0].montant >= -pointBas ? ent[0] : null;
                                 if (deb.length) pourquoi = {
+                                    apresCycle: !!(_finCycle && _dBas && _dBas > _finCycle), finCycle: _finCycle ? lib(_finCycle) : null,
+                                    avancer: _vir && dateNeg ? { libelle: court(_vir.libelle), montant: Math.round(_vir.montant), de: lib(_vir.date), a: lib(dateNeg) } : null,
                                     depuis: lib(deb[deb.length - 1].date), jusque: lib(deb[0].date),
                                     sorties: Math.round(deb.reduce((x, p) => x + p.montant, 0)),
                                     principales: deb.slice().sort((x, y) => y.montant - x.montant).slice(0, 2).map(p => ({ libelle: court(p.libelle), montant: Math.round(p.montant), quand: lib(p.date) })),
