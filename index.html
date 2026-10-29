@@ -5436,7 +5436,7 @@
                                                                :value="montantPayeCycle(t.ref, cyclePilotage) || ''"
                                                                @input="setMontantPayeCycle(t.ref, $event.target.value, cyclePilotage)"
                                                                :data-saisie="t.sens !== 'credit' && (t.nature === 'variable' || t.nature === 'exceptionnel') ? 'invitante' : 'discrete'"
-                                                               :placeholder="t.sens === 'credit' ? 'reçu' : ((t.nature === 'variable' || t.nature === 'exceptionnel') ? 'Saisir' : 'avance')"
+                                                               :placeholder="t.parJournal > 0 && t.sens !== 'credit' ? formatNombre(t.parJournal) + ' 🧾' : (t.sens === 'credit' ? 'reçu' : ((t.nature === 'variable' || t.nature === 'exceptionnel') ? 'Saisir' : 'avance'))"
                                                                :title="t.sens === 'credit' ? 'Déjà reçu, en partie' : ((t.nature === 'variable' || t.nature === 'exceptionnel') ? 'Saisissez ce qui a vraiment été payé' : 'Avance partielle déjà versée')"
                                                                :class="t.sens === 'credit'
                                                                    ? 'w-16 h-8 bg-transparent border border-emerald-700/60 hover:border-emerald-500 rounded-lg px-2 text-right text-xs font-bold text-emerald-200 placeholder:text-emerald-700 outline-none focus:border-emerald-400 transition'
@@ -5448,6 +5448,8 @@
                                                         <span v-if="t.sens !== 'credit' && (t.nature === 'variable' || t.nature === 'exceptionnel')" aria-hidden="true"
                                                               :class="['pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black', t.nature === 'variable' ? 'text-sky-300/70' : 'text-rose-300/70']">DH</span>
                                                     </div>
+                                                    <span v-if="t.parJournal > 0 && t.sens !== 'credit'" data-par-journal class="text-[10px] font-black px-1.5 py-0.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 shrink-0 whitespace-nowrap"
+                                                          :title="'Des opérations du journal rangées sur « ' + t.libelle + ' » ce cycle : ' + formatNombre(t.parJournal) + ' DH, comptés comme réglés'">🧾 {{ formatNombre(t.parJournal) }} réglés</span>
                                                     <span v-if="t.sens === 'credit'" data-entree-montant class="text-sm font-black text-emerald-300 tabular-nums whitespace-nowrap">+ {{ formatMAD(t.due) }}</span>
                                                     <span v-else class="text-[10px] font-black text-slate-400 w-16 text-right tabular-nums">/ {{ formatNombre(t.due) }}</span>
                                                     <!-- v37.51 : clôturer la case — plus rien n'est attendu sur ce cycle -->
@@ -8718,8 +8720,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.80 Même jour";
+                    const CURRENT_VERSION = "37.81 Journal visible";
                     const CHANGELOG = [
+        { version: "37.81 Journal visible", date: "2026-10-29", changes: [
+            "🧾 CE QUE LE JOURNAL A DÉJÀ RÉGLÉ SE VOIT SUR SA LIGNE — « Toujours ce problème d'élec. » Depuis la v37.78 le journal règle la ligne (221 DH de « Société Régionale Mult » rangés sur « elect »), mais la case restait vide, « Saisir », sans rien dire : on ne voyait ni que les 221 étaient comptés, ni qu'il en reste 129 sur 350. Désormais la ligne affiche « 🧾 221 réglés », et la case vide propose « 221 🧾 ». Si le prévu (350) est plus haut que ce qui a été payé (221), le bouton ✓ de la ligne la clôture.",
+            "PREUVE — la suite « Le journal règle sa ligne du Pilotage » vérifie le cas rapporté (prévu 350, 221 payés : badge et case). Rejouée sur la v37.80 : en échec.",
+        ] },
         { version: "37.80 Même jour", date: "2026-10-29", changes: [
             "🔁 LE MÊME JOUR, L'ARGENT ARRIVE AVANT DE PARTIR — « Pourquoi c'est désynchronisé ? » Le Relevé de ce cycle finissait positif, la grande case réclamait un virement : elle regarde plus loin, jusqu'au 26 déc. Le 27 nov., la paie ouvre le cycle suivant, son premier morceau de semaine part du Courant dès le 27… et le virement d'Assafa n'arrivait que le 28 — sous zéro un seul jour. Désormais, le même jour, les entrées (salaire, virement reçu) passent avant les dépenses : un virement posé le jour de paie couvre les dépenses de ce jour.",
             "⏭️ LA GRANDE CASE DIT OÙ ELLE REGARDE — quand le compte passe sous zéro après la fin du cycle affiché : « c'est au début du cycle suivant, après le 26 nov. — Vos comptes et le Relevé de ce cycle s'arrêtent avant ». Même mention dans Sécurité des comptes.",
@@ -19925,6 +19931,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                         && _rangDansCycle(jourPrevu) <= _rangAujourdhui.value + HORIZON_URGENCE,
                                 paye: isItemPaid(ref, d, cyc),
                                 regle: getPaidAmount(ref, d, cyc) || 0,
+                                parJournal: regleParJournal(ref, cyc),   // v37.81 : ce que le journal a déjà réglé, visible sur la ligne
                                 clos: estClotureItem(ref, cyc),   // v37.51
                                 quand: dateReelleCycle(ref, cyc),
                             });

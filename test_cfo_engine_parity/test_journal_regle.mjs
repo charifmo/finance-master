@@ -100,6 +100,17 @@ try {
         v('B. « elect » 200 : réglée par « Société Régionale Mult » 221 (journal, 29 oct. — cycle de novembre)', T.elect && T.elect.paye === true && T.elect.regle === 221, JSON.stringify(T.elect));
         v('  → « tel » 99 : 49 réglés par Orange, 50 restent (pas « payée »)', T.tel && T.tel.paye === false && T.tel.regle === 49, JSON.stringify(T.tel));
     });
+    await section('B2', async () => {
+        //  le cas rapporté : prévu 350, 221 payés — la ligne reste « à traiter » et dit ce qui est déjà réglé
+        await page.evaluate(async (ST) => { const st = eval(ST); st.donneesAnnuelles[2026].chargesVariables.factures.details[0].montant = 350; st.donneesAnnuelles[2026].chargesVariables.factures.valeur = 449; st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 500)); }, ST);
+        const L = await page.evaluate(() => { const ligne = (nom) => [...document.querySelectorAll('[data-par-journal]')].map(e => e.closest('div.flex, div') && e.parentElement).find(p => p && new RegExp('\\b' + nom + '\\b').test(p.textContent));
+            const badges = [...document.querySelectorAll('[data-par-journal]')].filter(e => e.offsetParent !== null).map(e => e.textContent.replace(/\s+/g, ' ').trim());
+            const places = [...document.querySelectorAll('input[data-saisie]')].filter(e => e.offsetParent !== null).map(e => e.placeholder);
+            return { badges, places }; });
+        v('B2. prévu 350, 221 payés : la ligne le dit « 🧾 221 réglés » (elect), « 🧾 49 réglés » (tel) ; la case vide propose « 221 🧾 »',
+          L.badges.includes('🧾 221 réglés') && L.badges.includes('🧾 49 réglés') && L.places.some(x => /^221 🧾$/.test(x.replace(/\s/g, ' '))), JSON.stringify(L));
+        await page.evaluate(async (ST) => { const st = eval(ST); st.donneesAnnuelles[2026].chargesVariables.factures.details[0].montant = 200; st.donneesAnnuelles[2026].chargesVariables.factures.valeur = 299; st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 400)); }, ST);
+    });
     await section('C', async () => {
         const T = await taches();
         v('C. « Syndic » : l\'opération du 20 oct. (cycle d\'octobre) et celle rangée « par défaut » ne règlent rien', T.Syndic && T.Syndic.paye === false && T.Syndic.regle === 0, JSON.stringify(T.Syndic));
