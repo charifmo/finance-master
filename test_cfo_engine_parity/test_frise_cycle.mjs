@@ -35,9 +35,9 @@ console.log('\n  SUR TOUT LE CYCLE · SÉANCES À LA QUINZAINE · FRISE DU CYCLE
 /* ── A. Statique ─────────────────────────────────────────────────────── */
 v('A. un bloc « Sur tout le cycle » mémorisé (uiOuvert / uiFixer), replié par défaut',
   /<details v-if="p\.postesCycle && p\.postesCycle\.length && sm\.dansCycle" data-pulse-cycle :open="uiOuvert\('meteo\.cycle', false\)" @toggle="uiFixer\('meteo\.cycle', \$event\.target\.open\)"/.test(html));
-v('  → la frise s\'ouvre d\'un bouton (les 3 Météo la branchent) et ne calcule rien fermée',
+v('  → la frise s\'ouvre d\'un bouton (les 3 Météo la branchent) ; fermée, elle n\'est pas affichée (v37.77 : ses dépassements, eux, vont à la Météo)',
   /data-ouvrir-frise @click="\$emit\('frise'\)"/.test(html) && (html.match(/@frise="friseOuverte = true"/g) || []).length === 3
-  && /const friseCycle = computed\(\(\) => \{\n\s+if \(!friseOuverte\.value\) return null;/.test(html));
+  && /const friseCycle = computed\(\(\) => friseOuverte\.value \? _friseCalc\.value : null\);/.test(html));
 v('  → plus de note « semaine coupée » (le titre suffit)', !/data-semaine-coupee/.test(html));
 
 const require = createRequire(import.meta.url);
