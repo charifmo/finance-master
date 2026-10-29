@@ -327,7 +327,8 @@ try {
     }, ST);
     v('exception du mois (1 200 / sem.) : budget du cycle 1 200 × ' + Math.round(NS * 7) + ' jours ÷ 7, postes 600 · 360 · 240, signalé',
       ajuste.budget === Math.round(1200 * NS) && JSON.stringify(ajuste.prevu) === '[600,360,240]' && ajuste.ajuste === true, JSON.stringify(ajuste));
-    // Un compte du Sanctuaire
+    // Un compte du Sanctuaire (v37.77 : la souris quitte d'abord la zone — après « +2 », elle pouvait déjà être sur ce compte : pas d'entrée)
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
     await page.hover('[data-sanct-compte][data-compte="cpt_2"]');
     await page.waitForTimeout(250);
     const p3 = await panneau(page);
