@@ -8738,8 +8738,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.82 Graphiques";
+                    const CURRENT_VERSION = "37.83 CFO branché";
                     const CHANGELOG = [
+        { version: "37.83 CFO branché", date: "2026-10-29", changes: [
+            "🔌 LE CFO SE BRANCHE TOUT SEUL — « C'est quoi ce truc ? » (« Configuration requise : collez l'URL du Webhook n8n »). L'adresse du CFO n'était mémorisée que dans le navigateur où on l'avait collée : sur un autre navigateur, un téléphone, ou après un effacement des données du site, il la redemandait. L'appli est servie par le même serveur que n8n : son webhook est à la même adresse (…/webhook/finance-cfo-web). Sans adresse enregistrée, l'appli la déduit d'elle-même — plus rien à coller. Une adresse enregistrée à la main garde la priorité ; en local (localhost, fichier) rien n'est deviné.",
+            "PREUVE — la déduction (https, adresse du serveur, chemin du webhook ; rien en local, en fichier ni en localhost), la priorité de l'adresse enregistrée, et le CFO utilisable sans configuration. Rejouée sur la v37.82 : en échec.",
+        ] },
         { version: "37.82 Graphiques", date: "2026-10-29", changes: [
             "📈 LA TRAJECTOIRE, COMPTE PAR COMPTE — « Je veux ce graphique sélectionnable par compte. » Sous « Trajectoire de vos comptes », une pastille par compte réel (le Courant d'abord) : on coche un ou plusieurs comptes, le graphique trace une courbe par compte (le solde en fin de mois, en rouge quand il passe sous zéro), et le « point bas » suit la sélection (le compte, le jour). « Vue d'ensemble » rend le graphique d'avant. La sélection est mémorisée.",
             "📊 L'ANNÉE, TYPE DE CHARGES PAR TYPE DE CHARGES — « Le même graphique pour les charges, sélectionnable par type de charges. » Sous « L'année mois par mois », une pastille par type (mensualités de crédit, charges fixes, factures, conso, dépenses ponctuelles, épargne) : on coche, le graphique ne garde que ça. UN seul type coché : il se détaille ligne par ligne — chaque charge de ce type, mois par mois (les huit plus grosses, puis « Autres »). « Tous » rend le graphique d'avant. Mémorisé.",
@@ -11908,7 +11912,15 @@
                         document.addEventListener('mousemove', onMove);
                         document.addEventListener('mouseup', onUp);
                     };
-                    const cfoWebhookUrl = ref(localStorage.getItem('cfo_webhook_url') || '');
+                    //  v37.83 : sans adresse enregistrée, celle du serveur qui sert l'appli (…/finance/ ↔ …/webhook/finance-cfo-web)
+                    const webhookCfoParDefaut = (loc) => {
+                        try {
+                            const l = loc || window.location;
+                            if (!l || !/^https?:$/.test(l.protocol) || /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(l.hostname)) return '';
+                            return l.origin + '/webhook/finance-cfo-web';
+                        } catch (_) { return ''; }
+                    };
+                    const cfoWebhookUrl = ref(localStorage.getItem('cfo_webhook_url') || webhookCfoParDefaut());
                     const cfoWebhookInput = ref('');
                     const cfoChatContainer = ref(null);
                     const cfoChatContainerMobile = ref(null);   // v37.11 : le fil de la vue mobile
@@ -25318,7 +25330,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire
