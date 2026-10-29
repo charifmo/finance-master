@@ -32,7 +32,7 @@ v('A. dictionnaire enrichi : ' + cles.length + ' thèmes complétés, chacun rat
 v('  → « Variantes ajoutées au dictionnaire » dans « Ce que l\'appli a appris », chacune oubliable',
   /data-apprentissage-variantes/.test(html) && /data-apprentissage-oublier-variante @click="oublierVariante\(x\.mot\)"/.test(html));
 v('  → la frise du cycle : un bouton dans l\'en-tête du Pilotage, un vrai bouton dans la Météo',
-  /data-ouvrir-frise-entete @click="friseOuverte = true"/.test(html) && />📈 Cycle et semaines<\/button>/.test(html) && />📈 Voir le cycle et ses semaines<\/button>/.test(html));
+  /data-ouvrir-frise-entete @click="friseOuverte = true"/.test(html) && />📈 Cycle et semaines<\/button>/.test(html) && />📈 Voir le cycle et ses semaines(<span[^<]*>[^<]*<\/span>)?<\/button>/.test(html));
 
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
