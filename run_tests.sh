@@ -119,5 +119,6 @@ suite "Jour exact : chocs et virements du Calendrier Pluriannuel, cycle suivant 
 suite "Vos comptes : aujourd’hui, au plus bas, fin de cycle ; virements à prévoir ; version à jour"  node test_cfo_engine_parity/test_comptes_cycle.mjs
 suite "Dictionnaire et variantes : Carrefour sûr, vos corrections apprises, frise visible"  node test_cfo_engine_parity/test_dictionnaire_variantes.mjs
 suite "Le cycle se lit comme le Relevé : dates, pourquoi du point bas, dépassements, zoom"  node test_cfo_engine_parity/test_cycle_lisible.mjs
+suite "Le journal règle sa ligne du Pilotage (factures, fixes, épargne)"  node test_cfo_engine_parity/test_journal_regle.mjs
 
 echo "✅ Toutes les suites passent."

@@ -8714,8 +8714,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.77 Lisible";
+                    const CURRENT_VERSION = "37.78 Journal → Pilotage";
                     const CHANGELOG = [
+        { version: "37.78 Journal → Pilotage", date: "2026-10-29", changes: [
+            "🧾 UNE FACTURE DÉJÀ PAYÉE N'EST PLUS « À SAISIR » — « Facture élec déjà saisie, mais elle apparaît à 0 dans la partie saisie. » L'opération importée de la banque était bien rangée sur « elect », mais une ligne du Pilotage ne se réglait que par sa propre case ou par un « pointage » à l'import : le journal disait payé, le Pilotage « Saisir », et le Relevé projetait encore la facture à sa date — alors qu'elle avait déjà quitté le compte (comptée deux fois).",
+            "✅ DÉSORMAIS — pour une ligne du Pilotage (charge fixe, ligne d'une catégorie mensuelle comme les factures, épargne), les opérations du journal rangées sur sa catégorie et datées dans le cycle la règlent (un jour au moins égal au jour de paie ouvre le cycle suivant). La case et le journal ne s'additionnent pas : c'est le plus grand des deux qui compte — le même paiement vu deux fois. Payée en partie (Orange 49 pour 99 prévus) : le reste reste attendu. Une opération rangée « par défaut » (libellé inconnu) ne règle rien ; les postes de la semaine (courses…) gardent leur saisie.",
+            "PREUVE — nouvelle suite « Le journal règle sa ligne du Pilotage » : facture réglée par l'import, réglée en partie, cycle précédent et « par défaut » sans effet, poste de la semaine non concerné, case + journal sans double compte, Relevé qui ne projette plus ce qui est payé. Rejouée sur la v37.77 : 6 en échec ; défauts réintroduits exprès : attrapés.",
+        ] },
         { version: "37.77 Lisible", date: "2026-10-29", changes: [
             "📅 LE RELEVÉ DONNE LA DATE — « Mettre les jours du mois au lieu des J-X. » Chaque ligne porte sa date : « lun. 30 nov. » au lieu de « j.30 ». Le mois vient du cycle de la ligne : un jour au moins égal au jour de paie appartient au mois précédent (le cycle de décembre court du 27 nov. au 26 déc.).",
             "❓ POURQUOI CE POINT BAS — « Pourquoi il me dit que le Courant sera négatif le 30 nov. ? » Sous chaque compte qui passe sous zéro (Sécurité des comptes, grande case des virements) : les sorties qui y mènent, depuis quand, les plus grosses, et les prochaines entrées qui le font remonter. Le cas rapporté : la paie du 27 nov. ouvre le cycle de décembre, dont les budgets de la semaine sont pris sur le Courant dès le 27 et le 30 nov., alors que ses entrées (loyers, CNSS) n'arrivent que les 5 et 6 déc. — le salaire, lui, tombe sur un autre compte. Un virement à la paie depuis ce compte l'évite.",
@@ -17520,21 +17525,57 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     //  prime comptée deux fois. On compare désormais des MONTANTS, et le
                     //  réglé revient avec le signe du dû demandé : même réponse quel que soit
                     //  l'écran, pointages déjà enregistrés compris.
+                    //  v37.78 : UNE OPÉRATION DU JOURNAL RANGÉE SUR UNE LIGNE DU PILOTAGE LA RÈGLE — charges fixes, lignes
+                    //  des catégories mensuelles (factures…), épargne ; pas les postes de la semaine (ils ont leur saisie).
+                    //  Le montant des opérations de SA catégorie, datées dans le cycle ; « par défaut » ne règle rien.
+                    const _catsLignesPilotage = computed(() => {
+                        const s = new Set();
+                        const noter = (x) => { if (x && x.categorieId) s.add(x.categorieId); };
+                        (chargesFixesBudgetairesTriees.value || []).forEach(noter);
+                        (chargesVarMensuellePilotage.value || []).forEach(c => (c.details || []).forEach(noter));
+                        (epargneBudgetairePilotage.value || []).forEach(noter);
+                        return s;
+                    });
+                    const _txParCategorieCycle = computed(() => {
+                        calculationTick.value;
+                        const jdp = jourDePaie.value, out = Object.create(null);
+                        Object.values(donneesAnnuelles.value || {}).forEach(d => (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).forEach(t => {
+                            if (!t || !t.categorieId || t.categorieId === 'cat_misc' || t.categorieSource === 'défaut') return;
+                            const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(t.date || t.datetime || ''));
+                            if (!m) return;
+                            let a = Number(m[1]), mo = Number(m[2]);
+                            if (jdp > 1 && Number(m[3]) >= jdp) { mo++; if (mo > 12) { mo = 1; a++; } }
+                            const k = t.categorieId + '|' + _cleCycle(mo, a);
+                            out[k] = Math.round(((out[k] || 0) + Math.abs(Number(t.montant) || 0)) * 100) / 100;
+                        }));
+                        return out;
+                    });
+                    const regleParJournal = (item, cle) => {
+                        if (!item || !item.categorieId || !_catsLignesPilotage.value.has(item.categorieId)) return 0;
+                        return _txParCategorieCycle.value[item.categorieId + '|' + _cycleDe(item, cle)] || 0;
+                    };
+
                     const isItemPaid = (item, dueAmount, cle) => {
                         const e = _etatCycle(item, cle);
-                        if (!e) return false;
-                        if (e.cloture) return true;          // v37.51 : close = plus rien n'est attendu
-                        if (e.paye && !e.montantPaye) return true;
-                        return Math.abs(Number(e.montantPaye) || 0) >= Math.abs(Number(dueAmount) || 0);
+                        if (e) {
+                            if (e.cloture) return true;          // v37.51 : close = plus rien n'est attendu
+                            if (e.paye && !e.montantPaye) return true;
+                            if (Math.abs(Number(e.montantPaye) || 0) >= Math.abs(Number(dueAmount) || 0)) return true;
+                        }
+                        const j = regleParJournal(item, cle);    // v37.78
+                        return j > 0 && j >= Math.abs(Number(dueAmount) || 0);
                     };
 
                     const getPaidAmount = (item, dueAmount, cle) => {
                         const e = _etatCycle(item, cle);
-                        if (!e) return 0;
-                        if (e.paye && !e.montantPaye) return dueAmount;
-                        if (e.montantPaye !== undefined && e.montantPaye !== null)
-                            return (Number(dueAmount) < 0 ? -1 : 1) * Math.abs(Number(e.montantPaye) || 0);
-                        return e.paye ? dueAmount : 0;
+                        const sg = Number(dueAmount) < 0 ? -1 : 1, j = regleParJournal(item, cle);   // v37.78 : le plus grand des deux
+                        let p = 0;
+                        if (e) {
+                            if (e.paye && !e.montantPaye) p = dueAmount;
+                            else if (e.montantPaye !== undefined && e.montantPaye !== null) p = sg * Math.abs(Number(e.montantPaye) || 0);
+                            else p = e.paye ? dueAmount : 0;
+                        }
+                        return j > Math.abs(Number(p) || 0) ? sg * j : p;
                     };
 
                     /*  v37.51 — UNE CASE CLÔTURÉE. « Plus rien n'est attendu sur ce cycle » : elle
@@ -25156,7 +25197,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire
