@@ -37,7 +37,7 @@ v('A. la Météo dit pourquoi un compte finit dans le rouge (« Pourquoi ? », l
 v('  → et un revenu arrivé sur un autre compte, avec le virement qui devait faire ce trajet',
   /data-meteo-ailleurs :data-prevu="r\.prevu"/.test(html) && /data-meteo-retirer-virement @click="\$emit\('retirer-virement', v\)"/.test(html));
 v('  → les trois Météo (Réalisé, Prévisionnel, Pilotage) branchent le retrait',
-  (html.match(/@retirer-virement="retirerVirementPrevu"( @frise="friseOuverte = true")?><\/meteo-financiere>/g) || []).length === 3 && /'cloturer', 'retirer-virement'(, 'frise')?\]/.test(html));
+  (html.match(/@retirer-virement="retirerVirementPrevu"[^>]*><\/meteo-financiere>/g) || []).length === 3 && /'cloturer', 'retirer-virement'(, '[a-z-]+')*\]/.test(html));
 
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
