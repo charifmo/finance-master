@@ -33,7 +33,9 @@ v('1. « Voyage Japon » sans destination ni compte du même nom : REFUSÉ', ($r
 v('  → la raison demande destination_account (le compte qui reçoit)', strpos($raison, 'destination_account') !== false && strpos($raison, 'poche fantôme') !== false, $raison);
 
 // 2. Sans destination, mais le nom désigne un seul compte : déduit
-[$r, $fd] = $compiler('[{"function":"set_recurring_savings","args":{"name":"Epargne urgence","fixed_amount":2000,"source_account":"Compte Salaire"}}]');
+//  (v37.85 : « Urgence » existe déjà vers ce compte — une seconde ligne se sommerait, elle est refusée ; on la retire ici)
+$fd = json_decode($base); $fd->donneesAnnuelles->{'2026'}->epargne = [$fd->donneesAnnuelles->{'2026'}->epargne[1]];
+$r = cfo_compile(json_decode('[{"function":"set_recurring_savings","args":{"name":"Epargne urgence","fixed_amount":2000,"source_account":"Compte Salaire"}}]'), $fd, ['anneeContexte' => 2026]);
 $e = $trouve($fd, 'Epargne urgence');
 v('2. « Epargne urgence » depuis le Compte Salaire : destination déduite = Compte urgence', $e !== null && (string)$e->linkedAccountId === '901' && $e->sourceCompte === 'cpt_900', json_encode($e));
 
