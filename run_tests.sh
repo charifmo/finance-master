@@ -124,5 +124,6 @@ suite "Des dates, partout : plus aucun « j.N » ni « J−N »"  node test_cfo_
 suite "Le même jour : les entrées d’abord, la grande case dit où elle regarde et quel virement avancer"  node test_cfo_engine_parity/test_meme_jour.mjs
 suite "Les deux graphiques du Bilan : par compte, par type de charges"  node test_cfo_engine_parity/test_graphiques_bilan.mjs
 suite "Le CFO se branche tout seul : l’adresse du webhook déduite du serveur"  node test_cfo_engine_parity/test_webhook_defaut.mjs
+suite "Un revenu négatif est une sortie : Relevé, Surplus, Respiration, Bilan"  node test_cfo_engine_parity/test_revenu_negatif.mjs
 
 echo "✅ Toutes les suites passent."

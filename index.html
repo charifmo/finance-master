@@ -8738,8 +8738,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.83 CFO branché";
+                    const CURRENT_VERSION = "37.84 Revenu négatif";
                     const CHANGELOG = [
+        { version: "37.84 Revenu négatif", date: "2026-10-30", changes: [
+            "💸 UN REVENU NÉGATIF EST UNE SORTIE, ET ON LA VOIT — « Pourquoi je ne vois pas le négatif du Studio sur les premiers mois ? » Le Studio rapporte 8 000 DH par mois, avec une règle d'exception de M1 à M6 à − 1 615 : ces mois-là, il COÛTE 1 615. Mais partout où l'appli lisait les revenus, un revenu négatif était écarté comme « flux inactif » : il disparaissait du Relevé de comptes (donc de la trajectoire et de la Météo), du Surplus détaillé et de la Respiration du budget. Les 1 615 DH par mois n'étaient comptés nulle part : le Courant paraissait plus riche qu'il ne l'est.",
+            "✅ DÉSORMAIS — un revenu négatif ce mois-là est une sortie du même compte : une ligne « 💸 Studio (revenu négatif) » dans le Relevé, à sa date ; compté dans les sorties du Surplus détaillé ; dans les charges fixes de la Respiration (« Studio (net) ») et du Bilan. Zéro reste « suspendu » (rien ne se passe) ; seul le négatif coûte.",
+            "PREUVE — nouvelle suite « Un revenu négatif est une sortie » : Relevé janvier 2027 (sortie de 1 615) et juillet (entrée de 8 000), Respiration (charge nette 1 615, ressources 20 000), Bilan (marge 18 385 puis 28 000), Surplus détaillé (18 385 puis 28 000). Rejouée sur la v37.83 : en échec ; défauts réintroduits exprès : attrapés.",
+        ] },
         { version: "37.83 CFO branché", date: "2026-10-29", changes: [
             "🔌 LE CFO SE BRANCHE TOUT SEUL — « C'est quoi ce truc ? » (« Configuration requise : collez l'URL du Webhook n8n »). L'adresse du CFO n'était mémorisée que dans le navigateur où on l'avait collée : sur un autre navigateur, un téléphone, ou après un effacement des données du site, il la redemandait. L'appli est servie par le même serveur que n8n : son webhook est à la même adresse (…/webhook/finance-cfo-web). Sans adresse enregistrée, l'appli la déduit d'elle-même — plus rien à coller. Une adresse enregistrée à la main garde la priorité ; en local (localhost, fichier) rien n'est deviné.",
             "PREUVE — la déduction (https, adresse du serveur, chemin du webhook ; rien en local, en fichier ni en localhost), la priorité de l'adresse enregistrée, et le CFO utilisable sans configuration. Rejouée sur la v37.82 : en échec.",
@@ -18027,6 +18032,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 }
                                 const amt = _amt(r, r.base);
                                 if (amt > 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💰 ' + (r.label || r.nom || 'Revenu'), montant: amt, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), internal: false });
+                                //  v37.84 : un revenu NÉGATIF ce mois-là (règle d'exception) coûte : une sortie du même compte.
+                                //  (_amt écarte tout ce qui est ≤ 0 — « flux inactif » : zéro = suspendu, négatif = un coût)
+                                else {
+                                    const vn = _effVal(r, r.base, m);
+                                    if (vn < 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💸 ' + (r.label || r.nom || 'Revenu') + ' (revenu négatif)', montant: Math.round(-vn * 100) / 100, type: 'debit', jourPrevu: Number(r.jourPrevu || jdp), internal: false });
+                                }
                             });
                             // v26.20 Ledger-Math-Sync : realized-in = revenus encaissés uniquement (déjà poussés ci-dessus) → AUCUNE sortie
                             if (mode === 'realized-in') return out;
@@ -18599,6 +18610,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         Object.values(dA.revenus || {}).forEach(r => {
                             if (_perim && !_dans(r.destinationCompte)) return;
                             const a = _amt(r, r.base); if (a > 0) entrants += a;
+                            else { const vn = _effVal(r, r.base); if (vn < 0) sortants += Math.round(-vn * 100) / 100; }   // v37.84 : un revenu négatif est une sortie
                         });
                         // Charges fixes → sortants (filtre compte macro des fixes si scope courant)
                         //  v37.50 : ligne par ligne — chacune sur SON compte
@@ -20401,6 +20413,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const _hors = (l) => { lignes.horsPerimetre.push(l); };
                         Object.values(d.revenus || {}).forEach(r => {
                             const v = valeurEffective(r, r.base, m);
+                            //  v37.84 : un revenu négatif ce mois-là est une charge nette du même compte
+                            if (v < 0) {
+                                const ln = { cle: 'net_' + (r.label || '?'), nom: (r.label || r.nom || '?') + ' (net)', montant: -v, jourPrevu: r.jourPrevu || null, compte: compteDeFlux('revenu', r), nature: 'fixe', ref: r };
+                                if (estFonctionnement(ln.compte)) lignes.fixes.push(ln); else _hors({ ...ln, sens: 'sortie' });
+                                return;
+                            }
                             if (!(v > 0)) return;
                             const l = { nom: r.label || r.nom || '?', montant: v, jourPrevu: r.jourPrevu || null, compte: compteDeFlux('revenu', r), nature: 'revenu' };
                             if (estFonctionnement(l.compte)) lignes.revenus.push(l); else _hors({ ...l, sens: 'entree' });
@@ -23744,6 +23762,8 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 const poste = String(k).startsWith('credit') ? 'credits' : 'fixes';
                                 val[poste] += v; ajoute(poste, (f || {}).label || k, v);
                             });
+                            //  v37.84 : un revenu négatif ce mois-là est une charge nette — un poste du Bilan, comme la Respiration
+                            (r.lignes.fixes || []).filter(l => String(l.cle || '').startsWith('net_')).forEach(l => { val.fixes += l.montant; ajoute('fixes', l.nom, l.montant); });
                             ['mensuelles', 'conso', 'exceptionnel', 'epargne'].forEach(cle => {
                                 val[cle] = 0;
                                 (r.lignes[cle] || []).forEach(l => { val[cle] += l.montant; ajoute(cle, l.nom + (cle === 'exceptionnel' ? ' (' + _MOIS_BILAN[m] + ')' : ''), l.montant); });
