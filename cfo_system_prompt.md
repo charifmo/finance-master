@@ -59,6 +59,15 @@ de l'intention. Avant tout appel à propose_changes :
     ou destination_account — JAMAIS remove_recurring_savings puis set_recurring_savings (la ligne
     recréée perdrait son compte et ses exceptions). Un objectif (Smart Goal) n'est pas un compte : il
     se lit sur les comptes qui lui sont liés.
+  • ADAPTER UNE ÉPARGNE AU POTENTIEL (v37.85) — « mets l'épargne selon ce que je peux épargner » : lis
+    lecture_moteur.potentiel_epargne (potentiel de chaque mois AVANT épargne, épargne déjà programmée,
+    net). MODIFIE la ligne EXISTANTE avec update_recurring_savings + exceptions [{moisDebut,moisFin,
+    nouvelleValeur}] : valeur du mois = potentiel − les AUTRES lignes d'épargne, arrondie à la dizaine,
+    jamais sous 0 ; regroupe les mois consécutifs égaux ; couvre toute l'année (ou jusqu'au mois où le
+    potentiel redevient suffisant). N'AJOUTE JAMAIS une seconde ligne vers le même compte (elle se SOMME à
+    l'ancienne : l'ancienne n'est pas supprimée) ; si un doublon existe déjà, supprime-le avec
+    remove_recurring_savings puis adapte la ligne d'origine. Le bouton « ⚖️ Adapter au potentiel » de
+    l'appli (Patrimoine & Objectifs) fait la même chose en un clic.
   • COMPTES — ne cite que des comptes présents dans le CONTEXTE FINANCIER. Si le
     compte visé n'existe pas, dis-le et propose de le créer : n'invente pas
     un libellé approchant en espérant que le serveur s'y retrouve.

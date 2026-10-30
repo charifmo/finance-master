@@ -612,9 +612,10 @@ function cfo_arg_spec(): array {
     ]],
 
     'update_recurring_savings' => ['desc'=>"Modifie un virement d'épargne EXISTANT, sur place : montant, nom, compte source et/ou compte de destination. Pour changer le compte d'où part (ou où arrive) une épargne, utilise CETTE fonction — ne supprime pas la ligne pour la recréer.",
-        'au_moins_un' => ['amount', 'new_name', 'source_account', 'destination_account'],
+        'au_moins_un' => ['amount', 'new_name', 'source_account', 'destination_account', 'exceptions'],
         'params'=>[
         'name'     => ['type'=>'string','required'=>true,'aliases'=>array_merge($A_NOM,['poche','savings_name']),'desc'=>"Ligne d'épargne visée."],
+        'exceptions' => ['type'=>'raw','aliases'=>['exceptions_mensuelles','overrides'],'desc'=>"REMPLACE les exceptions mensuelles de la ligne EXISTANTE : [{moisDebut,moisFin,nouvelleValeur}] (mois 1-12). C'est ainsi qu'on adapte une épargne au potentiel de chaque mois (valeur du mois = potentiel_epargne − les AUTRES lignes, jamais sous zéro) : on ne crée JAMAIS une seconde ligne vers le même compte."],
         'amount'   => ['type'=>'number','aliases'=>array_merge($A_MONTANT,['fixed_amount','montant_fixe','nouveau_montant']),'desc'=>"Nouveau montant mensuel (REMPLACE)."],
         'new_name' => ['type'=>'string','aliases'=>['nouveau_nom','rename','nouveau_libelle'],'desc'=>"Renomme la ligne."],
         'source_account' => ['type'=>'string','aliases'=>['source','compte_source','depuis','from_account'],'desc'=>"Nouveau compte débité."],
@@ -1002,6 +1003,7 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
             $amt = oget($a, 'amount', null);
             $ch = cfo_obj(['action'=>'modify','category'=>'epargne','target'=>oget($a,'name'),
                 'amount'=>is_numeric($amt) ? $amt + 0 : null,'label'=>oget($a,'new_name'),'years'=>$yrs]);
+            if (is_array(oget($a, 'exceptions', null))) oset($ch, 'exceptions', oget($a, 'exceptions'));   // v37.85
             if (oget($a, 'source_account', null) !== null) {
                 $s = cfo_resolve_source_compte(oget($a, 'source_account'), $ctx['financeData']);
                 oset($ch, 'sourceCompte', $s['key']); if ($s['warning']) oset($ch, 'sourceCompteAvertissement', $s['warning']);
@@ -1580,7 +1582,7 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
                     return [$o(['type'=>'update_charge_variable','key'=>$resolvedKey,'valeur'=>$amt,'periode'=>$period ?: null,'label'=>$newLabel ?: null])];
                 case 'epargne': {
                     $op = $o(['type'=>'update_epargne','key'=>$resolvedKey,'valeur'=>$amt,'label'=>$newLabel ?: null]);
-                    foreach (['sourceCompte', 'linkedAccountId', 'sourceCompteAvertissement', 'destinationAvertissement'] as $f)   // v37.70
+                    foreach (['sourceCompte', 'linkedAccountId', 'sourceCompteAvertissement', 'destinationAvertissement', 'exceptions'] as $f)   // v37.70 ; v37.85 : exceptions
                         if (oget($change, $f, null) !== null) oset($op, $f, oget($change, $f));
                     return [$op];
                 }
@@ -2005,6 +2007,18 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             if (cfo_cle_compte_epargne($lie, $fd) === cfo_cle_compte_epargne($srcAdd, $fd)) {
                 $log['status']='error'; $log['reason']='« '.$lbl.' » partirait et arriverait sur le même compte : choisis un autre compte de destination.'; break;
             }
+            //  v37.85 : UNE LIGNE QUI DOUBLE UNE LIGNE EXISTANTE vers le même compte — « Epargne urgence » à côté de « Urgence » —
+            //  se SOMME au lieu de la remplacer. On modifie l'existante (update_recurring_savings, exceptions comprises).
+            $motsNeufs = array_values(array_filter(preg_split('/[^a-z0-9]+/', cfo_norm_str($lbl)), fn($w) => strlen($w) >= 4 && !in_array($w, ['epargne', 'compte', 'mensuel', 'mensuelle', 'versement', 'virement'], true)));
+            foreach ($pool as $e) {
+                if (!is_object($e) || cfo_cle_compte_epargne(oget($e,'linkedAccountId', null), $fd) !== cfo_cle_compte_epargne($lie, $fd)) continue;
+                $motsE = preg_split('/[^a-z0-9]+/', cfo_norm_str(oget($e,'nom') ?: oget($e,'label','')));
+                if (count(array_intersect($motsNeufs, $motsE))) {
+                    $log['status']='error';
+                    $log['reason']='« '.$lbl.' » doublerait la ligne existante « '.(oget($e,'nom') ?: oget($e,'label','')).' » (même compte de destination) : les deux se SOMMERAIENT. Modifie la ligne existante avec update_recurring_savings (montant, ou exceptions mensuelles).';
+                    break 2;
+                }
+            }
             $newId = cfo_uid();
             $newEp = cfo_obj(['id'=>$newId,'nom'=>$lbl,'label'=>$lbl,'valeur'=>$v,
                 'sourceCompte'=>$srcAdd,
@@ -2074,6 +2088,19 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             if ($lieU === null || $lieU === '') {
                 $d = cfo_deduire_destination_epargne($fd, oget($ep,'nom') ?: oget($ep,'label',''), oget($ep,'id'), oget($ep,'sourceCompte') ?: 'courant');
                 if ($d) { oset($ep,'linkedAccountId',$d['id']); $ch['destination'] = ['avant'=>null,'apres'=>cfo_nom_compte_epargne($d['id'], $fd),'deduite'=>$d['comment']]; }
+            }
+            //  v37.85 : les exceptions mensuelles se REMPLACENT sur la ligne existante (mois 1-12, valeur ≥ 0)
+            $exNew = oget($op, 'exceptions', null);
+            if (is_array($exNew)) {
+                $propres = []; $mauvais = null;
+                foreach ($exNew as $e) {
+                    $d0 = (int)oget($e, 'moisDebut', 0); $f0 = (int)oget($e, 'moisFin', 0); $nv = oget($e, 'nouvelleValeur', null);
+                    if ($d0 < 1 || $f0 > 12 || $d0 > $f0 || !is_numeric($nv) || $nv < 0) { $mauvais = json_encode($e, JSON_UNESCAPED_UNICODE); break; }
+                    $propres[] = cfo_obj(['id'=>cfo_uid(),'moisDebut'=>$d0,'moisFin'=>$f0,'nouvelleValeur'=>$nv + 0]);
+                }
+                if ($mauvais !== null) { $log['status']='error'; $log['reason']='exception invalide (mois 1-12, du début à la fin, valeur ≥ 0) : '.$mauvais; break; }
+                $ch['exceptions'] = ['avant'=>count(oget($ep,'exceptions') ?: []).' période(s)','apres'=>count($propres).' période(s)'];
+                oset($ep, 'exceptions', $propres); oset($ep, 'showExceptions', count($propres) > 0);
             }
             if (!count($ch)) { $log['status']='error'; $log['reason']='aucun champ fourni'; break; }
             // v36.1 : une ligne sans nom doit quand même être nommable dans le
