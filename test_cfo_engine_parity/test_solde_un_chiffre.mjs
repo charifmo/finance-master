@@ -260,6 +260,9 @@ try {
             const a = await analyser(V(l));
             v('B. ' + nom + ' : compte chèque 5 107,80 et total 5 212,11', a.soldes.compteCheque === 5107.8 && a.soldes.mesComptes === 5212.11, JSON.stringify(a.soldes));
         }
+        //  v37.87 : l'OCR a rendu « 521211DH © » pour le total « 5 212,11 DH » (virgule perdue, gros caractères)
+        const colle = await analyser(V('Compte chèque\n000999B000123456\n5 107,80 DH').replace('5 212,11 DH', '521211DH ©'));
+        v('C. total collé sans virgule « 521211DH © » : lu 5 212,11 ; le compte chèque 5 107,80 reste lu', colle.soldes.mesComptes === 5212.11 && colle.soldes.compteCheque === 5107.8, JSON.stringify(colle.soldes));
         const a = await analyser(V('Compte chèque\n000999B000123456\n5 107,8 DH'));
         v('  → les opérations gardent leurs deux chiffres : -20,00 et -31,85', JSON.stringify(a.operations.map(o => o.montant)) === '[-20,-31.85]', JSON.stringify(a.operations.map(o => o.montant)));
     });

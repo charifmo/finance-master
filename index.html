@@ -8754,8 +8754,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.86 Solde Attijari";
+                    const CURRENT_VERSION = "37.87 Total Attijari";
                     const CHANGELOG = [
+        { version: "37.87 Total Attijari", date: "2026-10-31", changes: [
+            "🏦 « SOLDE MES COMPTES ILLISIBLE » — votre compte suit le TOTAL « Mes comptes ». Relu sur votre vraie capture avec l'OCR de l'appli : le total « 5 212,11 DH » (gros caractères) est rendu « 521211DH » — la virgule est perdue — donc jamais reconnu comme un montant ; le compte chèque (5 107,80) était, lui, bien lu. Désormais : un montant de l'en-tête collé à sa devise, sans virgule, vaut ses deux derniers chiffres en centimes (521211DH → 5 212,11 DH).",
+            "PREUVE — la suite « Solde Attijari » rejoue le texte exact rendu par l'OCR (« 521211DH © »). Rejouée sur la v37.86 : en échec.",
+        ] },
         { version: "37.86 Solde Attijari", date: "2026-10-31", changes: [
             "🏦 LE SOLDE DU COMPTE CHÈQUE NE SE METTAIT PAS À JOUR — « La mise à jour, c'est le solde du compte qui n'est pas mis à jour. » Sur votre capture, Attijari affiche « 5 107,⁸ DH » : UN seul chiffre en exposant (le zéro final est tu). L'appli exigeait deux chiffres après la virgule : le compte chèque n'était pas lu, seul le total « Mes comptes » (5 212,11) l'était — et ce total n'est jamais pris à la place du compte chèque. Résultat : aucun solde à appliquer, le Courant restait à l'ancien montant.",
             "✅ DÉSORMAIS — un solde de l'en-tête à un seul chiffre après la virgule vaut ce chiffre suivi d'un zéro (« 5 107,8 DH », ou coupé en deux lignes « 5 107, » / « 8 DH ») ; la relecture des centimes en exposant accepte aussi un seul chiffre. Les opérations gardent leurs deux chiffres (−31,85 reste −31,85).",
@@ -24438,6 +24442,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             if (prec != null && /\d[,.]\s*$/.test(prec) && /^\d(?:\s|$)/.test(String(l).trim())) { teteSoldes[teteSoldes.length - 1] = prec.replace(/\s+$/, '') + String(l).trim(); return; }
                             teteSoldes.push(String(l));
                         });
+                        //  v37.86 : « 521211DH » — l'OCR a perdu la virgule du total « 5 212,11 DH » (gros caractères) : les deux derniers
+                        //  chiffres d'un montant collé à sa devise, sans virgule ni point, sont les centimes (le solde est toujours à 2 chiffres)
+                        teteSoldes.forEach((l, i) => { if (!/[,.]\d/.test(l)) teteSoldes[i] = l.replace(/(^|[^\d])(\d{1,7})(\d{2})\s*(dhs?|mad)\b/gi, '$1$2,$3 $4'); });
                         teteSoldes.forEach((l, i) => { teteSoldes[i] = l.replace(/(\d[,.])(\d)(?!\d)(?=\s*(?:dhs?|mad|ph|pn|dn|oh)?\s*$|\s+(?:dhs?|mad|ph|pn|dn|oh)\b)/gi, '$1$20'); });
                         teteSoldes.forEach(l => {
                             const n = bqNorm(l), t = _bqLigne(l);
