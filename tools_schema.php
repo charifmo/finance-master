@@ -56,7 +56,7 @@ function cfo_build_tool_schema(): array {
     foreach ($props as $k => &$pv) {
         $fns = $pv['_fns']; unset($pv['_fns']);
         $pv['description'] = trim($pv['description'] . ' [' . (in_array('*', $fns, true) ? 'toutes fonctions' : implode(', ', $fns)) . ']');
-        if (($pv['type'] ?? null) === 'array') $pv['items'] = ['type' => ($k === 'years' ? 'integer' : 'object')];
+        if (($pv['type'] ?? null) === 'array') $pv['items'] = ['type' => (in_array($k, ['years', 'months'], true) ? 'integer' : 'object')];   // v37.86 : months = [11,12], des nombres
     }
     unset($pv);
 

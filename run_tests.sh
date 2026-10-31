@@ -126,5 +126,6 @@ suite "Les deux graphiques du Bilan : par compte, par type de charges"  node tes
 suite "Le CFO se branche tout seul : l’adresse du webhook déduite du serveur"  node test_cfo_engine_parity/test_webhook_defaut.mjs
 suite "Un revenu négatif est une sortie : Relevé, Surplus, Respiration, Bilan"  node test_cfo_engine_parity/test_revenu_negatif.mjs
 suite "L’épargne s’adapte au potentiel : bouton, CFO, doublon refusé"  node test_cfo_engine_parity/test_epargne_potentiel.mjs
+suite "Solde Attijari à un seul chiffre après la virgule"  node test_cfo_engine_parity/test_solde_un_chiffre.mjs
 
 echo "✅ Toutes les suites passent."

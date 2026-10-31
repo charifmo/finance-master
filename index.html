@@ -8754,8 +8754,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.85 Épargne au potentiel";
+                    const CURRENT_VERSION = "37.86 Solde Attijari";
                     const CHANGELOG = [
+        { version: "37.86 Solde Attijari", date: "2026-10-31", changes: [
+            "🏦 LE SOLDE DU COMPTE CHÈQUE NE SE METTAIT PAS À JOUR — « La mise à jour, c'est le solde du compte qui n'est pas mis à jour. » Sur votre capture, Attijari affiche « 5 107,⁸ DH » : UN seul chiffre en exposant (le zéro final est tu). L'appli exigeait deux chiffres après la virgule : le compte chèque n'était pas lu, seul le total « Mes comptes » (5 212,11) l'était — et ce total n'est jamais pris à la place du compte chèque. Résultat : aucun solde à appliquer, le Courant restait à l'ancien montant.",
+            "✅ DÉSORMAIS — un solde de l'en-tête à un seul chiffre après la virgule vaut ce chiffre suivi d'un zéro (« 5 107,8 DH », ou coupé en deux lignes « 5 107, » / « 8 DH ») ; la relecture des centimes en exposant accepte aussi un seul chiffre. Les opérations gardent leurs deux chiffres (−31,85 reste −31,85).",
+            "⚠️ ET PLUS JAMAIS EN SILENCE — quand aucun solde n'a pu être lu sur une capture, l'import l'écrit en orange (« solde non mis à jour ») au lieu de n'afficher aucune ligne.",
+            "🤖 « REBALANCE LES VIREMENTS POUR QUE LE COURANT NE TOMBE PAS SOUS 0 » faisait échouer le CFO (« Expected object, received number → calls[0].args.months[0] ») : le schéma de l'outil déclarait la liste des mois comme une liste d'OBJETS, alors que le CFO envoie des nombres (11, 12…). n8n rejetait l'appel avant même le moteur. Corrigé : months est une liste de nombres (comme years). Sur le VPS : « sudo bash install.sh cfo ».",
+            "PREUVE — nouvelle suite « Solde Attijari à un seul chiffre » : quatre mises en forme du même solde, total conservé, opérations intactes. Rejouée sur la v37.85 : en échec.",
+        ] },
         { version: "37.85 Épargne au potentiel", date: "2026-10-30", changes: [
             "⚖️ L'ÉPARGNE S'ADAPTE AU POTENTIEL DE CHAQUE MOIS — « Il faut une épargne non stable : de janvier à juin 2027 mon potentiel est négatif. » Le CFO avait créé une SECONDE ligne « Epargne urgence » vers le même compte au lieu de modifier « Urgence » : l'ancienne n'était pas supprimée, les deux se sommaient — de janvier à juin, 9 000 DH d'épargne pour 4 638 DH de potentiel.",
             "✅ DÉSORMAIS — dans Patrimoine & Objectifs, chaque ligne d'épargne a un bouton « ⚖️ Adapter au potentiel » (plafond facultatif) : une exception par période, valeur du mois = potentiel − les autres lignes, jamais sous zéro, à partir du mois en cours ; « Retirer l'adaptation » défait tout. Le CFO lit le potentiel de chaque mois (lecture_moteur.potentiel_epargne) et peut remplacer les exceptions de la ligne EXISTANTE (update_recurring_savings) ; une ligne qui doublerait une ligne existante vers le même compte est refusée.",
@@ -24422,7 +24429,17 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const parCode = identifiants.filter(bqRibValide).map(x => BQ_CODES[x.slice(0, 3)]).find(Boolean);
                         //  Les soldes de l'en-tête, rangés sous le libellé qui les annonce
                         const soldes = {}; let cle = null, totaux = null;
+                        //  v37.86 : Attijari affiche « 5 107,⁸ DH » (un seul chiffre en exposant : le zéro final est tu) — lu « 5 107,8 DH »
+                        //  ou coupé en deux lignes (« 5 107, » puis « 8 DH »). Un solde de l'en-tête à un seul chiffre après la
+                        //  virgule vaut ce chiffre suivi d'un zéro ; les opérations, elles, gardent leurs deux chiffres.
+                        const teteSoldes = [];
                         tete.forEach(l => {
+                            const prec = teteSoldes[teteSoldes.length - 1];
+                            if (prec != null && /\d[,.]\s*$/.test(prec) && /^\d(?:\s|$)/.test(String(l).trim())) { teteSoldes[teteSoldes.length - 1] = prec.replace(/\s+$/, '') + String(l).trim(); return; }
+                            teteSoldes.push(String(l));
+                        });
+                        teteSoldes.forEach((l, i) => { teteSoldes[i] = l.replace(/(\d[,.])(\d)(?!\d)(?=\s*(?:dhs?|mad|ph|pn|dn|oh)?\s*$|\s+(?:dhs?|mad|ph|pn|dn|oh)\b)/gi, '$1$20'); });
+                        teteSoldes.forEach(l => {
                             const n = bqNorm(l), t = _bqLigne(l);
                             if (/total des mouvements|^debit\b|^credit\b/.test(n)) return;
                             if (/mes comptes/.test(n)) cle = 'mesComptes';
@@ -24774,8 +24791,9 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                 const g = c2.getContext('2d');
                                 g.fillStyle = '#fff'; g.fillRect(0, 0, c2.width, c2.height); g.imageSmoothingQuality = 'high';
                                 g.drawImage(cv, x0, y0, x1 - x0, y1 - y0, 20, 20, (x1 - x0) * k, (y1 - y0) * k);
-                                const c = ((await w.recognize(c2)).data.text || '').replace(/\s/g, '').match(/^(\d{2})/);
-                                if (c) votes[c[1]] = (votes[c[1]] || 0) + 1;
+                                const lu = ((await w.recognize(c2)).data.text || '').replace(/\s/g, '');
+                                const c = lu.match(/^(\d{2})/) || lu.match(/^(\d)(?!\d)/);   // v37.86 : « ,⁸ DH » — un seul chiffre, le zéro final est tu
+                                if (c) { const cc1 = c[1].length === 1 ? c[1] + '0' : c[1]; votes[cc1] = (votes[cc1] || 0) + 1; }
                             }
                             const [cc, nv] = Object.entries(votes).sort((p, q) => q[1] - p[1])[0] || [];
                             if (nv >= 2) texte = texte.replace(m.text, m.text.slice(0, m.text.indexOf(',') + 1) + cc + ' DH');
@@ -25056,7 +25074,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                             ? (c.soldeSuivi === 'mesComptes' ? s.mesComptes : (s.compteCheque ?? s.solde))
                             : (s.solde ?? s.compteCheque);
                         cap.soldeChoisi = cap.soldeChoisi == null ? null : cap.soldeChoisi;
-                        cap.soldeIllisible = cap.soldeChoisi == null && Object.keys(s).length > 0;
+                        cap.soldeIllisible = cap.soldeChoisi == null && (Object.keys(s).length > 0 || (cap.lignes || []).length > 0);   // v37.86 : aucun solde lu = on le dit, jamais en silence
                         cap.appliquerSolde = cap.soldeChoisi != null;
                     };
                     const _reproposer = () => {

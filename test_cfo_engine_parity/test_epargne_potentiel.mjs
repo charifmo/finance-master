@@ -25,6 +25,13 @@ const php = fs.readFileSync(path.join(RACINE, 'cfo_intent_engine.php'), 'utf8');
 v('A. appli : bouton « Adapter au potentiel » ; CFO : exceptions sur update_recurring_savings, refus du doublon',
   /data-adapter-potentiel/.test(html) && /const adapterEpargneAuPotentiel = /.test(html) && /potentiel_epargne/.test(html)
   && /'exceptions' => \['type'=>'raw'/.test(php) && /doublerait la ligne existante/.test(php));
+{   //  v37.86 : « Expected object, received number » — months = [1, 2, …] doit être une liste de NOMBRES dans le schéma de l'outil
+    const wf = JSON.parse(fs.readFileSync(path.join(RACINE, 'super_agent_cfo_audio.json'), 'utf8'));
+    let sch = wf.nodes.find(n => n.name === 'Tool: Intent Compiler').parameters.inputSchema; if (typeof sch === 'string') sch = JSON.parse(sch);
+    const pr = sch.properties.calls.items.properties.args.properties;
+    v('A2. schéma du CFO : months et years = listes de nombres (pas d\u2019objets), exceptions = liste d\u2019objets',
+      pr.months.items.type === 'integer' && pr.years.items.type === 'integer' && pr.exceptions.items.type === 'object', JSON.stringify([pr.months.items, pr.exceptions.items]));
+}
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
 const pw = essai(() => require('playwright-core'));
