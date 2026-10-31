@@ -6425,12 +6425,6 @@
                                             <option value="">Banque…</option>
                                             <option v-for="b in BANQUES_SELECT" :key="b.cle" :value="b.cle">{{ b.nom }}</option>
                                         </select>
-                                        <select v-if="c.banque === 'attijari'" data-calibrage-solde :value="c.soldeSuivi || 'compteCheque'" @change="c.soldeSuivi = $event.target.value; handleDataChange()"
-                                                title="Attijari Mobile affiche deux soldes : lequel suivre pour ce compte ?"
-                                                class="text-[11px] font-bold px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 outline-none focus:border-indigo-400">
-                                            <option value="compteCheque">Solde suivi : « Compte chèque » (ce compte)</option>
-                                            <option value="mesComptes">Solde suivi : « Mes comptes » (TOTAL de vos comptes Attijari)</option>
-                                        </select>
                                         <span v-for="x in (c.identifiants || [])" :key="'id_' + x" data-calibrage-id class="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 tabular-nums">
                                             🔢 {{ idLisible(x) }}<button type="button" @click="retirerIdentifiant(c, x)" :aria-label="'Retirer ' + x" class="text-indigo-400 hover:text-red-600">×</button>
                                         </span>
@@ -6732,7 +6726,7 @@
                                 <span class="text-xs font-black tabular-nums text-gray-400 line-through">{{ formatMAD((comptes.find(c => String(c.id) === String(cap.compteId)) || {}).solde) }}</span>
                                 <span class="text-xs font-black tabular-nums text-indigo-700" :title="'Exact : ' + cap.soldeChoisi.toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' DH'">→ {{ formatMAD(cap.soldeChoisi) }}</span>
                             </label>
-                            <p v-if="cap.compteId && cap.soldeIllisible" data-import-solde-illisible class="px-3 py-2 text-[11px] font-bold text-amber-800 bg-amber-50 border-b border-amber-100">⚠️ Solde « {{ (comptes.find(c => String(c.id) === String(cap.compteId)) || {}).soldeSuivi === 'mesComptes' ? 'Mes comptes' : 'Compte chèque' }} » illisible sur cette capture : solde non mis à jour (le total « Mes comptes » n'est jamais pris à sa place).</p>
+                            <p v-if="cap.compteId && cap.soldeIllisible" data-import-solde-illisible class="px-3 py-2 text-[11px] font-bold text-amber-800 bg-amber-50 border-b border-amber-100">⚠️ Solde « Compte chèque » illisible sur cette capture : solde non mis à jour (le total « Mes comptes » n'est jamais pris à sa place).</p>
                             <!-- Les opérations -->
                             <ul class="divide-y divide-gray-100">
                                 <li v-for="l in cap.lignes" :key="'il_' + l.hash" data-import-ligne :data-type="l.type" :data-action="l.action.split(':')[0]" :data-hash="l.hash"
@@ -8754,8 +8748,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.87 Total Attijari";
+                    const CURRENT_VERSION = "37.88 Compte chèque";
                     const CHANGELOG = [
+        { version: "37.88 Compte chèque", date: "2026-10-31", changes: [
+            "🏦 LE COMPTE COURANT SUIT LE COMPTE CHÈQUE, JAMAIS « MES COMPTES » — « Il doit prendre le compte courant, pas Mes comptes ! » Un ancien réglage « Solde suivi : Mes comptes » (le TOTAL de tous vos comptes Attijari) faisait chercher le mauvais solde. Ce choix n'existe plus : à l'import, le solde proposé est toujours celui du « Compte chèque » (5 107,80 sur votre capture), même si l'ancien réglage traîne dans vos données. Le sélecteur « Solde suivi » du calibrage est retiré.",
+            "PREUVE — les suites « Calibrage » et « Banque » rejouent l'ancien réglage : le solde du compte chèque est pris, jamais le total.",
+        ] },
         { version: "37.87 Total Attijari", date: "2026-10-31", changes: [
             "🏦 « SOLDE MES COMPTES ILLISIBLE » — votre compte suit le TOTAL « Mes comptes ». Relu sur votre vraie capture avec l'OCR de l'appli : le total « 5 212,11 DH » (gros caractères) est rendu « 521211DH » — la virgule est perdue — donc jamais reconnu comme un montant ; le compte chèque (5 107,80) était, lui, bien lu. Désormais : un montant de l'en-tête collé à sa devise, sans virgule, vaut ses deux derniers chiffres en centimes (521211DH → 5 212,11 DH).",
             "PREUVE — la suite « Solde Attijari » rejoue le texte exact rendu par l'OCR (« 521211DH © »). Rejouée sur la v37.86 : en échec.",
@@ -25077,8 +25075,10 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         });
                         const s = cap.analyse.soldes || {}, c = _compteParId(cap.compteId) || {};
                         //  v37.55 : le solde SUIVI, ou aucun — jamais le total « Mes comptes » à la place du compte chèque
+                        //  v37.88 : TOUJOURS le solde du compte chèque (« Compte Courant »), jamais le total « Mes comptes » — même si un ancien
+                        //  réglage « solde suivi » le demandait : ce choix n'existe plus
                         cap.soldeChoisi = cap.analyse.banque === 'attijari'
-                            ? (c.soldeSuivi === 'mesComptes' ? s.mesComptes : (s.compteCheque ?? s.solde))
+                            ? (s.compteCheque ?? s.solde)
                             : (s.solde ?? s.compteCheque);
                         cap.soldeChoisi = cap.soldeChoisi == null ? null : cap.soldeChoisi;
                         cap.soldeIllisible = cap.soldeChoisi == null && (Object.keys(s).length > 0 || (cap.lignes || []).length > 0);   // v37.86 : aucun solde lu = on le dit, jamais en silence

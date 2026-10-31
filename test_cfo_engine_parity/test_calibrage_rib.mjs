@@ -31,9 +31,8 @@ console.log('\n  BANQUE : CALIBRER UNE FOIS, LE BON SOLDE TOUJOURS\n  ' + '─'.
 /* ── A. Statique ─────────────────────────────────────────────────────── */
 v('A. UN SEUL bouton « 🎯 Calibrer avec une capture » (plusieurs à la fois) ; plus de bouton par compte',
   (html.match(/data-calibrage-captures/g) || []).length === 1 && /accept="image\/\*" multiple class="hidden" data-calibrage-captures/.test(html) && !/data-calibrage-capture\b/.test(html));
-v('  → le solde : plus aucun repli sur « Mes comptes » (le total) quand le « Compte chèque » n\'est pas lu',
-  /c\.soldeSuivi === 'mesComptes' \? s\.mesComptes : \(s\.compteCheque \?\? s\.solde\)/.test(html) && !/s\.compteCheque \?\? s\.solde \?\? s\.mesComptes/.test(html));
-v('  → « Mes comptes » est nommé pour ce qu\'il est : le TOTAL de vos comptes Attijari', /« Mes comptes » \(TOTAL de vos comptes Attijari\)/.test(html));
+v('  → le solde : toujours le « Compte chèque », jamais le total « Mes comptes » (v37.88 : le réglage « solde suivi » n\'existe plus)',
+  /\? \(s\.compteCheque \?\? s\.solde\)\s*:/.test(html) && !/c\.soldeSuivi === 'mesComptes'/.test(html) && !/data-calibrage-solde/.test(html) && !/s\.compteCheque \?\? s\.solde \?\? s\.mesComptes/.test(html));
 const require = createRequire(import.meta.url);
 const essai = (f) => { try { return f(); } catch { return null; } };
 const pw = essai(() => require('playwright-core'));
@@ -258,14 +257,14 @@ try {
         v('  → « Compte chèque » illisible : AUCUN solde proposé, et c\'est dit (« illisible… le total n\'est jamais pris à sa place »)',
           ill[0] === CC && ill[1] == null && ill[2] === false && /illisible/.test(ill[3]) && /jamais pris à sa place/.test(ill[3]) && ill[4] === false, JSON.stringify(ill));
         await page.evaluate((ST) => eval(ST).fermerImportBanque(), ST);
-        //  Le solde « Mes comptes » quand on l'a choisi, lui seulement
+        //  Un ancien réglage « Mes comptes » reste sans effet
         await page.evaluate(({ ST, CC }) => { eval(ST).comptes.find(c => c.id === CC).soldeSuivi = 'mesComptes'; }, { ST, CC });
         await page.evaluate((ST) => eval(ST).ouvrirImportBanque(), ST); await page.waitForTimeout(200);
         await page.fill('[data-import-texte]', ACCUEIL('4 213,32 DH'));
         await page.click('[data-import-analyser]');
         await page.waitForFunction((ST) => eval(ST).importBanque.etape === 'revue', ST, { timeout: 60000 }); await page.waitForTimeout(300);
         const mc = await page.evaluate((ST) => eval(ST).importBanque.captures[0].soldeChoisi, ST);
-        v('  → « Solde suivi : Mes comptes » choisi exprès : alors, et alors seulement, le total 4 318,35', mc === 4318.35, JSON.stringify(mc));
+        v('  → même avec un ancien réglage « Mes comptes » : le solde du COMPTE CHÈQUE 4 213,32, jamais le total 4 318,35', mc === 4213.32, JSON.stringify(mc));
         await page.evaluate(({ ST, CC }) => { eval(ST).fermerImportBanque(); delete eval(ST).comptes.find(c => c.id === CC).soldeSuivi; }, { ST, CC });
         //  « Détails du compte » dans l'import : son solde, aucune opération
         await page.evaluate((ST) => eval(ST).ouvrirImportBanque(), ST); await page.waitForTimeout(200);

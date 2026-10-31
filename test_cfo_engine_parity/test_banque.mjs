@@ -352,7 +352,7 @@ try {
         v('  → la même capture déposée deux fois : la seconde marquée « déjà sur une autre capture »', c[2].lignes.length === 2 && c[2].lignes.every(l => l.doublon), JSON.stringify(c[2].lignes));
         //  Le solde « Mes comptes » plutôt que « Compte chèque »
         await page.evaluate(async ({ ST, CC }) => { const st = eval(ST); st.comptes.find(x => x.id === CC).soldeSuivi = 'mesComptes'; st.changerCompteCapture(st.importBanque.captures[1], CC); await new Promise(r => setTimeout(r, 100)); }, { ST, CC });
-        v('  → Attijari : solde suivi « Mes comptes » → 4 318,35 proposé', (await caps())[1].solde === 4318.35, String((await caps())[1].solde));
+        v('  → Attijari : même avec un ancien réglage « Mes comptes », le solde du compte chèque (jamais le total 4 318,35)', (await caps())[1].solde !== 4318.35 && (await caps())[1].solde != null, String((await caps())[1].solde));
         await page.click('[data-import-appliquer]'); await page.waitForTimeout(400);
         const t = await txs();
         const fr = t.find(x => /Attijariwafa Bank \(2 op\.\)/.test(x.libelle)) || {};
@@ -361,7 +361,7 @@ try {
           && t.some(x => x.libelle === 'ACIMA') && fr.montant === 15.5 && fr.libelle === 'Frais bancaires · Attijariwafa Bank (2 op.)', JSON.stringify([n0, t.length, t.map(x => x.libelle)]));
         const tel = await page.evaluate((ST) => (eval(ST).tachesPilotageToutes.find(x => x.libelle === 'tel') || {}).regle, ST);
         v('  → « tel » : 120 réglés au Pilotage', tel === 120, String(tel));
-        v('  → et le solde du Courant suit « Mes comptes » : 4 318', (await compte(CC)).solde === 4318, String((await compte(CC)).solde));
+        v('  → et le solde du Courant suit le COMPTE CHÈQUE (4 213), pas le total « Mes comptes »', (await compte(CC)).solde === 4213, String((await compte(CC)).solde));
     });
 
     /* ── I. Un RIB n'appartient qu'à un compte ─────────────────────────── */
