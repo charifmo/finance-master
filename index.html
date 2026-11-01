@@ -8774,8 +8774,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.89 Courant au juste besoin";
+                    const CURRENT_VERSION = "37.90 Connexion CFO";
                     const CHANGELOG = [
+        { version: "37.90 Connexion CFO", date: "2026-11-02", changes: [
+            "📶 « ERREUR DE CONNEXION AU CFO — FAILED TO FETCH » — ce message du navigateur veut dire : AUCUNE réponse (une erreur du serveur en serait une). Au téléphone, la cause la plus fréquente : l'écran se verrouille ou on change d'appli pendant l'attente, Chrome suspend l'onglet et coupe la requête — alors que le CFO continue côté serveur.",
+            "✅ DÉSORMAIS — pendant l'attente, l'écran reste allumé (quand le navigateur le permet). Sur « Failed to fetch », l'appli enquête et le dit en clair : pas de réseau ; « le CFO a bien reçu votre question, la connexion a été coupée pendant l'attente » (étapes notées par le VPS, l'écran est relu) ; une adresse de webhook enregistrée dans CE navigateur qui ne répond pas → la question repart aussitôt vers l'adresse du serveur, gardée pour la suite ; ou « le serveur répond, mais pas le CFO (n8n) » avec la commande à lancer sur le VPS. Un bouton « ↻ Renvoyer la question ».",
+            "PREUVE — nouvelle suite « Connexion au CFO » (faux serveur finance.test) : adresse morte corrigée et réponse affichée, connexion coupée reconnue puis question renvoyée, n8n muet, hors ligne. Rejouée sur la v37.89 : en échec.",
+        ] },
         { version: "37.89 Courant au juste besoin", date: "2026-11-01", changes: [
             "🔄 LE COURANT ALIMENTÉ AU JUSTE BESOIN — « Il faut un virement chaque début de cycle, avec la valeur requise. » Le CFO avait posé 9 100 DH le 28 de chaque mois : le 28 janvier appartient au cycle de FÉVRIER (après la paie du 27) — janvier restait à − 7 880, février recevait deux fois ; 9 100 tous les mois même quand le Courant n'en avait plus besoin (52 672 DH dessus en novembre) ; des allers-retours Courant → Assafa le même jour. Nouveau, dans Flux exceptionnels : « 🔄 Calculer et poser les virements » — pour chaque cycle à venir, UN virement du compte du salaire vers le Courant, le jour de paie (le 27 déc. ouvre janvier), du montant qui garde le Courant au-dessus de zéro sur tout le cycle, calculé par le Relevé cycle après cycle (rien quand il n'en faut pas). Il remplace les virements salaire ↔ Courant de ces cycles ; « ↩️ Annuler » remet tout. Il signale le compte du salaire qui passerait sous zéro et les gros virements qui partent du Courant (« Faire partir du compte du salaire » en un clic).",
             "🧮 LE CFO DEMANDE, L'APPLI CALCULE — nouvel outil app_action : le CFO demande « alimenter le Courant » ou « adapter une épargne au potentiel » ; l'appli l'exécute avec SON moteur au rechargement qui suit l'échange et l'écrit dans le fil (« 🧮 Calculé par l'appli, pas par le CFO »). Ses consignes (§0bis) lui interdisent de refaire ces calculs et de promettre un solde que l'appli n'a pas calculé. Sa lecture donne, pour chaque cycle, la date exacte de son virement ; le moteur refuse un virement identique à un virement existant.",
@@ -11948,7 +11953,40 @@
                         _cfoChronoId = setInterval(() => { cfoAttente.chrono = _cfoDuree(Date.now() - _cfoAttenteT0); cfoAttente.actif = _cfoPhrase(); }, 100);
                         _cfoSondageId = setInterval(_cfoSonder, 1500);
                     };
-                    const _cfoAttenteArreter = () => { clearInterval(_cfoChronoId); clearInterval(_cfoSondageId); _cfoChronoId = _cfoSondageId = null; };
+                    const _cfoAttenteArreter = () => { clearInterval(_cfoChronoId); clearInterval(_cfoSondageId); _cfoChronoId = _cfoSondageId = null; _cfoEcranLibre(); };
+                    //  v37.90 : pendant l'attente, l'écran reste allumé — un téléphone verrouillé suspend l'onglet et coupe la requête
+                    let _cfoVerrouEcran = null;
+                    const _cfoEcranAllume = async () => { try { if (navigator.wakeLock && !_cfoVerrouEcran) _cfoVerrouEcran = await navigator.wakeLock.request('screen'); } catch (_) { _cfoVerrouEcran = null; } };
+                    const _cfoEcranLibre = () => { try { if (_cfoVerrouEcran) _cfoVerrouEcran.release(); } catch (_) { /* déjà libéré */ } _cfoVerrouEcran = null; };
+                    /*  v37.90 — « Failed to fetch » = AUCUNE réponse HTTP. L'appli enquête : réseau ? le VPS a-t-il noté des étapes
+                        pour CETTE question (reçue, puis connexion coupée) ? l'adresse enregistrée est-elle celle du serveur ? */
+                    const diagnostiquerConnexionCFO = async (urlEssayee) => {
+                        if (typeof navigator !== 'undefined' && navigator.onLine === false) return { cause: 'hors_ligne' };
+                        let etapes = null, vps = false;
+                        try {
+                            const r = await fetch(CFO_ETAPES_URL + '?session_id=' + encodeURIComponent(cfoSessionId.value) + '&t=' + Date.now(), { cache: 'no-store' });
+                            vps = r.ok; if (r.ok) { const j = await r.json(); etapes = (Array.isArray(j.etapes) ? j.etapes : []).filter(e => e && e.code && e.il_y_a_ms <= Date.now() - _cfoAttenteT0 + 1500); }
+                        } catch (_) { vps = false; }
+                        if (etapes && etapes.length) return { cause: 'coupee', etapes };
+                        const defaut = webhookCfoParDefaut();
+                        if (defaut && urlEssayee !== defaut) return { cause: 'adresse', defaut, vps };
+                        return { cause: vps ? 'n8n' : 'serveur', vps };
+                    };
+                    const _cfoMessageConnexion = (d, url, question) => {
+                        const lien = '<button type="button" data-cfo-renvoyer data-question="' + String(question || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" style="margin-top:6px;padding:3px 10px;border-radius:8px;background:#4f46e5;color:#fff;font-weight:800;font-size:11px">↻ Renvoyer la question</button>';
+                        const t = {
+                            hors_ligne: '📵 <b>Pas de réseau</b> sur cet appareil : la question n’est pas partie.',
+                            coupee: '📶 <b>Le CFO a bien reçu votre question</b> (étapes notées par le VPS : ' + ((d.etapes || []).map(e => e.libelle || e.code).join(' → ')) + '), mais la connexion a été <b>coupée pendant l’attente</b> — téléphone verrouillé ou appli changée : le navigateur suspend l’onglet. Ce qu’il a écrit sur le serveur est relu à l’écran ; sa réponse écrite, elle, est perdue.',
+                            n8n: '🛑 <b>Le serveur répond, mais pas le CFO (n8n)</b> à ' + url + '. Sur le VPS : <code>sudo bash install.sh cfo</code> (réinstalle et réactive le workflow).',
+                            serveur: '🛑 <b>Ni le serveur ni le CFO ne répondent</b> (' + url + ') : le VPS est peut-être arrêté ou injoignable depuis ce réseau.',
+                        }[d.cause] || ('❌ Pas de réponse de ' + url);
+                        return '<div data-cfo-diagnostic="' + d.cause + '" style="border-left:3px solid #b91c1c;background:#fef2f2;padding:8px 12px;border-radius:8px;font-size:12px"><b style="color:#b91c1c">❌ Erreur de connexion au CFO</b><br>' + t + '<br>' + lien + '</div>';
+                    };
+                    //  « ↻ Renvoyer la question » (le bouton vit dans une bulle HTML du fil)
+                    if (typeof document !== 'undefined') document.addEventListener('click', (ev) => {
+                        const b = ev.target && ev.target.closest && ev.target.closest('[data-cfo-renvoyer]');
+                        if (b && !cfoLoading.value) consulterCFO(b.getAttribute('data-question') || '');
+                    });
                     const chatFullScreen = ref(false);
                     const showCfoModal   = ref(false); // v26.95 : widget modal flottant CFO
                     const cfoMaximized   = ref(false); // v27.1 : plein écran du widget
@@ -12405,7 +12443,15 @@
                         cfoMessages.value.push({ role: 'user', content: question, time });
                         cfoLoading.value = true;
                         _cfoAttenteDemarrer();   // v37.73
+                        _cfoEcranAllume();       // v37.90
                         scrollCFOToBottom();
+                        const _corps = () => JSON.stringify({
+                                    session_id: cfoSessionId.value,
+                                    question: _avecConsigneMemoire(question),
+                                    source: 'web',
+                                    system_prompt: CFO_SYSTEM_PROMPT,
+                                    finance_data: _buildPayloadCFO(),
+                                });
                         try {
                             const res = await fetch(cfoWebhookUrl.value, {
                                 method: 'POST',
@@ -12427,7 +12473,24 @@
                             const time2 = t2.getHours().toString().padStart(2, '0') + ':' + t2.getMinutes().toString().padStart(2, '0');
                             cfoMessages.value.push({ role: 'agent', content: html, time: time2 });
                         } catch (e) {
-                            cfoMessages.value.push({ role: 'agent', content: '<b style="color:#b91c1c">❌ Erreur de connexion au CFO</b><br/><span style="font-size:11px;color:#6b7280">' + (e.message || e) + '</span>', time: '--:--' });
+                            //  v37.90 : « Failed to fetch » — enquête, nouvel essai sur l'adresse du serveur si l'enregistrée ne répond pas
+                            let fait = false;
+                            if (e instanceof TypeError) {
+                                const url = cfoWebhookUrl.value, d = await diagnostiquerConnexionCFO(url);
+                                if (d.cause === 'adresse') {
+                                    try {
+                                        const res2 = await fetch(d.defaut, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: _corps() });
+                                        const raw2 = await res2.text();
+                                        cfoWebhookUrl.value = d.defaut; try { localStorage.setItem('cfo_webhook_url', d.defaut); } catch (_) { /* stockage bloqué */ }
+                                        cfoMessages.value.push({ role: 'agent', time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}),
+                                            content: '<div data-cfo-adresse-corrigee style="border-left:3px solid #059669;background:#ecfdf5;padding:6px 10px;border-radius:8px;font-size:11px">🔧 L’adresse enregistrée dans ce navigateur (' + String(url).replace(/</g, '&lt;') + ') ne répondait pas : la question est repartie vers celle du serveur, gardée pour la suite.</div>' });
+                                        cfoMessages.value.push({ role: 'agent', content: _lireReponseCFO(raw2).html, time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}) });
+                                        fait = true;
+                                    } catch (e2) { d.cause = 'n8n'; }
+                                }
+                                if (!fait) { cfoMessages.value.push({ role: 'agent', content: _cfoMessageConnexion(d, cfoWebhookUrl.value, question), time: '--:--' }); fait = true; }
+                            }
+                            if (!fait) cfoMessages.value.push({ role: 'agent', content: '<b style="color:#b91c1c">❌ Erreur de connexion au CFO</b><br/><span style="font-size:11px;color:#6b7280">' + (e.message || e) + '</span>', time: '--:--' });
                         } finally {
                             _cfoAttenteArreter();   // v37.73
                             cfoLoading.value = false;
