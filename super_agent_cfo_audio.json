@@ -305,7 +305,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// ════════════════════════════════════════════════════════\n// FORMAT FOR TELEGRAM v37.58\n//   Telegram (parse_mode HTML) REFUSE tout le message — 400, aucune réponse —\n//   si le texte contient un « < » ou un « & » nu, une balise non fermée, ou\n//   s'il dépasse 4 096 caractères. Ici :\n//     • seules <b> <i> <u> <s> <code> <pre> <a href> survivent, équilibrées ;\n//     • tout le reste du texte est ré-échappé (&lt; &gt; &amp;) ;\n//     • tableaux : « cellule · cellule », une ligne par rangée ;\n//     • une réponse longue part en plusieurs messages (≤ 3 900 car.).\n// ════════════════════════════════════════════════════════\nconst LIMITE = 3900;\nconst chatId = $('Telegram Trigger').first().json.message.chat.id;\nconst echapper = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst decoder = (s) => String(s)\n  .replace(/&nbsp;/g, ' ').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\")\n  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\\d+);/g, (m, n) => String.fromCharCode(Number(n)))\n  .replace(/&amp;/g, '&');\n\nlet html = '';\nlet isError = false;\nlet errorDetail = '';\ntry {\n  const agentOut = $('AI Agent').first().json;\n  if (agentOut.error) {\n    isError = true;\n    errorDetail = typeof agentOut.error === 'string' ? agentOut.error : (agentOut.error.message || JSON.stringify(agentOut.error));\n  } else {\n    html = agentOut.output || agentOut.text || agentOut.response || '';\n    if (!html) { isError = true; errorDetail = 'Aucune réponse générée (output vide après continueOnFail).'; }\n  }\n} catch (e) {\n  isError = true;\n  errorDetail = e.message || 'Exception lors de la lecture de la sortie agent.';\n}\nif (isError) {\n  return [{ json: { chat_id: chatId, telegram_text: '⚠️ <b>Alerte Système (Super-Agent CFO)</b>\\n'\n    + 'Une exception a empêché l\\'exécution correcte de la commande.\\n'\n    + '<b>Détail technique :</b> <code>' + echapper(String(errorDetail).slice(0, 1500)) + '</code>' } }];\n}\n\n// 1. Mise en page : blocs → sauts de ligne, tableaux → « a · b », listes → puces\nconst plat = String(html)\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/(?:td|th)>\\s*(?=<(?:td|th)\\b)/gi, ' · ')\n  .replace(/<\\/tr>/gi, '\\n')\n  .replace(/<\\/p>\\s*<p[^>]*>/gi, '\\n\\n')\n  .replace(/<\\/li>/gi, '\\n')\n  .replace(/<li[^>]*>/gi, '• ')\n  .replace(/<hr\\s*\\/?>/gi, '\\n———\\n')\n  .replace(/<\\/?(?:p|div|ul|ol|table|thead|tbody|h[1-6])\\b[^>]*>/gi, '\\n')\n  .replace(/<(\\/?)strong\\b[^>]*>/gi, '<$1b>').replace(/<(\\/?)em\\b[^>]*>/gi, '<$1i>');\n\n// 2. Jetons : balise permise, ou texte (toute autre balise disparaît)\nconst jetons = [];\nconst re = /<(\\/?)([a-z][a-z0-9]*)\\b([^>]*)>/gi;\nlet i = 0, m;\nconst texte = (s) => { if (s) jetons.push({ t: echapper(decoder(s)) }); };\nwhile ((m = re.exec(plat))) {\n  texte(plat.slice(i, m.index)); i = re.lastIndex;\n  const nom = m[2].toLowerCase(), ferme = m[1] === '/';\n  if (!['b', 'i', 'u', 's', 'code', 'pre', 'a'].includes(nom)) continue;\n  if (nom === 'a' && !ferme) {\n    const h = /href\\s*=\\s*[\"']([^\"']+)[\"']/i.exec(m[3]);\n    if (!h || !/^https?:\\/\\//i.test(decoder(h[1]))) { jetons.push({ ouvre: 'a', vide: true }); continue; }\n    jetons.push({ ouvre: 'a', balise: '<a href=\"' + echapper(decoder(h[1])).replace(/\"/g, '&quot;') + '\">' });\n  } else if (ferme) jetons.push({ ferme: nom });\n  else jetons.push({ ouvre: nom, balise: '<' + nom + '>' });\n}\ntexte(plat.slice(i));\n\n// 3. Morceaux ≤ LIMITE, balises équilibrées dans chacun\nconst morceaux = [];\nlet cour = '', pile = [];\nconst fermer = () => pile.slice().reverse().map(p => p.vide ? '' : '</' + p.ouvre + '>').join('');\nconst rouvrir = () => pile.map(p => p.vide ? '' : p.balise).join('');\nconst couper = () => { const s = (cour + fermer()).replace(/\\n{3,}/g, '\\n\\n').trim(); if (s.replace(/<[^>]+>/g, '').trim()) morceaux.push(s); cour = rouvrir(); };\nfor (const j of jetons) {\n  if (j.ouvre) { pile.push(j); cour += j.vide ? '' : j.balise; continue; }\n  if (j.ferme) {\n    const k = pile.map(p => p.ouvre).lastIndexOf(j.ferme);\n    if (k < 0) continue;                                   // fermeture orpheline : ignorée\n    const dessus = pile.splice(k);\n    cour += dessus.slice().reverse().map(p => p.vide ? '' : '</' + p.ouvre + '>').join('');\n    cour += dessus.slice(1).map(p => p.vide ? '' : p.balise).join('');\n    pile.push(...dessus.slice(1));\n    continue;\n  }\n  let reste = j.t;\n  while (cour.length + reste.length + fermer().length > LIMITE) {\n    const place = Math.max(0, LIMITE - cour.length - fermer().length);\n    let cut = Math.max(reste.lastIndexOf('\\n', place), reste.lastIndexOf(' ', place));\n    if (cut <= 0) cut = place;\n    while (cut > 0 && /&[a-z#0-9]*$/i.test(reste.slice(0, cut))) cut--;   // ne pas couper une entité\n    if (cut <= 0 && cour.replace(/<[^>]+>/g, '').trim()) { couper(); continue; }\n    if (cut <= 0) cut = Math.min(reste.length, LIMITE);\n    cour += reste.slice(0, cut); reste = reste.slice(cut).replace(/^[ \\n]+/, '');\n    couper();\n  }\n  cour += reste;\n}\ncouper();\nif (!morceaux.length) morceaux.push('(réponse vide)');\nreturn morceaux.map((t, n) => ({ json: { chat_id: chatId, telegram_text: morceaux.length > 1 ? t + '\\n<i>(' + (n + 1) + '/' + morceaux.length + ')</i>' : t } }));\n"
+                "jsCode": "// ════════════════════════════════════════════════════════\n// FORMAT FOR TELEGRAM v37.95 (v37.58 + blocs de code nus, texte brut de secours)\n//   Telegram (parse_mode HTML) REFUSE tout le message — 400, aucune réponse —\n//   si le texte contient un « < » ou un « & » nu, une balise non fermée, ou\n//   s'il dépasse 4 096 caractères. Ici :\n//     • seules <b> <i> <u> <s> <code> <pre> <a href> survivent, équilibrées ;\n//     • tout le reste du texte est ré-échappé (&lt; &gt; &amp;) ;\n//     • tableaux : « cellule · cellule », une ligne par rangée ;\n//     • une réponse longue part en plusieurs messages (≤ 3 900 car.).\n// ════════════════════════════════════════════════════════\nconst LIMITE = 3900;\nconst chatId = $('Telegram Trigger').first().json.message.chat.id;\nconst echapper = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst decoder = (s) => String(s)\n  .replace(/&nbsp;/g, ' ').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\")\n  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\\d+);/g, (m, n) => String.fromCharCode(Number(n)))\n  .replace(/&amp;/g, '&');\n\nlet html = '';\nlet isError = false;\nlet errorDetail = '';\ntry {\n  const agentOut = $('AI Agent').first().json;\n  if (agentOut.error) {\n    isError = true;\n    errorDetail = typeof agentOut.error === 'string' ? agentOut.error : (agentOut.error.message || JSON.stringify(agentOut.error));\n  } else {\n    html = agentOut.output || agentOut.text || agentOut.response || '';\n    if (!html) { isError = true; errorDetail = 'Aucune réponse générée (output vide après continueOnFail).'; }\n  }\n} catch (e) {\n  isError = true;\n  errorDetail = e.message || 'Exception lors de la lecture de la sortie agent.';\n}\nif (isError) {\n  return [{ json: { chat_id: chatId, telegram_text: '⚠️ <b>Alerte Système (Super-Agent CFO)</b>\\n'\n    + 'Une exception a empêché l\\'exécution correcte de la commande.\\n'\n    + '<b>Détail technique :</b> <code>' + echapper(String(errorDetail).slice(0, 1500)) + '</code>',\n    telegram_plain: '⚠️ Alerte Système (Super-Agent CFO)\\nUne exception a empêché l\\'exécution correcte de la commande.\\nDétail technique : ' + String(errorDetail).slice(0, 1500) } }];\n}\n\n// 1. Mise en page : blocs → sauts de ligne, tableaux → « a · b », listes → puces\nconst plat = String(html)\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/(?:td|th)>\\s*(?=<(?:td|th)\\b)/gi, ' · ')\n  .replace(/<\\/tr>/gi, '\\n')\n  .replace(/<\\/p>\\s*<p[^>]*>/gi, '\\n\\n')\n  .replace(/<\\/li>/gi, '\\n')\n  .replace(/<li[^>]*>/gi, '• ')\n  .replace(/<hr\\s*\\/?>/gi, '\\n———\\n')\n  .replace(/<\\/?(?:p|div|ul|ol|table|thead|tbody|h[1-6])\\b[^>]*>/gi, '\\n')\n  .replace(/<(\\/?)strong\\b[^>]*>/gi, '<$1b>').replace(/<(\\/?)em\\b[^>]*>/gi, '<$1i>');\n\n// 2. Jetons : balise permise, ou texte (toute autre balise disparaît)\nconst jetons = [];\nconst re = /<(\\/?)([a-z][a-z0-9]*)\\b([^>]*)>/gi;\nlet i = 0, m, brut = 0;   // v37.95 : dans <code>/<pre>, Telegram refuse toute autre balise\nconst texte = (s) => { if (s) jetons.push({ t: echapper(decoder(s)) }); };\nwhile ((m = re.exec(plat))) {\n  texte(plat.slice(i, m.index)); i = re.lastIndex;\n  const nom = m[2].toLowerCase(), ferme = m[1] === '/';\n  if (!['b', 'i', 'u', 's', 'code', 'pre', 'a'].includes(nom)) continue;\n  if (brut > 0 && !(ferme && (nom === 'code' || nom === 'pre'))) continue;\n  if (nom === 'code' || nom === 'pre') brut = Math.max(0, brut + (ferme ? -1 : 1));\n  if (nom === 'a' && !ferme) {\n    const h = /href\\s*=\\s*[\"']([^\"']+)[\"']/i.exec(m[3]);\n    if (!h || !/^https?:\\/\\//i.test(decoder(h[1]))) { jetons.push({ ouvre: 'a', vide: true }); continue; }\n    jetons.push({ ouvre: 'a', balise: '<a href=\"' + echapper(decoder(h[1])).replace(/\"/g, '&quot;') + '\">' });\n  } else if (ferme) jetons.push({ ferme: nom });\n  else jetons.push({ ouvre: nom, balise: '<' + nom + '>' });\n}\ntexte(plat.slice(i));\n\n// 3. Morceaux ≤ LIMITE, balises équilibrées dans chacun\nconst morceaux = [];\nlet cour = '', pile = [];\nconst fermer = () => pile.slice().reverse().map(p => p.vide ? '' : '</' + p.ouvre + '>').join('');\nconst rouvrir = () => pile.map(p => p.vide ? '' : p.balise).join('');\nconst couper = () => { const s = (cour + fermer()).replace(/\\n{3,}/g, '\\n\\n').trim(); if (s.replace(/<[^>]+>/g, '').trim()) morceaux.push(s); cour = rouvrir(); };\nfor (const j of jetons) {\n  if (j.ouvre) { pile.push(j); cour += j.vide ? '' : j.balise; continue; }\n  if (j.ferme) {\n    const k = pile.map(p => p.ouvre).lastIndexOf(j.ferme);\n    if (k < 0) continue;                                   // fermeture orpheline : ignorée\n    const dessus = pile.splice(k);\n    cour += dessus.slice().reverse().map(p => p.vide ? '' : '</' + p.ouvre + '>').join('');\n    cour += dessus.slice(1).map(p => p.vide ? '' : p.balise).join('');\n    pile.push(...dessus.slice(1));\n    continue;\n  }\n  let reste = j.t;\n  while (cour.length + reste.length + fermer().length > LIMITE) {\n    const place = Math.max(0, LIMITE - cour.length - fermer().length);\n    let cut = Math.max(reste.lastIndexOf('\\n', place), reste.lastIndexOf(' ', place));\n    if (cut <= 0) cut = place;\n    while (cut > 0 && /&[a-z#0-9]*$/i.test(reste.slice(0, cut))) cut--;   // ne pas couper une entité\n    if (cut <= 0 && cour.replace(/<[^>]+>/g, '').trim()) { couper(); continue; }\n    if (cut <= 0) cut = Math.min(reste.length, LIMITE);\n    cour += reste.slice(0, cut); reste = reste.slice(cut).replace(/^[ \\n]+/, '');\n    couper();\n  }\n  cour += reste;\n}\ncouper();\nif (!morceaux.length) morceaux.push('(réponse vide)');\n//  v37.95 : la même réponse en texte brut — envoyée par « Send Telegram (texte brut) » si Telegram refuse le HTML\nconst brutDe = (t) => decoder(String(t).replace(/<[^>]+>/g, '')).slice(0, 4000);\nreturn morceaux.map((t, n) => { const tt = morceaux.length > 1 ? t + '\\n<i>(' + (n + 1) + '/' + morceaux.length + ')</i>' : t;\n  return { json: { chat_id: chatId, telegram_text: tt, telegram_plain: brutDe(tt) } }; });\n"
             },
             "id": "node-format-telegram",
             "name": "Format for Telegram",
@@ -321,7 +321,8 @@
                 "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
                 "text": "={{ $json.telegram_text }}",
                 "additionalFields": {
-                    "parse_mode": "HTML"
+                    "parse_mode": "HTML",
+                    "appendAttribution": false
                 }
             },
             "id": "node-send-telegram",
@@ -337,7 +338,8 @@
                     "id": "CFOV2TelegramAPI",
                     "name": "CFO V2 Telegram API"
                 }
-            }
+            },
+            "onError": "continueErrorOutput"
         },
         {
             "parameters": {
@@ -654,6 +656,29 @@
             ],
             "id": "node-tool-transactions",
             "name": "Tool: Transactions Réelles"
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+                "text": "={{ $json.telegram_plain || $json.telegram_text }}",
+                "additionalFields": {
+                    "appendAttribution": false
+                }
+            },
+            "id": "node-send-telegram-brut",
+            "name": "Send Telegram (texte brut)",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1.2,
+            "position": [
+                560,
+                60
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "CFOV2TelegramAPI",
+                    "name": "CFO V2 Telegram API"
+                }
+            }
         }
     ],
     "connections": {
@@ -922,6 +947,13 @@
                         "type": "main",
                         "index": 0
                     }
+                ],
+                [
+                    {
+                        "node": "Send Telegram (texte brut)",
+                        "type": "main",
+                        "index": 0
+                    }
                 ]
             ]
         },
@@ -954,6 +986,17 @@
                     {
                         "node": "AI Agent",
                         "type": "ai_tool",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Send Telegram (texte brut)": {
+            "main": [
+                [
+                    {
+                        "node": "If Voice Input",
+                        "type": "main",
                         "index": 0
                     }
                 ]

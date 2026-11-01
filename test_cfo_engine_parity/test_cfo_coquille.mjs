@@ -133,8 +133,8 @@ try {
         const rt = JSON.parse(execFileSync(php, [path.join(RACINE, 'n8n/maj_workflow_cfo.php'), path.join(tmp, 'sante.json'), path.join(tmp, 'sante_sortie.json'), path.join(tmp, 'creds.json')], { encoding: 'utf8' }));
         const st = JSON.parse(fs.readFileSync(path.join(tmp, 'sante_sortie.json'), 'utf8'));
         const tg = st.nodes.filter(n => n.credentials && n.credentials.telegramApi).map(n => n.credentials.telegramApi.id);
-        v('  → branché sur « Telegram santé » : les 4 nœuds Telegram rebranchés sur « CFO V2 Telegram API », les autres identifiants intacts',
-          tg.length === 4 && tg.every(x => x === 'CFOV2TelegramAPI') && rt.telegram.apres === 'CFO V2 Telegram API' && JSON.stringify(rt.telegram.avant) === '["Telegram santé  account"]'
+        v('  → branché sur « Telegram santé » : les 4 nœuds Telegram rebranchés sur « CFO V2 Telegram API » (+ le nœud de secours en texte brut, sur le même bot), les autres identifiants intacts',
+          tg.length === 5 && tg.every(x => x === 'CFOV2TelegramAPI') && rt.telegram.apres === 'CFO V2 Telegram API' && JSON.stringify(rt.telegram.avant) === '["Telegram santé  account"]'
           && JSON.stringify(st.nodes.filter(n => n.credentials && !n.credentials.telegramApi).map(n => n.credentials)) === JSON.stringify(avant.nodes.filter(n => n.credentials && !n.credentials.telegramApi).map(n => n.credentials)), JSON.stringify(rt.telegram));
         const rt2 = JSON.parse(execFileSync(php, [path.join(RACINE, 'n8n/maj_workflow_cfo.php'), path.join(tmp, 'sante_sortie.json'), path.join(tmp, 'sante2.json'), path.join(tmp, 'creds.json')], { encoding: 'utf8' }));
         fs.writeFileSync(path.join(tmp, 'creds2.json'), JSON.stringify([{ id: 'a', name: 'CFO A', type: 'telegramApi' }, { id: 'b', name: 'CFO B', type: 'telegramApi' }]));
@@ -154,6 +154,16 @@ try {
         const depot = JSON.parse(lire('super_agent_cfo_audio.json'));
         v('  → le fichier du dépôt est déjà à jour (même code que celui installé)',
           depot.nodes.find(n => n.name === 'Build Agent Input').parameters.jsCode === b && depot.nodes.find(n => n.name === 'AI Agent').parameters.options.systemMessage === '={{ $json.system_message }}', '');
+        //  v37.95 : Telegram « Bad request » — sortie erreur de Send Telegram → « Send Telegram (texte brut) », sans mention n8n
+        {
+            const sT = apres.nodes.find(n => n.name === 'Send Telegram'), sB = apres.nodes.find(n => n.name === 'Send Telegram (texte brut)');
+            const cx = apres.connections['Send Telegram'] && apres.connections['Send Telegram'].main;
+            const fmt = apres.nodes.find(n => n.name === 'Format for Telegram').parameters.jsCode;
+            v('  → Telegram : un refus du HTML part vers « Send Telegram (texte brut) » (même bot), plus de mention « sent automatically with n8n »',
+              sT.onError === 'continueErrorOutput' && sT.parameters.additionalFields.appendAttribution === false && !!sB && sB.parameters.additionalFields.appendAttribution === false
+              && JSON.stringify(sB.credentials) === JSON.stringify(sT.credentials) && cx && cx[1] && cx[1][0].node === 'Send Telegram (texte brut)'
+              && apres.connections['Send Telegram (texte brut)'].main[0][0].node === 'If Voice Input' && /telegram_plain/.test(fmt) && /brut > 0/.test(fmt), JSON.stringify({ onError: sT.onError, cx }));
+        }
         //  Pour D : la même mise à jour, l'adresse du VPS pointant sur le serveur de test
         const local = JSON.parse(JSON.stringify(avant));
         const iN = local.nodes.findIndex(n => n.name === 'Normalize Input');

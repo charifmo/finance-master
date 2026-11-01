@@ -88,10 +88,34 @@ if ($iI !== null && is_array($depot)) {
     $schemaAvant = $wf['nodes'][$iI]['parameters']['inputSchema'] ?? null;
     if ($schemaApres !== null) $wf['nodes'][$iI]['parameters']['inputSchema'] = $schemaApres;
 }
+//  v37.95 : TELEGRAM « BAD REQUEST » — le formatage du dépôt (blocs de code nus, texte brut de secours), Send Telegram
+//  qui ne casse plus le workflow en cas de refus (sortie « erreur ») et un second nœud qui renvoie la réponse en texte brut.
+$telegramSecours = 'non trouvé';
+$iF = $noeud($wf, 'Format for Telegram'); $iS = $noeud($wf, 'Send Telegram');
+if ($iF !== null && $iS !== null && is_array($depot)) {
+    $parNom = []; foreach ($depot['nodes'] ?? [] as $n) $parNom[$n['name'] ?? ''] = $n;
+    $avantS = json_encode([$wf['nodes'][$iF]['parameters']['jsCode'] ?? null, $wf['nodes'][$iS]['parameters']['additionalFields'] ?? null, $wf['nodes'][$iS]['onError'] ?? null,
+                           $noeud($wf, 'Send Telegram (texte brut)') !== null, $wf['connections']['Send Telegram'] ?? null]);
+    if (isset($parNom['Format for Telegram']['parameters']['jsCode'])) $wf['nodes'][$iF]['parameters']['jsCode'] = $parNom['Format for Telegram']['parameters']['jsCode'];
+    $wf['nodes'][$iS]['parameters']['additionalFields'] = ['parse_mode' => 'HTML', 'appendAttribution' => false];
+    $wf['nodes'][$iS]['onError'] = 'continueErrorOutput';
+    if ($noeud($wf, 'Send Telegram (texte brut)') === null && isset($parNom['Send Telegram (texte brut)'])) {
+        $nb = $parNom['Send Telegram (texte brut)'];
+        $nb['credentials'] = $wf['nodes'][$iS]['credentials'] ?? ($nb['credentials'] ?? []);   // l'identifiant du bot EN SERVICE
+        $nb['position'] = [($wf['nodes'][$iS]['position'][0] ?? 0), ($wf['nodes'][$iS]['position'][1] ?? 0) + 180];
+        $wf['nodes'][] = $nb;
+    }
+    $suite = $wf['connections']['Send Telegram']['main'][0] ?? [['node' => 'If Voice Input', 'type' => 'main', 'index' => 0]];
+    $wf['connections']['Send Telegram'] = ['main' => [$suite, [['node' => 'Send Telegram (texte brut)', 'type' => 'main', 'index' => 0]]]];
+    $wf['connections']['Send Telegram (texte brut)'] = ['main' => [$suite]];
+    $apresS = json_encode([$wf['nodes'][$iF]['parameters']['jsCode'] ?? null, $wf['nodes'][$iS]['parameters']['additionalFields'] ?? null, $wf['nodes'][$iS]['onError'] ?? null,
+                           true, $wf['connections']['Send Telegram'] ?? null]);
+    $telegramSecours = $avantS === $apresS ? 'à jour' : 'mis à jour';
+}
 $apres = json_encode([$code, '={{ $json.system_message }}']);
 $telegramChange = $telegram && $telegram['apres'] && $telegram['avant'] !== [$telegram['apres']];
 
 file_put_contents($argv[2], json_encode($wf, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
 echo json_encode(['id' => $wf['id'] ?? null, 'nom' => $wf['name'] ?? null, 'actif' => !empty($wf['active']), 'base' => $base,
-                  'telegram' => $telegram, 'schema_outil' => $schemaApres === null ? 'non trouvé' : ($schemaAvant === $schemaApres ? 'à jour' : 'mis à jour'),
-                  'deja_a_jour' => $avant === $apres && !$telegramChange && ($schemaApres === null || $schemaAvant === $schemaApres)], JSON_UNESCAPED_UNICODE), "\n";
+                  'telegram' => $telegram, 'telegram_secours' => $telegramSecours, 'schema_outil' => $schemaApres === null ? 'non trouvé' : ($schemaAvant === $schemaApres ? 'à jour' : 'mis à jour'),
+                  'deja_a_jour' => $avant === $apres && !$telegramChange && ($schemaApres === null || $schemaAvant === $schemaApres) && $telegramSecours !== 'mis à jour'], JSON_UNESCAPED_UNICODE), "\n";
