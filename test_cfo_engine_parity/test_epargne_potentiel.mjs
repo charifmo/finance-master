@@ -51,7 +51,7 @@ const fixture = () => {
     fx.donneesAnnuelles = { 2026: JSON.parse(JSON.stringify(base)), 2027: JSON.parse(JSON.stringify(base)) };
     Object.assign(fx.soldesInitiaux, { moisActuel: 11, anneeActuelle: 2026, jourDePaie: 27, compteChargesFixes: 'courant', compteChargesVariables: 'courant', assurances_tracker: [], voyageDebut: '', voyageFin: '' });
     fx.soldesInitiaux.categories = [];
-    fx.comptes = [{ id: 'acc_cc', label: 'Compte Courant', type: 'liquide', solde: 20000, icone: '💳' }, { id: 'acc_ur', label: 'Compte urgence', type: 'epargne', solde: 0, icone: '🛟' }];
+    fx.comptes = [{ id: 'acc_cc', label: 'Compte Courant', type: 'liquide', solde: 20000, icone: '💳' }, { id: 'acc_ur', label: 'Compte urgence', type: 'epargne', solde: 0, icone: '🛟' }, { id: 'acc_lt', label: 'Compte long terme', type: 'epargne', solde: 0, icone: '🎯' }];
     const neutre = { paye: false, montantPaye: 0, exceptions: [], showExceptions: false };
     for (const an of ['2026', '2027']) {
         const d = fx.donneesAnnuelles[an];
@@ -133,7 +133,7 @@ try {
     //  v37.91 : un gros virement ponctuel en décembre (100 000 vers urgence) se paie avec ce qui s'accumule avant
     await section('F', async () => {
         const R = await page.evaluate(async (ST) => { const st = eval(ST); const d = st.donneesAnnuelles[2027];
-            d.virementsInternes = [{ id: 9001, mois: 12, sourceCompte: 'courant', destinationCompte: 'cpt_acc_ur', montant: 100000 }];
+            d.virementsInternes = [{ id: 9001, mois: 12, sourceCompte: 'courant', destinationCompte: 'cpt_acc_lt', montant: 100000 }];
             st.calculationTick++; await new Promise(r => setTimeout(r, 200));
             const ep = d.epargne[0]; ep.exceptions = []; delete ep.adapteePotentiel;
             st.adapterEpargneAuPotentiel(ep, 2027); await new Promise(r => setTimeout(r, 200));
@@ -141,9 +141,25 @@ try {
             let cumul = 0, mini = 0; P.forEach(x => { cumul += x.net_apres_epargne; mini = Math.min(mini, cumul); });
             const out = { v: Array.from({ length: 12 }, (_, i) => mo[i + 1]), cumul, mini };
             d.virementsInternes = []; st.retirerAdaptationEpargne(ep); return JSON.parse(JSON.stringify(out)); }, ST);
-        v('F. 100 000 virés d\u2019un coup en décembre : l\u2019épargne garde la réserve — 18 380 × 6, 28 000, 28 000, 12 000, puis 0',
+        v('F. 100 000 virés d\u2019un coup en décembre vers UN AUTRE compte : l\u2019épargne garde la réserve — 18 380 × 6, 28 000, 28 000, 12 000, puis 0',
           JSON.stringify(R.v) === JSON.stringify([18380, 18380, 18380, 18380, 18380, 18380, 28000, 28000, 12000, 0, 0, 0]), JSON.stringify(R));
         v('  → le cumul de l\u2019année ne passe jamais sous zéro (le virement de décembre est payé)', R.mini >= 0 && R.cumul >= 0, JSON.stringify(R));
+    });
+    //  v37.93 : un gros virement de fin d'année vers le MÊME compte que la ligne est absorbé — l'épargne se construit chaque mois
+    await section('G', async () => {
+        const R = await page.evaluate(async (ST) => { const st = eval(ST); const d = st.donneesAnnuelles[2027];
+            d.virementsInternes = [{ id: 9002, mois: 12, sourceCompte: 'courant', destinationCompte: 'cpt_acc_ur', montant: 100000 }];
+            st.calculationTick++; await new Promise(r => setTimeout(r, 200));
+            const ep = d.epargne[0]; ep.exceptions = []; delete ep.adapteePotentiel;
+            st.adapterEpargneAuPotentiel(ep, 2027); await new Promise(r => setTimeout(r, 200));
+            const mo = ep.adapteePotentiel.mois;
+            const out = { v: Array.from({ length: 12 }, (_, i) => mo[i + 1]), restants: d.virementsInternes.length, absorbes: (ep.adapteePotentiel.virementsAbsorbes || []).length };
+            st.retirerAdaptationEpargne(ep); await new Promise(r => setTimeout(r, 200));
+            out.revenus = d.virementsInternes.length; out.idRevenu = (d.virementsInternes[0] || {}).id;
+            d.virementsInternes = []; return JSON.parse(JSON.stringify(out)); }, ST);
+        v('G. 100 000 vers le MÊME compte (urgence) en décembre : absorbés — l\u2019épargne se construit chaque mois (18 380 × 6, puis 28 000 × 6)',
+          JSON.stringify(R.v) === JSON.stringify([18380, 18380, 18380, 18380, 18380, 18380, 28000, 28000, 28000, 28000, 28000, 28000]) && R.restants === 0 && R.absorbes === 1, JSON.stringify(R));
+        v('  → « retirer l\u2019adaptation » remet le virement absorbé', R.revenus === 1 && R.idRevenu === 9002, JSON.stringify(R));
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

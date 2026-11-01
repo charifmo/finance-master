@@ -8774,8 +8774,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.92 Nettoyage avant calcul";
+                    const CURRENT_VERSION = "37.93 Épargne progressive";
                     const CHANGELOG = [
+        { version: "37.93 Épargne progressive", date: "2026-11-02", changes: [
+            "🧱 « POURQUOI UN GROS MONTANT VERS URGENCE À LA FIN DE L'ANNÉE ? POURQUOI NE PAS CONSTRUIRE PETIT À PETIT ? » — les 40 000 + 20 000 DH de décembre vers Compte urgence étaient un « écrêtage » du CFO : l'argent laissé dormir toute l'année, vidé d'un coup en décembre ; la réserve de la v37.91 arrêtait même l'épargne mensuelle dès août pour les payer.",
+            "✅ DÉSORMAIS — « adapter l'épargne au potentiel » ABSORBE les virements ponctuels vers le MÊME compte que la ligne adaptée, sur les mois adaptés : ils sont retirés, et la ligne prend chaque mois ce que le mois dégage. Sur vos chiffres (simulé) : Epargne urgence 2 630 à 4 150 DH de janvier à juin, 12 250 à 12 750 de juillet à novembre, 9 750 en décembre (la réserve des 3 000 vers Long Terme). Les virements vers d'autres comptes gardent leur réserve ; « retirer l'adaptation » remet les virements absorbés ; le fil du CFO dit combien ont été absorbés.",
+            "PREUVE — la suite « L'épargne s'adapte au potentiel » : 100 000 vers le même compte en décembre → absorbés, 18 380 × 6 puis 28 000 × 6, et remis au retrait ; vers un autre compte → réserve gardée. Rejouée sur la v37.92 : en échec.",
+        ] },
         { version: "37.92 Nettoyage avant calcul", date: "2026-11-02", changes: [
             "🧹 « EST-CE QUE L'APPLI SUPPRIME L'EXISTANT AVANT DE METTRE À JOUR ? JE NE VEUX PAS DE RÉSIDUS DES CALCULS PASSÉS. » — « Alimenter le Courant » retirait déjà les virements salaire ↔ Courant des cycles recalculés. Il retire désormais aussi ceux posés fin décembre pour le cycle de janvier SUIVANT quand l'année suivante n'existe pas encore (les 9 100 → Courant et 6 000 → Assafa du 28 décembre : un aller-retour d'anciens calculs). Relancé, il remplace ses propres virements sans les garder comme « anciens » : « Annuler » ramène à l'état d'avant le PREMIER calcul. Le fil du CFO dit combien d'anciens virements ont été retirés avant de poser les nouveaux.",
             "PREUVE — la suite « Le Courant alimenté au juste besoin » : 13 anciens virements retirés (dont le résidu du 28 décembre), relancé sans doublon, Annuler après deux calculs revient aux 14 virements d'origine. Rejouée sur la v37.91 : en échec.",
@@ -18744,6 +18749,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!mois.length) { addLog('⚖️ Aucun mois restant à adapter en ' + a + '.', 'warn'); return null; }
                         const cap = Number(plafond) > 0 ? Number(plafond) : null;
                         const valeurs = {};
+                        //  v37.93 : les virements ponctuels vers le MÊME compte que la ligne, sur les mois adaptés, sont ABSORBÉS
+                        //  (retirés, gardés pour « Retirer l'adaptation ») : l'épargne se construit chaque mois, pas d'un bloc en décembre
+                        const destK = cleDeCompte(String(destEpargne(obj))), dA = donneesAnnuelles.value[a];
+                        const absorbes = ((obj.adapteePotentiel && obj.adapteePotentiel.an === a && obj.adapteePotentiel.virementsAbsorbes) || []).slice();
+                        if (Array.isArray(dA.virementsInternes)) dA.virementsInternes = dA.virementsInternes.filter(v => {
+                            if (!v) return true;
+                            const c = cycleDuVirement(v, a);
+                            if (c.a !== a || !mois.includes(c.m) || cleDeCompte(String(v.destinationCompte || 'courant')) !== destK) return true;
+                            if (!(sensEpargne(v.sourceCompte || 'courant', v.destinationCompte || 'courant') > 0)) return true;
+                            absorbes.push(JSON.parse(JSON.stringify(v))); return false;
+                        });
+                        calculationTick.value++;
                         /*  v37.91 — L'ANNÉE ENTIÈRE, PAS MOIS PAR MOIS. libre(m) = potentiel − les autres épargnes et virements
                             ponctuels du mois (négatif en décembre quand 63 000 partent d'un coup). reserve(m) = ce qu'il faut
                             garder à la fin du mois m pour les mois déficitaires qui suivent. L'épargne du mois prend ce qui
@@ -18773,7 +18790,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             else plages.push({ id: Date.now() + plages.length, moisDebut: m, moisFin: m, nouvelleValeur: parMois[m] });
                         });
                         obj.exceptions = plages;
-                        obj.adapteePotentiel = { an: a, plafond: cap, le: _aujourdhuiISO(), mois: valeurs };
+                        obj.adapteePotentiel = { an: a, plafond: cap, le: _aujourdhuiISO(), mois: valeurs, virementsAbsorbes: absorbes };
                         calculationTick.value++;
                         handleDataChange();
                         addLog('⚖️ « ' + (obj.nom || 'Épargne') + ' » adaptée au potentiel de ' + a + ' : ' + plages.filter(p => valeurs[p.moisDebut] !== undefined).map(p => (p.moisDebut === p.moisFin ? 'M' + p.moisDebut : 'M' + p.moisDebut + '–M' + p.moisFin) + ' ' + formatMAD(p.nouvelleValeur)).join(' · '), 'success');
@@ -18781,6 +18798,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
                     const retirerAdaptationEpargne = (obj) => {
                         if (!obj) return;
+                        //  v37.93 : les virements ponctuels absorbés reviennent
+                        const _ap = obj.adapteePotentiel || {}, _dR = (donneesAnnuelles.value || {})[_ap.an];
+                        if (_dR && (_ap.virementsAbsorbes || []).length) { if (!Array.isArray(_dR.virementsInternes)) _dR.virementsInternes = []; _ap.virementsAbsorbes.forEach(v => _dR.virementsInternes.push(v)); }
                         const moisAdaptes = Object.keys((obj.adapteePotentiel || {}).mois || {}).map(Number);
                         const parMois = {};
                         (obj.exceptions || []).forEach(e => { const d0 = Number(e.moisDebut), f0 = Number(e.moisFin); for (let m = d0; m <= f0 && m <= 12; m++) if (d0 && f0) parMois[m] = Number(e.nouvelleValeur) || 0; });
@@ -18916,7 +18936,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     if (!obj) { fait.push('⚠️ Épargne « ' + x.nom + ' » introuvable en ' + an + ' : rien adapté.'); return; }
                                     adapterEpargneAuPotentiel(obj, an, Number(x.plafond) > 0 ? Number(x.plafond) : null);
                                     const mo = (obj.adapteePotentiel || {}).mois || {};
-                                    fait.push('⚖️ « ' + (obj.nom || obj.label) + ' » adaptée au potentiel en ' + an + ' : ' + Object.entries(mo).map(([m, v]) => _MOIS_COURTS[m - 1] + ' ' + formatMAD(v)).join(' · '));
+                                    const _abs = (obj.adapteePotentiel || {}).virementsAbsorbes || [];
+                                    fait.push('⚖️ « ' + (obj.nom || obj.label) + ' » adaptée au potentiel en ' + an + ' : ' + Object.entries(mo).map(([m, v]) => _MOIS_COURTS[m - 1] + ' ' + formatMAD(v)).join(' · ')
+                                              + (_abs.length ? ' — ' + _abs.length + ' virement(s) ponctuel(s) vers le même compte absorbé(s) (' + formatMAD(_abs.reduce((s, v) => s + Math.abs(Number(v.montant) || 0), 0)) + ') : l’épargne se construit chaque mois' : ''));
                                 }
                             } catch (e) { fait.push('❌ ' + x.tache + ' : ' + (e.message || e)); }
                         });
