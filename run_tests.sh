@@ -19,17 +19,15 @@ cd "$(dirname "$0")"
 #   Chromium est fourni par l'environnement (/opt/pw-browsers/chromium) ;
 #   sinon, pointer CHROMIUM=/chemin/vers/chrome.
 
+#  v37.95 — EN PARALLÈLE : chaque ligne « suite » ci-dessous est déposée dans une liste ; run_parallel.mjs les
+#  exécute par JOBS (défaut : une par cœur), les plus longues d'abord, et affiche les résultats dans l'ordre.
+#  Toutes tournent, même après un échec ; chaque échec est nommé à la fin. JOBS=1 = l'ancien déroulé, une par une.
+LISTE=$(mktemp)
+trap 'rm -f "$LISTE"' EXIT
 suite() {
-    desc=$1; shift
-    echo "▸ $desc"
-    if sortie=$("$@" 2>&1); then
-        printf '%s\n' "$sortie" | tail -2
-    else
-        code=$?
-        printf '%s\n' "$sortie" | tail -25
-        echo "❌ ÉCHEC ($code) : $desc"
-        exit 1
-    fi
+    printf '%s\t' "$1" >> "$LISTE"; shift
+    for a in "$@"; do printf '%s\037' "$a" >> "$LISTE"; done
+    printf '\n' >> "$LISTE"
 }
 
 echo "▸ Syntaxe PHP"
@@ -130,4 +128,4 @@ suite "Solde Attijari à un seul chiffre après la virgule"  node test_cfo_engin
 suite "Le Courant alimenté au juste besoin ; le CFO demande, l’appli calcule"  node test_cfo_engine_parity/test_alimentation_juste_besoin.mjs
 suite "Connexion au CFO : « Failed to fetch » diagnostiqué, nouvel essai, écran allumé"  node test_cfo_engine_parity/test_connexion_cfo.mjs
 
-echo "✅ Toutes les suites passent."
+node run_parallel.mjs "$LISTE" "${JOBS:-$(nproc 2>/dev/null || echo 4)}"
