@@ -1682,7 +1682,7 @@
                         <template v-if="(donneesAnnuelles[anneeAffichage] || {}).alimentationJusteBesoin">
                             <div class="flex flex-wrap gap-1.5" data-alimentation-plan>
                                 <span v-for="p in donneesAnnuelles[anneeAffichage].alimentationJusteBesoin.plan" :key="'al_' + p.cycle" class="text-[10px] font-black px-2 py-0.5 rounded-full border tabular-nums"
-                                      :class="p.montant ? 'bg-white border-indigo-200 text-indigo-800' : 'bg-slate-50 border-slate-200 text-slate-400'">{{ nomDuMois(p.cycle) }} : {{ p.montant ? formatMAD(p.montant) + ' le ' + p.le : 'rien' }}{{ p.impossible ? ' ⚠️ ' + p.impossible : '' }}</span>
+                                      :class="p.montant ? 'bg-white border-indigo-200 text-indigo-800' : 'bg-slate-50 border-slate-200 text-slate-400'">{{ nomDuMois(p.cycle) }}{{ p.an && p.an !== anneeAffichage ? ' ' + p.an : '' }} : {{ p.montant ? formatMAD(p.montant) + ' le ' + p.le : 'rien' }}{{ p.impossible ? ' ⚠️ ' + p.impossible : '' }}</span>
                             </div>
                             <p v-if="donneesAnnuelles[anneeAffichage].alimentationJusteBesoin.salaireMin" data-alimentation-salaire-negatif class="text-[11px] font-black text-rose-700">⚠️ {{ donneesAnnuelles[anneeAffichage].alimentationJusteBesoin.salaire }} passe sous zéro ({{ formatMAD(donneesAnnuelles[anneeAffichage].alimentationJusteBesoin.salaireMin.montant) }}) : regardez les gros virements qui en partent.</p>
                         </template>
@@ -8774,8 +8774,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.93 Épargne progressive";
+                    const CURRENT_VERSION = "37.94 Janvier suivant";
                     const CHANGELOG = [
+        { version: "37.94 Janvier suivant", date: "2026-11-02", changes: [
+            "🧹 « J'APPUIE SUR RECALCULER, MAIS IL RESTE TOUT ÇA SANS NETTOYAGE » — les virements du 28 décembre 2027 (9 100 d'Assafa vers le Courant, 6 000 du Courant vers Assafa : un aller-retour d'anciens calculs) alimentent le cycle de JANVIER 2028 ; votre 2028 existe déjà, et la v37.92 ne les retirait que si l'année suivante manquait.",
+            "✅ DÉSORMAIS — « Alimenter le Courant » pour une année traite aussi le cycle de janvier suivant (son virement se pose le jour de paie de décembre) : les anciens virements salaire ↔ Courant de ce cycle sont retirés et, si l'année suivante existe, le montant juste est calculé et posé — le plan affiche « Janvier 2028 ».",
+            "PREUVE — la suite « Le Courant alimenté au juste besoin » : avec 2028 présent, 13 cycles calculés, le vieux 9 100 du 28 décembre retiré, « Janvier 2028 » affiché. Rejouée sur la v37.93 : en échec.",
+        ] },
         { version: "37.93 Épargne progressive", date: "2026-11-02", changes: [
             "🧱 « POURQUOI UN GROS MONTANT VERS URGENCE À LA FIN DE L'ANNÉE ? POURQUOI NE PAS CONSTRUIRE PETIT À PETIT ? » — les 40 000 + 20 000 DH de décembre vers Compte urgence étaient un « écrêtage » du CFO : l'argent laissé dormir toute l'année, vidé d'un coup en décembre ; la réserve de la v37.91 arrêtait même l'épargne mensuelle dès août pour les payer.",
             "✅ DÉSORMAIS — « adapter l'épargne au potentiel » ABSORBE les virements ponctuels vers le MÊME compte que la ligne adaptée, sur les mois adaptés : ils sont retirés, et la ligne prend chaque mois ce que le mois dégage. Sur vos chiffres (simulé) : Epargne urgence 2 630 à 4 150 DH de janvier à juin, 12 250 à 12 750 de juillet à novembre, 9 750 en décembre (la réserve des 3 000 vers Long Terme). Les virements vers d'autres comptes gardent leur réserve ; « retirer l'adaptation » remet les virements absorbés ; le fil du CFO dit combien ont été absorbés.",
@@ -18851,7 +18856,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const c = cycleDuVirement(v, y);
                                 //  v37.92 : le cycle de janvier SUIVANT, posé fin décembre, quand l'année suivante n'existe pas encore —
                                 //  un résidu d'anciens calculs : retiré aussi
-                                const residu = sansSuivante && y === a && c.a === a + 1 && c.m === 1;
+                                const residu = y === a && c.a === a + 1 && c.m === 1;   // v37.94 : que l'année suivante existe ou non
                                 if ((c.a === a && cycles.includes(c.m)) || residu) {
                                     if (deja.has(String(v.id))) return false;
                                     retires.push({ an: y, v: JSON.parse(JSON.stringify(v)) }); nettoyes++; return false;
@@ -18860,14 +18865,17 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                         });
                         const cles = []; for (let m = mb.mois, y = mb.an; y < a || (y === a && m <= 12); ) { cles.push(m + '-' + y); m++; if (m > 12) { m = 1; y++; } }
+                        //  v37.94 : le cycle de janvier SUIVANT (son virement se pose fin décembre de cette année) — calculé si l'année suivante existe
+                        const paires = cycles.map(M => [M, a]);
+                        if (!sansSuivante) { paires.push([1, a + 1]); cles.push('1-' + (a + 1)); }
                         let n = 0;
-                        cycles.forEach(M => {
-                            const cle = M + '-' + a, i = cles.indexOf(cle), dv = _dateVirementDuCycle(M, a);
+                        paires.forEach(([M, A]) => {
+                            const cle = M + '-' + A, i = cles.indexOf(cle), dv = _dateVirementDuCycle(M, A);
                             calculationTick.value++;
                             const E = ((_buildJournalReleve([], cles.slice(0, i + 1)) || {}).entries || []).filter(e => e.cycle === cle && e.compteKey === ck && (e.type === 'credit' || e.type === 'debit'));
                             const min = E.length ? Math.min(...E.map(e => Number(e.soldeCompteApres) || 0)) : 0;
                             const montant = min < 0 ? Math.ceil(-min / 100) * 100 : 0;
-                            const ligne = { cycle: M, montant, le: dv.jour + ' ' + _MOIS_COURTS[dv.mois - 1] + ' ' + dv.an };
+                            const ligne = { cycle: M, an: A, montant, le: dv.jour + ' ' + _MOIS_COURTS[dv.mois - 1] + ' ' + dv.an };
                             plan.push(ligne);
                             if (!montant) return;
                             const d = (donneesAnnuelles.value || {})[dv.an];

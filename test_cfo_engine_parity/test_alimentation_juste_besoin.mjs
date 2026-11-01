@@ -146,6 +146,18 @@ try {
         const A = await plan(page);
         v('D. « Annuler » (après deux calculs) : retour à l\u2019état d\u2019AVANT le premier — les 14 virements reviennent', A.r === null && A.v26.length === 0 && A.v27.length === 14 && A.v27.filter(x => x[2] === 9100).length === 12, JSON.stringify(A));
     });
+    //  v37.94 : l'année suivante existe — le cycle de janvier suivant fait partie du calcul (son virement est fin décembre)
+    await section('D2', async () => {
+        await page.evaluate(async (ST) => { const st = eval(ST); const c = JSON.parse(JSON.stringify(st.donneesAnnuelles[2027])); c.virementsInternes = []; delete c.alimentationJusteBesoin; st.donneesAnnuelles[2028] = c; st.calculationTick++; await new Promise(r => setTimeout(r, 300)); }, ST);
+        await page.click('[data-alimenter-courant]'); await page.waitForTimeout(900);
+        const P = await plan(page);
+        const dernier = P.r && P.r.plan[P.r.plan.length - 1];
+        const affiche = await page.evaluate(() => (document.querySelector('[data-alimentation-plan]') || {}).textContent || '');
+        v('D2. 2028 existe : le cycle de janvier 2028 est calculé avec 2027 (13 cycles) ; le vieux 9 100 du 28 déc. est retiré',
+          P.r.plan.length === 13 && dernier.cycle === 1 && dernier.an === 2028 && !P.v27.some(x => x[0] === 12 && x[1] === 28 && x[2] === 9100) && /Janvier 2028 : /.test(affiche), JSON.stringify([dernier, P.v27, affiche.slice(-60)]));
+        await page.click('[data-annuler-alimentation]'); await page.waitForTimeout(400);
+        await page.evaluate(async (ST) => { const st = eval(ST); delete st.donneesAnnuelles[2028]; st.calculationTick++; await new Promise(r => setTimeout(r, 200)); }, ST);
+    });
     await section('E', async () => {
         const S = await page.evaluate(async (ST) => { const st = eval(ST); st.anneeAffichage = 2027; await new Promise(r => setTimeout(r, 200)); return JSON.parse(JSON.stringify(st.surplusStats)); }, ST);
         v('E. Surplus détaillé : la moyenne HORS virements du calendrier ajoute les 10 000 de décembre (÷ 12)',
