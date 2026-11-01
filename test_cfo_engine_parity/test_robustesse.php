@@ -102,6 +102,10 @@ $CAS = [
     ['account'=>'courant','amount'=>60000,'years'=>[2027]],
     ['compte'=>'courant','solde'=>'60 000 DH','annee'=>'2027'],
     ['account'=>'courant']],
+'app_action' => [              // v37.89 : le CFO demande, l'appli calcule
+    ['task'=>'alimenter_courant','years'=>[2027]],
+    ['tache'=>'alimenter_courant','annee'=>'2027'],
+    ['name'=>'Urgence']],
 'clone_year' => [
     ['from_year'=>2026,'to_year'=>2030],
     ['annee_source'=>'2026','annee_cible'=>'2030'],
