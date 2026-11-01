@@ -130,6 +130,21 @@ try {
         v('  → plus aucun mois négatif après adaptation (net ≥ 0)', R.net.every(n => n >= 0), JSON.stringify(R.net));
         v('  → « Retirer l\u2019adaptation » rend la ligne telle qu\u2019avant', R.retire === 0 && !R.flagApres, JSON.stringify(R));
     });
+    //  v37.91 : un gros virement ponctuel en décembre (100 000 vers urgence) se paie avec ce qui s'accumule avant
+    await section('F', async () => {
+        const R = await page.evaluate(async (ST) => { const st = eval(ST); const d = st.donneesAnnuelles[2027];
+            d.virementsInternes = [{ id: 9001, mois: 12, sourceCompte: 'courant', destinationCompte: 'cpt_acc_ur', montant: 100000 }];
+            st.calculationTick++; await new Promise(r => setTimeout(r, 200));
+            const ep = d.epargne[0]; ep.exceptions = []; delete ep.adapteePotentiel;
+            st.adapterEpargneAuPotentiel(ep, 2027); await new Promise(r => setTimeout(r, 200));
+            const mo = ep.adapteePotentiel.mois, P = st.potentielEpargneAn(2027);
+            let cumul = 0, mini = 0; P.forEach(x => { cumul += x.net_apres_epargne; mini = Math.min(mini, cumul); });
+            const out = { v: Array.from({ length: 12 }, (_, i) => mo[i + 1]), cumul, mini };
+            d.virementsInternes = []; st.retirerAdaptationEpargne(ep); return JSON.parse(JSON.stringify(out)); }, ST);
+        v('F. 100 000 virés d\u2019un coup en décembre : l\u2019épargne garde la réserve — 18 380 × 6, 28 000, 28 000, 12 000, puis 0',
+          JSON.stringify(R.v) === JSON.stringify([18380, 18380, 18380, 18380, 18380, 18380, 28000, 28000, 12000, 0, 0, 0]), JSON.stringify(R));
+        v('  → le cumul de l\u2019année ne passe jamais sous zéro (le virement de décembre est payé)', R.mini >= 0 && R.cumul >= 0, JSON.stringify(R));
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close();

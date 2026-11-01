@@ -8774,8 +8774,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.90 Connexion CFO";
+                    const CURRENT_VERSION = "37.91 Épargne avec réserve";
                     const CHANGELOG = [
+        { version: "37.91 Épargne avec réserve", date: "2026-11-02", changes: [
+            "⚖️ « C'EST QUOI CE MASSACRE ! » — après « adapter l'épargne au potentiel », Compte Principale ASSAFA finissait 2027 à − 44 919 et Compte urgence à 146 085. Chaque mois, l'épargne prenait TOUT le potentiel du mois ; or en décembre partent d'un coup 63 000 DH (40 000 + 20 000 vers urgence, 3 000 vers Long Terme), qui se paient avec ce qui s'est ACCUMULÉ dans l'année. Plus rien ne s'accumulait : le Bilan affichait « − 4 182 DH par mois » (c'était − 50 243 en décembre, divisés par 12).",
+            "✅ DÉSORMAIS — l'adaptation lit l'année entière : un mois qui ne se suffit pas (gros virement ponctuel, dépense lourde) se prépare dans les mois d'avant. À la fin de chaque mois, on garde en réserve ce qu'il faudra pour les mois déficitaires qui suivent ; l'épargne du mois prend le reste, et le cumul de l'année ne passe jamais sous zéro. Sur vos chiffres (simulé) : Epargne urgence 2 630 à 4 150 de janvier à juin, 12 000 en juillet, puis 0 (décembre la remplit d'un coup) ; ASSAFA finit à + 6 531, le Courant à + 4 830, net moyen + 6 DH par mois.",
+            "PREUVE — la suite « L'épargne s'adapte au potentiel » gagne un cas : 100 000 virés en décembre → 18 380 × 6, 28 000, 28 000, 12 000 puis 0, cumul jamais sous zéro. Rejouée sur la v37.90 : en échec.",
+        ] },
         { version: "37.90 Connexion CFO", date: "2026-11-02", changes: [
             "📶 « ERREUR DE CONNEXION AU CFO — FAILED TO FETCH » — ce message du navigateur veut dire : AUCUNE réponse (une erreur du serveur en serait une). Au téléphone, la cause la plus fréquente : l'écran se verrouille ou on change d'appli pendant l'attente, Chrome suspend l'onglet et coupe la requête — alors que le CFO continue côté serveur.",
             "✅ DÉSORMAIS — pendant l'attente, l'écran reste allumé (quand le navigateur le permet). Sur « Failed to fetch », l'appli enquête et le dit en clair : pas de réseau ; « le CFO a bien reçu votre question, la connexion a été coupée pendant l'attente » (étapes notées par le VPS, l'écran est relu) ; une adresse de webhook enregistrée dans CE navigateur qui ne répond pas → la question repart aussitôt vers l'adresse du serveur, gardée pour la suite ; ou « le serveur répond, mais pas le CFO (n8n) » avec la commande à lancer sur le VPS. Un bouton « ↻ Renvoyer la question ».",
@@ -18735,11 +18740,23 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (!mois.length) { addLog('⚖️ Aucun mois restant à adapter en ' + a + '.', 'warn'); return null; }
                         const cap = Number(plafond) > 0 ? Number(plafond) : null;
                         const valeurs = {};
+                        /*  v37.91 — L'ANNÉE ENTIÈRE, PAS MOIS PAR MOIS. libre(m) = potentiel − les autres épargnes et virements
+                            ponctuels du mois (négatif en décembre quand 63 000 partent d'un coup). reserve(m) = ce qu'il faut
+                            garder à la fin du mois m pour les mois déficitaires qui suivent. L'épargne du mois prend ce qui
+                            dépasse la réserve ; le cumul ne passe jamais sous zéro. */
+                        const libre = {};
+                        mois.forEach(m => { libre[m] = Math.floor((potentielEpargneDuMois(a, m) - epargneDuMoisHors(a, m, obj)) / 10) * 10; });
+                        const reserve = {};
+                        for (let i = mois.length - 1; i >= 0; i--) {
+                            const m = mois[i], suivant = mois[i + 1];
+                            reserve[m] = suivant === undefined ? 0 : Math.max(0, reserve[suivant] - libre[suivant]);
+                        }
+                        let cumul = 0;
                         mois.forEach(m => {
-                            const marge = potentielEpargneDuMois(a, m) - epargneDuMoisHors(a, m, obj);
-                            let v = Math.max(0, Math.floor(marge / 10) * 10);
+                            let v = Math.max(0, Math.floor((cumul + libre[m] - reserve[m]) / 10) * 10);
                             if (cap !== null) v = Math.min(v, cap);
                             valeurs[m] = v;
+                            cumul += libre[m] - v;
                         });
                         //  les exceptions existantes, mois par mois ; celles des mois adaptés sont remplacées, les autres gardées
                         const parMois = {};
