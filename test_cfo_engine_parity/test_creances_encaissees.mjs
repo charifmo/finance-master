@@ -45,7 +45,10 @@ if (!pw || !vueJs || !chartJs || !chromium) { console.log('  ⏭️  ignoré (pl
 
 /* ── Le décor : paie hier, donc le cycle en cours court d'hier au mois prochain ── */
 const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
-const maintenant = new Date();
+//  Le 1er du mois, « paie hier » est impossible (jour de paie ≥ 2) : l'horloge est fixée au 15 du mois
+//  courant, dans la page comme ici — le décor ne dépend plus du jour où la suite tourne.
+const _auj = new Date();
+const maintenant = new Date(_auj.getFullYear(), _auj.getMonth(), 15, 12, 0, 0);
 const Y = maintenant.getFullYear();
 const jourDePaie = Math.max(2, maintenant.getDate() - 1);
 const base = fx.donneesAnnuelles[Object.keys(fx.donneesAnnuelles)[0]];
@@ -95,6 +98,7 @@ const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--n
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 try {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+    await page.clock.setFixedTime(maintenant);
     const erreurs = []; page.on('pageerror', e => erreurs.push(String(e)));
     page.on('dialog', d => d.accept());
     await page.goto(`http://127.0.0.1:${srv.address().port}/finance/`, { waitUntil: 'load' });
