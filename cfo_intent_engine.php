@@ -705,6 +705,13 @@ function cfo_arg_spec(): array {
         'amount'  => ['type'=>'number','required'=>true,'aliases'=>array_merge($A_MONTANT,['solde','balance']),'desc'=>"Nouveau solde (DH)."],
     ]],
 
+    //  v37.89 : LE CFO DEMANDE, L'APPLI CALCULE — l'appli exécute la tâche avec son propre moteur au rechargement qui suit
+    'app_action' => ['desc'=>"Demande à l'APPLI d'exécuter une de ses capacités avec SON moteur (au rechargement de l'écran juste après ta réponse ; le résultat s'écrit dans le fil). task=alimenter_courant : un virement du compte du salaire vers le Courant à chaque cycle à venir de l'année, le jour de paie, du montant exact qui garde le Courant ≥ 0 (remplace les virements salaire ↔ Courant de ces cycles). task=adapter_epargne : la ligne d'épargne `name` adaptée au potentiel de chaque mois (plafond `cap` facultatif). Tu ne calcules pas ces montants.",
+        'params'=>[
+        'task' => ['type'=>'string','required'=>true,'aliases'=>['tache','action_appli','capacite'],'desc'=>"alimenter_courant | adapter_epargne"],
+        'name' => ['type'=>'string','aliases'=>array_merge($A_NOM,['poche','savings_name']),'desc'=>"adapter_epargne : la ligne d'épargne EXISTANTE."],
+        'cap'  => ['type'=>'number','aliases'=>['plafond','maximum'],'desc'=>"adapter_epargne : plafond mensuel facultatif (DH)."],
+    ]],
     'clone_year' => ['desc'=>"Duplique un exercice budgétaire complet.",
         'params'=>[
         'from_year' => ['type'=>'number','required'=>true,'aliases'=>['source_year','depuis','annee_source','from'],'desc'=>"Exercice source."],
@@ -910,7 +917,7 @@ function cfo_catalog_names(): array {
         'create_smart_goal','update_smart_goal','add_funds_to_goal','set_recurring_savings','update_recurring_savings',
         'remove_recurring_savings','update_asset_valuation','add_fixed_expense','update_fixed_expense',
         'remove_fixed_expense','add_variable_expense','update_variable_expense','add_income','update_income',
-        'add_one_off_expense','create_account','adjust_account_balance','plan_transfer','set_initial_balance','clone_year',
+        'add_one_off_expense','create_account','adjust_account_balance','plan_transfer','set_initial_balance','clone_year','app_action',
     ];
 }
 
@@ -1075,6 +1082,9 @@ function cfo_translate_call(string $fn, $a, array $ctx): array {
                 'destination_erreur'=>empty($dst['resolved']) ? ($dst['error'] ?? 'compte de destination introuvable') : null,
                 'amount'=>$num('amount'), 'mois'=>$mois, 'jour'=>oget($a, 'day', null) !== null ? (int)oget($a, 'day') : null, 'years'=>$yrs])];
         }
+        case 'app_action':   // v37.89
+            return [cfo_obj(['action'=>'action_appli','category'=>'appli','target'=>oget($a, 'task'),'tache'=>oget($a, 'task'),
+                'nom'=>oget($a, 'name', null),'plafond'=>is_numeric(oget($a, 'cap', null)) ? oget($a, 'cap') + 0 : null,'years'=>$yrs])];
         case 'clone_year':
             return [cfo_obj(['action'=>'clone_year','category'=>'annee','clone_from_year'=>(int)$num('from_year'),'years'=>[(int)$num('to_year')]])];
     }
@@ -1672,6 +1682,8 @@ function cfo_build_ops($change, $resolvedKey, $resolvedCat, $annee): ?array {
             if (!oget($change,'one_off_id')) return null;
             return [$o(['type'=>'update_depense_ponctuelle','id'=>oget($change,'one_off_id'),'montant'=>$amt,
                 'mois'=>oget($change,'month') ?: null,'nom'=>$newLabel ?: null])];
+        case 'action_appli':   // v37.89
+            return [$o(['type'=>'action_appli','annee'=>$annee,'tache'=>oget($change,'tache'),'nom'=>oget($change,'nom', null),'plafond'=>oget($change,'plafond', null)])];
         case 'clone_year':
             return [$o(['type'=>'clone_annee','depuis'=>oget($change,'clone_from_year') ?: ($annee - 1),'vers'=>$annee])];
         case 'set_balance':
@@ -1943,6 +1955,27 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             cfo_write_charge($t,$v,$lbl); $log['key']=$K; $log['changes']=$ch; break;
         }
 
+        /* ── v37.89 : UNE DEMANDE À L'APPLI — exécutée par son moteur au rechargement qui suit ── */
+        case 'action_appli': {
+            $t = cfo_norm_str((string)oget($op, 'tache'));
+            $t = strpos($t, 'alim') !== false ? 'alimenter_courant' : (strpos($t, 'epargne') !== false || strpos($t, 'adapt') !== false ? 'adapter_epargne' : $t);
+            if (!in_array($t, ['alimenter_courant', 'adapter_epargne'], true)) { $log['status']='error'; $log['reason']='tâche inconnue : '.oget($op,'tache').' (alimenter_courant | adapter_epargne)'; break; }
+            if (!$y) { $log['status']='error'; $log['reason']='année absente : '.$a; break; }
+            $nom = oget($op, 'nom', null);
+            if ($t === 'adapter_epargne') {
+                cfo_ep_migrate($y); $pool = oget($y, 'epargne');
+                list($ix, $ep) = (is_array($pool) && count($pool) && $nom) ? cfo_ep_find($pool, $nom) : [null, null];
+                if (!$ep) { $log['status']='error'; $log['reason']='adapter_epargne : ligne d épargne « '.($nom ?: '?').' » introuvable en '.$a.' (name = une ligne EXISTANTE)'; break; }
+                $nom = oget($ep, 'nom') ?: oget($ep, 'label');
+            }
+            $L = is_array(oget($fd, 'actionsAppli')) ? oget($fd, 'actionsAppli') : [];
+            $L = array_values(array_filter($L, fn($x) => !(is_object($x) && oget($x,'tache') === $t && (int)oget($x,'annee') === $a && (string)oget($x,'nom','') === (string)($nom ?? ''))));
+            $L[] = cfo_obj(['id'=>cfo_uid(),'tache'=>$t,'annee'=>$a,'nom'=>$nom,'plafond'=>oget($op,'plafond', null),'demande'=>date('c')]);
+            oset($fd, 'actionsAppli', $L);
+            $log['action_appli'] = ['tache'=>$t,'annee'=>$a,'nom'=>$nom,'execution'=>"par l'appli, avec son moteur, au rechargement de l'écran juste après ta réponse — le résultat s'écrit dans le fil : ne l'annonce pas en chiffres"];
+            break;
+        }
+
         /* ── v37.72 : VIREMENT PROGRAMMÉ (virementsInternes) — aucun solde touché ── */
         case 'add_virement_programme': {
             if (!$y) { $log['status']='error'; $log['reason']='année absente'; break; }
@@ -1959,6 +1992,18 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
             $_cc = null;
             foreach ((oget($fd, 'comptes') ?: []) as $c) if (is_object($c) && in_array(oget($c, 'type'), ['courant', 'liquide'], true)) { $_cc = 'cpt_' . oget($c, 'id'); break; }
             if ($_cc !== null) { if ($src === $_cc) $src = 'courant'; if ($dst === $_cc) $dst = 'courant'; }
+            //  v37.89 : le MÊME virement (mêmes comptes, même mois, même jour) existe déjà — le reposer le doublerait
+            $jj = ($j !== null && (int)$j >= 1 && (int)$j <= 31) ? (int)$j : null;
+            foreach ($pool as $v0) {
+                if (!is_object($v0) || (int)oget($v0,'mois') !== $m) continue;
+                $j0 = oget($v0,'jourPrevu', null); $j0 = $j0 !== null ? (int)$j0 : null;
+                if ($j0 === $jj && cfo_cle_compte_epargne((string)oget($v0,'sourceCompte'), $fd) === cfo_cle_compte_epargne($src, $fd)
+                    && cfo_cle_compte_epargne((string)oget($v0,'destinationCompte'), $fd) === cfo_cle_compte_epargne($dst, $fd)) {
+                    $log['status']='error';
+                    $log['reason']='ce virement existe déjà ('.oget($v0,'montant').' DH, mois '.$m.($jj ? ', le '.$jj : '').') : le reposer le DOUBLERAIT. Un virement posé le jour de paie ou après appartient au cycle SUIVANT (le 28 janvier alimente février). Pour alimenter le Courant au juste besoin : app_action task=alimenter_courant.';
+                    break 2;
+                }
+            }
             $vir = cfo_obj(['id'=>cfo_uid(),'mois'=>$m,'sourceCompte'=>$src,'destinationCompte'=>$dst,'montant'=>$mt + 0]);
             if ($j !== null && (int)$j >= 1 && (int)$j <= 31) oset($vir,'jourPrevu',(int)$j);
             $pool[] = $vir; oset($y,'virementsInternes',$pool);

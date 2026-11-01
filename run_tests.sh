@@ -127,5 +127,6 @@ suite "Le CFO se branche tout seul : l’adresse du webhook déduite du serveur"
 suite "Un revenu négatif est une sortie : Relevé, Surplus, Respiration, Bilan"  node test_cfo_engine_parity/test_revenu_negatif.mjs
 suite "L’épargne s’adapte au potentiel : bouton, CFO, doublon refusé"  node test_cfo_engine_parity/test_epargne_potentiel.mjs
 suite "Solde Attijari à un seul chiffre après la virgule"  node test_cfo_engine_parity/test_solde_un_chiffre.mjs
+suite "Le Courant alimenté au juste besoin ; le CFO demande, l’appli calcule"  node test_cfo_engine_parity/test_alimentation_juste_besoin.mjs
 
 echo "✅ Toutes les suites passent."
