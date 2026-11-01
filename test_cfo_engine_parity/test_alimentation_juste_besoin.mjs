@@ -130,8 +130,13 @@ try {
           JSON.stringify(montants) === JSON.stringify([7000, 7000, 7000, 7000, 7000, 7000, 0, 0, 0, 0, 0, 0]), JSON.stringify(P.r && P.r.plan));
         v('  → janvier posé le 27 DÉCEMBRE 2026 (le jour de paie ouvre le cycle), février le 27 janvier',
           JSON.stringify(P.v26) === JSON.stringify([[12, 27, 7000, 'cpt_acc_sal', 'courant']]) && P.v27.some(x => x[0] === 1 && x[1] === 27 && x[2] === 7000) && !P.v27.some(x => x[1] === 28 && x[4] === 'courant' && x[0] < 12), JSON.stringify(P));
-        v('  → 11 virements de 9 100 et l\u2019aller-retour Courant → Salaire remplacés (12) ; le 28 déc. (cycle de janvier 2028) et l\u2019épargne gardés',
-          P.r.retires.length === 12 && P.v27.some(x => x[0] === 12 && x[1] === 28 && x[2] === 9100) && P.v27.some(x => x[2] === 10000 && x[4] === 'cpt_acc_ep') && !P.v27.some(x => x[2] === 5000), JSON.stringify(P.r.retires.length));
+        v('  → nettoyage d\u2019abord : les 12 virements de 9 100 (dont le 28 déc., résidu pour janvier 2028 — année absente) et l\u2019aller-retour retirés (13) ; l\u2019épargne gardée',
+          P.r.retires.length === 13 && P.r.nettoyes === 13 && !P.v27.some(x => x[2] === 9100) && P.v27.some(x => x[2] === 10000 && x[4] === 'cpt_acc_ep') && !P.v27.some(x => x[2] === 5000), JSON.stringify([P.r.retires.length, P.r.nettoyes]));
+        //  relancé : ses propres virements remplacés, pas gardés comme « anciens »
+        await page.click('[data-alimenter-courant]'); await page.waitForTimeout(700);
+        const P2 = await plan(page);
+        v('  → relancé : mêmes virements, aucun doublon ; ses propres virements ne deviennent pas des « anciens » (13 gardés pour Annuler)',
+          P2.r.nettoyes === 0 && P2.r.retires.length === 13 && P2.v27.filter(x => x[4] === 'courant').length === 5 && P2.v26.length === 1, JSON.stringify([P2.r.nettoyes, P2.r.retires.length, P2.v26, P2.v27]));
         //  le Courant ne passe jamais sous zéro (le radar du Relevé, jusqu'à fin 2027)
         const bas = await page.evaluate((ST) => { const st = eval(ST); const c = st.radarComptes.comptes.find(x => x.key === 'cpt_acc_cc'); return c ? c.pointBas : null; }, ST);
         v('  → le Courant ne passe plus jamais sous zéro (point bas ≥ 0)', bas !== null && bas >= 0, String(bas));
@@ -139,7 +144,7 @@ try {
         v('  → affiché : « Janvier : 7 000 DH le 27 déc. 2026 » … « Juillet : rien »', /Janvier : 7[\s\u00a0\u202f]?000[\s\u00a0]DH le 27 déc\. 2026/.test(affiche) && /Juillet : rien/.test(affiche), affiche.slice(0, 200));
         await page.click('[data-annuler-alimentation]'); await page.waitForTimeout(400);
         const A = await plan(page);
-        v('D. « Annuler » : les 14 virements d\u2019avant reviennent, ceux du juste besoin partent', A.r === null && A.v26.length === 0 && A.v27.length === 14 && A.v27.filter(x => x[2] === 9100).length === 12, JSON.stringify(A));
+        v('D. « Annuler » (après deux calculs) : retour à l\u2019état d\u2019AVANT le premier — les 14 virements reviennent', A.r === null && A.v26.length === 0 && A.v27.length === 14 && A.v27.filter(x => x[2] === 9100).length === 12, JSON.stringify(A));
     });
     await section('E', async () => {
         const S = await page.evaluate(async (ST) => { const st = eval(ST); st.anneeAffichage = 2027; await new Promise(r => setTimeout(r, 200)); return JSON.parse(JSON.stringify(st.surplusStats)); }, ST);

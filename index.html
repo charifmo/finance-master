@@ -8774,8 +8774,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.91 Épargne avec réserve";
+                    const CURRENT_VERSION = "37.92 Nettoyage avant calcul";
                     const CHANGELOG = [
+        { version: "37.92 Nettoyage avant calcul", date: "2026-11-02", changes: [
+            "🧹 « EST-CE QUE L'APPLI SUPPRIME L'EXISTANT AVANT DE METTRE À JOUR ? JE NE VEUX PAS DE RÉSIDUS DES CALCULS PASSÉS. » — « Alimenter le Courant » retirait déjà les virements salaire ↔ Courant des cycles recalculés. Il retire désormais aussi ceux posés fin décembre pour le cycle de janvier SUIVANT quand l'année suivante n'existe pas encore (les 9 100 → Courant et 6 000 → Assafa du 28 décembre : un aller-retour d'anciens calculs). Relancé, il remplace ses propres virements sans les garder comme « anciens » : « Annuler » ramène à l'état d'avant le PREMIER calcul. Le fil du CFO dit combien d'anciens virements ont été retirés avant de poser les nouveaux.",
+            "PREUVE — la suite « Le Courant alimenté au juste besoin » : 13 anciens virements retirés (dont le résidu du 28 décembre), relancé sans doublon, Annuler après deux calculs revient aux 14 virements d'origine. Rejouée sur la v37.91 : en échec.",
+        ] },
         { version: "37.91 Épargne avec réserve", date: "2026-11-02", changes: [
             "⚖️ « C'EST QUOI CE MASSACRE ! » — après « adapter l'épargne au potentiel », Compte Principale ASSAFA finissait 2027 à − 44 919 et Compte urgence à 146 085. Chaque mois, l'épargne prenait TOUT le potentiel du mois ; or en décembre partent d'un coup 63 000 DH (40 000 + 20 000 vers urgence, 3 000 vers Long Terme), qui se paient avec ce qui s'est ACCUMULÉ dans l'année. Plus rien ne s'accumulait : le Bilan affichait « − 4 182 DH par mois » (c'était − 50 243 en décembre, divisés par 12).",
             "✅ DÉSORMAIS — l'adaptation lit l'année entière : un mois qui ne se suffit pas (gros virement ponctuel, dépense lourde) se prépare dans les mois d'avant. À la fin de chaque mois, on garde en réserve ce qu'il faudra pour les mois déficitaires qui suivent ; l'épargne du mois prend le reste, et le cumul de l'année ne passe jamais sous zéro. Sur vos chiffres (simulé) : Epargne urgence 2 630 à 4 150 de janvier à juin, 12 000 en juillet, puis 0 (décembre la remplit d'un coup) ; ASSAFA finit à + 6 531, le Courant à + 4 830, net moyen + 6 DH par mois.",
@@ -18812,14 +18816,26 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const cycles = []; for (let m = premier; m <= 12; m++) cycles.push(m);
                         if (!cycles.length) { addLog('🔄 Aucun cycle à venir en ' + a + '.', 'warn'); return null; }
                         const estAli = (v) => { const s = cleDeCompte(v.sourceCompte || 'courant'), d = cleDeCompte(v.destinationCompte || 'courant'); return (s === skK && d === ck) || (s === ck && d === skK); };
-                        const retires = [], ajoutes = [], plan = [];
+                        //  v37.92 : un calcul précédent est REMPLACÉ (ses virements ne deviennent pas des « anciens ») ; « Annuler »
+                        //  ramène à l'état d'avant le premier calcul
+                        const prec = ((donneesAnnuelles.value || {})[a] || {}).alimentationJusteBesoin;
+                        const deja = new Set(((prec && prec.ajoutes) || []).map(x => String(x.id)));
+                        const retires = ((prec && prec.retires) || []).slice(), ajoutes = [], plan = [];
+                        const sansSuivante = !(donneesAnnuelles.value || {})[a + 1];
+                        let nettoyes = 0;
                         [a - 1, a].forEach(y => {
                             const d = (donneesAnnuelles.value || {})[y];
                             if (!d || !Array.isArray(d.virementsInternes)) return;
                             d.virementsInternes = d.virementsInternes.filter(v => {
                                 if (!v || !estAli(v)) return true;
                                 const c = cycleDuVirement(v, y);
-                                if (c.a === a && cycles.includes(c.m)) { retires.push({ an: y, v: JSON.parse(JSON.stringify(v)) }); return false; }
+                                //  v37.92 : le cycle de janvier SUIVANT, posé fin décembre, quand l'année suivante n'existe pas encore —
+                                //  un résidu d'anciens calculs : retiré aussi
+                                const residu = sansSuivante && y === a && c.a === a + 1 && c.m === 1;
+                                if ((c.a === a && cycles.includes(c.m)) || residu) {
+                                    if (deja.has(String(v.id))) return false;
+                                    retires.push({ an: y, v: JSON.parse(JSON.stringify(v)) }); nettoyes++; return false;
+                                }
                                 return true;
                             });
                         });
@@ -18849,11 +18865,11 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             E.forEach(e => { const s = Number(e.soldeCompteApres) || 0; if (!salaireMin || s < salaireMin.montant) salaireMin = { montant: Math.round(s), cycle: e.cycle }; });
                         } catch (e) { /* journal indisponible */ }
                         const d = donneesAnnuelles.value[a];
-                        d.alimentationJusteBesoin = { le: _aujourdhuiISO(), salaire: getNomCompte(sk), retires, ajoutes, plan,
+                        d.alimentationJusteBesoin = { le: _aujourdhuiISO(), salaire: getNomCompte(sk), retires, ajoutes, plan, nettoyes,
                                                       salaireMin: salaireMin && salaireMin.montant < 0 ? salaireMin : null };
                         const total = plan.reduce((s, p) => s + p.montant, 0);
                         addLog('🔄 Courant alimenté au juste besoin (' + a + ') : ' + plan.filter(p => p.montant).map(p => _MOIS_COURTS[p.cycle - 1] + ' ' + formatMAD(p.montant)).join(' · ')
-                               + ' — ' + formatMAD(total) + ' au total, ' + retires.length + ' ancien(s) virement(s) remplacé(s).', 'success');
+                               + ' — ' + formatMAD(total) + ' au total, ' + nettoyes + ' ancien(s) virement(s) retiré(s) avant de poser les nouveaux.', 'success');
                         handleDataChange();
                         return d.alimentationJusteBesoin;
                     };
@@ -18890,7 +18906,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (x.tache === 'alimenter_courant') {
                                     const r = alimenterCourantAuJusteBesoin(an);
                                     fait.push(r ? '🔄 Courant alimenté au juste besoin en ' + an + ' : ' + (r.plan.filter(p => p.montant).map(p => p.le + ' → ' + formatMAD(p.montant)).join(', ') || 'aucun virement nécessaire')
-                                                  + (r.retires.length ? ' (' + r.retires.length + ' ancien(s) virement(s) remplacé(s))' : '') + (r.salaireMin ? ' — ⚠️ ' + r.salaire + ' passe sous zéro (' + formatMAD(r.salaireMin.montant) + ')' : '')
+                                                  + ' — nettoyage d’abord : ' + (r.nettoyes || 0) + ' ancien(s) virement(s) salaire ↔ Courant retiré(s)' + (r.salaireMin ? ' — ⚠️ ' + r.salaire + ' passe sous zéro (' + formatMAD(r.salaireMin.montant) + ')' : '')
                                                 : '🔄 Alimentation du Courant ' + an + ' : rien à faire.');
                                 } else if (x.tache === 'adapter_epargne') {
                                     const n = String(x.nom || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
