@@ -205,7 +205,7 @@ try {
           JSON.stringify(e5.c) === '["courant","courant"]' && e5.f.courant === 300 + 450 && e5.def === '🏦 Assafa · par défaut', JSON.stringify(e5));
         //  Supprimer : dans les options de la ligne, confirmé, 2026 et 2027
         v('  → Scinder / Supprimer n\'encombrent plus la ligne (cachés tant que ses options sont fermées)', !(await page.$(`[data-supprimer-ligne]`)), '');
-        await page.click(`[data-ligne="chargesFixes:${cle}"] >> xpath=ancestor::div[contains(@class,"justify-between")][1]//button[contains(., "Gérer")]`); await page.waitForTimeout(200);
+        await page.click(`[data-ligne="chargesFixes:${cle}"] >> xpath=ancestor::div[contains(@class,"justify-between")][1]//button[contains(., "Montant variable")]`); await page.waitForTimeout(200);
         await page.click('[data-supprimer-ligne]'); await page.waitForTimeout(250);
         const e6 = await ev(`return [2026, 2027].map(a => arg in st.donneesAnnuelles[a].chargesFixes);`, cle);
         v('  → « 🗑 Supprimer » (options ouvertes, confirmé) : la ligne quitte 2026 et 2027', JSON.stringify(e6) === '[false,false]', JSON.stringify(e6));
