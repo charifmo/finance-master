@@ -706,9 +706,9 @@ function cfo_arg_spec(): array {
     ]],
 
     //  v37.89 : LE CFO DEMANDE, L'APPLI CALCULE — l'appli exécute la tâche avec son propre moteur au rechargement qui suit
-    'app_action' => ['desc'=>"Demande à l'APPLI d'exécuter une de ses capacités avec SON moteur (au rechargement de l'écran juste après ta réponse ; le résultat s'écrit dans le fil). task=alimenter_courant : un virement du compte du salaire vers le Courant à chaque cycle à venir de l'année, le jour de paie, du montant exact qui garde le Courant ≥ 0 (remplace les virements salaire ↔ Courant de ces cycles). task=adapter_epargne : la ligne d'épargne `name` adaptée au potentiel de chaque mois (plafond `cap` facultatif). Tu ne calcules pas ces montants.",
+    'app_action' => ['desc'=>"Demande à l'APPLI d'exécuter une de ses capacités avec SON moteur (au rechargement de l'écran juste après ta réponse ; le résultat s'écrit dans le fil). task=alimenter_courant : un virement du compte du salaire vers le Courant à chaque cycle à venir de l'année, le jour de paie, du montant exact qui garde le Courant ≥ 0 (remplace les virements salaire ↔ Courant de ces cycles). task=adapter_epargne : la ligne d'épargne `name` adaptée au potentiel de chaque mois (plafond `cap` facultatif). task=recalibrer_annee : TOUT en un geste — doublons de virements retirés, épargne déjà calée sur le potentiel recalée, Courant alimenté au juste besoin ; avant/après et garde-fous écrits dans le fil (les montants d'épargne fixes ne sont pas touchés). Tu ne calcules pas ces montants.",
         'params'=>[
-        'task' => ['type'=>'string','required'=>true,'aliases'=>['tache','action_appli','capacite'],'desc'=>"alimenter_courant | adapter_epargne"],
+        'task' => ['type'=>'string','required'=>true,'aliases'=>['tache','action_appli','capacite'],'desc'=>"recalibrer_annee | alimenter_courant | adapter_epargne"],
         'name' => ['type'=>'string','aliases'=>array_merge($A_NOM,['poche','savings_name']),'desc'=>"adapter_epargne : la ligne d'épargne EXISTANTE."],
         'cap'  => ['type'=>'number','aliases'=>['plafond','maximum'],'desc'=>"adapter_epargne : plafond mensuel facultatif (DH)."],
     ]],
@@ -1958,8 +1958,8 @@ function cfo_apply_op($fd, $op, $anneeTarget): array {
         /* ── v37.89 : UNE DEMANDE À L'APPLI — exécutée par son moteur au rechargement qui suit ── */
         case 'action_appli': {
             $t = cfo_norm_str((string)oget($op, 'tache'));
-            $t = strpos($t, 'alim') !== false ? 'alimenter_courant' : (strpos($t, 'epargne') !== false || strpos($t, 'adapt') !== false ? 'adapter_epargne' : $t);
-            if (!in_array($t, ['alimenter_courant', 'adapter_epargne'], true)) { $log['status']='error'; $log['reason']='tâche inconnue : '.oget($op,'tache').' (alimenter_courant | adapter_epargne)'; break; }
+            $t = strpos($t, 'recalib') !== false ? 'recalibrer_annee' : (strpos($t, 'alim') !== false ? 'alimenter_courant' : (strpos($t, 'epargne') !== false || strpos($t, 'adapt') !== false ? 'adapter_epargne' : $t));
+            if (!in_array($t, ['recalibrer_annee', 'alimenter_courant', 'adapter_epargne'], true)) { $log['status']='error'; $log['reason']='tâche inconnue : '.oget($op,'tache').' (recalibrer_annee | alimenter_courant | adapter_epargne)'; break; }
             if (!$y) { $log['status']='error'; $log['reason']='année absente : '.$a; break; }
             $nom = oget($op, 'nom', null);
             if ($t === 'adapter_epargne') {

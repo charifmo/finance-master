@@ -126,6 +126,7 @@ suite "Un revenu négatif est une sortie : Relevé, Surplus, Respiration, Bilan"
 suite "L’épargne s’adapte au potentiel : bouton, CFO, doublon refusé"  node test_cfo_engine_parity/test_epargne_potentiel.mjs
 suite "Solde Attijari à un seul chiffre après la virgule"  node test_cfo_engine_parity/test_solde_un_chiffre.mjs
 suite "Le Courant alimenté au juste besoin ; le CFO demande, l’appli calcule"  node test_cfo_engine_parity/test_alimentation_juste_besoin.mjs
+suite "Recalibrer l’année en un geste ; les garde-fous"                 node test_cfo_engine_parity/test_recalibrage.mjs
 suite "Connexion au CFO : « Failed to fetch » diagnostiqué, nouvel essai, écran allumé"  node test_cfo_engine_parity/test_connexion_cfo.mjs
 suite "Santé Master : calculs, règle de Gilbert, intégrité, moteur d'intentions"  php test_cfo_engine_parity/test_sante_calculs.php
 suite "Santé Master : parité JS ↔ PHP, lecture des comptes rendus"  node test_cfo_engine_parity/test_sante_parite.mjs
