@@ -72,10 +72,10 @@
                         <div class="flex items-end justify-between"><span class="text-3xl font-black tabnum" data-pas>{{ fmt(pasJour) }}</span><span class="text-sm text-slate-500">objectif {{ fmt(etat.profil.pas_objectif || 10000) }}</span></div>
                         <div class="h-3 rounded-full bg-slate-100 mt-2 overflow-hidden"><div class="h-full bg-emerald-500" :style="{ width: Math.min(100, 100 * pasJour / (etat.profil.pas_objectif || 10000)) + '%' }"></div></div>
                         <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pas (saisie)</span><input type="number" min="0" data-saisie-pas :value="jour.activite.pas ?? ''" @change="majActivite('pas', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Zone 2 à jeun (min)</span><input type="number" min="0" data-saisie-zone2 :value="jour.activite.zone2_min ?? ''" @change="majActivite('zone2_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Marches de 15 min après repas</span><input type="number" min="0" :value="jour.activite.marches_post ?? ''" @change="majActivite('marches_post', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Soleus pushups (min)</span><input type="number" min="0" :value="jour.activite.soleus_min ?? ''" @change="majActivite('soleus_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pas (saisie)</span><input type="number" min="0" data-saisie-pas v-model.lazy="saisie.pas" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Zone 2 à jeun (min)</span><input type="number" min="0" data-saisie-zone2 v-model.lazy="saisie.zone2_min" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Marches de 15 min après repas</span><input type="number" min="0" v-model.lazy="saisie.marches_post" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Soleus pushups (min)</span><input type="number" min="0" v-model.lazy="saisie.soleus_min" class="border rounded-lg px-2 py-1"></label>
                         </div>
                         <label class="flex items-center gap-2 mt-2 text-sm font-semibold"><input type="checkbox" data-saisie-machines class="w-4 h-4 accent-emerald-600" :checked="!!jour.activite.machines" @change="majActivite('machines', $event.target.checked)"> Séance machines bas du corps aujourd’hui</label>
                         <p class="text-xs font-black mt-2" data-machines-semaine :class="machinesSemaine >= (etat.profil.seances_machines_semaine || 2) ? 'text-emerald-700' : 'text-amber-700'">🏋️ {{ machinesSemaine }}/{{ etat.profil.seances_machines_semaine || 2 }} séances machines cette semaine</p>
@@ -96,8 +96,8 @@
             <div class="carte p-4" data-profil>
                 <h2 class="font-black text-emerald-900 mb-2">👤 Profil</h2>
                 <div class="grid sm:grid-cols-3 gap-2 text-sm">
-                    <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Taille (cm)</span><input type="number" data-profil-taille :value="etat.profil.taille_cm ?? ''" @change="etat.profil.taille_cm = nb($event.target.value)" class="border rounded-lg px-2 py-1"></label>
-                    <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pression systolique (mmHg, pour SCORE2)</span><input type="number" :value="etat.profil.pas_systolique ?? ''" @change="etat.profil.pas_systolique = nb($event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                    <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Taille (cm)</span><input type="number" data-profil-taille v-model.lazy="saisie.taille_cm" class="border rounded-lg px-2 py-1"></label>
+                    <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pression systolique (mmHg, pour SCORE2)</span><input type="number" v-model.lazy="saisie.pas_systolique" class="border rounded-lg px-2 py-1"></label>
                     <label class="flex items-center gap-2 mt-4"><input type="checkbox" class="w-4 h-4" :checked="etat.profil.fumeur" @change="etat.profil.fumeur = $event.target.checked"> Fumeur</label>
                 </div>
                 <ul class="mt-2 text-xs text-slate-600 list-disc pl-5"><li v-for="t in etat.profil.terrain" :key="t">{{ t }}</li></ul>
@@ -274,7 +274,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.1';
+        const VERSION = '1.2';
         const ONGLETS = [
             { id: 'pilotage', libelle: '🎯 Pilotage' }, { id: 'analyses', libelle: '🩸 Analyses' }, { id: 'nutrition', libelle: '🥗 Nutrition' },
             { id: 'poids', libelle: '📱 Samsung & Poids' }, { id: 'cmo', libelle: '🧠 Médecin-Chef IA' },
@@ -348,6 +348,21 @@ createApp({
         });
         const checklistFaits = computed(() => CHECKLIST.filter(c => jour.value.checklist[c.id]).length);
         const majActivite = (k, v) => { jour.value.activite[k] = k === 'machines' ? !!v : nb(v); if (k === 'zone2_min' && (nb(v) || 0) >= 40) jour.value.checklist.zone2 = true; if (k === 'soleus_min' && (nb(v) || 0) > 0) jour.value.checklist.soleus = true; };
+        // v1.2 — LA SAISIE NE S'EFFACE PLUS PENDANT LA FRAPPE. Ces champs étaient liés par :value + @change : Vue
+        //   réécrit TOUJOURS la propriété value d'un <input> à chaque rendu (pour suivre l'état). Or chaque modification
+        //   déclenche, 700 ms plus tard, sauver() → statut « enregistré » → nouveau rendu. Si ce rendu tombait entre la
+        //   frappe et la sortie du champ, le champ revenait à l'ancienne valeur (vide) : la saisie était perdue, aucun
+        //   change ne portait 42, la case Zone 2 ne se cochait pas. v-model.lazy, lui, ne touche pas un champ qui a le
+        //   focus tant que la valeur enregistrée n'a pas changé ; il écrit au change, comme avant, via ces setters.
+        const champ = (lire, ecrire) => computed({ get: () => lire() ?? '', set: ecrire });
+        const saisie = reactive({
+            pas: champ(() => jour.value.activite.pas, v => majActivite('pas', v)),
+            zone2_min: champ(() => jour.value.activite.zone2_min, v => majActivite('zone2_min', v)),
+            marches_post: champ(() => jour.value.activite.marches_post, v => majActivite('marches_post', v)),
+            soleus_min: champ(() => jour.value.activite.soleus_min, v => majActivite('soleus_min', v)),
+            taille_cm: champ(() => etat.profil.taille_cm, v => { etat.profil.taille_cm = nb(v); }),
+            pas_systolique: champ(() => etat.profil.pas_systolique, v => { etat.profil.pas_systolique = nb(v); }),
+        });
         const pasJour = computed(() => Math.max(Number(jour.value.activite.pas || 0), Number(jour.value.samsung.pas || 0)));
         const machinesSemaine = computed(() => {
             const d = new Date(dateJour.value + 'T12:00:00'), lundi = new Date(d); lundi.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -506,7 +521,7 @@ createApp({
 
         onMounted(charger);
         return { VERSION, ONGLETS, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
-                 fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
+                 fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, saisie, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  texteBilan, apercu, lectureEnCours, messageBilan, lireFichierBilan, analyserBilan, ajouterBilanApercu,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv,
