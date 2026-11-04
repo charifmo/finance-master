@@ -116,7 +116,12 @@ const REPONSES = {
 };
 
 const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
-await page.clock.setFixedTime(new Date(2026, 9, 13, 12, 0, 0));
+//  v37.99 — L'horloge est figée… mais l'appli numérote chaque saisie Date.now() + un tirage < 1 000. Figée pour
+//  toutes, deux saisies tombaient parfois sur le MÊME id (≈ 5 % des passes) : l'IA traitait l'une à la place de
+//  l'autre, et « panne » ou « truc bizarre » restait sans réponse. valider() avance donc l'horloge d'1 s avant
+//  chaque saisie, comme le temps réel : ids distincts par construction, toujours le 13/10 à 12:00.
+let horloge = new Date(2026, 9, 13, 12, 0, 0).getTime();
+await page.clock.setFixedTime(horloge);
 const erreurs = []; page.on('pageerror', e => erreurs.push(String(e)));
 page.on('dialog', d => d.accept());
 await page.route('**/webhook/**', async (route) => {
@@ -139,13 +144,31 @@ const cat = (libs) => page.evaluate(({ ST, libs }) => { const st = eval(ST); con
 const txs = () => page.evaluate((ST) => JSON.parse(JSON.stringify(eval(ST).donneesAnnuelles[2026].transactionsReelles)), ST);
 const tx = async (libelle) => (await txs()).filter(t => t.libelle === libelle).pop() || null;
 const idDe = (label) => page.evaluate(({ ST, label }) => { const c = (eval(ST).soldesInitiaux.categories || []).find(x => String(x.label).trim() === label && !x.archive); return c ? c.id : null; }, { ST, label });
-const saisir = async (texte) => { const i = page.locator('input[placeholder="Ex: 200 courses"]'); await i.fill(texte); await page.waitForTimeout(150); };
-const valider = async () => { await page.locator('input[placeholder="Ex: 200 courses"]').press('Enter'); await page.waitForTimeout(200); };
+//  v37.99 — ATTENTES DÉTERMINISTES, plus de sommeils fixes : sous charge (suites en parallèle), 150 / 200 ms ne
+//  suffisaient pas toujours. On attend l'ÉTAT : le texte lu par Vue et rendu (nextTick), la transaction enregistrée.
+const rendu = () => page.evaluate(() => Vue.nextTick());
+const nbTx = () => page.evaluate((ST) => eval(ST).donneesAnnuelles[2026].transactionsReelles.length, ST);
+const saisir = async (texte) => { const i = page.locator('input[placeholder="Ex: 200 courses"]'); await i.fill(texte);
+    await page.waitForFunction(({ ST, texte }) => eval(ST).saisieRapide === texte, { ST, texte }, { timeout: 10000 }); await rendu(); };
+const valider = async () => { horloge += 1000; await page.clock.setFixedTime(horloge); const n = await nbTx(); await page.locator('input[placeholder="Ex: 200 courses"]').press('Enter');
+    await page.waitForFunction(({ ST, n }) => eval(ST).donneesAnnuelles[2026].transactionsReelles.length > n, { ST, n }, { timeout: 10000 }); await rendu(); };
 const badge = () => page.evaluate(() => { const b = document.querySelector('[data-saisie-cat]'); const i = document.querySelector('[data-saisie-cat-inconnue]');
     return { statut: b ? b.dataset.statut : null, texte: (b || i || {}).textContent ? (b || i).textContent.replace(/\s+/g, ' ').trim() : null,
              puces: [...document.querySelectorAll('[data-saisie-suggestion]')].map(x => x.textContent.trim()) }; });
 const ligne = (txId) => page.evaluate((id) => { const l = document.querySelector(`[data-a-categoriser-ligne][data-tx="${id}"]`); return l ? l.textContent.replace(/\s+/g, ' ').trim() : null; }, txId);
-const attendreIA = async () => { await page.waitForFunction((ST) => Object.keys(eval(ST).iaCategorisation.enCours).length === 0, ST, { timeout: 10000 }); await page.waitForTimeout(150); };
+//  L'IA a fini : la file est vide ET chaque libellé nommé a reçu sa réponse (rangé hors « Non catégorisé », ou un
+//  message). La file seule ne suffit pas : entre deux demandes, elle peut être vide un instant.
+const attendreIA = async (...libelles) => {
+    await page.waitForFunction(({ ST, libelles }) => { const st = eval(ST), ia = st.iaCategorisation;
+        if (Object.keys(ia.enCours).length) return false;
+        const txs = st.donneesAnnuelles[2026].transactionsReelles;
+        return libelles.every(l => { const t = txs.filter(x => x.libelle === l).pop(); return !!t && ((t.categorieId && t.categorieId !== 'cat_misc') || !!ia.messages[t.id]); });
+    }, { ST, libelles }, { timeout: 20000 }).catch(async (e) => {
+        const etat = await page.evaluate(({ ST, libelles }) => { const st = eval(ST), ia = st.iaCategorisation;
+            return { enCours: Object.keys(ia.enCours), txs: st.donneesAnnuelles[2026].transactionsReelles.filter(t => libelles.includes(t.libelle)).map(t => [t.id, t.libelle, t.categorieId, t.categorieSource || null]) }; }, { ST, libelles });
+        throw new Error('attendreIA : pas de réponse de l\'IA pour ' + JSON.stringify(etat) + ' — ' + String(e.message).split('\n')[0]); });
+    await rendu();
+};
 
 try {
     /* ── B. Le moteur, libellé par libellé ───────────────────────────── */
@@ -188,14 +211,14 @@ try {
 
     /* ── C. Il apprend de vos choix ──────────────────────────────────── */
     await section('C', async () => {
-        await saisir('25 chez hamid'); await valider(); await attendreIA();
+        await saisir('25 chez hamid'); await valider(); await attendreIA('chez hamid');
         const h = await tx('chez hamid');
         await page.evaluate(({ ST, id, cat }) => eval(ST).rangerTransaction(id, cat), { ST, id: h.id, cat: await idDe('Alimentation (Tqdya)') });
-        await page.waitForTimeout(150);
+        await rendu();
         const r = await cat(['chez hamid', 'hamid']);
         v('C. « chez hamid » rangé à la main dans Alimentation → reconnu, sûr, source « vous » (et « hamid » seul aussi)',
           r['chez hamid'].statut === 'sur' && r['chez hamid'].cat === 'Alimentation (Tqdya)' && r['chez hamid'].source === 'vous' && r.hamid.cat === 'Alimentation (Tqdya)' && r.hamid.statut === 'sur', JSON.stringify(r));
-        await saisir('40 café'); await page.waitForTimeout(100);
+        await saisir('40 café');
         const b0 = await badge();
         await page.click('[data-saisie-suggestion]:has-text("Cafe Charif")'); await page.waitForTimeout(100); await valider();
         const c = await tx('café');
@@ -230,11 +253,12 @@ try {
 
     /* ── E. L'IA ──────────────────────────────────────────────────────── */
     await section('E', async () => {
+        await attendreIA();   // les demandes des sections précédentes (« afriquia » en D) sont toutes rentrées
         const n0 = ia.requetes.length;
         await saisir('120 zzqx');
         const b = await badge();
         v('E. « 120 zzqx » : « 🤖 Inconnu des règles : l\'IA proposera une catégorie »', !b.statut && /Inconnu des règles/.test(b.texte || ''), JSON.stringify(b));
-        await valider(); await attendreIA();
+        await valider(); await attendreIA('zzqx');
         const q = ia.requetes[n0] || {};
         const lignes = String(q.question || '').split('\n');
         v('  → une demande, session « categorisation », LECTURE SEULE, le libellé et le montant',
@@ -245,11 +269,11 @@ try {
         v('  → confiance haute : rangée dans barber, source « ia », pas à vérifier ; le journal dit « · IA »',
           z.categorieId === await idDe('barber') && z.categorieSource === 'ia' && !z.aVerifier && z.iaConfiance === 'haute'
           && await page.evaluate((id) => /barber · IA/.test(document.querySelector(`[data-journal-cat][data-tx="${id}"]`)?.textContent.replace(/\s+/g, ' ') || ''), z.id), JSON.stringify(z));
-        await saisir('30 truc bizarre'); await valider(); await attendreIA();
+        await saisir('30 truc bizarre'); await valider(); await attendreIA('truc bizarre');
         const t = await tx('truc bizarre');
         v('  → confiance moyenne (réponse en HTML échappé) : Alimentation À L\'ESSAI, à vérifier, « ✓ Alimentation (Tqdya) · IA » dans la liste',
           t.categorieId === await idDe('Alimentation (Tqdya)') && t.aVerifier === true && t.categorieSource === 'ia' && /✓ Alimentation \(Tqdya\) · IA/.test(await ligne(t.id) || ''), JSON.stringify([t, await ligne(t.id)]));
-        await saisir('15 objet inconnu'); await valider(); await saisir('15 panne'); await valider(); await attendreIA();
+        await saisir('15 objet inconnu'); await valider(); await saisir('15 panne'); await valider(); await attendreIA('objet inconnu', 'panne');
         const o = await tx('objet inconnu'), p = await tx('panne');
         const msg = await page.evaluate((ST) => JSON.parse(JSON.stringify(eval(ST).iaCategorisation.messages)), ST);
         //  v37.52 : l'IA qui échoue ne laisse plus rien en attente — une catégorie PAR DÉFAUT (votre plus utilisée), à vérifier
