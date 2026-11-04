@@ -139,6 +139,23 @@ try {
         v('I. « Importer mon dossier » (.json) : profil et bilans chargés et enregistrés', /1 bilan/.test(await p2.textContent('[data-message-import]')) && lireFichier().profil.nom === 'PERSONNE FICTIVE');
         await p2.close();
     });
+    await section('J', async () => {
+        //  « non enregistré » : le serveur refuse (dossier non inscriptible) — la page dit pourquoi et propose de réessayer
+        const p3 = await ouvrir();
+        let casse = true;
+        await p3.route('**/save_sante.php', r => casse && r.request().method() === 'POST'
+            ? r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, erreur: 'écriture impossible — base : indisponible ; fichier : PHP ne peut pas écrire dans /var/www/finance/sante' }) })
+            : r.continue());
+        await p3.evaluate((ST) => { eval(ST).etat.profil.nom = 'PERSONNE ESSAI ERREUR'; }, ST);
+        await p3.waitForSelector('[data-erreur-sauvegarde]', { timeout: 8000 });
+        const msg = await p3.textContent('[data-erreur-sauvegarde]'), statut = await p3.textContent('[data-statut-sauvegarde]');
+        v('J. le serveur refuse l\u2019écriture : « non enregistré », la RAISON est écrite dans la page (le dossier concerné)', /non enregistré/.test(statut) && /PHP ne peut pas écrire dans \/var\/www\/finance\/sante/.test(msg) && /ne la fermez pas/.test(msg), [statut, msg]);
+        casse = false;
+        await p3.click('[data-reessayer]');
+        await p3.waitForFunction(() => /enregistré/.test(document.querySelector('[data-statut-sauvegarde]').textContent) && !/non enregistré/.test(document.querySelector('[data-statut-sauvegarde]').textContent) && !document.querySelector('[data-erreur-sauvegarde]'), null, { timeout: 8000 });
+        v('  → « ↻ Réessayer » une fois le serveur réparé : enregistré, le bandeau disparaît, rien n\u2019a été perdu', lireFichier().profil.nom === 'PERSONNE ESSAI ERREUR', lireFichier().profil);
+        await p3.close();
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close(); php.kill();
