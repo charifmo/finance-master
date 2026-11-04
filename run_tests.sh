@@ -132,6 +132,7 @@ suite "Écran « Aujourd’hui », mode expert, réponses instantanées du CFO" 
 suite "Mes applis : passer de Finance à Santé (lanceur, apps.json, accueil)"  node test_cfo_engine_parity/test_lanceur.mjs
 suite "Connexion au CFO : « Failed to fetch » diagnostiqué, nouvel essai, écran allumé"  node test_cfo_engine_parity/test_connexion_cfo.mjs
 suite "Santé Master : calculs, règle de Gilbert, intégrité, moteur d'intentions"  php test_cfo_engine_parity/test_sante_calculs.php
+suite "Santé Master : le fichier de secours (sante/ ou pending/), l’erreur dite"  php test_cfo_engine_parity/test_sante_stockage.php
 suite "Santé Master : parité JS ↔ PHP, lecture des comptes rendus"  node test_cfo_engine_parity/test_sante_parite.mjs
 suite "Santé Master : l'appli, le stockage, l'API du CMO, le webhook Samsung"  node test_cfo_engine_parity/test_sante_appli.mjs
 suite "Sauvegarde hors du VPS (Telegram) et surveillance"  php test_cfo_engine_parity/test_sauvegarde.php

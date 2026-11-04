@@ -43,10 +43,17 @@ function sv_lire(string $table, string $fichier): array {
     if (is_file($fichier)) { $t = (string)file_get_contents($fichier); if (trim($t) !== '') return [$t, 'fichier']; }
     return [null, 'absent'];
 }
+/** Le fichier de secours de Santé : sante/ ou pending/ (voir sante_choisir_fichier) — le plus récent des deux. */
+function sv_fichier_sante(): string {
+    if ($e = getenv('SANTE_DATA_FILE')) return $e;
+    $c = array_values(array_filter([__DIR__ . '/sante/sante_data.json', __DIR__ . '/pending/sante_data.json'], 'is_file'));
+    usort($c, fn($a, $b) => filemtime($b) <=> filemtime($a));
+    return $c[0] ?? __DIR__ . '/sante/sante_data.json';
+}
 function sv_sources(): array {
     return [
         'finance' => sv_lire('finance_state', getenv('FM_FINANCE_FICHIER') ?: __DIR__ . '/finance_data.json'),
-        'sante'   => sv_lire('sante_state', getenv('SANTE_DATA_FILE') ?: __DIR__ . '/sante/sante_data.json'),
+        'sante'   => sv_lire('sante_state', sv_fichier_sante()),
     ];
 }
 /** Envoi Telegram (sendMessage / sendDocument). */
@@ -127,7 +134,7 @@ function sv_restaurer(string $fichier): array {
     if (!is_array($p) || (!isset($p['finance']) && !isset($p['sante']))) return ['ok' => false, 'erreur' => 'fichier de sauvegarde illisible'];
     $avant = sv_quotidienne();
     $pdo = sv_db(); $fait = [];
-    foreach (['finance' => ['finance_state', getenv('FM_FINANCE_FICHIER') ?: __DIR__ . '/finance_data.json'], 'sante' => ['sante_state', getenv('SANTE_DATA_FILE') ?: __DIR__ . '/sante/sante_data.json']] as $nom => [$table, $f]) {
+    foreach (['finance' => ['finance_state', getenv('FM_FINANCE_FICHIER') ?: __DIR__ . '/finance_data.json'], 'sante' => ['sante_state', sv_fichier_sante()]] as $nom => [$table, $f]) {
         if (!isset($p[$nom])) continue;
         $t = json_encode($p[$nom], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
         if ($pdo) $pdo->prepare("INSERT INTO $table (id, data, updated_at) VALUES (1, CAST(:d AS jsonb), now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()")->execute([':d' => $t]);

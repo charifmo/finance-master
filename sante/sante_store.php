@@ -25,10 +25,27 @@ function sante_pdo(): ?PDO {
         $pdo = new PDO(sprintf('pgsql:host=%s;port=%s;dbname=%s', $c['host'], $c['port'], $c['dbname']), $c['user'], $c['password'],
                        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 5]);
         $pdo->exec(file_get_contents(__DIR__ . '/sql/sante_state.sql'));
-    } catch (Throwable $e) { error_log('[sante_store] PG : ' . $e->getMessage()); $pdo = null; }
+    } catch (Throwable $e) { error_log('[sante_store] PG : ' . $e->getMessage()); $GLOBALS['sante_pg_erreur'] = $e->getMessage(); $pdo = null; }
     return $pdo;
 }
-function sante_fichier(): string { return getenv('SANTE_DATA_FILE') ?: __DIR__ . '/sante_data.json'; }
+/**
+ * Où vit le fichier de secours. Le dossier sante/ est créé par « git pull » — souvent par root : PHP (www-data) n'y
+ * peut alors rien écrire. Second emplacement : pending/ (que install.sh donne à PHP, hors dépôt). On LIT le fichier
+ * le plus récent des deux ; on ÉCRIT dans le dossier où PHP peut écrire (celui du fichier lu si possible).
+ * $ecrivable : prédicat de dossier (injecté par les tests ; is_writable par défaut).
+ */
+function sante_choisir_fichier(array $candidats, ?callable $ecrivable = null): array {
+    $ecrivable = $ecrivable ?: 'is_writable';
+    $existants = array_values(array_filter($candidats, 'is_file'));
+    usort($existants, fn($a, $b) => filemtime($b) <=> filemtime($a));
+    $lecture = $existants[0] ?? $candidats[0];
+    $ecriture = null;
+    foreach (array_merge($existants ? [$lecture] : [], $candidats) as $f) if ($ecrivable(dirname($f))) { $ecriture = $f; break; }
+    return ['lecture' => $lecture, 'ecriture' => $ecriture ?? $lecture, 'ecrivable' => $ecriture !== null];
+}
+function sante_candidats(): array { return [__DIR__ . '/sante_data.json', dirname(__DIR__) . '/pending/sante_data.json']; }
+function sante_fichier(): string { return getenv('SANTE_DATA_FILE') ?: sante_choisir_fichier(sante_candidats())['ecriture']; }
+function sante_fichier_lecture(): string { return getenv('SANTE_DATA_FILE') ?: sante_choisir_fichier(sante_candidats())['lecture']; }
 function sante_version(string $t): string { return sha1($t); }
 
 /** [texte, mode] : la base si elle a une ligne, sinon le fichier, sinon '{}'. */
@@ -38,7 +55,7 @@ function sante_lire(bool $verrou = false): array {
         $r = $pdo->query('SELECT data::text AS t FROM sante_state WHERE id = 1' . ($verrou ? ' FOR UPDATE' : ''))->fetch(PDO::FETCH_ASSOC);
         if ($r && $r['t'] !== null && $r['t'] !== '') return [$r['t'], 'postgres'];
     }
-    $f = sante_fichier();
+    $f = sante_fichier_lecture();
     if (is_file($f)) { $t = (string)file_get_contents($f); if (trim($t) !== '') return [$t, 'file']; }
     return ['{}', 'vide'];
 }
@@ -54,8 +71,8 @@ function sante_ecrire_fichier(string $texte): bool {
         }
     }
     $tmp = $f . '.tmp';
-    if (file_put_contents($tmp, $texte, LOCK_EX) === false) return false;
-    if (!@rename($tmp, $f)) { @unlink($tmp); return false; }
+    if (@file_put_contents($tmp, $texte, LOCK_EX) === false) { $GLOBALS['sante_fichier_erreur'] = 'PHP ne peut pas écrire dans ' . dirname($f); error_log('[sante_store] ' . $GLOBALS['sante_fichier_erreur']); return false; }
+    if (!@rename($tmp, $f)) { @unlink($tmp); $GLOBALS['sante_fichier_erreur'] = 'impossible de remplacer ' . $f; error_log('[sante_store] ' . $GLOBALS['sante_fichier_erreur']); return false; }
     return true;
 }
 /** Écrit l'état (tableau). $base = version connue du client : refus (conflit) si le serveur a changé depuis. */
@@ -77,7 +94,7 @@ function sante_ecrire(array $etat, ?string $base = null): array {
             $pdo->commit();
         }
         $okF = sante_ecrire_fichier($texte);
-        if (!$pdo && !$okF) return ['ok' => false, 'erreur' => 'écriture impossible (ni base ni fichier)'];
+        if (!$pdo && !$okF) return ['ok' => false, 'erreur' => 'écriture impossible — base : ' . ($GLOBALS['sante_pg_erreur'] ?? 'indisponible') . ' ; fichier : ' . ($GLOBALS['sante_fichier_erreur'] ?? 'inconnu')];
         [$relu] = sante_lire();
         return ['ok' => true, 'mode' => $pdo ? 'postgres' : 'file', 'version' => sante_version($relu)];
     } catch (Throwable $e) {
