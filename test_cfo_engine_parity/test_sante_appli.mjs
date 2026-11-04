@@ -268,6 +268,27 @@ z.close()`, docx, para]);
           && await p4.isVisible('[data-accueil]'), { nom: f.profil.nom, plans: f.plans, journal: f.journal, accueil: await p4.isVisible('[data-accueil]') });
         await p4.close();
     });
+    await section('L', async () => {
+        //  v1.4 — la page blanche après une mise à jour : la nouvelle page tournait avec les anciens fichiers JS gardés en cache
+        const html = fs.readFileSync(path.join(RACINE, 'sante/index.html'), 'utf8'), version = /const VERSION = '([^']+)'/.exec(html)[1];
+        const srcs = [...html.matchAll(/<script src="(sante_[^"]+)"/g)].map(m => m[1]);
+        v('L. chaque script local porte la version de la page (?v=' + version + ') : une mise à jour recharge toujours les bons fichiers', srcs.length === 2 && srcs.every(x => x.endsWith('?v=' + version)), srcs);
+        const vieux = (f) => execFileSync('git', ['show', 'origin/main:sante/' + f], { cwd: RACINE, encoding: 'utf8' });
+        const anciens = essai(() => ({ calculs: vieux('sante_calculs.js'), import: vieux('sante_import.js') }));
+        if (!anciens || /suiviPlan/.test(anciens.calculs)) { console.log('  ⏭️  fichiers d\'avant la v1.4 introuvables (origin/main) : contrôle du cache périmé ignoré'); return; }
+        const p5 = await browser.newPage();
+        await p5.route('https://unpkg.com/**', r => r.fulfill({ body: fs.readFileSync(vueJs), contentType: 'text/javascript' }));
+        await p5.route('https://cdn.jsdelivr.net/npm/chart.js', r => r.fulfill({ body: fs.readFileSync(chartJs), contentType: 'text/javascript' }));
+        await p5.route('https://cdn.tailwindcss.com/**', r => r.fulfill({ body: '', contentType: 'text/javascript' }));
+        //  le « cache » sert les vieux fichiers tant qu'on ne demande pas explicitement au serveur (cache: 'reload')
+        let rafraichi = false;
+        await p5.route('**/sante/sante_*.js*', r => { if (r.request().resourceType() === 'fetch') rafraichi = true;   // la demande explicite au serveur
+            return rafraichi ? r.continue() : r.fulfill({ body: /calculs/.test(r.request().url()) ? anciens.calculs : anciens.import, contentType: 'text/javascript' }); });
+        await p5.goto(U, { waitUntil: 'load' });
+        await p5.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__; }, null, { timeout: 15000 }).catch(() => {});
+        v('  → fichiers périmés détectés : rechargés depuis le serveur, la page redémarre seule (pas de page blanche)', rafraichi && await p5.isVisible('[data-onglet="plans"]'), { rafraichi });
+        await p5.close();
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close(); php.kill();

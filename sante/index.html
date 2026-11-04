@@ -8,8 +8,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="sante_calculs.js"></script>
-    <script src="sante_import.js"></script>
+    <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
+         (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
+    <script src="sante_calculs.js?v=1.4"></script>
+    <script src="sante_import.js?v=1.4"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -18,6 +20,23 @@
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
+<!-- v1.4 — plus jamais de page blanche muette : si l'appli n'a pas démarré après 8 s, on dit pourquoi et on propose de recharger -->
+<div id="demarrage-rate" hidden style="max-width:40rem;margin:3rem auto;padding:1rem 1.25rem;border:2px solid #fda4af;border-radius:1rem;background:#fff1f2;color:#9f1239;font:600 14px system-ui,sans-serif">
+    <p style="font-weight:900;font-size:16px">⚠️ Santé Master n’a pas pu démarrer</p>
+    <p style="margin-top:.4rem">Le plus souvent : le navigateur a gardé des fichiers d’une ancienne version. Rechargez sans le cache (Ctrl+F5, ou sur le téléphone : ⋮ → Actualiser). Vos données sont sur le serveur, rien n’est perdu.</p>
+    <p id="demarrage-erreur" style="margin-top:.4rem;font:12px ui-monospace,monospace;color:#64748b;word-break:break-all"></p>
+    <button type="button" onclick="location.reload()" style="margin-top:.6rem;padding:.4rem .9rem;border-radius:.6rem;background:#e11d48;color:#fff;font-weight:900">↻ Recharger</button>
+</div>
+<script>
+(function () {
+    var derniere = '';
+    window.addEventListener('error', function (e) { derniere = String((e && (e.message || (e.error && e.error.message))) || ''); });
+    setTimeout(function () {
+        var a = document.getElementById('app');
+        if (a && a.hasAttribute('v-cloak')) { document.getElementById('demarrage-erreur').textContent = derniere; document.getElementById('demarrage-rate').hidden = false; }
+    }, 8000);
+})();
+</script>
 <div id="app" v-cloak class="h-screen flex overflow-hidden bg-slate-50">
 
     <!-- Le menu, comme dans Finance : barre verticale sombre à gauche (un tiroir sur le téléphone) -->
@@ -484,6 +503,15 @@
 </div>
 
 <script>
+//  v1.4 — FICHIERS PÉRIMÉS EN CACHE : si sante_calculs.js / sante_import.js sont d'une version plus ancienne que cette page,
+//  on les recharge depuis le serveur (cache: 'reload' met le cache à jour) puis on recharge la page — une seule fois.
+(function () {
+    var perimes = typeof SanteCalc === 'undefined' || typeof SanteCalc.creer({}).suiviPlan !== 'function' || typeof SanteImport === 'undefined' || typeof SanteImport.lirePlan !== 'function';
+    if (!perimes) return;
+    var deja = false; try { deja = sessionStorage.getItem('sante_fichiers_rafraichis') === location.href; sessionStorage.setItem('sante_fichiers_rafraichis', location.href); } catch (e) { /* navigation privée */ }
+    if (!deja) Promise.all(Array.prototype.map.call(document.querySelectorAll('script[src*="sante_"]'), function (x) { return fetch(x.src, { cache: 'reload' }).catch(function () { return null; }); })).then(function () { location.reload(); });
+    throw new Error('fichiers de l’appli périmés dans le cache du navigateur (sante_calculs.js / sante_import.js)' + (deja ? ' — rechargez avec Ctrl+F5' : ' — rechargement…'));
+})();
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
