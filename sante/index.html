@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Santé Master — espace privé</title>
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="sante_calculs.js"></script>
+    <script src="sante_import.js"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+        .tabnum { font-variant-numeric: tabular-nums; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+<div id="app" v-cloak class="min-h-screen">
+
+    <!-- En-tête -->
+    <header class="bg-gradient-to-r from-emerald-700 to-teal-600 text-white">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <h1 class="text-xl font-black tracking-tight">🩺 Santé Master <span class="text-xs font-bold opacity-80">v{{ VERSION }}</span></h1>
+                <p class="text-xs opacity-90" data-profil-resume>{{ resumeProfil }}</p>
+            </div>
+            <label class="text-xs font-bold flex items-center gap-2">📅 Jour
+                <input type="date" v-model="dateJour" data-date-jour class="text-slate-800 rounded-lg px-2 py-1 text-sm font-bold">
+            </label>
+            <span data-statut-sauvegarde class="text-xs font-bold px-2 py-1 rounded-full" :class="statut === 'conflit' ? 'bg-rose-500' : statut === 'modifié' ? 'bg-amber-500' : 'bg-white/20'">{{ libelleStatut }}</span>
+        </div>
+        <nav class="max-w-6xl mx-auto px-2 flex gap-1 overflow-x-auto">
+            <button v-for="o in ONGLETS" :key="o.id" type="button" :data-onglet="o.id" @click="onglet = o.id"
+                    class="px-3 py-2 text-sm font-bold rounded-t-xl whitespace-nowrap" :class="onglet === o.id ? 'bg-slate-50 text-emerald-800' : 'text-white/90 hover:bg-white/10'">{{ o.libelle }}</button>
+        </nav>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-5 space-y-5">
+        <p class="text-[11px] text-slate-500 font-semibold" data-avertissement>Outil de suivi personnel : les calculs aident à comprendre, ils ne remplacent pas l’avis de votre médecin.</p>
+
+        <!-- Accueil : rien encore -->
+        <section v-if="vide" data-accueil class="carte p-5 space-y-3 border-emerald-200 bg-emerald-50/50">
+            <h2 class="text-lg font-black text-emerald-900">Bienvenue dans Santé Master</h2>
+            <p class="text-sm">Aucune donnée pour l’instant. Importez votre dossier initial (fichier <b>.json</b> fourni à part, jamais publié), ou découvrez l’appli avec un profil fictif.</p>
+            <div class="flex flex-wrap gap-2">
+                <label class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-black text-sm cursor-pointer">📂 Importer mon dossier
+                    <input type="file" accept=".json,application/json" class="hidden" data-import-dossier @change="importerDossier($event)">
+                </label>
+                <button type="button" data-charger-demo @click="chargerDemo" class="px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-800 font-black text-sm">🧪 Charger la démo (profil fictif)</button>
+            </div>
+        </section>
+        <p v-if="messageImport" class="text-sm font-bold text-emerald-800" data-message-import>{{ messageImport }}</p>
+
+        <!-- ═════ 1. PILOTAGE QUOTIDIEN ═════ -->
+        <section v-show="onglet === 'pilotage'" data-section="pilotage" class="space-y-5">
+            <div class="grid md:grid-cols-2 gap-5">
+                <div class="carte p-4 space-y-2">
+                    <h2 class="font-black text-emerald-900">✅ La journée du {{ dateLisible(dateJour) }}</h2>
+                    <label v-for="c in CHECKLIST" :key="c.id" class="flex items-center gap-3 py-1 cursor-pointer" :data-check="c.id">
+                        <input type="checkbox" class="w-5 h-5 accent-emerald-600" :checked="jour.checklist[c.id]" @change="jour.checklist[c.id] = $event.target.checked">
+                        <span class="text-sm" :class="jour.checklist[c.id] ? 'line-through text-slate-400' : 'font-semibold'">{{ c.libelle }}</span>
+                    </label>
+                    <p class="text-xs font-black text-emerald-700" data-checklist-score>{{ checklistFaits }}/{{ CHECKLIST.length }} faits</p>
+                </div>
+                <div class="space-y-5">
+                    <div class="carte p-4">
+                        <h2 class="font-black text-emerald-900 mb-2">🚶 Pas du jour</h2>
+                        <div class="flex items-end justify-between"><span class="text-3xl font-black tabnum" data-pas>{{ fmt(pasJour) }}</span><span class="text-sm text-slate-500">objectif {{ fmt(etat.profil.pas_objectif || 10000) }}</span></div>
+                        <div class="h-3 rounded-full bg-slate-100 mt-2 overflow-hidden"><div class="h-full bg-emerald-500" :style="{ width: Math.min(100, 100 * pasJour / (etat.profil.pas_objectif || 10000)) + '%' }"></div></div>
+                        <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pas (saisie)</span><input type="number" min="0" data-saisie-pas :value="jour.activite.pas ?? ''" @change="majActivite('pas', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Zone 2 à jeun (min)</span><input type="number" min="0" data-saisie-zone2 :value="jour.activite.zone2_min ?? ''" @change="majActivite('zone2_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Marches de 15 min après repas</span><input type="number" min="0" :value="jour.activite.marches_post ?? ''" @change="majActivite('marches_post', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Soleus pushups (min)</span><input type="number" min="0" :value="jour.activite.soleus_min ?? ''" @change="majActivite('soleus_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                        </div>
+                        <label class="flex items-center gap-2 mt-2 text-sm font-semibold"><input type="checkbox" data-saisie-machines class="w-4 h-4 accent-emerald-600" :checked="!!jour.activite.machines" @change="majActivite('machines', $event.target.checked)"> Séance machines bas du corps aujourd’hui</label>
+                        <p class="text-xs font-black mt-2" data-machines-semaine :class="machinesSemaine >= (etat.profil.seances_machines_semaine || 2) ? 'text-emerald-700' : 'text-amber-700'">🏋️ {{ machinesSemaine }}/{{ etat.profil.seances_machines_semaine || 2 }} séances machines cette semaine</p>
+                    </div>
+                    <div class="carte p-4" data-energie>
+                        <h2 class="font-black text-emerald-900 mb-2">🔥 Bilan énergétique</h2>
+                        <table class="w-full text-sm tabnum"><tbody>
+                            <tr><td>Calories ingérées</td><td class="text-right font-bold" data-kcal-ingerees>{{ fmt(kcalJour) }} kcal</td></tr>
+                            <tr><td>Métabolisme de base <span class="text-[10px] text-slate-400">(Mifflin-St Jeor)</span></td><td class="text-right font-bold">{{ bmr === null ? '—' : fmt(bmr) + ' kcal' }}</td></tr>
+                            <tr><td>Calories actives (Samsung Health)</td><td class="text-right font-bold">{{ jour.samsung.kcal_actives == null ? '—' : fmt(jour.samsung.kcal_actives) + ' kcal' }}</td></tr>
+                            <tr class="border-t"><td class="font-black">Bilan net</td><td class="text-right font-black" data-bilan-net :class="energie.net === null ? '' : energie.net < 0 ? 'text-emerald-700' : 'text-rose-700'">{{ energie.net === null ? '—' : (energie.net > 0 ? '+' : '') + fmt(energie.net) + ' kcal' }}</td></tr>
+                        </tbody></table>
+                        <p v-if="bmr === null" class="text-[11px] text-amber-700 font-bold mt-1">Pour le métabolisme de base : une pesée (onglet Poids) et votre taille (profil).</p>
+                        <p v-else-if="energie.net !== null" class="text-[11px] font-bold mt-1" :class="energie.net < 0 ? 'text-emerald-700' : 'text-rose-700'">{{ energie.net < 0 ? 'Déficit de ' + fmt(-energie.net) + ' kcal' : 'Excédent de ' + fmt(energie.net) + ' kcal' }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="carte p-4" data-profil>
+                <h2 class="font-black text-emerald-900 mb-2">👤 Profil</h2>
+                <div class="grid sm:grid-cols-3 gap-2 text-sm">
+                    <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Taille (cm)</span><input type="number" data-profil-taille :value="etat.profil.taille_cm ?? ''" @change="etat.profil.taille_cm = nb($event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                    <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pression systolique (mmHg, pour SCORE2)</span><input type="number" :value="etat.profil.pas_systolique ?? ''" @change="etat.profil.pas_systolique = nb($event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                    <label class="flex items-center gap-2 mt-4"><input type="checkbox" class="w-4 h-4" :checked="etat.profil.fumeur" @change="etat.profil.fumeur = $event.target.checked"> Fumeur</label>
+                </div>
+                <ul class="mt-2 text-xs text-slate-600 list-disc pl-5"><li v-for="t in etat.profil.terrain" :key="t">{{ t }}</li></ul>
+            </div>
+        </section>
+
+        <!-- ═════ 2. ANALYSES & BIOMARQUEURS ═════ -->
+        <section v-show="onglet === 'analyses'" data-section="analyses" class="space-y-5">
+            <div v-if="dernierBilan" class="grid md:grid-cols-3 gap-4" data-indicateurs>
+                <div class="carte p-4">
+                    <p class="text-[11px] font-black uppercase text-slate-500">Dernier bilan</p>
+                    <p class="text-lg font-black">{{ dateLisible(dernierBilan.date) }}</p>
+                    <p class="text-xs text-slate-500">{{ dernierBilan.labo || '' }}</p>
+                    <p v-if="ind.gilbert.statut === 'gilbert'" data-badge-gilbert class="mt-2 inline-block text-xs font-black px-2 py-1 rounded-full bg-sky-100 text-sky-800 border border-sky-200">{{ ind.gilbert.message }}</p>
+                    <p v-else-if="ind.gilbert.statut === 'alerte'" data-alerte-bilirubine class="mt-2 text-xs font-black px-2 py-1 rounded-lg bg-rose-100 text-rose-800">⚠️ {{ ind.gilbert.message }}</p>
+                </div>
+                <div class="carte p-4 text-sm tabnum">
+                    <p class="text-[11px] font-black uppercase text-slate-500 mb-1">Indicateurs calculés</p>
+                    <p>TG / HDL : <b data-ind-tg-hdl>{{ ind.ratio_tg_hdl ?? 'HDL manquant' }}</b></p>
+                    <p>Non-HDL : <b>{{ ind.non_hdl === null ? 'CT et HDL manquants' : ind.non_hdl + ' g/L' }}</b></p>
+                    <p>HOMA-IR : <b data-ind-homa>{{ ind.homa_ir ?? 'glycémie et insuline manquantes' }}</b></p>
+                    <p>TyG : <b data-ind-tyg>{{ ind.tyg ?? 'glycémie manquante' }}</b></p>
+                </div>
+                <div class="carte p-4 text-sm" data-score2>
+                    <p class="text-[11px] font-black uppercase text-slate-500 mb-1">Risque cardiovasculaire (SCORE2, 10 ans)</p>
+                    <template v-if="ind.score2.risque !== null">
+                        <p class="text-2xl font-black" :class="ind.score2.niveau === 'faible à modéré' ? 'text-emerald-700' : ind.score2.niveau === 'élevé' ? 'text-amber-600' : 'text-rose-700'">{{ ind.score2.risque }} %</p>
+                        <p class="text-xs font-bold">{{ ind.score2.niveau }} · région {{ ind.score2.region }}</p>
+                    </template>
+                    <p v-else class="text-xs font-bold text-amber-700">{{ ind.score2.raison }}</p>
+                </div>
+            </div>
+            <div class="carte p-4">
+                <div class="flex flex-wrap items-center gap-2 mb-3">
+                    <button v-for="(lib, s) in catalogue.systemes || {}" :key="s" type="button" :data-systeme="s" @click="systeme = s"
+                            class="px-3 py-1 rounded-full text-xs font-black border" :class="systeme === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600'">{{ lib }}</button>
+                    <span class="flex-1"></span>
+                    <button type="button" data-merlin @click="merlin = !merlin" class="px-3 py-1 rounded-full text-xs font-black border" :class="merlin ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-700 border-purple-200'">🪄 Merlin {{ merlin ? '(cliquez un biomarqueur)' : '' }}</button>
+                    <button type="button" data-ouvrir-import @click="importOuvert = !importOuvert" class="px-3 py-1 rounded-full text-xs font-black bg-teal-600 text-white">📥 Importer un bilan</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm tabnum" data-table-biomarqueurs>
+                        <thead><tr class="text-left text-[11px] uppercase text-slate-500"><th class="py-1 pr-2">Biomarqueur</th><th class="pr-2">Normes</th><th v-for="b in etat.bilans" :key="b.id" class="pr-2 whitespace-nowrap">{{ dateCourte(b.date) }}</th><th>Cible</th></tr></thead>
+                        <tbody>
+                            <tr v-for="k in lignesSysteme" :key="k" class="border-t hover:bg-slate-50 cursor-pointer" :data-marqueur="k" @click="cliquerMarqueur(k)" :class="marqueurChoisi === k ? 'bg-emerald-50' : ''">
+                                <td class="py-1 pr-2 font-semibold">{{ catalogue.marqueurs[k].libelle }} <span class="text-[10px] text-slate-400">{{ catalogue.marqueurs[k].unite }}</span></td>
+                                <td class="pr-2 text-[11px] text-slate-500 whitespace-nowrap">{{ normes(k) }}</td>
+                                <td v-for="b in etat.bilans" :key="b.id + k" class="pr-2 font-bold" :data-cellule="k + '|' + b.date" :class="couleurStatut(C.statut(b, k))">{{ C.val(b, k) ?? '' }}</td>
+                                <td class="text-[11px] font-bold text-emerald-700">{{ cible(k) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-if="marqueurChoisi" class="mt-4"><canvas id="graphMarqueur" height="90"></canvas></div>
+                <div v-if="explication" data-explication class="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm space-y-1">
+                    <p class="font-black text-purple-900">🪄 {{ catalogue.marqueurs[marqueurChoisi].libelle }} <span v-if="valeurChoisie !== null">— {{ valeurChoisie }} {{ catalogue.marqueurs[marqueurChoisi].unite }} ({{ C.statut(dernierAvec(marqueurChoisi), marqueurChoisi) }})</span></p>
+                    <p>{{ explication.role }}</p>
+                    <p v-if="explicationStatut" class="font-semibold">{{ explicationStatut }}</p>
+                    <ul v-if="explication.leviers" class="list-disc pl-5"><li v-for="l in explication.leviers" :key="l">{{ l }}</li></ul>
+                    <p v-if="impactProtocole" class="text-xs font-bold text-emerald-800" data-impact-protocole>Votre protocole actuel : {{ impactProtocole }}</p>
+                </div>
+            </div>
+            <div v-if="importOuvert" class="carte p-4 space-y-2" data-import-bilan>
+                <h3 class="font-black text-teal-900">📥 Importer un bilan</h3>
+                <p class="text-xs text-slate-500">Collez le texte du compte rendu, ou choisissez un PDF / une photo (lu sur place, rien n’est envoyé).</p>
+                <input type="file" accept=".pdf,image/*,.txt" data-import-fichier @change="lireFichierBilan($event)" class="text-sm">
+                <textarea v-model="texteBilan" data-import-texte rows="6" class="w-full border rounded-lg p-2 text-xs font-mono" placeholder="Hémoglobine 14,70 g/dL 13 - 18&#10;Triglycérides 2.17 g/L < 1.50"></textarea>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <button type="button" data-analyser-bilan @click="analyserBilan" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-black">🔎 Analyser</button>
+                    <span v-if="lectureEnCours" class="text-xs font-bold text-slate-500">{{ lectureEnCours }}</span>
+                </div>
+                <div v-if="apercu" data-apercu-bilan class="space-y-2">
+                    <label class="text-sm font-bold">Date du bilan <input type="date" v-model="apercu.date" data-apercu-date class="border rounded-lg px-2 py-1"></label>
+                    <p class="text-xs font-bold" data-apercu-compte>{{ Object.keys(apercu.valeurs).length }} biomarqueur(s) reconnu(s) : {{ Object.keys(apercu.valeurs).map(k => catalogue.marqueurs[k].libelle + ' ' + apercu.valeurs[k].v).join(' · ') }}</p>
+                    <p v-if="apercu.nonReconnues.length" class="text-[11px] text-amber-700">Non reconnues (à vérifier) : {{ apercu.nonReconnues.slice(0, 8).join(' | ') }}</p>
+                    <button type="button" data-ajouter-bilan @click="ajouterBilanApercu" :disabled="!apercu.date || !Object.keys(apercu.valeurs).length" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-black disabled:opacity-40">✓ Ajouter ce bilan</button>
+                    <p v-if="messageBilan" class="text-xs font-bold" data-message-bilan>{{ messageBilan }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═════ 3. NUTRITION & SÉQUENÇAGE ═════ -->
+        <section v-show="onglet === 'nutrition'" data-section="nutrition" class="space-y-5">
+            <div class="carte p-4 space-y-3">
+                <h2 class="font-black text-emerald-900">🥗 Nouveau repas — {{ dateLisible(dateJour) }}</h2>
+                <div class="flex flex-wrap gap-2 items-center text-sm">
+                    <select v-model="repas.moment" data-repas-moment class="border rounded-lg px-2 py-1">
+                        <option value="petit_dejeuner">Petit-déjeuner</option><option value="dejeuner">Déjeuner</option><option value="diner">Dîner</option><option value="collation">Collation</option>
+                    </select>
+                    <label class="flex items-center gap-1 font-semibold"><input type="checkbox" v-model="repas.marche" data-repas-marche class="w-4 h-4"> Marche de 15 min après</label>
+                </div>
+                <p class="text-xs text-slate-500">Dans l’ordre où vous mangez, séparés par des virgules : « salade 150, poulet 120, pain d’orge 60 » (grammes).</p>
+                <input v-model="repas.texte" data-repas-texte class="w-full border rounded-lg px-2 py-1 text-sm" list="aliments-liste" placeholder="salade 150, poulet 120, pain d'orge 60">
+                <datalist id="aliments-liste"><option v-for="(a, n) in aliments" :key="n" :value="n"></option></datalist>
+                <div v-if="repasItems.length" class="text-sm" data-repas-apercu>
+                    <table class="w-full tabnum text-xs"><thead><tr class="text-left text-slate-500"><th>#</th><th>Aliment</th><th>g</th><th>kcal</th><th>prot</th><th>glu</th><th>catégorie</th></tr></thead>
+                        <tbody><tr v-for="(it, i) in repasItems" :key="i" :class="it.connu ? '' : 'text-amber-700'"><td>{{ i + 1 }}</td><td>{{ it.nom }}{{ it.connu ? '' : ' (inconnu)' }}</td><td>{{ it.g }}</td><td>{{ it.kcal }}</td><td>{{ it.prot }}</td><td>{{ it.glu }}</td><td>{{ it.categorie }}{{ it.raffine ? ' · raffiné' : '' }}</td></tr></tbody></table>
+                    <p class="mt-2 font-black" data-repas-score>Score de séquençage : <span :class="repasScore.score >= 65 ? 'text-emerald-700' : repasScore.score >= 45 ? 'text-amber-600' : 'text-rose-700'">{{ repasScore.score }}/100</span> · {{ repasTotaux.kcal }} kcal · {{ repasTotaux.prot }} g de protéines</p>
+                    <p class="text-[11px] text-slate-500">{{ repasScore.detail.join(' · ') }}</p>
+                    <button type="button" data-repas-ajouter @click="ajouterRepas" :disabled="repasItems.some(i => !i.connu)" class="mt-2 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-black disabled:opacity-40">✓ Noter ce repas</button>
+                    <p v-if="repasItems.some(i => !i.connu)" class="text-[11px] text-amber-700 font-bold">Un aliment n’est pas dans la table : choisissez un nom de la liste (le Médecin-Chef IA saura estimer les autres, en phase 2).</p>
+                </div>
+            </div>
+            <div class="carte p-4" data-repas-du-jour>
+                <h3 class="font-black text-emerald-900 mb-2">Repas du jour · {{ fmt(kcalJour) }} kcal</h3>
+                <p v-if="!jour.repas.length" class="text-sm text-slate-500">Aucun repas noté.</p>
+                <div v-for="r in jour.repas" :key="r.id" class="border-t py-2 text-sm flex flex-wrap gap-2 items-center">
+                    <span class="font-black w-28">{{ MOMENTS[r.moment] }}</span>
+                    <span class="flex-1 text-xs">{{ r.items.map(i => i.nom + ' ' + i.g + ' g').join(' → ') }}</span>
+                    <span class="font-black tabnum">{{ r.totaux.kcal }} kcal</span>
+                    <span class="text-xs font-black px-2 py-0.5 rounded-full" :class="r.score >= 65 ? 'bg-emerald-100 text-emerald-800' : r.score >= 45 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'">{{ r.score }}/100</span>
+                    <button type="button" @click="retirerRepas(r.id)" class="text-rose-600 font-black">✕</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═════ 4. SAMSUNG HEALTH & POIDS ═════ -->
+        <section v-show="onglet === 'poids'" data-section="poids" class="space-y-5">
+            <div class="grid md:grid-cols-3 gap-4">
+                <div class="carte p-4">
+                    <p class="text-[11px] font-black uppercase text-slate-500">Poids actuel</p>
+                    <p class="text-3xl font-black tabnum" data-poids-actuel>{{ dernierPoids === null ? '—' : dernierPoids + ' kg' }}</p>
+                    <p class="text-sm">Objectif : <b>{{ etat.objectifs.poids_kg ?? '—' }} kg</b></p>
+                </div>
+                <div class="carte p-4" data-projection>
+                    <p class="text-[11px] font-black uppercase text-slate-500">Projection</p>
+                    <template v-if="projection.date && !projection.atteint"><p class="text-xl font-black">{{ dateLisible(projection.date) }}</p><p class="text-xs">{{ projection.kg_semaine }} kg/semaine · selon {{ projection.source }}</p></template>
+                    <p v-else-if="projection.atteint" class="text-xl font-black text-emerald-700">Objectif atteint 🎉</p>
+                    <p v-else class="text-sm font-bold text-amber-700">{{ projection.raison }}</p>
+                </div>
+                <div class="carte p-4 space-y-2">
+                    <p class="text-[11px] font-black uppercase text-slate-500">Nouvelle pesée</p>
+                    <div class="flex gap-2"><input type="number" step="0.1" v-model="pesee" data-pesee class="border rounded-lg px-2 py-1 w-24" placeholder="kg"><button type="button" data-ajouter-pesee @click="ajouterPesee" class="px-3 py-1 rounded-lg bg-emerald-600 text-white font-black text-sm">+ le {{ dateCourte(dateJour) }}</button></div>
+                </div>
+            </div>
+            <div class="carte p-4"><canvas id="graphPoids" height="80"></canvas></div>
+            <div class="carte p-4 space-y-3" data-samsung>
+                <h2 class="font-black text-emerald-900">📲 Samsung Health</h2>
+                <p class="text-sm" data-samsung-jour>Aujourd’hui : {{ fmt(jour.samsung.pas) }} pas · {{ fmt(jour.samsung.kcal_actives) }} kcal actives · FC repos {{ jour.samsung.fc_repos ?? '—' }} · sommeil {{ jour.samsung.sommeil_min == null ? '—' : Math.floor(jour.samsung.sommeil_min / 60) + ' h ' + String(jour.samsung.sommeil_min % 60).padStart(2, '0') }}</p>
+                <div class="text-sm space-y-1">
+                    <p class="font-bold">a) Synchronisation automatique (Health Connect → webhook)</p>
+                    <p class="text-xs">Adresse : <code class="bg-slate-100 px-1 rounded" data-url-webhook>{{ urlWebhook }}</code> · en-tête <code class="bg-slate-100 px-1 rounded">X-Sante-Token</code> (jeton à définir dans db_config.php, clé <code>sante_samsung_token</code>).</p>
+                    <p class="font-bold mt-2">b) Fichier CSV exporté de Samsung Health</p>
+                    <input type="file" accept=".csv,text/csv" data-import-csv @change="importerCsv($event)" class="text-sm">
+                    <p v-if="messageCsv" class="text-xs font-bold" data-message-csv>{{ messageCsv }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═════ 5. MÉDECIN-CHEF IA ═════ -->
+        <section v-show="onglet === 'cmo'" data-section="cmo" class="space-y-5">
+            <div class="carte p-4 space-y-3">
+                <h2 class="font-black text-emerald-900">🧠 Médecin-Chef IA</h2>
+                <p class="text-sm">Le Médecin-Chef IA lit les chiffres calculés par l’appli et agit par un catalogue strict (bilans, repas, activité, Samsung, suppléments, objectifs) : il ne calcule rien de tête.</p>
+                <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900" data-cmo-phase2>Phase 2 : le workflow n8n du Médecin-Chef IA (Telegram « Telegram santé account », Google Drive) n’est pas encore installé. L’API qu’il utilisera est prête : <code>sante_api.php</code>. En attendant, 🪄 Merlin explique chaque biomarqueur dans l’onglet Analyses.</div>
+                <label class="text-xs font-bold flex flex-col">Adresse du webhook n8n<input v-model="cmoUrl" data-cmo-url @change="sauverCmoUrl" class="border rounded-lg px-2 py-1 font-mono"></label>
+                <div class="space-y-2 max-h-80 overflow-y-auto" data-cmo-fil>
+                    <div v-for="(m, i) in cmoMessages" :key="i" class="text-sm rounded-xl px-3 py-2" :class="m.role === 'user' ? 'bg-emerald-50 ml-10' : 'bg-slate-100 mr-10'">{{ m.texte }}</div>
+                </div>
+                <div class="flex gap-2"><input v-model="cmoQuestion" data-cmo-question @keydown.enter="demanderCmo" class="flex-1 border rounded-lg px-2 py-1 text-sm" placeholder="Que disent mes triglycérides ?"><button type="button" data-cmo-envoyer @click="demanderCmo" :disabled="cmoAttente" class="px-3 py-1 rounded-lg bg-emerald-600 text-white font-black text-sm">{{ cmoAttente ? '…' : 'Envoyer' }}</button></div>
+                <button type="button" disabled class="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-500 text-sm font-black" title="Phase 2 : workflow n8n + identifiant Google Drive">📁 Indexer mes fichiers Santé (Google Drive) — phase 2</button>
+            </div>
+            <div class="carte p-4 text-sm space-y-1" data-protocole>
+                <h3 class="font-black text-emerald-900">📋 Protocole & suppléments</h3>
+                <ul class="list-disc pl-5"><li v-for="p in etat.protocole" :key="p">{{ p }}</li></ul>
+                <p class="font-bold mt-2">Suppléments :</p>
+                <ul class="list-disc pl-5"><li v-for="s in etat.supplements" :key="s.nom" :class="s.actif ? '' : 'line-through text-slate-400'">{{ s.nom }}{{ s.dose ? ' — ' + s.dose : '' }}{{ s.moment ? ' (' + s.moment + ')' : '' }}</li></ul>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script>
+const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
+createApp({
+    setup() {
+        const VERSION = '1.0';
+        const ONGLETS = [
+            { id: 'pilotage', libelle: '🎯 Pilotage' }, { id: 'analyses', libelle: '🩸 Analyses' }, { id: 'nutrition', libelle: '🥗 Nutrition' },
+            { id: 'poids', libelle: '📱 Samsung & Poids' }, { id: 'cmo', libelle: '🧠 Médecin-Chef IA' },
+        ];
+        const CHECKLIST = [
+            { id: 'zone2', libelle: 'Marche Zone 2 à jeun (40-45 min)' }, { id: 'cafe_mct', libelle: 'Café noir + 1 c. à c. d’huile MCT C8' },
+            { id: 'dej_seq', libelle: 'Déjeuner séquencé (fibres → protéines → glucides)' }, { id: 'dej_marche', libelle: 'Marche de 15 min après le déjeuner' },
+            { id: 'din_seq', libelle: 'Dîner séquencé' }, { id: 'din_marche', libelle: 'Marche de 15 min après le dîner' },
+            { id: 'soleus', libelle: 'Soleus pushups au travail' }, { id: 'supplements', libelle: 'Suppléments du protocole pris' },
+        ];
+        const MOMENTS = { petit_dejeuner: 'Petit-déj.', dejeuner: 'Déjeuner', diner: 'Dîner', collation: 'Collation' };
+        const CIBLES = { tg: 'tg_gl', apob: 'apob_gl', vitd: 'vitd_ngml' };
+        const aujourdhui = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+        const catalogue = ref({ marqueurs: {}, systemes: {} });
+        const aliments = ref({});
+        const explications = ref({});
+        let C = SanteCalc.creer({});
+        const Cref = shallowRef(C);
+        const etat = reactive({ profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [] });
+        const version = ref(null), statut = ref('chargement'), charge = ref(false);
+        const onglet = ref('pilotage'), dateJour = ref(aujourdhui());
+        const messageImport = ref('');
+
+        // ── chargement et sauvegarde ──
+        const remplacer = (d) => { Object.keys(etat).forEach(k => delete etat[k]); Object.assign(etat, { profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [] }, d || {}); if (Array.isArray(etat.journal)) etat.journal = {}; };
+        const charger = async () => {
+            const [cat, al, ex] = await Promise.all(['biomarqueurs.json', 'aliments.json', 'explications.json'].map(f => fetch(f, { cache: 'no-store' }).then(r => r.json())));
+            catalogue.value = cat; aliments.value = al.aliments || {}; explications.value = ex.marqueurs || {};
+            C = SanteCalc.creer({ catalogue: cat, aliments: aliments.value }); Cref.value = C;
+            const r = await fetch('save_sante.php', { cache: 'no-store' });
+            version.value = r.headers.get('X-Sante-Version');
+            remplacer(await r.json());
+            await nextTick(); charge.value = true; statut.value = 'enregistré';
+        };
+        let minuteur = null;
+        const sauver = async () => {
+            const r = await fetch('save_sante.php', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(version.value ? { 'X-Sante-Base': version.value } : {}) }, body: JSON.stringify(etat) });
+            if (r.status === 409) { statut.value = 'conflit'; return; }
+            const j = await r.json().catch(() => ({}));
+            if (j.ok) { version.value = j.version || r.headers.get('X-Sante-Version'); statut.value = 'enregistré'; } else statut.value = 'erreur';
+        };
+        watch(etat, () => { if (!charge.value) return; statut.value = 'modifié'; clearTimeout(minuteur); minuteur = setTimeout(sauver, 700); }, { deep: true });
+        const libelleStatut = computed(() => ({ chargement: '⏳ chargement', 'modifié': '✎ modifié', 'enregistré': '✓ enregistré', conflit: '⚠️ modifié ailleurs — rechargez', erreur: '⚠️ non enregistré' })[statut.value] || statut.value);
+        const vide = computed(() => charge.value && !etat.bilans.length && !etat.profil.naissance);
+        const chargerDemo = async () => { const d = await fetch('seed_demo.json', { cache: 'no-store' }).then(r => r.json()); remplacer(d); messageImport.value = 'Démo chargée (profil fictif).'; };
+        const importerDossier = (ev) => {
+            const f = ev.target.files && ev.target.files[0]; if (!f) return;
+            const lr = new FileReader();
+            lr.onload = () => { try { const d = JSON.parse(lr.result); if (!d || typeof d !== 'object' || !d.profil) throw new Error('fichier sans profil'); remplacer(d); messageImport.value = 'Dossier importé : ' + (d.bilans || []).length + ' bilan(s).'; } catch (e) { messageImport.value = '❌ Fichier illisible : ' + e.message; } };
+            lr.readAsText(f);
+        };
+
+        // ── outils d'affichage ──
+        const fmt = (n) => n === null || n === undefined || n === '' ? '—' : Math.round(Number(n)).toLocaleString('fr-FR');
+        const nb = (v) => { const n = C.num(v); return n; };
+        const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+        const dateLisible = (d) => d ? Number(d.slice(8, 10)) + ' ' + MOIS[Number(d.slice(5, 7)) - 1] + ' ' + d.slice(0, 4) : '';
+        const dateCourte = (d) => d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(2, 4) : '';
+        const age = computed(() => C.age(etat.profil.naissance, dateJour.value));
+        const resumeProfil = computed(() => [etat.profil.nom, etat.profil.sexe === 'F' ? 'Femme' : 'Homme', age.value !== null ? age.value + ' ans' : null, etat.objectifs.poids_kg ? 'objectif ' + etat.objectifs.poids_kg + ' kg' : null].filter(Boolean).join(' · '));
+
+        // ── le jour ──
+        const jourVide = () => ({ checklist: Object.fromEntries(CHECKLIST.map(c => [c.id, false])), repas: [], activite: {}, samsung: {} });
+        const jour = computed(() => {
+            if (!etat.journal[dateJour.value]) etat.journal[dateJour.value] = jourVide();
+            const j = etat.journal[dateJour.value];
+            ['checklist', 'activite', 'samsung'].forEach(k => { if (!j[k] || Array.isArray(j[k])) j[k] = k === 'checklist' ? jourVide().checklist : {}; });
+            if (!Array.isArray(j.repas)) j.repas = [];
+            return j;
+        });
+        const checklistFaits = computed(() => CHECKLIST.filter(c => jour.value.checklist[c.id]).length);
+        const majActivite = (k, v) => { jour.value.activite[k] = k === 'machines' ? !!v : nb(v); if (k === 'zone2_min' && (nb(v) || 0) >= 40) jour.value.checklist.zone2 = true; if (k === 'soleus_min' && (nb(v) || 0) > 0) jour.value.checklist.soleus = true; };
+        const pasJour = computed(() => Math.max(Number(jour.value.activite.pas || 0), Number(jour.value.samsung.pas || 0)));
+        const machinesSemaine = computed(() => {
+            const d = new Date(dateJour.value + 'T12:00:00'), lundi = new Date(d); lundi.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+            let n = 0; for (let i = 0; i < 7; i++) { const x = new Date(lundi); x.setDate(lundi.getDate() + i); const k = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); if (etat.journal[k] && etat.journal[k].activite && etat.journal[k].activite.machines) n++; }
+            return n;
+        });
+        const kcalJour = computed(() => jour.value.repas.reduce((s, r) => s + Number((r.totaux || {}).kcal || 0), 0));
+        const pesees = computed(() => etat.poids || []);
+        const dernierPoids = computed(() => pesees.value.length ? pesees.value[pesees.value.length - 1].kg : null);
+        const bmr = computed(() => C.bmr(dernierPoids.value, C.num(etat.profil.taille_cm), age.value, etat.profil.sexe || 'H'));
+        const energie = computed(() => C.bilanEnergie(kcalJour.value || null, bmr.value, C.num(jour.value.samsung.kcal_actives)));
+
+        // ── analyses ──
+        const systeme = ref('cardio'), merlin = ref(false), marqueurChoisi = ref(null), importOuvert = ref(false);
+        const dernierBilan = computed(() => etat.bilans.length ? etat.bilans[etat.bilans.length - 1] : null);
+        const ind = computed(() => dernierBilan.value ? C.indicateurs(dernierBilan.value, etat.profil) : null);
+        const lignesSysteme = computed(() => Object.keys(catalogue.value.marqueurs || {}).filter(k => catalogue.value.marqueurs[k].systeme === systeme.value && etat.bilans.some(b => C.val(b, k) !== null)));
+        const dernierAvec = (k) => [...etat.bilans].reverse().find(b => C.val(b, k) !== null) || {};
+        const normes = (k) => { const [mn, mx] = C.bornes(dernierAvec(k), k); return mn !== null && mx !== null ? mn + ' – ' + mx : mn !== null ? '> ' + mn : mx !== null ? '< ' + mx : ''; };
+        const cible = (k) => { const c = CIBLES[k]; const v = c ? etat.objectifs[c] : null; if (v === null || v === undefined) return ''; return (k === 'vitd' ? '> ' : '< ') + v; };
+        const couleurStatut = (s) => s === 'haut' ? 'text-rose-700' : s === 'bas' ? 'text-amber-600' : s === 'normal' ? 'text-emerald-700' : 'text-slate-400';
+        const cliquerMarqueur = (k) => { marqueurChoisi.value = k; };
+        const explication = computed(() => merlin.value && marqueurChoisi.value ? explications.value[marqueurChoisi.value] || { role: 'Pas encore d’explication pour ce biomarqueur.' } : null);
+        const valeurChoisie = computed(() => marqueurChoisi.value ? C.val(dernierAvec(marqueurChoisi.value), marqueurChoisi.value) : null);
+        const explicationStatut = computed(() => { if (!explication.value) return ''; const s = C.statut(dernierAvec(marqueurChoisi.value), marqueurChoisi.value); return s === 'haut' ? explication.value.haut || '' : s === 'bas' ? explication.value.bas || '' : ''; });
+        const impactProtocole = computed(() => {
+            const k = marqueurChoisi.value; if (!k) return '';
+            const P = { tg: 'séquençage des repas, marches de 15 min après les repas et marche Zone 2 à jeun agissent directement sur les triglycérides.',
+                        apob: 'la baisse des triglycérides et la perte de poids réduisent le nombre de particules ApoB ; les fibres d’orge (pain d’orge) aident aussi.',
+                        vitd: 'avec une supplémentation en vitamine D3, un contrôle après 3 mois dit si la dose suffit pour atteindre la cible.',
+                        bili_t: 'rien à corriger : profil Gilbert bénin.', bili_l: 'rien à corriger : profil Gilbert bénin.',
+                        glycemie: 'séquençage, marches post-repas et renforcement musculaire améliorent la sensibilité à l’insuline.', insuline: 'séquençage, marches post-repas et renforcement musculaire améliorent la sensibilité à l’insuline.' };
+            return P[k] || '';
+        });
+        let graphM = null, graphP = null;
+        const dessinerMarqueur = async () => {
+            await nextTick(); const cv = document.getElementById('graphMarqueur'); if (!cv || !marqueurChoisi.value || typeof Chart === 'undefined') return;
+            const k = marqueurChoisi.value, pts = etat.bilans.filter(b => C.val(b, k) !== null);
+            if (graphM) graphM.destroy();
+            const [mn, mx] = C.bornes(dernierAvec(k), k);
+            const ds = [{ label: catalogue.value.marqueurs[k].libelle, data: pts.map(b => C.val(b, k)), borderColor: '#059669', backgroundColor: '#059669', tension: 0.2 }];
+            if (mx !== null) ds.push({ label: 'norme max', data: pts.map(() => mx), borderColor: '#f43f5e', borderDash: [6, 4], pointRadius: 0 });
+            if (mn !== null) ds.push({ label: 'norme min', data: pts.map(() => mn), borderColor: '#f59e0b', borderDash: [6, 4], pointRadius: 0 });
+            graphM = new Chart(cv, { type: 'line', data: { labels: pts.map(b => dateCourte(b.date)), datasets: ds }, options: { animation: false, plugins: { legend: { display: true } } } });
+        };
+        watch([marqueurChoisi, () => etat.bilans.length, onglet], dessinerMarqueur);
+
+        // ── import d'un bilan ──
+        const texteBilan = ref(''), apercu = ref(null), lectureEnCours = ref(''), messageBilan = ref('');
+        const charger_script = (src) => new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => ko(new Error('chargement de ' + src)); document.head.appendChild(s); });
+        const lireFichierBilan = async (ev) => {
+            const f = ev.target.files && ev.target.files[0]; if (!f) return;
+            try {
+                if (/\.txt$/i.test(f.name)) { texteBilan.value = await f.text(); }
+                else if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+                    lectureEnCours.value = 'Lecture du PDF…';
+                    if (!window.pdfjsLib) { await charger_script('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
+                    const pdf = await window.pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise; const lignes = [];
+                    for (let p = 1; p <= pdf.numPages; p++) {
+                        const c = await (await pdf.getPage(p)).getTextContent(), rangs = {};
+                        c.items.forEach(it => { const y = Math.round(it.transform[5]); (rangs[y] = rangs[y] || []).push(it); });
+                        Object.keys(rangs).map(Number).sort((a, b) => b - a).forEach(y => lignes.push(rangs[y].sort((a, b) => a.transform[4] - b.transform[4]).map(i => i.str).join(' ')));
+                    }
+                    texteBilan.value = lignes.join('\n');
+                } else {
+                    lectureEnCours.value = 'Lecture de l’image (OCR, 20-40 s)…';
+                    if (!window.Tesseract) await charger_script('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+                    const r = await window.Tesseract.recognize(f, 'fra');
+                    texteBilan.value = r.data.text;
+                }
+                lectureEnCours.value = ''; analyserBilan();
+            } catch (e) { lectureEnCours.value = '❌ ' + e.message; }
+        };
+        const analyserBilan = () => { const r = SanteImport.lireBilan(texteBilan.value, catalogue.value); apercu.value = { date: r.date || dateJour.value, valeurs: r.valeurs, nonReconnues: r.nonReconnues }; messageBilan.value = ''; };
+        const ajouterBilanApercu = () => {
+            const a = apercu.value; if (!a) return;
+            const ex = etat.bilans.find(b => b.date === a.date);
+            if (ex) { Object.assign(ex.valeurs, a.valeurs); messageBilan.value = 'Bilan du ' + dateLisible(a.date) + ' complété (' + Object.keys(a.valeurs).length + ' valeurs).'; }
+            else { etat.bilans.push({ id: Math.random().toString(16).slice(2, 14), date: a.date, labo: '', source: 'import', valeurs: a.valeurs }); etat.bilans.sort((x, y) => x.date < y.date ? -1 : 1); messageBilan.value = 'Bilan du ' + dateLisible(a.date) + ' ajouté.'; }
+        };
+
+        // ── nutrition ──
+        const repas = reactive({ moment: 'dejeuner', marche: false, texte: '' });
+        const repasItems = computed(() => repas.texte.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+            const m = /^(.*?)\s+(\d+(?:[.,]\d+)?)\s*g?$/i.exec(s);
+            return C.item(m ? { nom: m[1], g: m[2] } : { nom: s });
+        }));
+        const repasScore = computed(() => C.scoreSequencage(repasItems.value, repas.marche));
+        const repasTotaux = computed(() => C.totauxRepas(repasItems.value));
+        const ajouterRepas = () => {
+            if (!repasItems.value.length || repasItems.value.some(i => !i.connu)) return;
+            const sc = repasScore.value;
+            jour.value.repas.push({ id: Math.random().toString(16).slice(2, 14), moment: repas.moment, items: repasItems.value, marche_post: repas.marche, score: sc.score, score_detail: sc.detail, totaux: repasTotaux.value });
+            if (repas.moment === 'dejeuner') { if (sc.score >= 65) jour.value.checklist.dej_seq = true; if (repas.marche) jour.value.checklist.dej_marche = true; }
+            if (repas.moment === 'diner') { if (sc.score >= 65) jour.value.checklist.din_seq = true; if (repas.marche) jour.value.checklist.din_marche = true; }
+            repas.texte = ''; repas.marche = false;
+        };
+        const retirerRepas = (id) => { jour.value.repas = jour.value.repas.filter(r => r.id !== id); };
+
+        // ── poids & Samsung ──
+        const pesee = ref('');
+        const ajouterPesee = () => { const kg = nb(pesee.value); if (kg === null || kg < 20 || kg > 400) return; etat.poids = etat.poids.filter(p => p.date !== dateJour.value || p.source !== 'saisie'); etat.poids.push({ date: dateJour.value, kg, source: 'saisie' }); etat.poids.sort((a, b) => a.date < b.date ? -1 : 1); pesee.value = ''; };
+        const deficitMoyen = computed(() => {
+            const nets = Object.keys(etat.journal).sort().slice(-7).map(d => { const j = etat.journal[d], k = (j.repas || []).reduce((s, r) => s + Number((r.totaux || {}).kcal || 0), 0); const e = C.bilanEnergie(k || null, bmr.value, C.num((j.samsung || {}).kcal_actives)); return e.net; }).filter(n => n !== null);
+            return nets.length ? nets.reduce((s, n) => s + n, 0) / nets.length : null;
+        });
+        const projection = computed(() => C.projectionPoids(pesees.value, C.num(etat.objectifs.poids_kg), deficitMoyen.value, dateJour.value));
+        const dessinerPoids = async () => {
+            await nextTick(); const cv = document.getElementById('graphPoids'); if (!cv || typeof Chart === 'undefined') return;
+            if (graphP) graphP.destroy();
+            const P = pesees.value, cibleKg = C.num(etat.objectifs.poids_kg);
+            const ds = [{ label: 'Poids (kg)', data: P.map(p => p.kg), borderColor: '#0d9488', backgroundColor: '#0d9488', tension: 0.2 }];
+            if (cibleKg !== null) ds.push({ label: 'Objectif', data: P.map(() => cibleKg), borderColor: '#10b981', borderDash: [6, 4], pointRadius: 0 });
+            graphP = new Chart(cv, { type: 'line', data: { labels: P.map(p => dateCourte(p.date)), datasets: ds }, options: { animation: false } });
+        };
+        watch([() => etat.poids.length, onglet, () => etat.objectifs.poids_kg], dessinerPoids);
+        const urlWebhook = computed(() => location.origin + location.pathname.replace(/[^/]*$/, '') + 'sync_samsung.php');
+        const messageCsv = ref('');
+        const importerCsv = async (ev) => {
+            const f = ev.target.files && ev.target.files[0]; if (!f) return;
+            const lignes = (await f.text()).split(/\r?\n/).filter(l => l.trim());
+            const sep = (lignes[0].match(/;/g) || []).length > (lignes[0].match(/,/g) || []).length ? ';' : ',';
+            const tete = lignes[0].split(sep).map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+            const col = (noms) => tete.findIndex(h => noms.some(n => h === n || h.endsWith('.' + n) || h.includes(n)));
+            const iD = col(['date', 'day_time', 'day', 'jour']), C2 = { pas: col(['step_count', 'steps', 'pas', 'count']), kcal_actives: col(['active_calorie', 'calorie', 'kcal']), poids: col(['weight', 'poids']), fc_repos: col(['resting', 'fc_repos']), sommeil_min: col(['sleep', 'sommeil']) };
+            if (iD < 0) { messageCsv.value = '❌ Colonne de date introuvable'; return; }
+            let n = 0;
+            lignes.slice(1).forEach(l => {
+                const c = l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+                let d = c[iD] || ''; if (/^\d{12,13}$/.test(d)) d = new Date(Number(d)).toISOString().slice(0, 10); d = d.slice(0, 10).replace(/\//g, '-');
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+                if (!etat.journal[d]) etat.journal[d] = jourVide();
+                const j = etat.journal[d]; if (!j.samsung || Array.isArray(j.samsung)) j.samsung = {};
+                Object.entries(C2).forEach(([k, i]) => { if (i >= 0 && C.num(c[i]) !== null) j.samsung[k] = C.num(c[i]); });
+                if (j.samsung.poids) { etat.poids = etat.poids.filter(p => !(p.date === d && p.source === 'samsung')); etat.poids.push({ date: d, kg: j.samsung.poids, source: 'samsung' }); }
+                n++;
+            });
+            etat.poids.sort((a, b) => a.date < b.date ? -1 : 1);
+            messageCsv.value = n + ' jour(s) importé(s).';
+        };
+
+        // ── Médecin-Chef IA ──
+        const cmoUrl = ref((() => { try { return localStorage.getItem('sante_cmo_url') || ''; } catch (_) { return ''; } })() || (location.origin + '/webhook/sante-cmo'));
+        const sauverCmoUrl = () => { try { localStorage.setItem('sante_cmo_url', cmoUrl.value); } catch (_) { /* stockage bloqué */ } };
+        const cmoMessages = ref([]), cmoQuestion = ref(''), cmoAttente = ref(false);
+        const demanderCmo = async () => {
+            const q = cmoQuestion.value.trim(); if (!q || cmoAttente.value) return;
+            cmoMessages.value.push({ role: 'user', texte: q }); cmoQuestion.value = ''; cmoAttente.value = true;
+            try {
+                const r = await fetch(cmoUrl.value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, source: 'web', session_id: 'sante-web' }) });
+                const t = await r.text(); let txt = t; try { const j = JSON.parse(t); txt = j.output || j.text || j.html || t; } catch (_) { /* texte brut */ }
+                cmoMessages.value.push({ role: 'cmo', texte: r.ok ? String(txt).replace(/<[^>]+>/g, '') : 'Le Médecin-Chef IA ne répond pas (' + r.status + ') : son workflow n8n n’est pas encore installé (phase 2).' });
+            } catch (e) { cmoMessages.value.push({ role: 'cmo', texte: 'Le Médecin-Chef IA est injoignable : son workflow n8n n’est pas encore installé (phase 2).' }); }
+            cmoAttente.value = false;
+        };
+
+        onMounted(charger);
+        return { VERSION, ONGLETS, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
+                 fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
+                 systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
+                 texteBilan, apercu, lectureEnCours, messageBilan, lireFichierBilan, analyserBilan, ajouterBilanApercu,
+                 repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv,
+                 cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, C: Cref };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>

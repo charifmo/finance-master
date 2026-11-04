@@ -160,8 +160,12 @@ try {
         v('  → la même version toujours annoncée après le rechargement : pas de boucle, un bandeau « Recharger »',
           /\?v=99\.0%20Test/.test(apres.url) && /Version 99\.0 Test disponible/.test(apres.bandeau || ''), JSON.stringify(apres));
         //  2. Des saisies non sauvegardées : jamais de rechargement, le bandeau
+        //  la vérification automatique (4 s après l'ouverture) ne doit pas voir la nouvelle version avant que les saisies
+        //  soient marquées non sauvegardées — sous charge, l'ouverture peut dépasser 4 s
+        serveurPlusRecent = false;
         const { ctx: ctx2, page: p2 } = await ouvrir();
         await p2.evaluate((ST) => { eval(ST).serverSyncStatus = 'modified'; }, ST);
+        serveurPlusRecent = true;
         await p2.clock.setFixedTime(new Date(T0.getTime() + 600000));
         const url0 = p2.url();
         await p2.evaluate(async (ST) => { await eval(ST).verifierVersion(); await new Promise(r => setTimeout(r, 300)); }, ST);

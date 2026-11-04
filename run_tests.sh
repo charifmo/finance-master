@@ -31,7 +31,7 @@ suite() {
 }
 
 echo "▸ Syntaxe PHP"
-for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php; do
+for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php sante/sante_lib.php sante/sante_integrity.php sante/sante_intent_engine.php sante/sante_store.php sante/save_sante.php sante/sante_api.php sante/sync_samsung.php sauvegarde.php; do
     [ -f "$f" ] && php -l "$f" > /dev/null && echo "  ✅ $f"
 done
 
@@ -126,6 +126,12 @@ suite "Un revenu négatif est une sortie : Relevé, Surplus, Respiration, Bilan"
 suite "L’épargne s’adapte au potentiel : bouton, CFO, doublon refusé"  node test_cfo_engine_parity/test_epargne_potentiel.mjs
 suite "Solde Attijari à un seul chiffre après la virgule"  node test_cfo_engine_parity/test_solde_un_chiffre.mjs
 suite "Le Courant alimenté au juste besoin ; le CFO demande, l’appli calcule"  node test_cfo_engine_parity/test_alimentation_juste_besoin.mjs
+suite "Recalibrer l’année en un geste ; les garde-fous"                 node test_cfo_engine_parity/test_recalibrage.mjs
+suite "Écran « Aujourd’hui », mode expert, réponses instantanées du CFO"  node test_cfo_engine_parity/test_aujourdhui.mjs
 suite "Connexion au CFO : « Failed to fetch » diagnostiqué, nouvel essai, écran allumé"  node test_cfo_engine_parity/test_connexion_cfo.mjs
+suite "Santé Master : calculs, règle de Gilbert, intégrité, moteur d'intentions"  php test_cfo_engine_parity/test_sante_calculs.php
+suite "Santé Master : parité JS ↔ PHP, lecture des comptes rendus"  node test_cfo_engine_parity/test_sante_parite.mjs
+suite "Santé Master : l'appli, le stockage, l'API du CMO, le webhook Samsung"  node test_cfo_engine_parity/test_sante_appli.mjs
+suite "Sauvegarde hors du VPS (Telegram) et surveillance"  php test_cfo_engine_parity/test_sauvegarde.php
 
 node run_parallel.mjs "$LISTE" "${JOBS:-$(nproc 2>/dev/null || echo 4)}"

@@ -18,6 +18,7 @@
 #           sudo bash install.sh securite  (controle anti-hameconnage, lecture seule)
 #           sudo bash install.sh cfo       (v37.69 : workflow CFO -> coquille, une fois)
 #           sudo bash install.sh cfo-retour (remet le workflow CFO d'avant)
+#           sudo bash install.sh sauvegarde (v37.96 : sauvegarde quotidienne envoyee sur Telegram + surveillance horaire)
 # ==============================================================================
 set -euo pipefail
 
@@ -447,6 +448,49 @@ retour_cfo() {
 }
 
 # -----------------------------------------------------------------------------
+# v37.96 — Sauvegarde hors du VPS (Telegram) + surveillance horaire
+#   Le jeton du bot du CFO est lu dans n8n (export dechiffre, efface aussitot, jamais affiche) et range
+#   dans /etc/finance-master/sauvegarde.conf (root seul). Le chat : TELEGRAM_CHAT_IDS de n8n, sinon la
+#   derniere conversation Telegram vue par le CFO.
+# -----------------------------------------------------------------------------
+installer_sauvegarde() {
+  command -v php >/dev/null 2>&1 || die "php introuvable sur l'hote."
+  php -m | grep -qi '^curl$' || install_php_extensions
+  local dir; dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  [[ -f "${dir}/sauvegarde.php" ]] || die "sauvegarde.php absent : faites d'abord git pull."
+  local conf_dir="/etc/finance-master" conf="/etc/finance-master/sauvegarde.conf"
+  mkdir -p "${conf_dir}"; chmod 700 "${conf_dir}"
+  local jeton="" chat=""
+  if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx "${N8N_CONTAINER}"; then
+    local dansc="/tmp/fm_creds_dec_$$.json" tmpc; tmpc="$(mktemp)"; chmod 600 "${tmpc}"
+    if n8n_cmd export:credentials --all --decrypted --output="${dansc}" >/dev/null 2>&1; then
+      docker exec "${N8N_CONTAINER}" cat "${dansc}" > "${tmpc}" 2>/dev/null || true
+    fi
+    docker exec -u root "${N8N_CONTAINER}" rm -f "${dansc}" >/dev/null 2>&1 || true
+    jeton="$(php "${dir}/sauvegarde.php" jeton < "${tmpc}" 2>/dev/null || true)"
+    shred -u "${tmpc}" 2>/dev/null || rm -f "${tmpc}"
+    chat="$(php "${dir}/sauvegarde.php" chat "$(docker exec "${N8N_CONTAINER}" printenv TELEGRAM_CHAT_IDS 2>/dev/null || true)" "${FINANCE_DIR}/pending/etapes" 2>/dev/null || true)"
+  fi
+  [[ -n "${jeton}" ]] || die "Jeton du bot Telegram du CFO introuvable dans n8n (identifiant Telegram dont le nom contient « CFO »)."
+  [[ -n "${chat}" ]] || die "Conversation Telegram inconnue : envoyez un message au bot du CFO, puis relancez « sudo bash install.sh sauvegarde »."
+  umask 077
+  php -r 'echo json_encode(["bot_token"=>$argv[1],"chat_id"=>$argv[2],"dossier"=>"/var/backups/finance-master"], JSON_UNESCAPED_SLASHES);' "${jeton}" "${chat}" > "${conf}"
+  chmod 600 "${conf}"; umask 022
+  ok "Reglages ecrits dans ${conf} (root seul)."
+  mkdir -p /var/backups/finance-master; chmod 700 /var/backups/finance-master
+  mkdir -p "${FINANCE_DIR}/pending"; chown "${WEB_USER}:${WEB_GROUP}" "${FINANCE_DIR}/pending" 2>/dev/null || true
+  cat > /etc/cron.d/finance-master <<CRON
+# Finance Master (v37.96) — sauvegarde quotidienne envoyee sur Telegram, surveillance horaire
+17 3 * * * root php ${FINANCE_DIR}/sauvegarde.php quotidienne >> /var/log/finance-sauvegarde.log 2>&1
+7 * * * * root php ${FINANCE_DIR}/sauvegarde.php surveillance >> /var/log/finance-sauvegarde.log 2>&1
+CRON
+  chmod 644 /etc/cron.d/finance-master
+  ok "Taches planifiees : sauvegarde a 03:17, surveillance chaque heure (/etc/cron.d/finance-master)."
+  log "Premiere sauvegarde, tout de suite..."
+  if php "${FINANCE_DIR}/sauvegarde.php" quotidienne; then ok "Sauvegarde envoyee : regardez votre conversation Telegram avec le bot du CFO."; else warn "La premiere sauvegarde a echoue (voir ci-dessus)."; fi
+}
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 main() {
@@ -461,6 +505,10 @@ main() {
   fi
   if [[ "${1:-}" == "cfo" ]]; then
     installer_cfo
+    return 0
+  fi
+  if [[ "${1:-}" == "sauvegarde" ]]; then
+    installer_sauvegarde
     return 0
   fi
   if [[ "${1:-}" == "cfo-retour" ]]; then

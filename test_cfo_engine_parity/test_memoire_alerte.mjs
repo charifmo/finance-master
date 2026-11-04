@@ -131,7 +131,7 @@ try {
     //  Budget Structurel : les lignes de calcul de COURSES, les périodes de LOYER
     await aller(page, 'previsionnel', 'parametres');
     await page.locator('button', { hasText: 'Voir Lignes de calcul' }).first().click();
-    await page.locator('button', { hasText: 'Gérer Périodes' }).nth(0).click();
+    await page.locator('button', { hasText: 'Montant variable selon le mois' }).nth(0).click();
     await page.waitForTimeout(200);
     const bs = () => page.evaluate(() => ({ details: [...document.querySelectorAll('button')].filter(b => /Fermer Détails/.test(b.textContent)).length,
                                             periodes: [...document.querySelectorAll('button')].filter(b => /Masquer options/.test(b.textContent)).length }));
