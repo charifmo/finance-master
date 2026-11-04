@@ -65,11 +65,25 @@ sont lus : `tracker.pedometer_day_summary` (pas : la ligne **combinée** de Sams
 une nuit en morceaux comptée une fois). Secours : sans CSV de pas, le détail par 10 min de `jsons/`. Le journal reprend
 la dernière année ; les pesées, tout l'historique. Un CSV « maison » (colonne `date` + `steps` / `weight`…) reste accepté.
 
-## Webhook Samsung Health
+## Synchro automatique depuis le téléphone (v1.5)
 
-Dans `/var/www/finance/db_config.php` (jamais commité), ajouter : `'sante_samsung_token' => '<un long jeton aléatoire>',`.
-L'appli qui envoie les données (Health Connect → webhook) poste en JSON sur `https://<hôte>/finance/sante/sync_samsung.php`
-avec l'en-tête `X-Sante-Token` et l'authentification `basic_auth` du site.
+Une page web ne peut pas lire Samsung Health (Android ne donne pas accès aux fichiers ni à Health Connect aux sites).
+Le relais : l'appli Android gratuite **HC Webhook** ([mcnaveen/health-connect-webhook](https://github.com/mcnaveen/health-connect-webhook),
+Play Store `com.hcwebhook.app`) lit Samsung Health via Health Connect et POSTe sur `sync_samsung.php` — à intervalle,
+à heure fixe, ou d'un appui sur son widget « Synchroniser ».
+
+- Réglage depuis l'onglet Samsung & Poids → « 🔑 Préparer ma synchro automatique » : `sante_jeton.php` (réservé à une
+  requête authentifiée par Caddy) crée le jeton dans `sante_jeton_samsung.php`, à côté des données (ignoré par git) ;
+  la page donne l'adresse et les en-têtes JSON à coller dans l'appli (`Authorization: Basic …` fabriqué dans le
+  navigateur à partir du mot de passe du site, jamais envoyé ; `X-Sante-Token`).
+- `sante_hc.php` lit le format de l'appli (`steps`, `active_calories`, `weight`, `sleep`, `heart_rate`,
+  `resting_heart_rate`), envois incrémentaux et renvois : les morceaux sont rangés par clé (id Health Connect ou heure)
+  dans `journal[date].hc` (8 jours), puis les totaux du jour refaits — un renvoi remplace, ne s'additionne pas.
+  Pas / kcal « Quotidien » (défaut de l'appli) : le total du jour remplace. Siestes écartées. Dates locales (décalage
+  de la mesure, sinon Africa/Casablanca).
+- `sync_auto` (dernière synchro reçue) s'affiche dans l'onglet ; revenir sur la page relit l'état.
+- L'ancien format « un jour » (`{"date", "steps", …}`) reste accepté ; jeton aussi possible dans `db_config.php`
+  (`sante_samsung_token`).
 
 ## Phase 2
 

@@ -103,6 +103,16 @@ function sante_normaliser($e): array {
         $pf = [];
         foreach ((array)($jour['plan_fait'] ?? []) as $id => $fait) if (!empty($fait) && is_string($id) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $id)) $pf[$id] = true;
         if ($pf) $jo['plan_fait'] = $pf;
+        //  v1.5 — les morceaux reçus de HC Webhook (pour qu'un renvoi remplace au lieu d'additionner) : 8 derniers jours seulement
+        if (is_array($jour['hc'] ?? null) && $date >= gmdate('Y-m-d', time() - 8 * 86400)) {
+            $hc = [];
+            foreach (['pas', 'kcal', 'fc', 'sommeil'] as $t) if (is_array($jour['hc'][$t] ?? null)) {
+                $m = [];
+                foreach ($jour['hc'][$t] as $k => $v) { if (count($m) >= 1500) break; if (is_string($k) && strlen($k) <= 70 && is_numeric($v)) $m[$k] = (float)$v; }
+                if ($m) $hc[$t] = $m;
+            }
+            if ($hc) $jo['hc'] = $hc;
+        }
         $j[$date] = $jo;
     }
     ksort($j);
@@ -111,6 +121,9 @@ function sante_normaliser($e): array {
         ? ['nom' => mb_substr((string)$s['nom'], 0, 60), 'dose' => mb_substr((string)($s['dose'] ?? ''), 0, 60), 'moment' => mb_substr((string)($s['moment'] ?? ''), 0, 60), 'actif' => !isset($s['actif']) || !empty($s['actif'])]
         : null, (array)($e['supplements'] ?? []))));
     $o['protocole'] = array_values(array_filter(array_map(fn($x) => is_string($x) ? mb_substr($x, 0, 300) : null, (array)($e['protocole'] ?? []))));
+    //  v1.5 — la dernière synchro automatique reçue du téléphone (affichée dans l'onglet Samsung & Poids)
+    if (is_array($e['sync_auto'] ?? null) && is_string($e['sync_auto']['derniere'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}T[\d:]{8}/', $e['sync_auto']['derniere']))
+        $o['sync_auto'] = ['derniere' => substr($e['sync_auto']['derniere'], 0, 30), 'source' => mb_substr((string)($e['sync_auto']['source'] ?? ''), 0, 60), 'jours' => (int)($e['sync_auto']['jours'] ?? 0)];
     $pl = is_array($e['plans'] ?? null) ? $e['plans'] : [];
     $o['plans'] = new stdClass();
     foreach (['nutrition', 'exercice'] as $t) if (($n = sante_norm_plan($pl[$t] ?? null, $t)) !== null) { $o['plans'] = (array)$o['plans']; $o['plans'][$t] = $n; }

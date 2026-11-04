@@ -321,6 +321,37 @@ z.close()`, src, zip]);
         v('  → le message dit ce qui a été lu (jours de pas, nuits, pesées)', /jour\(s\) importé\(s\)/.test(msg) && /de pas/.test(msg) && /nuits/.test(msg) && /pesée/.test(msg), msg);
         await p6.close();
     });
+    await section('N', async () => {
+        //  v1.5 — la synchro automatique : HC Webhook (Health Connect) → sync_samsung.php, réglée depuis la page
+        const sansAuth = await fetch(U + 'sante_jeton.php', { method: 'POST', body: '{"action":"creer"}' });
+        v('N. le jeton de la synchro n\'est donné qu\'à une requête authentifiée (mot de passe du site) : sinon 403', sansAuth.status === 403);
+        const p7 = await ouvrir();
+        const basic = 'Basic ' + Buffer.from('testeur:secret-du-site').toString('base64');
+        await p7.route('**/sante_jeton.php', r => r.continue({ headers: { ...r.request().headers(), authorization: basic } }));   // ce que fait Caddy
+        await p7.click('[data-onglet="poids"]');
+        await p7.click('[data-preparer-synchro]');
+        await p7.waitForSelector('[data-config-synchro]', { timeout: 5000 });
+        const url = await p7.inputValue('[data-url-webhook]');
+        v('  → « Préparer ma synchro automatique » : l\'adresse du webhook ; l\'identifiant du site repris', /\/sante\/sync_samsung\.php$/.test(url) && await p7.inputValue('[data-config-synchro] input[autocomplete="username"]') === 'testeur', url);
+        await p7.fill('[data-mdp-synchro]', 'secret-du-site');
+        const entetes = JSON.parse(await p7.inputValue('[data-entetes-synchro]'));
+        v('  → en-têtes JSON prêts à coller : Authorization (fabriqué dans la page) + X-Sante-Token', entetes.Authorization === basic && entetes['X-Sante-Token'] === JETON, entetes);
+        //  ce qu'envoie HC Webhook (docs/webhook.md) avec ces en-têtes
+        const auj = new Date(), dj = auj.toISOString().slice(0, 10);
+        const envoi = { timestamp: auj.toISOString(), app_version: '1.9.40', timezone: 'UTC',
+            steps: [{ count: 6543, start_time: `${dj}T00:00:00Z`, end_time: `${dj}T23:59:59Z` }],
+            sleep: [{ session_end_time: `${dj}T05:30:00Z`, duration_seconds: 25200, stages: [], metadata: { id: 'n1', end_zone_offset_seconds: 0 } }],
+            heart_rate: [{ avg: 72, min: 60, max: 90, bpm: 72, time: `${dj}T08:00:00Z`, metadata: { zone_offset_seconds: 0 } }] };
+        const rep = await fetch(url.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8', ...entetes }, body: JSON.stringify(envoi) });
+        const corps = await rep.json(), f = lireFichier();
+        v('  → un envoi HC Webhook accepté (200) et écrit : pas 6 543, sommeil 420 min, FC 72 ; « dernière synchro » notée', rep.status === 200 && corps.source === 'hc_webhook' && f.journal[dj].samsung.pas === 6543 && f.journal[dj].samsung.sommeil_min === 420 && f.journal[dj].samsung.fc_moy === 72 && /HC Webhook/.test(f.sync_auto.source), [rep.status, corps, f.journal[dj] && f.journal[dj].samsung]);
+        const mauvais = await fetch(U + 'sync_samsung.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sante-Token': 'faux-jeton-faux-jeton' }, body: JSON.stringify(envoi) });
+        v('  → avec un mauvais jeton : 403', mauvais.status === 403);
+        await p7.evaluate((ST) => eval(ST).rechargerEtat(), ST);          // revenir sur la page (visibilitychange)
+        await p7.waitForSelector('[data-derniere-synchro]', { timeout: 5000 });
+        v('  → de retour sur la page : « ✓ dernière synchro à l\'instant », les pas du jour affichés', /dernière synchro à l’instant/.test(await p7.textContent('[data-derniere-synchro]')) && (await p7.textContent('[data-samsung-jour]')).replace(/\D/g, '').startsWith('6543'), await p7.textContent('[data-samsung-jour]'));
+        await p7.close();
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close(); php.kill();

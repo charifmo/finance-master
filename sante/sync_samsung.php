@@ -9,15 +9,32 @@
  */
 require_once __DIR__ . '/sante_store.php';
 require_once __DIR__ . '/sante_intent_engine.php';
+require_once __DIR__ . '/sante_hc.php';
 header('Content-Type: application/json; charset=utf-8');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['ok' => false, 'erreur' => 'POST attendu']); exit; }
-$cfg = sante_db_config() ?? [];
-$attendu = (string)($cfg['sante_samsung_token'] ?? getenv('SANTE_SAMSUNG_TOKEN') ?: '');
+//  v1.5 — jetons valides : db_config.php (sante_samsung_token), SANTE_SAMSUNG_TOKEN, ou celui créé depuis l'appli (sante_jeton.php)
+$valides = sante_jetons_valides();
 $recu = (string)($_SERVER['HTTP_X_SANTE_TOKEN'] ?? ($_GET['token'] ?? ''));
-if ($attendu === '') { http_response_code(503); echo json_encode(['ok' => false, 'erreur' => "jeton non configuré : ajoutez 'sante_samsung_token' dans db_config.php"]); exit; }
-if (!hash_equals($attendu, $recu)) { http_response_code(403); echo json_encode(['ok' => false, 'erreur' => 'jeton invalide']); exit; }
+if (!$valides) { http_response_code(503); echo json_encode(['ok' => false, 'erreur' => "jeton non configuré : onglet Samsung & Poids → « Préparer ma synchro automatique »"]); exit; }
+$bon = false; foreach ($valides as $v) if ($recu !== '' && hash_equals($v, $recu)) $bon = true;
+if (!$bon) { http_response_code(403); echo json_encode(['ok' => false, 'erreur' => 'jeton invalide']); exit; }
 $p = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, 'erreur' => 'JSON attendu']); exit; }
+
+//  v1.5 — l'appli Android « HC Webhook » (Health Connect → ici) : son format tel quel, envois incrémentaux
+if (sante_hc_est_payload($p)) {
+    [$t] = sante_lire();
+    $etat = json_decode($t, true) ?: [];
+    $etat = sante_normaliser($etat); $etat = json_decode(json_encode($etat), true);
+    $r = sante_hc_integrer($p, $etat);
+    $etat['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => count($r['dates'])];
+    $c = $r['calls'] ? sante_compiler($r['calls'], $etat) : ['status' => 'ok', 'etat' => sante_normaliser($etat), 'journal' => []];
+    if ($c['status'] !== 'ok') { http_response_code(422); echo json_encode(['ok' => false, 'journal' => $c['journal']], JSON_UNESCAPED_UNICODE); exit; }
+    $w = sante_ecrire($c['etat']);
+    if (!$w['ok']) http_response_code(500);
+    echo json_encode(['ok' => $w['ok'], 'source' => 'hc_webhook', 'jours' => count($r['dates']), 'dates' => $r['dates'], 'ignores' => $r['ignores']], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 $jours = array_is_list($p) ? $p : (isset($p['jours']) && is_array($p['jours']) ? $p['jours'] : [$p]);
 $A = ['date' => ['date', 'day', 'jour'], 'pas' => ['pas', 'steps', 'step_count'], 'kcal_actives' => ['kcal_actives', 'active_calories', 'active_energy_kcal'],
       'fc_moy' => ['fc_moy', 'heart_rate_avg', 'avg_heart_rate'], 'fc_repos' => ['fc_repos', 'resting_heart_rate'], 'sommeil_min' => ['sommeil_min', 'sleep_minutes', 'sleep_duration_min'],

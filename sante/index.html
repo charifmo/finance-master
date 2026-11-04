@@ -10,9 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.5"></script>
-    <script src="sante_import.js?v=1.5"></script>
-    <script src="sante_samsung.js?v=1.5"></script>
+    <script src="sante_calculs.js?v=1.6"></script>
+    <script src="sante_import.js?v=1.6"></script>
+    <script src="sante_samsung.js?v=1.6"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -445,8 +445,43 @@
             <div class="carte p-4 space-y-3" data-samsung>
                 <h2 class="font-black text-emerald-900">📲 Samsung Health</h2>
                 <p class="text-sm" data-samsung-jour>Aujourd’hui : {{ fmt(jour.samsung.pas) }} pas · {{ fmt(jour.samsung.kcal_actives) }} kcal actives · FC repos {{ jour.samsung.fc_repos ?? '—' }} · sommeil {{ jour.samsung.sommeil_min == null ? '—' : Math.floor(jour.samsung.sommeil_min / 60) + ' h ' + String(jour.samsung.sommeil_min % 60).padStart(2, '0') }}</p>
-                <div class="text-sm space-y-1">
-                    <p class="font-bold">1. Le plus simple : importer l’export de Samsung Health — tout le dossier d’un coup</p>
+                <div class="text-sm space-y-3">
+                    <div class="rounded-xl border-2 border-emerald-200 bg-emerald-50/60 p-3 space-y-2" data-synchro-auto>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <p class="w-full font-black text-emerald-900">⚡ 1. Synchro automatique <span class="font-semibold text-emerald-800">— à régler une fois, ensuite plus rien à faire</span></p>
+                            <span v-if="etat.sync_auto" class="text-xs font-black px-2 py-1 rounded-full bg-emerald-600 text-white" data-derniere-synchro>✓ dernière synchro {{ depuisQuand(etat.sync_auto.derniere) }}<span v-if="etat.sync_auto.jours"> · {{ etat.sync_auto.jours }} jour(s)</span></span>
+                            <span v-else class="text-xs font-black px-2 py-1 rounded-full bg-amber-100 text-amber-800">pas encore reçue</span>
+                        </div>
+                        <p class="text-xs text-slate-600">Une page web ne peut pas lire Samsung Health toute seule (Android l’interdit aux sites). La petite appli gratuite <b>HC Webhook</b> le fait pour elle : elle lit Samsung Health (via Health Connect) et envoie ici vos pas, calories, sommeil, poids et fréquence cardiaque — toute seule toutes les heures, ou d’un appui sur son widget « Synchroniser ».</p>
+                        <ol class="list-decimal pl-5 space-y-1.5 text-xs">
+                            <li><b>Samsung Health</b> → ≡ → <b>Paramètres</b> → <b>Health Connect</b> : autorisez le partage (pas, calories, poids, sommeil, fréquence cardiaque).</li>
+                            <li>Installez <a href="https://play.google.com/store/apps/details?id=com.hcwebhook.app" target="_blank" rel="noopener" class="font-bold text-emerald-700 underline">HC Webhook</a> (Play Store). Ouvrez-la → <b>Accorder les autorisations</b> : Pas, Calories actives, Poids, Sommeil, Fréquence cardiaque, Fréquence cardiaque au repos ; acceptez aussi l’autorisation d’arrière-plan.</li>
+                            <li>
+                                Ici : <button type="button" data-preparer-synchro @click="preparerSynchro()" class="px-2 py-1 rounded-lg bg-emerald-600 text-white font-black">🔑 Préparer ma synchro automatique</button>
+                                <span v-if="configAuto.message" class="ml-1 font-bold" :class="/^❌/.test(configAuto.message) ? 'text-rose-700' : 'text-slate-500'" data-message-synchro>{{ configAuto.message }}</span>
+                                <div v-if="configAuto.jeton" class="mt-2 space-y-2 rounded-lg bg-white border border-emerald-200 p-2" data-config-synchro>
+                                    <div><span class="font-bold">Adresse du webhook</span>
+                                        <div class="flex gap-1 mt-0.5"><input readonly :value="urlWebhook" data-url-webhook class="flex-1 min-w-0 border rounded px-2 py-1 font-mono text-[11px] bg-slate-50"><button type="button" @click="copier(urlWebhook, 'url')" class="px-2 rounded border font-bold">{{ configAuto.copie === 'url' ? '✓ copiée' : 'Copier' }}</button></div></div>
+                                    <div class="grid sm:grid-cols-2 gap-2">
+                                        <label class="font-bold">Identifiant du site <input v-model="configAuto.utilisateur" autocomplete="username" class="mt-0.5 w-full border rounded px-2 py-1 font-normal" placeholder="celui de la fenêtre de connexion"></label>
+                                        <label class="font-bold">Mot de passe du site <input v-model="configAuto.motDePasse" type="password" autocomplete="current-password" data-mdp-synchro class="mt-0.5 w-full border rounded px-2 py-1 font-normal" placeholder="reste sur cet appareil"></label>
+                                    </div>
+                                    <p class="text-[11px] text-slate-500">Le mot de passe ne quitte pas cette page : il sert seulement à fabriquer l’en-tête que l’appli enverra (le site est protégé par mot de passe).</p>
+                                    <div><span class="font-bold">En-têtes (JSON)</span>
+                                        <div class="flex gap-1 mt-0.5"><textarea readonly rows="2" :value="enTetesAuto" data-entetes-synchro class="flex-1 min-w-0 border rounded px-2 py-1 font-mono text-[11px] bg-slate-50"></textarea><button type="button" @click="copier(enTetesAuto, 'json')" :disabled="!configAuto.motDePasse" class="px-2 rounded border font-bold disabled:opacity-40">{{ configAuto.copie === 'json' ? '✓ copiés' : 'Copier' }}</button></div>
+                                        <p v-if="!configAuto.motDePasse" class="text-[11px] font-bold text-amber-700">Saisissez le mot de passe du site pour compléter les en-têtes.</p></div>
+                                    <p v-if="configAuto.copie === 'manuel'" class="text-[11px] font-bold text-amber-700">Copie automatique impossible ici : sélectionnez le texte et copiez-le.</p>
+                                </div>
+                            </li>
+                            <li>Dans HC Webhook → <b>Webhooks</b> : ajoutez l’adresse → <b>Modifier les en-têtes</b> → onglet <b>JSON</b> → collez → <b>Appliquer JSON</b>.</li>
+                            <li><b>Quand synchroniser</b> → <b>Intervalle</b> 60 min (ou <b>Programmé</b>, par ex. 8 h et 21 h) → enregistrez. Laissez les pas et calories en <b>Quotidien</b> (réglage par défaut).</li>
+                            <li><b>Votre bouton</b> : appui long sur l’écran d’accueil du téléphone → <b>Widgets</b> → HC Webhook → <b>« Synchroniser »</b>. Un appui = vos données arrivent ici ; revenez sur cette page, elle se met à jour.</li>
+                        </ol>
+                        <p class="text-[11px] text-slate-500">Votre jeton secret est créé et gardé sur le serveur (jamais dans le dépôt). <button type="button" v-if="configAuto.jeton" @click="preparerSynchro(true)" class="underline">Changer de jeton</button> — l’ancien cesse aussitôt de marcher, il faudra recoller les en-têtes.</p>
+                    </div>
+                    <details class="rounded-xl border border-slate-200 px-3 py-2" data-sans-appli>
+                    <summary class="cursor-pointer font-bold text-slate-700">2. Sans appli : importer l’export de Samsung Health (.zip)</summary>
+                    <div class="mt-2 space-y-2">
                     <div data-zone-samsung @dragover.prevent="survolSamsung = true" @dragleave="survolSamsung = false" @drop.prevent="deposerSamsung($event)"
                          class="rounded-xl border-2 border-dashed p-3 space-y-2 transition-colors" :class="survolSamsung ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'">
                         <div class="flex flex-col sm:flex-row gap-2">
@@ -470,12 +505,9 @@
                         <p class="mt-1 text-slate-600">Réimporter un export plus récent met les jours à jour sans rien dupliquer. Le journal reprend la dernière année ; les pesées, tout l’historique.</p>
                         <p class="mt-1 text-slate-500">Autre application ou tableur : un CSV avec une colonne <code>date</code> (AAAA-MM-JJ) et au choix <code>steps</code> / <code>pas</code>, <code>active_calorie</code> / <code>kcal</code>, <code>weight</code> / <code>poids</code>, <code>resting_heart_rate</code>, <code>sleep_minutes</code>.</p>
                     </details>
-                    <details class="mt-3 rounded-lg border border-slate-200 px-3 py-2 text-xs" data-aide-webhook>
-                        <summary class="cursor-pointer font-bold text-slate-700">2. Option avancée : synchronisation automatique, sans bouton</summary>
-                        <p class="mt-2">Une page web ne peut pas lire Samsung Health : Android ne le permet pas aux sites. L’automatique passe donc par une <b>appli relais sur le téléphone</b>, qui lit vos données dans <b>Health Connect</b> (où Samsung Health les partage) et les envoie chaque jour à Santé Master. N’importe quelle appli capable de lire Health Connect et d’envoyer une requête web convient (appli d’automatisation, appli « Health Connect → webhook »…).</p>
-                        <p class="mt-1">À lui donner : l’adresse <code class="bg-slate-100 px-1 rounded break-all" data-url-webhook>{{ urlWebhook }}</code>, l’en-tête <code class="bg-slate-100 px-1 rounded">X-Sante-Token</code> avec votre jeton secret (défini une fois sur le serveur, dans db_config.php, clé <code>sante_samsung_token</code>), et le mot de passe du site. Format accepté : <code>{"date":"2026-11-04","steps":8200,"active_calories":480,"resting_heart_rate":60,"sleep_minutes":412,"weight":97.2}</code> (un jour, ou une liste de jours).</p>
-                        <p class="mt-1 text-slate-500">Sans appli relais, l’import du fichier (1.) fait le même travail : quelques secondes, quand vous voulez.</p>
+                    </div>
                     </details>
+
 
                 </div>
             </div>
@@ -519,7 +551,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.5';
+        const VERSION = '1.6';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -923,6 +955,26 @@ createApp({
             } catch (e) { messageCsv.value = '❌ ' + (e.message || e); }
             finally { enCours.value = false; }
         };
+        //  v1.5 — SYNCHRO AUTOMATIQUE (HC Webhook → sync_samsung.php) : le jeton créé ici, l'adresse et les en-têtes prêts à coller
+        const configAuto = reactive({ jeton: '', utilisateur: '', motDePasse: '', message: '', copie: '' });
+        const preparerSynchro = async (renouveler) => {
+            configAuto.message = '⏳ Préparation…';
+            try {
+                const r = await fetch('sante_jeton.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: renouveler === true ? 'renouveler' : 'creer' }) });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok || !j.jeton) throw new Error(j.erreur || ('erreur ' + r.status));
+                configAuto.jeton = j.jeton; if (!configAuto.utilisateur && j.utilisateur) configAuto.utilisateur = j.utilisateur; configAuto.message = '';
+            } catch (e) { configAuto.message = '❌ ' + (e.message || e); }
+        };
+        //  le mot de passe du site ne sert qu'ici, dans le navigateur, à fabriquer l'en-tête Authorization : jamais gardé ni envoyé
+        const enTetesAuto = computed(() => { const o = {}; if (configAuto.utilisateur && configAuto.motDePasse) o.Authorization = 'Basic ' + btoa(unescape(encodeURIComponent(configAuto.utilisateur + ':' + configAuto.motDePasse))); o['X-Sante-Token'] = configAuto.jeton; return JSON.stringify(o); });
+        const copier = async (texte, quoi) => { try { await navigator.clipboard.writeText(texte); configAuto.copie = quoi; } catch (e) { configAuto.copie = 'manuel'; } setTimeout(() => { if (configAuto.copie === quoi || configAuto.copie === 'manuel') configAuto.copie = ''; }, 3000); };
+        const depuisQuand = (iso) => { const t = Date.parse(iso); if (!t) return ''; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'à l’instant' : m < 60 ? 'il y a ' + m + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'le ' + dateCourte(new Date(t).toISOString().slice(0, 10)); };
+        //  revenir sur la page (après un appui sur le widget du téléphone) : l'état est relu, sauf modification en cours
+        const rechargerEtat = async () => {
+            if (statut.value !== 'enregistré') return;
+            try { const r = await fetch('save_sante.php', { cache: 'no-store' }); if (!r.ok) return; const d = await r.json(); if (statut.value !== 'enregistré') return; charge.value = false; version.value = r.headers.get('X-Sante-Version'); remplacer(d); await nextTick(); charge.value = true; } catch (e) { /* hors ligne */ }
+        };
         const importerCsv = async (ev) => { const l = Array.from((ev.target && ev.target.files) || []); if (ev.target) ev.target.value = ''; await importerSamsung(l); };
         //  glisser-déposer (ordinateur) : fichiers, .zip ou le DOSSIER entier (sans descendre dans les photos ni les détails inutiles)
         const survolSamsung = ref(false);
@@ -1014,14 +1066,14 @@ createApp({
             } catch (e) { /* hors ligne */ }
         };
         onMounted(charger);
-        onMounted(() => { setTimeout(verifierVersion, 2500); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verifierVersion(); }); });
+        onMounted(() => { setTimeout(verifierVersion, 2500); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { verifierVersion(); rechargerEtat(); } }); });
         return { VERSION, ONGLETS, menuOuvert, erreurSauvegarde, sauver, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
                  fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, saisie, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
                  TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
-                 repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, deposerSamsung, survolSamsung, enCours,
+                 repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, C: Cref };
     }
 }).component('saisie-valeur', {
