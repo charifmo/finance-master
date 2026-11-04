@@ -1,7 +1,7 @@
 /*  LE LANCEUR — passer d'une appli à l'autre (Finance, Santé, puis Psy, Voyage…).
     La liste vient de apps.json (une ligne par appli) ; sans lui, Finance et Santé.
     N'importe quel élément [data-lanceur] ouvre le panneau ; [data-lanceur-page] affiche les tuiles sur place
-    (accueil.html). Aucune dépendance : marche dans Finance (Vue), Santé (Vue) et toute nouvelle appli. */
+    (accueil.html) ; [data-lanceur-barre] affiche la rangée d'icônes en haut du menu de chaque appli. Aucune dépendance : marche dans Finance (Vue), Santé (Vue) et toute nouvelle appli. */
 (function () {
     'use strict';
     if (window.Lanceur) return;
@@ -39,6 +39,18 @@
                      : '<div data-lanceur-appli="' + esc(a.id) + '" data-lanceur-bientot aria-disabled="true" style="' + style + '">' + corps + '</div>';
         }).join('');
     };
+    //  La rangée d'icônes, en haut du menu sombre de chaque appli : toutes les applis, celle où l'on est entourée
+    var rangee = function (L) {
+        var cur = courante(L);
+        return L.map(function (a) {
+            var u = adresse(a), ici = cur && cur.id === a.id;
+            var style = 'display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;font-size:18px;line-height:1;text-decoration:none;'
+                + (ici ? 'background:#334155;box-shadow:inset 0 0 0 2px #38bdf8' : (u ? 'background:rgba(51,65,85,.45);cursor:pointer' : 'background:transparent;opacity:.35;filter:grayscale(1)'));
+            var titre = esc(a.nom) + (u ? (ici ? ' (ici)' : '') : ' — bientôt');
+            return u ? '<a data-lanceur-appli="' + esc(a.id) + '"' + (ici ? ' data-lanceur-ici aria-current="page"' : '') + ' href="' + esc(u.href) + '" title="' + titre + '" aria-label="' + titre + '" style="' + style + '">' + esc(a.icone || '•') + '</a>'
+                     : '<span data-lanceur-appli="' + esc(a.id) + '" data-lanceur-bientot title="' + titre + '" aria-label="' + titre + '" style="' + style + '">' + esc(a.icone || '•') + '</span>';
+        }).join('');
+    };
     var GRILLE = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px';
     var panneau = null;
     var fermer = function () { if (panneau) { panneau.remove(); panneau = null; } };
@@ -64,10 +76,21 @@
         if (b) { e.preventDefault(); ouvrir(); }
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fermer(); });
+    //  Les emplacements (page d'accueil, rangée du menu) se remplissent dès qu'ils apparaissent — y compris quand
+    //  l'appli (Vue) redessine son menu et les recrée vides
+    var enAttente = false;
     var surPlace = function () {
-        var cibles = document.querySelectorAll('[data-lanceur-page]');
-        if (cibles.length) charger().then(function (L) { cibles.forEach(function (c) { c.style.cssText += ';' + GRILLE; c.innerHTML = tuiles(L); }); });
+        enAttente = false;
+        var pages = Array.prototype.filter.call(document.querySelectorAll('[data-lanceur-page]'), function (c) { return !c.childElementCount; });
+        var rangees = Array.prototype.filter.call(document.querySelectorAll('[data-lanceur-barre]'), function (c) { return !c.childElementCount; });
+        if (!pages.length && !rangees.length) return;
+        charger().then(function (L) {
+            pages.forEach(function (c) { c.style.cssText += ';' + GRILLE; c.innerHTML = tuiles(L); });
+            rangees.forEach(function (c) { c.style.cssText += ';display:flex;flex-wrap:wrap;gap:6px'; c.innerHTML = rangee(L); });
+        });
     };
+    var plusTard = function () { if (!enAttente) { enAttente = true; (window.requestAnimationFrame || setTimeout)(surPlace); } };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', surPlace); else surPlace();
+    if (window.MutationObserver) new MutationObserver(plusTard).observe(document.documentElement, { childList: true, subtree: true });
     window.Lanceur = { ouvrir: ouvrir, fermer: fermer, applis: charger };
 })();
