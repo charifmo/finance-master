@@ -105,6 +105,7 @@ suite "En-tête : le patrimoine projeté en haut à droite (détail des comptes)
 suite "Revenu arrivé ailleurs : pourquoi ce découvert, le virement déjà fait"  node test_cfo_engine_parity/test_revenu_ailleurs.mjs
 suite "Semaines coupées par la paie : chaque morceau dans son cycle"  node test_cfo_engine_parity/test_semaines_coupees.mjs
 suite "Sur tout le cycle, séances à la quinzaine, frise du cycle"      node test_cfo_engine_parity/test_frise_cycle.mjs
+suite "La frise s’ouvre sur le journal : voir, modifier, supprimer les saisies d’une case"  node test_cfo_engine_parity/test_frise_apercu.mjs
 suite "Le CFO lit le moteur (comptes, exceptions, virement vers le Courant), Annuler 50 pas"  node test_cfo_engine_parity/test_cfo_lit_le_moteur.mjs
 suite "En-têtes de compte ignorés à l’import, corrections approuvées (schéma 23)"  node test_cfo_engine_parity/test_corrections_approuvees.mjs
 suite "Le workflow n8n du CFO : une coquille, contexte et consignes servis par le VPS"  node test_cfo_engine_parity/test_cfo_coquille.mjs
@@ -128,6 +129,7 @@ suite "Solde Attijari à un seul chiffre après la virgule"  node test_cfo_engin
 suite "Le Courant alimenté au juste besoin ; le CFO demande, l’appli calcule"  node test_cfo_engine_parity/test_alimentation_juste_besoin.mjs
 suite "Recalibrer l’année en un geste ; les garde-fous"                 node test_cfo_engine_parity/test_recalibrage.mjs
 suite "Écran « Aujourd’hui », mode expert, réponses instantanées du CFO"  node test_cfo_engine_parity/test_aujourdhui.mjs
+suite "Mes applis : passer de Finance à Santé (lanceur, apps.json, accueil)"  node test_cfo_engine_parity/test_lanceur.mjs
 suite "Connexion au CFO : « Failed to fetch » diagnostiqué, nouvel essai, écran allumé"  node test_cfo_engine_parity/test_connexion_cfo.mjs
 suite "Santé Master : calculs, règle de Gilbert, intégrité, moteur d'intentions"  php test_cfo_engine_parity/test_sante_calculs.php
 suite "Santé Master : parité JS ↔ PHP, lecture des comptes rendus"  node test_cfo_engine_parity/test_sante_parite.mjs

@@ -1,0 +1,134 @@
+/**
+ * v37.100 — UNE CASE DE LA FRISE → LES OPÉRATIONS DERRIÈRE CE CHIFFRE (modifier, supprimer sur place).
+ *   Décor fictif : paie le 27 ; jeudi 12 nov. 2026, cycle du 27 oct. au 26 nov. (morceaux 27 oct.–1ᵉʳ nov., 2–8, 9–15,
+ *   16–22, 23–26). Courses : Marjane 600 / sem, Psy 400 / 15 j (catégories cat_cv_alimentation__dmarjane, __dpsy).
+ *   Journal : Marjane 120 le 29 oct. ; Marjane 250 le 3 nov. et 180 le 5 nov. ; une épicerie 60 le 4 nov. rangée
+ *   dans la catégorie mère (pas Marjane) ; Psy 400 le 9 nov.
+ */
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const ICI = path.dirname(fileURLToPath(import.meta.url));
+const RACINE = path.resolve(ICI, '..');
+const html = fs.readFileSync(path.join(RACINE, 'index.html'), 'utf8').split('\r\n').join('\n');
+let ko = 0;
+const v = (t, ok, d = '') => { if (!ok) ko++; console.log(`  ${ok ? '✅' : '❌'} ${t.padEnd(64)} ${ok ? '' : d}`); };
+const section = async (nom, f) => { try { await f(); } catch (e) { v(`${nom} : exécution sans exception`, false, String(e && e.stack || e).slice(0, 300)); } };
+console.log('\n  LA FRISE S’OUVRE SUR LE JOURNAL\n  ' + '─'.repeat(80));
+v('A. cases et enveloppes cliquables ; un panneau avec modifier / supprimer / « Voir dans le Journal »',
+  /data-frise-case role="button" tabindex="0" @click="ouvrirApercuFrise\(c, l, x\)"/.test(html) && /data-frise-enveloppe role="button"/.test(html)
+  && /data-frise-apercu-supprimer @click="supprimerOperation\(o\.t\.id\)"/.test(html) && /data-frise-apercu-enregistrer @click="enregistrerOperation\(\)"/.test(html) && /data-frise-apercu-journal/.test(html));
+
+const require = createRequire(import.meta.url);
+const essai = (f) => { try { return f(); } catch { return null; } };
+const pw = essai(() => require('playwright-core'));
+const vueJs = essai(() => require.resolve('vue/dist/vue.global.js'));
+const chartJs = essai(() => fs.existsSync(path.join(RACINE, 'node_modules/chart.js/dist/chart.umd.js')) && path.join(RACINE, 'node_modules/chart.js/dist/chart.umd.js'));
+const chromium = process.env.CHROMIUM || ['/opt/pw-browsers/chromium'].find(p => essai(() => fs.existsSync(p) && fs.statSync(p).isFile()));
+if (!pw || !vueJs || !chartJs || !chromium) { console.log('  ⏭️  partie navigateur ignorée'); console.log(ko === 0 ? '  ✅ TOUT PASSE — 0 contrôle(s) en échec' : `  ❌ ${ko} contrôle(s) en échec`); process.exit(ko === 0 ? 0 : 1); }
+
+const MARJANE = 'alimentation::1', PSY = 'alimentation::2';
+const fixture = () => {
+    const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
+    fx._schemaVersion = 21;
+    const base = fx.donneesAnnuelles[Object.keys(fx.donneesAnnuelles)[0]];
+    fx.donneesAnnuelles = { 2026: JSON.parse(JSON.stringify(base)) };
+    Object.assign(fx.soldesInitiaux, { moisActuel: 11, anneeActuelle: 2026, jourDePaie: 27, compteChargesFixes: 'courant', compteChargesVariables: 'courant', assurances_tracker: [], voyageDebut: '', voyageFin: '' });
+    fx.soldesInitiaux.categories = [];
+    fx.comptes = [{ id: 'acc_cc', label: 'Compte Courant', type: 'liquide', solde: 30000, icone: '💳' }];
+    const neutre = { paye: false, montantPaye: 0, exceptions: [], showExceptions: false };
+    const d = fx.donneesAnnuelles[2026];
+    const Rv = (label, b, j) => ({ ...neutre, label, base: b, jourPrevu: j, destinationCompte: 'courant' });
+    d.revenus = { salaire: Rv('SALAIRE', 20000, 27), bonif: Rv('—', 0), magasin: Rv('—', 0), cnss: Rv('—', 0), appart: Rv('—', 0), studio: Rv('—', 0) };
+    const Fx = (label, valeur) => ({ ...neutre, label, valeur, jourPrevu: null });
+    d.chargesFixes = { creditImmo: Fx('—', 0), creditStudio: Fx('—', 0), syndic: Fx('—', 0), nounou: Fx('—', 0), ecole: Fx('—', 0), femmeMenage: Fx('—', 0), habitsCharif: Fx('—', 0), habitsBebe: Fx('—', 0), jouets: Fx('—', 0) };
+    d.chargesVariables = {
+        alimentation: { ...neutre, label: 'Courses', valeur: 0, periode: 'semaine', categorieId: 'cat_cv_alimentation',
+                        details: [{ id: 1, nom: 'Marjane', montant: 600, periode: 'semaine', categorieId: 'cat_cv_alimentation__dmarjane' }, { id: 2, nom: 'Psy', montant: 400, periode: 'quinzaine', categorieId: 'cat_cv_alimentation__dpsy' }] },
+        factures: { ...neutre, label: 'Factures', valeur: 0, periode: 'mois', details: [], categorieId: 'cat_cv_factures' },
+    };
+    d.epargne = []; d.depensesIrregulieres = []; d.virementsInternes = []; d.banqueOperations = {}; d.consoRealiseeT0 = {}; d.consoClotureT0 = {};
+    const T = (id, date, libelle, montant, categorieId) => ({ id, datetime: date + 'T12:00', date, mois: Number(date.slice(5, 7)), libelle, montant, categorieId, compteId: 'acc_cc', source: 'manuel' });
+    d.transactionsReelles = [T(11, '2026-10-29', 'Marjane début', 120, 'cat_cv_alimentation__dmarjane'), T(12, '2026-11-03', 'Marjane Hay Riad', 250, 'cat_cv_alimentation__dmarjane'), T(13, '2026-11-05', 'Marjane Ain Sebaa', 180, 'cat_cv_alimentation__dmarjane'),
+                             T(14, '2026-11-04', 'Épicerie du coin', 60, 'cat_cv_alimentation'), T(15, '2026-11-09', 'Dr Psy', 400, 'cat_cv_alimentation__dpsy')];
+    return fx;
+};
+const page0 = html.replace('<script src="https://unpkg.com/vue@3/dist/vue.global.js"', '<script src="/vue.js"').replace('<script src="https://cdn.jsdelivr.net/npm/chart.js"', '<script src="/chart.js"')
+    .replace(/<script src="https:\/\/cdn\.tailwindcss\.com"[^>]*><\/script>/, '').replace(/<script[^>]*src="https:\/\/[^"]*"[^>]*><\/script>/g, '');
+const srv = http.createServer((req, res) => {
+    const p = req.url.split('?')[0];
+    const s = (c, b, t = 'application/json') => { res.writeHead(c, { 'Content-Type': t }); res.end(b); };
+    if (p === '/finance/') return s(200, page0, 'text/html; charset=utf-8');
+    if (p === '/vue.js') return s(200, fs.readFileSync(vueJs), 'text/javascript');
+    if (p === '/chart.js') return s(200, fs.readFileSync(chartJs), 'text/javascript');
+    if (p === '/finance/finance_data.json') return s(200, JSON.stringify(fixture()));
+    return s(200, '{"status":"ok"}');
+});
+await new Promise(r => srv.listen(0, '127.0.0.1', r));
+const port = srv.address().port;
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
+const erreurs = [];
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+const page = await ctx.newPage();
+await page.clock.setFixedTime(new Date(2026, 10, 12, 10, 0, 0));
+page.on('pageerror', e => erreurs.push(String(e)));
+await page.route('**/webhook/**', route => route.abort());
+await page.goto(`http://127.0.0.1:${port}/finance/`, { waitUntil: 'load' });
+await page.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__ && a.__vue_app__._instance && a.__vue_app__._instance.setupState.moisBudgetaire; }, null, { timeout: 30000 });
+await page.waitForTimeout(800);
+await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'previsionnel'; await new Promise(r => setTimeout(r, 250)); st.activeTab = 'pilotageTheo'; st.friseOuverte = true; }, ST);
+await page.waitForSelector('[data-frise]');
+const ops = () => page.$$eval('[data-frise-apercu-op]', l => l.map(e => e.getAttribute('data-tx') + ':' + e.querySelector('[data-frise-apercu-ouvrir]').textContent.replace(/\s+/g, ' ').trim()));
+const total = () => page.textContent('[data-frise-apercu-total]').then(t => t.replace(/\s+/g, ' ').trim());
+const caseMarjane = (i) => page.locator(`[data-frise-ligne][data-poste="${MARJANE}"] [data-frise-case]`).nth(i);
+
+try {
+    await section('B', async () => {
+        await caseMarjane(1).click();
+        await page.waitForSelector('[data-frise-apercu]');
+        const L = await ops(), T = await total(), titre = await page.textContent('[data-frise-apercu-titre]'), sous = await page.textContent('[data-frise-apercu] .text-slate-500');
+        v('B. la case Marjane du 2 au 8 nov. : les 2 opérations Marjane de ce morceau (5 nov., puis 3 nov.), pas l’épicerie ni le 29 oct.',
+          L.length === 2 && L[0].startsWith('13:') && L[1].startsWith('12:') && /Marjane Ain Sebaa/.test(L[0]) && /5 nov/.test(L[0]) && /250/.test(L[1]), JSON.stringify(L));
+        v('  → titre, période et total : « Marjane · Courses », du 2 nov. au 8 nov., 2 opérations · 430 DH',
+          /Marjane/.test(titre) && /Courses/.test(titre) && /du 2 nov\. au 8 nov\./.test(sous) && /^2 opérations · 430/.test(T), JSON.stringify([titre, sous, T]));
+    });
+    await section('C', async () => {
+        await page.click('[data-frise-apercu-op][data-tx="12"] [data-frise-apercu-ouvrir]');
+        await page.waitForSelector('[data-frise-apercu-edition]');
+        await page.fill('[data-frise-edit-montant]', '260');
+        await page.fill('[data-frise-edit-libelle]', 'Marjane Hay Riad (corrigé)');
+        await page.click('[data-frise-apercu-enregistrer]'); await page.waitForTimeout(300);
+        const L = await ops(), T = await total();
+        const t = await page.evaluate((ST) => JSON.parse(JSON.stringify(eval(ST).donneesAnnuelles[2026].transactionsReelles.find(x => x.id === 12))), ST);
+        const cell = (await caseMarjane(1).textContent()).replace(/\s+/g, '');
+        v('C. modifiée sur place (260, libellé corrigé) : enregistrée dans le journal, le total et la case suivent (440)',
+          t.montant === 260 && t.libelle === 'Marjane Hay Riad (corrigé)' && /corrigé/.test(L[1]) && /^2 opérations · 440/.test(T) && /^440\//.test(cell), JSON.stringify([t, T, cell]));
+        await page.click('[data-frise-apercu-op][data-tx="13"] [data-frise-apercu-ouvrir]');
+        await page.click('[data-frise-apercu-supprimer]'); await page.waitForTimeout(150);
+        const confirme = await page.textContent('[data-frise-apercu-supprimer]');
+        const encore = await page.evaluate((ST) => eval(ST).donneesAnnuelles[2026].transactionsReelles.some(x => x.id === 13), ST);
+        v('  → « Supprimer » demande une confirmation (rien d’effacé au premier toucher)', /Confirmer/.test(confirme) && encore, confirme);
+        await page.click('[data-frise-apercu-supprimer]'); await page.waitForTimeout(300);
+        const L2 = await ops(), T2 = await total();
+        const parti = await page.evaluate((ST) => !eval(ST).donneesAnnuelles[2026].transactionsReelles.some(x => x.id === 13), ST);
+        v('  → confirmé : supprimée du journal, la liste et le total suivent (1 opération · 260)', parti && L2.length === 1 && /^1 opération · 260/.test(T2), JSON.stringify([L2, T2]));
+        await page.click('[data-frise-apercu-fermer]'); await page.waitForTimeout(150);
+        v('  → ✕ ferme le panneau, la frise reste ouverte', !(await page.$('[data-frise-apercu]')) && !!(await page.$('[data-frise]')), '');
+    });
+    await section('D', async () => {
+        await page.click(`[data-frise-ligne][data-poste="${PSY}"] [data-frise-enveloppe]`);
+        await page.waitForSelector('[data-frise-apercu]');
+        const L = await ops(), sous = await page.textContent('[data-frise-apercu] .text-slate-500');
+        v('D. l’enveloppe du Psy (/ 15 j) : tout le cycle, du 27 oct. au 26 nov. — la séance du 9 nov.', L.length === 1 && /Dr Psy/.test(L[0]) && /Tout le cycle, du 27 oct\. au 26 nov\./.test(sous), JSON.stringify([L, sous]));
+        await page.click('[data-frise-apercu-journal]'); await page.waitForTimeout(400);
+        const J = await page.evaluate((ST) => { const st = eval(ST); return { tab: st.activeTab, mode: st.appMode, cat: st.journal.cat, frise: st.friseOuverte, periode: st.journal.periode }; }, ST);
+        v('  → « Voir dans le Journal » : la Saisie s’ouvre, journal filtré sur le Psy, ce cycle', J.tab === 'saisie' && J.mode === 'reel' && J.cat === 'cat_cv_alimentation__dpsy' && !J.frise && J.periode === 'cycle', JSON.stringify(J));
+    });
+    v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
+} finally { await browser.close(); srv.close(); }
+console.log(ko === 0 ? '\n  ✅ TOUT PASSE — 0 contrôle(s) en échec' : `\n  ❌ ${ko} contrôle(s) en échec`);
+process.exit(ko === 0 ? 0 : 1);
