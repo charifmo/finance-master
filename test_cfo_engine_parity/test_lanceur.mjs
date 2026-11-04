@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +31,17 @@ const chromium = process.env.CHROMIUM || '/opt/pw-browsers/chromium';
 if (!pw || !vueJs || !fs.existsSync(chartJs) || !fs.existsSync(chromium)) { console.log('  ⏭️  partie navigateur ignorée'); console.log(ko === 0 ? '  ✅ TOUT PASSE — 0 contrôle(s) en échec' : `  ❌ ${ko} contrôle(s) en échec`); process.exit(ko === 0 ? 0 : 1); }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lanceur-'));
+//  Tailwind reconstruit (Finance + Santé) : sans lui, ni menu à gauche ni tiroir — la disposition ne se vérifie pas
+const twBin = path.join(RACINE, 'node_modules/.bin/tailwindcss');
+const twCss = essai(() => {
+    if (!fs.existsSync(twBin)) return null;
+    fs.writeFileSync(path.join(tmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
+    fs.writeFileSync(path.join(tmp, 'cfg.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'index.html')) + ',' + JSON.stringify(path.join(RACINE, 'sante/index.html')) + '],theme:{extend:{}}};');
+    execFileSync(twBin, ['-c', path.join(tmp, 'cfg.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'out.css'), '--minify'], { stdio: 'ignore' });
+    const css = fs.readFileSync(path.join(tmp, 'out.css'), 'utf8');
+    return css.length > 10000 ? css : null;
+});
+const twJs = twCss ? '(function(){var s=document.createElement("style");s.textContent=' + JSON.stringify(twCss) + ';document.head.appendChild(s);})();' : '';
 const port = 25000 + Math.floor(Math.random() * 3000);
 const php = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', RACINE], { env: { ...process.env, SANTE_DATA_FILE: path.join(tmp, 'sante.json') }, stdio: 'ignore' });
 const U = `http://127.0.0.1:${port}/`;
@@ -42,7 +53,8 @@ const preparer = async (ctx, { sansApps = false } = {}) => {
     page.on('pageerror', e => erreurs.push(page.url() + ' — ' + String(e)));
     await page.route('https://unpkg.com/**', r => r.fulfill({ body: fs.readFileSync(vueJs), contentType: 'text/javascript' }));
     await page.route('https://cdn.jsdelivr.net/npm/chart.js', r => r.fulfill({ body: fs.readFileSync(chartJs), contentType: 'text/javascript' }));
-    await page.route(/^https:\/\/(?!unpkg\.com|cdn\.jsdelivr\.net\/npm\/chart\.js)/, r => r.fulfill({ body: '', contentType: 'text/javascript' }));
+    await page.route('https://cdn.tailwindcss.com/**', r => r.fulfill({ body: twJs, contentType: 'text/javascript' }));
+    await page.route(/^https:\/\/(?!unpkg\.com|cdn\.tailwindcss\.com|cdn\.jsdelivr\.net\/npm\/chart\.js)/, r => r.fulfill({ body: '', contentType: 'text/javascript' }));
     await page.route('**/save_data.php**', r => r.fulfill({ status: 404, body: '' }));
     await page.route('**/webhook/**', r => r.abort());
     if (sansApps) await page.route('**/apps.json', r => r.fulfill({ status: 404, body: '' }));
@@ -69,7 +81,16 @@ try {
         await Promise.all([page.waitForURL('**/sante/'), page.click('[data-lanceur-panneau] [data-lanceur-appli="sante"]')]);
         await page.waitForFunction(() => window.Lanceur && document.querySelector('#app') && document.querySelector('#app').__vue_app__, null, { timeout: 30000 });
         v('C. un toucher sur Santé : on arrive dans Santé Master', /Santé Master/.test(await page.title()), await page.title());
-        await page.click('header [data-lanceur]'); await page.waitForSelector('[data-lanceur-panneau]');
+        //  Santé : le même habillage que Finance — le menu (tiroir sur le téléphone), la rangée d'applis
+        const horsEcran = async () => { const b = await page.locator('[data-barre-sante]').boundingBox(); return !!b && b.x + b.width <= 1; };
+        if (twCss) v('  → Santé sur le téléphone : menu replié (hors de l\u2019écran), un bouton ☰ ; la barre du haut dit l\u2019onglet', await horsEcran() && await page.isVisible('[data-menu-sante]') && /Pilotage/.test(await page.textContent('[data-titre-onglet]')), '');
+        await page.click('[data-menu-sante]'); await page.waitForTimeout(400);
+        const R = await page.$$eval('[data-barre-sante] [data-lanceur-barre] [data-lanceur-appli]', l => l.map(x => x.getAttribute('data-lanceur-appli') + (x.hasAttribute('data-lanceur-ici') ? '*' : '') + (x.hasAttribute('data-lanceur-bientot') ? '~' : '')));
+        v('  → ☰ ouvre le menu sombre : la rangée « Mes applis » (Santé entourée) et les 5 onglets', await page.isVisible('[data-barre-sante] [data-onglet="analyses"]') && JSON.stringify(R) === JSON.stringify(['finance', 'sante*', 'psy~', 'voyage~']), JSON.stringify(R));
+        await page.click('[data-barre-sante] [data-onglet="analyses"]'); await page.waitForTimeout(500);
+        if (twCss) v('  → un onglet choisi : le menu se referme, la barre du haut suit', await horsEcran() && /Analyses/.test(await page.textContent('[data-titre-onglet]')), '');
+        await page.click('[data-menu-sante]'); await page.waitForTimeout(400);
+        await page.click('[data-barre-sante] [data-lanceur]'); await page.waitForSelector('[data-lanceur-panneau]');
         const T2 = await tuiles(page);
         v('  → dans Santé, 🧩 « Mes applis » : Santé est « ici »', JSON.stringify(T2) === JSON.stringify(['finance', 'sante*', 'psy~', 'voyage~']), JSON.stringify(T2));
         await Promise.all([page.waitForURL(U), page.click('[data-lanceur-panneau] [data-lanceur-appli="finance"]')]);
@@ -81,10 +102,27 @@ try {
         await ctx.addInitScript(() => { try { localStorage.setItem('fm_mode_affichage', 'expert'); } catch (e) {} });
         const page = await preparer(ctx, { sansApps: true });
         await page.goto(U, { waitUntil: 'load' });
-        await page.waitForFunction(() => window.Lanceur && document.querySelector('nav [data-lanceur]'), null, { timeout: 30000 });
+        await page.waitForSelector('[data-barre] [data-lanceur-barre] [data-lanceur-appli]', { timeout: 30000 });
+        const R = await page.$$eval('[data-barre] [data-lanceur-barre] [data-lanceur-appli]', l => l.map(x => x.getAttribute('data-lanceur-appli') + (x.hasAttribute('data-lanceur-ici') ? '*' : '')));
+        v('D. ordinateur, mode expert : la rangée d\u2019applis en haut du menu de Finance (Finance entourée) ; sans apps.json, Finance et Santé quand même', JSON.stringify(R) === JSON.stringify(['finance*', 'sante']), JSON.stringify(R));
+        await page.evaluate(() => { document.querySelector('#app').__vue_app__._instance.setupState.isSidebarCollapsed = true; });
+        await page.waitForTimeout(300);
         await page.click('nav [data-lanceur]'); await page.waitForSelector('[data-lanceur-panneau]');
         const T = await tuiles(page);
-        v('D. ordinateur, mode expert : 🧩 « Mes applis » dans le menu ; sans apps.json, Finance et Santé quand même', JSON.stringify(T) === JSON.stringify(['finance*', 'sante']), JSON.stringify(T));
+        v('  → menu replié : le bouton 🧩 ouvre « Mes applis »', JSON.stringify(T) === JSON.stringify(['finance*', 'sante']), JSON.stringify(T));
+        await page.keyboard.press('Escape');
+        //  le menu déplié à nouveau : la rangée revient (l'appli redessine son menu)
+        await page.evaluate(() => { const st = document.querySelector('#app').__vue_app__._instance.setupState; st.isSidebarCollapsed = false; });
+        await page.waitForTimeout(500);
+        const R2 = await page.$$eval('[data-barre] [data-lanceur-barre] [data-lanceur-appli]', l => l.length);
+        v('  → menu replié puis déplié : la rangée se remplit à nouveau', R2 === 2, String(R2));
+        const c2 = await browser.newContext({ viewport: { width: 1300, height: 900 } });
+        const ps = await preparer(c2);
+        await ps.goto(U + 'sante/', { waitUntil: 'load' });
+        await ps.waitForSelector('[data-barre-sante] [data-lanceur-barre] [data-lanceur-appli]', { timeout: 30000 });
+        const box = await ps.locator('[data-barre-sante]').boundingBox();
+        if (twCss) v('E0. Santé sur ordinateur : le menu vertical sombre à gauche, toujours visible (comme Finance)', box && box.x === 0 && box.width >= 250 && box.height >= 800 && await ps.isVisible('[data-barre-sante] [data-onglet="cmo"]') && !(await ps.isVisible('[data-menu-sante]')), JSON.stringify(box));
+        await c2.close();
         await ctx.close();
     });
     await section('E', async () => {
