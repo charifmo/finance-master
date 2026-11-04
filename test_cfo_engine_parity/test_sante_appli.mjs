@@ -272,7 +272,7 @@ z.close()`, docx, para]);
         //  v1.4 — la page blanche après une mise à jour : la nouvelle page tournait avec les anciens fichiers JS gardés en cache
         const html = fs.readFileSync(path.join(RACINE, 'sante/index.html'), 'utf8'), version = /const VERSION = '([^']+)'/.exec(html)[1];
         const srcs = [...html.matchAll(/<script src="(sante_[^"]+)"/g)].map(m => m[1]);
-        v('L. chaque script local porte la version de la page (?v=' + version + ') : une mise à jour recharge toujours les bons fichiers', srcs.length === 2 && srcs.every(x => x.endsWith('?v=' + version)), srcs);
+        v('L. chaque script local porte la version de la page (?v=' + version + ') : une mise à jour recharge toujours les bons fichiers', srcs.length === 3 && srcs.every(x => x.endsWith('?v=' + version)), srcs);
         const vieux = (f) => execFileSync('git', ['show', 'origin/main:sante/' + f], { cwd: RACINE, encoding: 'utf8' });
         const anciens = essai(() => ({ calculs: vieux('sante_calculs.js'), import: vieux('sante_import.js') }));
         if (!anciens || /suiviPlan/.test(anciens.calculs)) { console.log('  ⏭️  fichiers d\'avant la v1.4 introuvables (origin/main) : contrôle du cache périmé ignoré'); return; }
@@ -288,6 +288,38 @@ z.close()`, docx, para]);
         await p5.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__; }, null, { timeout: 15000 }).catch(() => {});
         v('  → fichiers périmés détectés : rechargés depuis le serveur, la page redémarre seule (pas de page blanche)', rafraichi && await p5.isVisible('[data-onglet="plans"]'), { rafraichi });
         await p5.close();
+    });
+    await section('M', async () => {
+        //  v1.5 — l'export Samsung Health TEL QUEL : le dossier samsunghealth_… compressé (.zip), choisi d'un seul geste
+        const p6 = await ouvrir();
+        const TC = '20261104123456', R = `samsunghealth_testeur_${TC}/`, d = (j) => { const x = new Date(Date.now() - j * 864e5); return x.toISOString().slice(0, 10); };
+        const csv = (type, tete, lignes) => `﻿${type},6313005,${lignes.length}\n${tete.join(',')},\n` + lignes.map(l => l.join(',') + ',').join('\n') + '\n';
+        const contenu = {
+            [`${R}com.samsung.health.device_profile.${TC}.csv`]: csv('com.samsung.health.device_profile', ['deviceuuid', 'device_group'], [['TEL1', '360001'], ['COMB', '0']]),
+            [`${R}com.samsung.shealth.tracker.pedometer_day_summary.${TC}.csv`]: csv('com.samsung.shealth.tracker.pedometer_day_summary', ['step_count', 'calorie', 'day_time', 'deviceuuid'],
+                [['5000', '200', `${d(2)} 00:00:00.000`, 'TEL1'], ['8123', '320', `${d(2)} 00:00:00.000`, 'COMB'], ['4000', '150', `${d(500)} 00:00:00.000`, 'COMB']]),
+            [`${R}com.samsung.health.weight.${TC}.csv`]: csv('com.samsung.health.weight', ['start_time', 'time_offset', 'weight'], [[`${d(2)} 07:00:00.000`, 'UTC+0000', '95.55'], [`${d(500)} 07:00:00.000`, 'UTC+0000', '101.2']]),
+            [`${R}com.samsung.shealth.sleep.${TC}.csv`]: csv('com.samsung.shealth.sleep', ['com.samsung.health.sleep.start_time', 'com.samsung.health.sleep.end_time', 'com.samsung.health.sleep.time_offset', 'sleep_duration'], [[`${d(3)} 22:00:00.000`, `${d(2)} 05:00:00.000`, 'UTC+0000', '420']]),
+            [`${R}com.samsung.shealth.exercise.${TC}.csv`]: csv('com.samsung.shealth.exercise', ['count'], [['99999']]),
+            [`${R}files/com.samsung.shealth.food_image/repas.jpg`]: 'JPEG',
+            [`${R}jsons/com.samsung.shealth.tracker.heart_rate/a/x.binning_data.json`]: '[]',
+        };
+        const src = path.join(tmp, 'export.json'), zip = path.join(tmp, `samsunghealth_testeur_${TC}.zip`);
+        fs.writeFileSync(src, JSON.stringify(contenu));
+        execFileSync('python3', ['-c', `import zipfile,json,sys
+d=json.load(open(sys.argv[1],encoding='utf-8'))
+z=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED)
+for k,t in d.items(): z.writestr(k,t)
+z.close()`, src, zip]);
+        await p6.click('[data-onglet="poids"]');
+        await p6.setInputFiles('[data-import-csv]', zip);
+        await p6.waitForFunction(() => /importé/.test(document.querySelector('[data-message-csv]')?.textContent || ''), null, { timeout: 8000 });
+        await attendreEnregistre(p6);
+        const f = lireFichier(), msg = await p6.textContent('[data-message-csv]');
+        v('M. export Samsung Health en .zip, d\'un seul geste : pas de la ligne COMBINÉE (8 123), sommeil 420 min, pesée — enregistrés', f.journal[d(2)] && f.journal[d(2)].samsung.pas === 8123 && f.journal[d(2)].samsung.sommeil_min === 420 && f.poids.some(p => p.date === d(2) && p.kg === 95.6 && p.source === 'samsung'), [msg, f.journal[d(2)]]);
+        v('  → plus d\'un an : pas dans le journal, mais la pesée rejoint la courbe ; exercice et photos ignorés', !f.journal[d(500)] && f.poids.some(p => p.date === d(500) && p.kg === 101.2) && !Object.values(f.journal).some(j => (j.samsung || {}).pas === 99999), msg);
+        v('  → le message dit ce qui a été lu (jours de pas, nuits, pesées)', /jour\(s\) importé\(s\)/.test(msg) && /de pas/.test(msg) && /nuits/.test(msg) && /pesée/.test(msg), msg);
+        await p6.close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

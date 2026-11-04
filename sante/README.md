@@ -49,11 +49,21 @@ chaque autre ligne devient un élément, corrigeable avant d'enregistrer. Chaque
 (`journal[date].plan_fait`) ; la semaine affiche prévu / réalisé, le taux et, pour l'exercice, les minutes. Le
 Médecin-Chef IA lit le plan du jour et la semaine (`sante_api.php?lecture=1` → `plans`).
 
-## CSV Samsung Health
+## Export Samsung Health (v1.5)
 
-Samsung Health → ≡ → Paramètres → « Télécharger les données personnelles ». Les CSV (un par mesure) arrivent dans
-`Download/Samsung Health/<date>` ; l'onglet Samsung & Poids les prend plusieurs à la fois (ligne de description avant
-l'en-tête sautée, `day_time` en ms ou `start_time`, maximum des pas si téléphone + montre).
+Samsung Health → ≡ → Paramètres → « Télécharger les données personnelles ». L'export arrive dans
+`Download/Samsung Health/samsunghealth_<compte>_<horodatage>/` : **un CSV par mesure à la racine**
+(`<type>.<horodatage>.csv`), `jsons/` (détail minute / 10 min) et `files/` (photos). Samsung ne publie pas de
+spécification ; le format suivi ici est celui vérifié sur des exports réels 2025-2026 (outil
+[v-2841/samsung-health-export](https://github.com/v-2841/samsung-health-export)).
+
+L'onglet Samsung & Poids prend **tout l'export d'un geste** : le dossier compressé (`.zip`, « Mes fichiers » → appui
+long → Compresser), le dossier entier, ou ses fichiers (`sante_samsung.js`, sans bibliothèque ; zip64 compris). Seuls
+sont lus : `tracker.pedometer_day_summary` (pas : la ligne **combinée** de Samsung, `device_profile.device_group = 0`),
+`calories_burned.details` (kcal actives), `health.weight` (poids, UTC + `time_offset` → jour local),
+`tracker.heart_rate` (FC moyenne du jour), `sleep` / `sleep_combined` (minutes par jour de réveil, siestes écartées,
+une nuit en morceaux comptée une fois). Secours : sans CSV de pas, le détail par 10 min de `jsons/`. Le journal reprend
+la dernière année ; les pesées, tout l'historique. Un CSV « maison » (colonne `date` + `steps` / `weight`…) reste accepté.
 
 ## Webhook Samsung Health
 

@@ -10,8 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.4"></script>
-    <script src="sante_import.js?v=1.4"></script>
+    <script src="sante_calculs.js?v=1.5"></script>
+    <script src="sante_import.js?v=1.5"></script>
+    <script src="sante_samsung.js?v=1.5"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -445,26 +446,29 @@
                 <h2 class="font-black text-emerald-900">📲 Samsung Health</h2>
                 <p class="text-sm" data-samsung-jour>Aujourd’hui : {{ fmt(jour.samsung.pas) }} pas · {{ fmt(jour.samsung.kcal_actives) }} kcal actives · FC repos {{ jour.samsung.fc_repos ?? '—' }} · sommeil {{ jour.samsung.sommeil_min == null ? '—' : Math.floor(jour.samsung.sommeil_min / 60) + ' h ' + String(jour.samsung.sommeil_min % 60).padStart(2, '0') }}</p>
                 <div class="text-sm space-y-1">
-                    <p class="font-bold">1. Le plus simple : importer l’export de Samsung Health (sur le téléphone ou l’ordinateur)</p>
-                    <label class="flex items-center justify-center gap-2 w-full sm:w-auto sm:inline-flex px-4 py-3 rounded-xl bg-emerald-600 text-white font-black cursor-pointer hover:bg-emerald-700" data-bouton-csv>📲 Importer les fichiers Samsung Health (CSV)
-                        <input type="file" multiple accept=".csv,text/csv" data-import-csv @change="importerCsv($event)" class="sr-only"></label>
-                    <p v-if="messageCsv" class="text-sm font-bold" :class="/^❌/.test(messageCsv) ? 'text-rose-700' : 'text-emerald-800'" data-message-csv>{{ messageCsv }}</p>
+                    <p class="font-bold">1. Le plus simple : importer l’export de Samsung Health — tout le dossier d’un coup</p>
+                    <div data-zone-samsung @dragover.prevent="survolSamsung = true" @dragleave="survolSamsung = false" @drop.prevent="deposerSamsung($event)"
+                         class="rounded-xl border-2 border-dashed p-3 space-y-2 transition-colors" :class="survolSamsung ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'">
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white font-black cursor-pointer hover:bg-emerald-700" :class="enCours ? 'opacity-60 pointer-events-none' : ''" data-bouton-csv>📲 Importer l’export (.zip ou fichiers)
+                                <input type="file" multiple accept=".zip,application/zip,.csv,text/csv,.json" data-import-csv @change="importerCsv($event)" class="sr-only"></label>
+                            <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-emerald-600 text-emerald-800 font-black cursor-pointer hover:bg-emerald-50" :class="enCours ? 'opacity-60 pointer-events-none' : ''" data-bouton-dossier>📁 Choisir le dossier entier
+                                <input type="file" webkitdirectory multiple data-import-dossier-samsung @change="importerCsv($event)" class="sr-only"></label>
+                        </div>
+                        <p class="text-[11px] text-slate-500 text-center">Sur l’ordinateur : glissez ici le dossier <code>samsunghealth_…</code> ou son .zip. L’appli prend ce qu’il faut (pas, calories actives, poids, fréquence cardiaque, sommeil) et ignore le reste (photos, détails minute par minute).</p>
+                    </div>
+                    <p v-if="messageCsv" class="text-sm font-bold" :class="/^❌/.test(messageCsv) ? 'text-rose-700' : /^⏳/.test(messageCsv) ? 'text-slate-500' : 'text-emerald-800'" data-message-csv>{{ messageCsv }}</p>
                     <details class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs" data-aide-csv>
-                        <summary class="cursor-pointer font-black text-slate-700">Comment exporter et importer vos données (2 minutes)</summary>
+                        <summary class="cursor-pointer font-black text-slate-700">Pas à pas sur le téléphone Samsung (2 minutes)</summary>
                         <ol class="list-decimal pl-5 mt-2 space-y-1.5">
-                            <li>Sur le téléphone, ouvrez <b>Samsung Health</b> → menu <b>≡</b> (ou <b>⋮</b>) → <b>Paramètres</b>.</li>
-                            <li>Descendez jusqu’à <b>« Télécharger les données personnelles »</b> → <b>Télécharger</b>, puis confirmez avec votre compte Samsung.</li>
-                            <li>À la fin, Samsung Health indique le dossier créé : <b>Mes fichiers › Stockage interne › Download › Samsung Health › <i>date_heure</i></b>. Il contient un fichier CSV par mesure.</li>
-                            <li>Envoyez-vous les fichiers utiles (Quick Share, Drive, e-mail) ou ouvrez cette page sur le téléphone, puis choisissez-les ci-dessous — <b>plusieurs à la fois</b> :
-                                <ul class="list-disc pl-5 mt-1 space-y-0.5">
-                                    <li><code>…pedometer_day_summary….csv</code> : pas et calories actives par jour</li>
-                                    <li><code>…health.weight….csv</code> : pesées (elles rejoignent la courbe de poids)</li>
-                                    <li><code>…heart_rate….csv</code> : fréquence cardiaque · <code>…sleep….csv</code> : sommeil</li>
-                                </ul>
-                            </li>
-                            <li>Les jours déjà présents sont mis à jour, rien n’est dupliqué : vous pouvez réimporter un export plus récent à tout moment.</li>
+                            <li><b>Samsung Health</b> → menu <b>≡</b> (ou <b>⋮</b>) → <b>Paramètres</b> → <b>« Télécharger les données personnelles »</b> → <b>Télécharger</b>, puis confirmez avec votre compte Samsung.</li>
+                            <li>Ouvrez l’appli <b>Mes fichiers</b> → <b>Téléchargements</b> (ou Stockage interne › Download) → dossier <b>Samsung Health</b>.</li>
+                            <li><b>Appui long</b> sur le dossier <code>samsunghealth_…</code> (le plus récent) → <b>⋮ Plus</b> → <b>Compresser</b> → OK. Un fichier <code>samsunghealth_….zip</code> apparaît à côté.</li>
+                            <li>Ici, touchez <b>« 📲 Importer l’export »</b> et choisissez ce <b>.zip</b>. C’est tout : pas besoin d’ouvrir les sous-dossiers <code>files</code> et <code>jsons</code>.</li>
                         </ol>
-                        <p class="mt-2 text-slate-500">Autre application ou tableur : un CSV avec une colonne <code>date</code> (AAAA-MM-JJ) et au choix <code>steps</code> / <code>pas</code>, <code>active_calorie</code> / <code>kcal</code>, <code>weight</code> / <code>poids</code>, <code>resting_heart_rate</code>, <code>sleep_minutes</code>. Séparateur virgule ou point-virgule.</p>
+                        <p class="mt-2 text-slate-600">Sans compresser : ouvrez le dossier <code>samsunghealth_…</code> dans le sélecteur, <b>Tout sélectionner</b> (les fichiers <code>.csv</code> sont à sa racine, à côté de <code>files</code> et <code>jsons</code>), puis validez. Ou « 📁 Choisir le dossier entier » si votre téléphone le propose.</p>
+                        <p class="mt-1 text-slate-600">Réimporter un export plus récent met les jours à jour sans rien dupliquer. Le journal reprend la dernière année ; les pesées, tout l’historique.</p>
+                        <p class="mt-1 text-slate-500">Autre application ou tableur : un CSV avec une colonne <code>date</code> (AAAA-MM-JJ) et au choix <code>steps</code> / <code>pas</code>, <code>active_calorie</code> / <code>kcal</code>, <code>weight</code> / <code>poids</code>, <code>resting_heart_rate</code>, <code>sleep_minutes</code>.</p>
                     </details>
                     <details class="mt-3 rounded-lg border border-slate-200 px-3 py-2 text-xs" data-aide-webhook>
                         <summary class="cursor-pointer font-bold text-slate-700">2. Option avancée : synchronisation automatique, sans bouton</summary>
@@ -506,7 +510,7 @@
 //  v1.4 — FICHIERS PÉRIMÉS EN CACHE : si sante_calculs.js / sante_import.js sont d'une version plus ancienne que cette page,
 //  on les recharge depuis le serveur (cache: 'reload' met le cache à jour) puis on recharge la page — une seule fois.
 (function () {
-    var perimes = typeof SanteCalc === 'undefined' || typeof SanteCalc.creer({}).suiviPlan !== 'function' || typeof SanteImport === 'undefined' || typeof SanteImport.lirePlan !== 'function';
+    var perimes = typeof SanteCalc === 'undefined' || typeof SanteCalc.creer({}).suiviPlan !== 'function' || typeof SanteImport === 'undefined' || typeof SanteImport.lirePlan !== 'function' || typeof SanteSamsung === 'undefined' || typeof SanteSamsung.lireZip !== 'function';
     if (!perimes) return;
     var deja = false; try { deja = sessionStorage.getItem('sante_fichiers_rafraichis') === location.href; sessionStorage.setItem('sante_fichiers_rafraichis', location.href); } catch (e) { /* navigation privée */ }
     if (!deja) Promise.all(Array.prototype.map.call(document.querySelectorAll('script[src*="sante_"]'), function (x) { return fetch(x.src, { cache: 'reload' }).catch(function () { return null; }); })).then(function () { location.reload(); });
@@ -515,7 +519,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.4';
+        const VERSION = '1.5';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -848,32 +852,94 @@ createApp({
                          fc_repos: col(['resting', 'fc_repos']), fc_moy: col(['heart_rate', 'fc_moy'], /resting|min|max/), sommeil_min: col(['sleep_minutes', 'sleep_duration', 'sleep', 'sommeil'], /score|time/) };
             return { lignes: lignes.slice(iT + 1), sep, iD, C2 };
         };
-        const importerCsv = async (ev) => {
-            const fichiers = Array.from((ev.target && ev.target.files) || []); if (!fichiers.length) return;
-            const jours = new Set(), erreurs = [], fc = {};
-            for (const f of fichiers) {
-                const { lignes, sep, iD, C2 } = lireCsv(await f.text());
-                if (iD < 0) { erreurs.push(f.name + ' : colonne de date introuvable'); continue; }
-                lignes.forEach(l => {
-                    const c = l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
-                    let d = c[iD] || ''; if (/^\d{12,13}$/.test(d)) d = new Date(Number(d)).toISOString().slice(0, 10); d = d.slice(0, 10).replace(/\//g, '-');
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+        //  un CSV « maison » (date + steps / kcal / weight…) : lecture souple par noms de colonnes
+        const appliquerCsvGenerique = (texte, jours, fc) => {
+            const { lignes, sep, iD, C2 } = lireCsv(texte);
+            if (iD < 0) return false;
+            lignes.forEach(l => {
+                const c = l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+                let d = c[iD] || ''; if (/^\d{12,13}$/.test(d)) d = new Date(Number(d)).toISOString().slice(0, 10); d = d.slice(0, 10).replace(/\//g, '-');
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+                if (!etat.journal[d]) etat.journal[d] = jourVide();
+                const j = etat.journal[d]; if (!j.samsung || Array.isArray(j.samsung)) j.samsung = {};
+                let lu = false;
+                Object.entries(C2).forEach(([k, i]) => {
+                    const x = i >= 0 ? C.num(c[i]) : null; if (x === null) return; lu = true;
+                    if (k === 'fc_moy') { const a = fc[d] || (fc[d] = [0, 0]); a[0] += x; a[1]++; j.samsung.fc_moy = Math.round(a[0] / a[1]); }
+                    else if ((k === 'pas' || k === 'kcal_actives') && jours.has(d) && j.samsung[k] != null) j.samsung[k] = Math.max(j.samsung[k], x);
+                    else j.samsung[k] = x;
+                });
+                if (j.samsung.poids) { etat.poids = etat.poids.filter(p => !(p.date === d && p.source === 'samsung')); etat.poids.push({ date: d, kg: j.samsung.poids, source: 'samsung' }); }
+                if (lu) jours.add(d);
+            });
+            return true;
+        };
+        //  v1.5 — L'EXPORT SAMSUNG HEALTH TEL QUEL (sante_samsung.js) : le .zip du dossier, le dossier entier, ou ses fichiers.
+        //  Seuls les CSV utiles sont lus (pas, kcal actives, poids, FC, sommeil) ; photos, détails minute par minute et autres
+        //  mesures sont ignorés sans être ouverts. Les jours de plus d'un an ne remplissent pas le journal (les pesées, si).
+        const UN_AN = 366, enCours = ref(false);
+        const importerSamsung = async (liste) => {
+            const fichiers = Array.from(liste || []); if (!fichiers.length || enCours.value) return;
+            enCours.value = true; messageCsv.value = '⏳ Lecture de ' + (fichiers.length > 1 ? fichiers.length + ' fichiers' : '« ' + fichiers[0].name + ' »') + '…';
+            try {
+                const utiles = [], details = [], generiques = [], erreurs = []; let ignores = 0;
+                for (const f of fichiers) {
+                    const nom = f._chemin || f.webkitRelativePath || f.name;
+                    if (/\.zip$/i.test(f.name) || /zip/i.test(f.type || '')) {
+                        try {
+                            const buf = await f.arrayBuffer();
+                            const u = await SanteSamsung.lireZip(buf, SanteSamsung.estUtile); utiles.push(...u);
+                            if (!u.some(x => /pedometer_day_summary|step_daily_trend|activity\.day_summary/.test(x.nom))) details.push(...await SanteSamsung.lireZip(buf, SanteSamsung.estBinningPas));
+                            if (!u.length) erreurs.push('« ' + f.name + ' » : aucun fichier Samsung Health utile dedans');
+                        } catch (e) { erreurs.push('« ' + f.name + ' » : ' + (e.message || e)); }
+                    }
+                    else if (SanteSamsung.estUtile(nom)) utiles.push({ nom, texte: await f.text() });
+                    else if (SanteSamsung.estBinningPas(nom)) details.push(f);
+                    else if (/\.csv$/i.test(f.name) && !SanteSamsung.estExportSamsung(nom)) generiques.push(f);
+                    else ignores++;
+                }
+                if (!utiles.some(x => /pedometer_day_summary|step_daily_trend|activity\.day_summary/.test(x.nom)))
+                    for (let i = 0; i < details.length && i < 4000; i++) if (details[i] instanceof Blob) details[i] = { nom: details[i]._chemin || details[i].webkitRelativePath || details[i].name, texte: await details[i].text() };
+                const r = SanteSamsung.extraire(utiles.concat(details.filter(x => !(x instanceof Blob))), { decalageMin: -new Date().getTimezoneOffset() });
+                const limite = Cref.value.decaler(aujourdhui(), -UN_AN), jours = new Set(), compte = { pas: 0, kcal_actives: 0, fc_moy: 0, sommeil_min: 0 };
+                Object.entries(r.jours).forEach(([d, x]) => {
+                    if (d < limite || d > aujourdhui()) return;
                     if (!etat.journal[d]) etat.journal[d] = jourVide();
                     const j = etat.journal[d]; if (!j.samsung || Array.isArray(j.samsung)) j.samsung = {};
-                    let lu = false;
-                    Object.entries(C2).forEach(([k, i]) => {
-                        const x = i >= 0 ? C.num(c[i]) : null; if (x === null) return; lu = true;
-                        if (k === 'fc_moy') { const a = fc[d] || (fc[d] = [0, 0]); a[0] += x; a[1]++; j.samsung.fc_moy = Math.round(a[0] / a[1]); }
-                        else if ((k === 'pas' || k === 'kcal_actives') && jours.has(d) && j.samsung[k] != null) j.samsung[k] = Math.max(j.samsung[k], x);
-                        else j.samsung[k] = x;
-                    });
-                    if (j.samsung.poids) { etat.poids = etat.poids.filter(p => !(p.date === d && p.source === 'samsung')); etat.poids.push({ date: d, kg: j.samsung.poids, source: 'samsung' }); }
-                    if (lu) jours.add(d);
+                    ['pas', 'kcal_actives', 'fc_moy', 'sommeil_min', 'poids'].forEach(k => { if (x[k] !== undefined) { j.samsung[k] = x[k]; if (compte[k] !== undefined) compte[k]++; } });
+                    jours.add(d);
                 });
-            }
-            etat.poids.sort((a, b) => a.date < b.date ? -1 : 1);
-            messageCsv.value = (erreurs.length && !jours.size ? '❌ ' : '') + jours.size + ' jour(s) importé(s)' + (fichiers.length > 1 ? ' depuis ' + fichiers.length + ' fichiers' : '') + '.' + (erreurs.length ? ' ⚠️ ' + erreurs.join(' ; ') : '');
-            if (ev.target) ev.target.value = '';
+                r.pesees.forEach(p => { if (p.date > aujourdhui()) return; etat.poids = etat.poids.filter(q => !(q.date === p.date && q.source === 'samsung')); etat.poids.push({ date: p.date, kg: p.kg, source: 'samsung' }); });
+                const fc = {};
+                for (const f of generiques) { if (!appliquerCsvGenerique(await f.text(), jours, fc)) erreurs.push(f.name + ' : colonne de date introuvable'); }
+                etat.poids.sort((a, b) => a.date < b.date ? -1 : 1);
+                const lusSamsung = utiles.length + details.filter(x => !(x instanceof Blob)).length, nbFichiers = lusSamsung + generiques.length;
+                const detail = [compte.pas && compte.pas + ' j de pas', compte.kcal_actives && compte.kcal_actives + ' j de calories', compte.fc_moy && compte.fc_moy + ' j de FC', compte.sommeil_min && compte.sommeil_min + ' nuits', r.pesees.length && r.pesees.length + ' pesée(s)'].filter(Boolean).join(' · ');
+                messageCsv.value = (!jours.size && !r.pesees.length ? '❌ ' : '') + jours.size + ' jour(s) importé(s)' + (nbFichiers > 1 ? ' depuis ' + nbFichiers + ' fichiers' : '') + '.'
+                    + (detail ? ' ' + detail + '.' : '')
+                    + (ignores ? ' ' + ignores + ' fichier(s) sans utilité ici ignorés (photos, autres mesures).' : '')
+                    + (!jours.size && !r.pesees.length && !erreurs.length ? ' Aucun fichier Samsung Health utile : choisissez le .zip du dossier samsunghealth_… (voir l’aide ci-dessous).' : '')
+                    + (erreurs.length ? ' ⚠️ ' + erreurs.join(' ; ') : '');
+            } catch (e) { messageCsv.value = '❌ ' + (e.message || e); }
+            finally { enCours.value = false; }
+        };
+        const importerCsv = async (ev) => { const l = Array.from((ev.target && ev.target.files) || []); if (ev.target) ev.target.value = ''; await importerSamsung(l); };
+        //  glisser-déposer (ordinateur) : fichiers, .zip ou le DOSSIER entier (sans descendre dans les photos ni les détails inutiles)
+        const survolSamsung = ref(false);
+        const deposerSamsung = async (ev) => {
+            survolSamsung.value = false;
+            const entrees = Array.from((ev.dataTransfer && ev.dataTransfer.items) || []).map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+            if (!entrees.some(e => e.isDirectory)) return importerSamsung(ev.dataTransfer.files);
+            const out = [];
+            const parcourir = async (e, chemin) => {
+                if (e.isFile) { const f = await new Promise((ok, ko) => e.file(ok, ko)); f._chemin = chemin + f.name; out.push(f); return; }
+                const ici = chemin + e.name + '/';
+                if (/(^|\/)files\/$/.test(ici) || (/(^|\/)jsons\/[^/]+\/$/.test(ici) && !/pedometer_day_summary\/$/.test(ici))) return;
+                const lecteur = e.createReader(); let lot;
+                do { lot = await new Promise((ok, ko) => lecteur.readEntries(ok, ko)); for (const x of lot) await parcourir(x, ici); } while (lot.length);
+            };
+            for (const e of entrees) await parcourir(e, '');
+            return importerSamsung(out);
         };
 
         // ── plans nutrition et exercice : prévu / réalisé (v1.4) ──
@@ -955,7 +1021,7 @@ createApp({
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
                  TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
-                 repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv,
+                 repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, C: Cref };
     }
 }).component('saisie-valeur', {
