@@ -89,6 +89,16 @@ try {
         await page.waitForFunction(() => document.querySelector('[data-check="zone2"] input').checked, null, { timeout: 3000 }).catch(() => {});
         const z = [await page.isChecked('[data-check="zone2"] input'), await page.textContent('[data-machines-semaine]')];
         v('  → Zone 2 à 42 min coche la case ; 1 séance machines cette semaine', z[0] && /1\/2 séances/.test(z[1]), z);
+        // v1.4 — la course qui rendait le contrôle ci-dessus intermittent, rendue certaine : une sauvegarde (re-rendu)
+        //   atterrit PENDANT la frappe, avant la sortie du champ. Avant : le champ revenait à vide, la saisie était perdue.
+        await attendreEnregistre(page);
+        await page.evaluate((ST) => { eval(ST).etat.objectifs.note_essai = 1; }, ST);
+        await page.fill('[data-saisie-pas]', '4321');
+        await page.waitForFunction(() => /modifié/.test(document.querySelector('[data-statut-sauvegarde]').textContent), null, { timeout: 3000 });
+        await attendreEnregistre(page);
+        const tape = await page.inputValue('[data-saisie-pas]');
+        await page.press('[data-saisie-pas]', 'Tab');
+        v('  → une sauvegarde qui tombe pendant la frappe n\'efface pas la saisie (pas : 4 321)', tape === '4321' && (await page.textContent('[data-pas]')).replace(/\D/g, '') === '4321', [tape, await page.textContent('[data-pas]')]);
         v('  → bilan énergétique : 359 kcal ingérées, métabolisme de base calculé (taille + pesée)', /359 kcal/.test(await page.textContent('[data-kcal-ingerees]')) && !/—/.test(await page.textContent('[data-bilan-net]')));
     });
     await section('E', async () => {
