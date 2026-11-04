@@ -7725,12 +7725,12 @@
         </div>
 
         <!-- 📈 v37.66 : LA FRISE DU CYCLE, à la demande — l'avancement de chaque catégorie et de chaque poste, morceau par morceau -->
-        <div v-if="friseOuverte && friseCycle" data-frise class="fixed inset-0 bg-black/50 z-[10000] flex items-center justify-center p-2 md:p-4" @click.self="friseOuverte = false">
+        <div v-if="friseOuverte && friseCycle" data-frise class="fixed inset-0 bg-black/50 z-[10000] flex items-center justify-center p-2 md:p-4" @click.self="friseOuverte = false; fermerApercuFrise()">
             <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col">
                 <div class="flex items-start justify-between gap-3 px-3 md:px-5 py-3 border-b border-slate-100">
                     <div class="min-w-0">
                         <p class="text-sm md:text-base font-black text-slate-800" data-frise-titre>📈 Frise du cycle · {{ friseCycle.du }} → {{ friseCycle.au }} ({{ friseCycle.jours }} j)</p>
-                        <p class="text-[11px] font-semibold text-slate-500 leading-snug">Jour {{ friseCycle.aujJ }} sur {{ friseCycle.jours }}. Une colonne = un morceau de semaine (lundi → dimanche) ; ✂️ = coupé par la paie. Chaque case : réel / prévu.</p>
+                        <p class="text-[11px] font-semibold text-slate-500 leading-snug">Jour {{ friseCycle.aujJ }} sur {{ friseCycle.jours }}. Une colonne = un morceau de semaine (lundi → dimanche) ; ✂️ = coupé par la paie. Chaque case : réel / prévu — touchez-la pour voir ce qui a été saisi.</p>
                     </div>
                     <button type="button" data-frise-fermer @click="friseOuverte = false" aria-label="Fermer la frise" class="shrink-0 w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black">✕</button>
                 </div>
@@ -7762,12 +7762,12 @@
                         <div v-for="l in c.lignes" :key="'fl' + l.cle" data-frise-ligne :data-poste="l.cle" :data-unite="l.unite" class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 items-center">
                             <p class="min-w-0 truncate text-[11px] font-semibold text-slate-600 pl-1">{{ l.emoji }} {{ l.nom }} <span class="text-slate-400">{{ l.unite === 'semaine' ? '/ sem' : (l.unite === 'quinzaine' ? '/ 15 j' : '/ cycle') }}</span></p>
                             <div v-if="l.cellules" class="flex rounded-md overflow-hidden ring-1 ring-slate-200">
-                                <span v-for="(x, i) in l.cellules" :key="'fx' + i" data-frise-case :data-etat="x.depasse && !x.avenir ? 'depasse' : (x.avenir ? 'avenir' : (x.auPrevu ? 'auprevu' : (x.encours ? 'encours' : 'tenu')))" :style="{ width: x.part + '%' }" :title="x.titre + ' : ' + x.reel + ' / ' + x.prevu + ' DH' + (x.auPrevu ? ' (au prévu, rien tapé)' : '')"
-                                      :class="['h-6 flex items-center justify-center text-[9px] md:text-[10px] font-bold tabular-nums border-r border-white leading-none',
+                                <span v-for="(x, i) in l.cellules" :key="'fx' + i" data-frise-case role="button" tabindex="0" @click="ouvrirApercuFrise(c, l, x)" @keydown.enter="ouvrirApercuFrise(c, l, x)" :data-etat="x.depasse && !x.avenir ? 'depasse' : (x.avenir ? 'avenir' : (x.auPrevu ? 'auprevu' : (x.encours ? 'encours' : 'tenu')))" :style="{ width: x.part + '%' }" :title="x.titre + ' : ' + x.reel + ' / ' + x.prevu + ' DH' + (x.auPrevu ? ' (au prévu, rien tapé)' : '')"
+                                      :class="['h-6 flex items-center justify-center text-[9px] md:text-[10px] font-bold tabular-nums border-r border-white leading-none cursor-pointer hover:brightness-95 hover:ring-2 hover:ring-inset hover:ring-blue-400',
                                                x.avenir ? 'bg-slate-50 text-slate-400' : (x.depasse ? 'bg-rose-200 text-rose-900' : (x.auPrevu ? 'bg-emerald-50 text-emerald-700 italic' : (x.encours ? 'bg-sky-100 text-sky-900' : 'bg-emerald-200 text-emerald-900')))]">{{ x.avenir ? x.prevu : x.reel + '/' + x.prevu }}</span>
                             </div>
                             <div v-else class="min-w-0">
-                                <div class="relative h-6 rounded-md bg-slate-100 ring-1 ring-slate-200 overflow-hidden" :title="l.engage + ' / ' + l.enveloppe + ' DH sur le cycle'">
+                                <div data-frise-enveloppe role="button" tabindex="0" @click="ouvrirApercuFrise(c, l, null)" @keydown.enter="ouvrirApercuFrise(c, l, null)" class="relative h-6 rounded-md bg-slate-100 ring-1 ring-slate-200 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-400" :title="l.engage + ' / ' + l.enveloppe + ' DH sur le cycle — touchez pour voir ce qui a été saisi'">
                                     <span :class="['absolute inset-y-0 left-0', l.depasse ? 'bg-rose-300' : 'bg-violet-200']" :style="{ width: l.pct + '%' }"></span>
                                     <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-700 tabular-nums">{{ l.engage }} / {{ l.enveloppe }} DH sur le cycle{{ l.fois ? ' · ≈ ' + l.fois + '×' : '' }}</span>
                                     <span v-for="(s, k) in l.seances" :key="'fs' + k" data-frise-seance :data-etat="s.etat" :title="(s.etat === 'paye' ? 'Payé le ' : (s.etat === 'suivant' ? 'Prochaine ≈ ' + s.quand + ' : au cycle suivant' : 'Prochaine ≈ ')) + (s.etat === 'suivant' ? '' : s.quand)"
@@ -7789,6 +7789,63 @@
                         <span class="inline-block w-2 h-2 align-middle rounded-full ring-2 ring-amber-500"></span> au cycle suivant ·
                         trait noir : le rythme attendu à ce jour.
                     </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- v37.100 : ce qui a été saisi derrière une case de la frise — modifiable et supprimable sur place -->
+        <div v-if="friseOuverte && apercuFrise" data-frise-apercu class="fixed inset-0 z-[10001] bg-black/30 flex items-end md:items-center justify-center p-0 md:p-4" @click.self="fermerApercuFrise()">
+            <div class="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl shadow-2xl max-h-[85vh] flex flex-col">
+                <div class="flex items-start gap-3 px-4 py-3 border-b border-slate-100">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-black text-slate-800 truncate" data-frise-apercu-titre>{{ apercuFrise.emoji }} {{ apercuFrise.nom }} <span class="text-slate-400 font-bold">· {{ apercuFrise.catLabel }}</span></p>
+                        <p class="text-[11px] font-semibold text-slate-500">{{ apercuFrise.parCycle ? 'Tout le cycle, ' : '' }}{{ apercuFrise.periode }} · compté {{ formatMAD(apercuFrise.reel) }} pour {{ formatMAD(apercuFrise.prevu) }} prévus</p>
+                    </div>
+                    <button type="button" data-frise-apercu-fermer @click="fermerApercuFrise()" aria-label="Fermer" class="shrink-0 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">✕</button>
+                </div>
+                <div class="overflow-y-auto px-3 py-2 space-y-1.5">
+                    <p v-if="apercuFrise.saisi" data-frise-apercu-saisi class="rounded-lg bg-sky-50 ring-1 ring-sky-200 px-2.5 py-1.5 text-[11px] font-bold text-sky-900">✍️ Saisi pour la semaine, sans date : {{ formatMAD(apercuFrise.saisi) }} — se corrige dans la Météo (✎ de la semaine).</p>
+                    <p v-if="apercuFrise.auPrevu" data-frise-apercu-auprevu class="rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-2.5 py-1.5 text-[11px] font-bold text-emerald-900">Rien n'a été tapé sur ce morceau : il compte au prévu ({{ formatMAD(apercuFrise.defaut) }}).</p>
+                    <p v-if="!apercuFriseOps.ops.length" data-frise-apercu-vide class="px-1 py-3 text-xs font-semibold text-slate-500 text-center">Aucune opération dans le journal pour ce poste, {{ apercuFrise.periode }}.</p>
+                    <div v-for="o in apercuFriseOps.ops" :key="'fa_' + o.t.id" data-frise-apercu-op :data-tx="o.t.id" :class="['rounded-xl border', journal.ouvert === o.t.id ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200']">
+                        <button type="button" data-frise-apercu-ouvrir @click="ouvrirOperation(o.t.id)" class="w-full text-left px-2.5 py-2 flex items-start gap-2">
+                            <span class="flex-1 min-w-0">
+                                <span class="block text-xs font-bold text-slate-900 truncate">{{ o.t.libelle || '(sans libellé)' }}</span>
+                                <span class="block text-[10px] font-semibold text-slate-500">{{ o.quand }} · {{ o.compte }}{{ o.cat ? ' · ' + o.cat : '' }}{{ o.t.source ? ' · ' + o.t.source : '' }}</span>
+                            </span>
+                            <span class="text-xs font-black tabular-nums text-red-600 whitespace-nowrap">−{{ formatMAD(o.montant) }}</span>
+                            <span class="text-[11px] text-slate-400">{{ journal.ouvert === o.t.id ? '▴' : '✏️' }}</span>
+                        </button>
+                        <div v-if="journal.ouvert === o.t.id && journal.brouillon" data-frise-apercu-edition class="px-2.5 pb-2.5 pt-1 border-t border-blue-100 space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                <label class="col-span-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Libellé
+                                    <input type="text" data-frise-edit-libelle v-model="journal.brouillon.libelle" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal"/></label>
+                                <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Montant (DH)
+                                    <input type="number" inputmode="decimal" step="0.01" min="0" data-frise-edit-montant v-model="journal.brouillon.montant" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400"/></label>
+                                <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Date
+                                    <input type="datetime-local" data-frise-edit-date v-model="journal.brouillon.datetime" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400"/></label>
+                                <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Catégorie
+                                    <select data-frise-edit-cat v-model="journal.brouillon.categorieId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
+                                        <option value="">À catégoriser</option>
+                                        <option v-if="journal.brouillon.categorieId && !categoriesPourRanger.some(g => g.items.some(c => c.id === journal.brouillon.categorieId))" :value="journal.brouillon.categorieId">{{ getCategorieLabel(journal.brouillon.categorieId) || journal.brouillon.categorieId }}</option>
+                                        <optgroup v-for="g in categoriesPourRanger" :key="'fae_' + g.label" :label="g.label"><option v-for="c in g.items" :key="'faec_' + c.id" :value="c.id">{{ c.label }}</option></optgroup>
+                                    </select></label>
+                                <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Compte
+                                    <select data-frise-edit-compte v-model="journal.brouillon.compteId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
+                                        <option value="">Sans compte</option>
+                                        <option v-for="c in journalComptes" :key="'faeo_' + c.id" :value="String(c.id)">{{ c.label }}</option>
+                                    </select></label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" data-frise-apercu-supprimer @click="supprimerOperation(o.t.id)" :class="['mr-auto px-2.5 py-1.5 rounded-lg text-[11px] font-black', journal.confirmerSuppression === o.t.id ? 'bg-red-600 text-white' : 'text-red-700 bg-red-50 hover:bg-red-100']">{{ journal.confirmerSuppression === o.t.id ? 'Confirmer la suppression' : '🗑️ Supprimer' }}</button>
+                                <button type="button" data-frise-apercu-enregistrer @click="enregistrerOperation()" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-white bg-blue-600 hover:bg-blue-700">✓ Enregistrer</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-3 py-2.5 border-t border-slate-100 flex items-center gap-2">
+                    <span class="mr-auto text-[11px] font-black text-slate-600 tabular-nums" data-frise-apercu-total>{{ apercuFriseOps.ops.length }} opération{{ apercuFriseOps.ops.length > 1 ? 's' : '' }} · {{ formatMAD(apercuFriseOps.total) }}</span>
+                    <button type="button" data-frise-apercu-journal @click="apercuVersJournal()" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200">📋 Voir dans le Journal</button>
                 </div>
             </div>
         </div>
@@ -8861,8 +8918,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
                 setup() {
-                    const CURRENT_VERSION = "37.99 Mes applis";
+                    const CURRENT_VERSION = "37.100 Frise → Journal";
                     const CHANGELOG = [
+        { version: "37.100 Frise → Journal", date: "2026-11-04", changes: [
+            "🔎 LA FRISE S'OUVRE SUR LE JOURNAL — touchez une case (un poste, un morceau de semaine) : la liste des opérations saisies derrière ce chiffre s'affiche, la plus récente en premier, avec leur date, leur compte et le total. Touchez une barre « / 15 j » ou « / cycle » : les opérations du poste sur tout le cycle.",
+            "✏️ MODIFIER OU SUPPRIMER SUR PLACE — une opération touchée s'ouvre : libellé, montant, date, catégorie, compte, puis « ✓ Enregistrer » ; « 🗑️ Supprimer » demande une confirmation. La case, le total et la frise se mettent à jour aussitôt.",
+            "📝 CE QUI N'EST PAS UNE OPÉRATION est dit aussi : un montant saisi pour la semaine sans date (il se corrige dans la Météo), ou un morceau compté au prévu parce que rien n'a été tapé.",
+            "📋 « Voir dans le Journal » ouvre la Saisie, journal filtré sur ce poste et ce cycle.",
+        ] },
         { version: "37.99 Mes applis", date: "2026-11-04", changes: [
             "🧩 MES APPLIS — un bouton dans chaque appli (écran Aujourd'hui, menu, barre du téléphone ; en-tête de Santé) ouvre le choix : Finance, Santé, puis Psy et Voyage (« bientôt »). L'appli où vous êtes est marquée « ici ».",
             "📱 UNE PAGE D'ACCUEIL — /finance/accueil.html : les tuiles de toutes vos applis, à ajouter sur l'écran d'accueil du téléphone.",
@@ -21661,12 +21724,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const prevu = Math.round(Number(prevus[i][cle] || 0)), defaut = Math.round(Number(m.defs[cle] || 0));
                                 const auPrevu = !tape && tk <= 0 && defaut > 0;
                                 const reel = Math.round(Math.max(sai, tk) + (auPrevu ? defaut : 0));
-                                return { prevu, reel, auPrevu, etat: m.etat, avenir: m.etat === 'avenir' && !tape && tk <= 0, encours: m.etat === 'encours', depasse: reel > prevu + 0.5, part: m.part, titre: m.titre };
+                                return { prevu, reel, auPrevu, etat: m.etat, avenir: m.etat === 'avenir' && !tape && tk <= 0, encours: m.etat === 'encours', depasse: reel > prevu + 0.5, part: m.part, titre: m.titre, du: m.debut, au: m.fin, saisi: tape ? Math.round(sai) : null, defaut };
                             };
                             const lignes = [];
                             const hebdo = (c.prevu || []).filter(p => p.unite === 'semaine');
-                            if (hebdo.length) hebdo.forEach(p => lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: 'semaine', cellules: morceaux.map((m, i) => cellule(p.cle, p.categorieId, i)) }));
-                            else if (!(c.prevu || []).length) lignes.push({ cle: c.key, nom: c.label, emoji: '', unite: 'semaine', cellules: morceaux.map((m, i) => cellule(c.key, null, i)) });
+                            if (hebdo.length) hebdo.forEach(p => lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: 'semaine', catKey: c.key, catId: p.categorieId || null, cellules: morceaux.map((m, i) => cellule(p.cle, p.categorieId, i)) }));
+                            else if (!(c.prevu || []).length) lignes.push({ cle: c.key, nom: c.label, emoji: '', unite: 'semaine', catKey: c.key, catId: null, cellules: morceaux.map((m, i) => cellule(c.key, null, i)) });
                             (L.postesCycle || []).filter(p => p.cat === c.key).forEach(p => {
                                 const seances = [];
                                 if (p.unite === 'quinzaine' && p.prevu > 0) {
@@ -21678,7 +21741,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                         if (hors) break;
                                     }
                                 } else p.paiements.forEach(iso => seances.push({ pos: pos(iso), quand: libIso(iso), etat: 'paye' }));
-                                lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, enveloppe: p.cyclePrevu, engage: p.cycleEngage, depasse: p.exces > 0, fois: p.unite === 'quinzaine' ? p.fois : null,
+                                lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, catKey: c.key, catId: p.categorieId || null, du: _ymd(debut), au: _ymd(fin), saisi: morceaux.reduce((s, m) => s + (Object.prototype.hasOwnProperty.call(m.vals, p.cle) ? Number(m.vals[p.cle] || 0) : 0), 0), enveloppe: p.cyclePrevu, engage: p.cycleEngage, depasse: p.exces > 0, fois: p.unite === 'quinzaine' ? p.fois : null,
                                               pct: p.cyclePrevu > 0 ? Math.min(100, Math.round(p.cycleEngage / p.cyclePrevu * 100)) : (p.cycleEngage > 0 ? 100 : 0), seances, alerte: p.alerte });
                                 if (p.exces > 0) alertes.push('🔴 ' + p.nom + ' (' + c.label + ') : ' + Math.round(p.cycleEngage) + ' DH sur une enveloppe de ' + Math.round(p.cyclePrevu) + ' — dépassement de ' + Math.round(p.exces) + ' DH');
                                 else if (p.alerte && p.alerte.niveau === 'depasse') alertes.push(p.alerte.texte.replace('⚠️ ', '⚠️ ' + p.nom + ' : '));
@@ -21698,6 +21761,56 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return { du: lib(debut), au: lib(fin), jours: J, aujJ, aujPct: aujJ / J * 100, morceaux: morceaux.map(({ vals, T, defs, m, ...x }) => x), categories, alertes, quinzaine };
                     });
                     const friseCycle = computed(() => friseOuverte.value ? _friseCalc.value : null);
+
+                    /*  v37.100 — UNE CASE DE LA FRISE → LES OPÉRATIONS DERRIÈRE CE CHIFFRE (modifier, supprimer sur place). */
+                    const apercuFrise = ref(null);
+                    const _libJourFrise = (iso) => { const p = String(iso || '').split('-').map(Number); return p[2] ? p[2] + ' ' + _MOIS_COURTS[p[1] - 1] : '?'; };
+                    const ouvrirApercuFrise = (c, l, x) => {
+                        if (!c || !l) return;
+                        const du = x ? x.du : l.du, au = x ? x.au : l.au;
+                        if (!du || !au) return;
+                        journal.ouvert = null; journal.brouillon = null; journal.confirmerSuppression = null;
+                        apercuFrise.value = { catKey: l.catKey || c.key, catId: l.catId || null, cle: l.cle, nom: l.nom, emoji: l.emoji || '', catLabel: c.label, du, au,
+                                              periode: du === au ? 'le ' + _libJourFrise(du) : 'du ' + _libJourFrise(du) + ' au ' + _libJourFrise(au), parCycle: !x,
+                                              reel: x ? x.reel : l.engage, prevu: x ? x.prevu : l.enveloppe, saisi: x ? x.saisi : (l.saisi || null), auPrevu: x ? x.auPrevu : false, defaut: x ? x.defaut : 0 };
+                    };
+                    const fermerApercuFrise = () => { apercuFrise.value = null; journal.ouvert = null; journal.brouillon = null; journal.confirmerSuppression = null; };
+                    const apercuFriseOps = computed(() => {
+                        calculationTick.value;
+                        const A = apercuFrise.value;
+                        if (!A) return { ops: [], total: 0 };
+                        const d = donneesAnnuelles.value[consoT0Annee.value] || {}, cvs = d.chargesVariables || {};
+                        const carte = {};
+                        Object.entries(cvs).forEach(([key, cv]) => {
+                            if (!cv || cv.categorieId === 'cat_cv_factures') return;
+                            if (cv.categorieId) carte[cv.categorieId] = key;
+                            (cv.details || []).forEach(det => { if (det && det.categorieId) carte[det.categorieId] = key; });
+                        });
+                        const mere = (cvs[A.catKey] || {}).categorieId;
+                        const parPoste = A.catId && A.catId !== mere;
+                        const ops = [];
+                        Object.values(donneesAnnuelles.value || {}).forEach(a => {
+                            (a && Array.isArray(a.transactionsReelles) ? a.transactionsReelles : []).forEach(t => {
+                                const dt = String(t.date || '').slice(0, 10);
+                                if (!t || !dt || dt < A.du || dt > A.au || carte[t.categorieId] !== A.catKey) return;
+                                if (parPoste && t.categorieId !== A.catId) return;
+                                const heure = String(t.datetime || '').slice(11, 16);
+                                ops.push({ t, quand: _libJourFrise(dt) + (heure && heure !== '12:00' ? ' · ' + heure : ''), montant: Number(t.montant) || 0,
+                                           compte: ((comptes.value || []).find(c => String(c.id) === String(t.compteId)) || {}).label || 'sans compte',
+                                           cat: t.categorieId && t.categorieId !== A.catId ? _libCat(t.categorieId) : '' });
+                            });
+                        });
+                        ops.sort((x, y) => String(y.t.datetime || y.t.date).localeCompare(String(x.t.datetime || x.t.date)));
+                        return { ops, total: Math.round(ops.reduce((s, o) => s + o.montant, 0) * 100) / 100 };
+                    });
+                    const apercuVersJournal = () => {
+                        const A = apercuFrise.value; if (!A) return;
+                        const d = donneesAnnuelles.value[consoT0Annee.value] || {};
+                        journal.cat = A.catId || ((d.chargesVariables || {})[A.catKey] || {}).categorieId || '';
+                        journal.q = ''; journal.periode = 'cycle'; journal.vue = 'date';
+                        fermerApercuFrise(); friseOuverte.value = false;
+                        appMode.value = 'reel'; activeTab.value = 'saisie';
+                    };
                     //  🔒 Le Sanctuaire : exactement la liste et le total de l'Urgence.
                     const sanctuaireHebdo = computed(() => {
                         const r = _rangAujourdhui.value;
@@ -26140,7 +26253,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire
