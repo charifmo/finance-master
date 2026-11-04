@@ -15,7 +15,8 @@ cd "$(dirname "$0")"
 # v37.8 — Les deux suites « navigateur » (un seul atterrissage, simulateur)
 #   ont besoin de dépendances locales NON versionnées. Sans elles, elles
 #   s'ignorent proprement au lieu d'échouer :
-#       npm install --no-save vue@3 playwright-core chart.js tailwindcss@3
+#       npm install --no-save vue@3 playwright-core chart.js tailwindcss@3 mammoth@1.8.0
+#   (mammoth : lecture des plans Word .docx de Santé ; sans lui, ce seul contrôle s’ignore)
 #   Chromium est fourni par l'environnement (/opt/pw-browsers/chromium) ;
 #   sinon, pointer CHROMIUM=/chemin/vers/chrome.
 

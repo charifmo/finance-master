@@ -17,9 +17,9 @@ initial (profil, bilans, protocole) se charge par **« 📂 Importer mon dossier
 
 | Fichier | Rôle |
 |---|---|
-| `index.html` | l'appli (5 onglets : Pilotage, Analyses, Nutrition, Samsung & Poids, Médecin-Chef IA) |
-| `sante_calculs.js` / `sante_lib.php` | les calculs, identiques en JS et en PHP (test de parité) : TG/HDL, non-HDL, HOMA-IR, TyG, SCORE2, règle de Gilbert, Mifflin-St Jeor, bilan énergétique, projection de poids, score de séquençage |
-| `sante_import.js` | lecture d'un compte rendu (texte, PDF, image) |
+| `index.html` | l'appli (6 onglets : Pilotage, Analyses, Nutrition, Plans, Samsung & Poids, Médecin-Chef IA) |
+| `sante_calculs.js` / `sante_lib.php` | les calculs, identiques en JS et en PHP (test de parité) : TG/HDL, non-HDL, HOMA-IR, TyG, SCORE2, règle de Gilbert, Mifflin-St Jeor, bilan énergétique, projection de poids, score de séquençage, suivi d'un plan (prévu / réalisé de la semaine) |
+| `sante_import.js` | lecture d'un compte rendu (texte, PDF, image) : biomarqueurs, bornes, date du bilan (prélèvement d'abord) ; lecture d'un plan nutrition / exercice en texte libre |
 | `sante_integrity.php` | forme de l'état, dates, nombres : tout ce qui entre y passe |
 | `sante_intent_engine.php` | le catalogue du Médecin-Chef IA : `add_lab_panel`, `update_biomarker`, `log_daily_nutrition`, `log_workout_activity`, `sync_samsung_health`, `update_supplement_protocol`, `update_health_goal` |
 | `sante_store.php`, `save_sante.php` | stockage : table `sante_state` (créée seule), fichier de secours, 30 sauvegardes, refus 409 d'un onglet périmé |
@@ -27,6 +27,33 @@ initial (profil, bilans, protocole) se charge par **« 📂 Importer mon dossier
 | `sync_samsung.php` | webhook Health Connect / Samsung Health (jeton obligatoire) |
 | `biomarqueurs.json`, `aliments.json`, `explications.json` | catalogue des biomarqueurs, table des aliments (valeurs indicatives / 100 g), explications de Merlin |
 | `sql/sante_state.sql`, `sql/sante_vectors.sql` | tables PostgreSQL (`sante_vectors` est séparée de `finance_vectors`) |
+
+## Analyses : import, provenance, corrections (v1.4)
+
+- **Plusieurs fichiers d'un coup** (glisser-déposer ou choix multiple) : PDF texte, PDF scanné (OCR page par page), photos
+  (OCR), texte. Tout est lu dans le navigateur. Chaque fichier donne un aperçu : date trouvée (la date de **prélèvement**
+  passe avant l'ouverture du dossier et l'édition ; jamais une date de naissance, d'antériorité ou future), valeurs
+  reconnues modifiables, lignes non reconnues à vérifier.
+- **Chaque valeur garde son document** (`valeurs[k].doc` → `bilan.documents[]`) : le tableau l'indique au survol,
+  « 🔦 » surligne les valeurs d'un document, « 🗑 » supprime le document **et ses valeurs** (second clic de confirmation).
+- **Corriger** : « ✏️ Modifier les valeurs » dans le tableau, ou « ▾ Lignes » d'un document ; une valeur corrigée est
+  marquée `edite` (✎). Vider la case la supprime.
+- **🧹 Tout effacer** : les analyses seules, ou toute l'appli ; confirmé en tapant `EFFACER`. Le serveur garde ses
+  30 sauvegardes tournantes.
+
+## Plans nutrition et exercice (v1.4)
+
+Onglet **Plans** : le plan de la nutritionniste ou du coach s'importe d'un PDF, d'un Word `.docx`, d'une photo ou d'un
+texte. Les jours (« Lundi », « Tous les jours ») et, pour la nutrition, les repas (« Petit-déjeuner »…) servent de titres ;
+chaque autre ligne devient un élément, corrigeable avant d'enregistrer. Chaque jour, on coche ce qui est **réalisé**
+(`journal[date].plan_fait`) ; la semaine affiche prévu / réalisé, le taux et, pour l'exercice, les minutes. Le
+Médecin-Chef IA lit le plan du jour et la semaine (`sante_api.php?lecture=1` → `plans`).
+
+## CSV Samsung Health
+
+Samsung Health → ≡ → Paramètres → « Télécharger les données personnelles ». Les CSV (un par mesure) arrivent dans
+`Download/Samsung Health/<date>` ; l'onglet Samsung & Poids les prend plusieurs à la fois (ligne de description avant
+l'en-tête sautée, `day_time` en ms ou `start_time`, maximum des pas si téléphone + montre).
 
 ## Webhook Samsung Health
 

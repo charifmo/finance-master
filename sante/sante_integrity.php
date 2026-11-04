@@ -14,7 +14,7 @@ function sante_etat_defaut(): array {
         'profil' => ['nom' => '', 'sexe' => 'H', 'naissance' => null, 'taille_cm' => null, 'fumeur' => false, 'pas_systolique' => null,
                      'region_score2' => 'moderate', 'pas_objectif' => 10000, 'seances_machines_semaine' => 2, 'terrain' => [], 'suivi' => ''],
         'objectifs' => ['poids_kg' => null, 'tg_gl' => 1.50, 'apob_gl' => 1.00, 'vitd_ngml' => 35],
-        'bilans' => [], 'poids' => [], 'journal' => new stdClass(), 'supplements' => [], 'protocole' => [],
+        'bilans' => [], 'poids' => [], 'journal' => new stdClass(), 'supplements' => [], 'protocole' => [], 'plans' => new stdClass(),
     ];
 }
 function sante_date_ok($d): bool { return is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && checkdate((int)substr($d, 5, 2), (int)substr($d, 8, 2), (int)substr($d, 0, 4)); }
@@ -27,6 +27,9 @@ function sante_norm_valeur($x): ?array {
     $o = ['v' => $v];
     if (isset($x['u']) && is_string($x['u'])) $o['u'] = mb_substr($x['u'], 0, 20);
     foreach (['min', 'max'] as $k) if (array_key_exists($k, $x) && sante_num($x[$k]) !== null) $o[$k] = sante_num($x[$k]);
+    //  v1.4 — la provenance : le document importé dont vient la valeur (son id), et « corrigée à la main »
+    if (isset($x['doc']) && is_string($x['doc']) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $x['doc'])) $o['doc'] = $x['doc'];
+    if (!empty($x['edite'])) $o['edite'] = true;
     return $o;
 }
 function sante_norm_bilan($b): ?array {
@@ -37,7 +40,35 @@ function sante_norm_bilan($b): ?array {
           'source' => mb_substr((string)($b['source'] ?? 'saisie'), 0, 30), 'valeurs' => $vals];
     if (sante_num($b['pas_systolique'] ?? null) !== null) $o['pas_systolique'] = sante_num($b['pas_systolique']);
     if (!empty($b['note'])) $o['note'] = mb_substr((string)$b['note'], 0, 500);
+    //  v1.4 — les documents (PDF, photos, texte) dont viennent les valeurs de ce bilan : supprimer un document retire ses valeurs
+    $docs = [];
+    foreach ((array)($b['documents'] ?? []) as $d) {
+        if (!is_array($d) || !isset($d['id']) || !is_string($d['id']) || !preg_match('/^[A-Za-z0-9_-]{1,40}$/', $d['id'])) continue;
+        $docs[] = ['id' => $d['id'], 'nom' => mb_substr((string)($d['nom'] ?? 'document'), 0, 160), 'type' => mb_substr((string)($d['type'] ?? ''), 0, 20),
+                   'importe_le' => sante_date_ok($d['importe_le'] ?? null) ? $d['importe_le'] : null];
+    }
+    if ($docs) $o['documents'] = $docs;
     return $o;
+}
+
+/** v1.4 — Un plan (nutrition ou exercice) : titre, document d'origine, éléments rangés par jour (et par repas). */
+const SANTE_JOURS_PLAN = ['tous', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const SANTE_MOMENTS_PLAN = ['petit_dejeuner', 'dejeuner', 'collation', 'diner'];
+function sante_norm_plan($p, string $type): ?array {
+    if (!is_array($p)) return null;
+    $items = [];
+    foreach ((array)($p['items'] ?? []) as $x) {
+        if (!is_array($x) || trim((string)($x['texte'] ?? '')) === '') continue;
+        $i = ['id' => is_string($x['id'] ?? null) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $x['id']) ? $x['id'] : sante_uid(),
+              'jour' => in_array($x['jour'] ?? '', SANTE_JOURS_PLAN, true) ? $x['jour'] : 'tous', 'texte' => mb_substr(trim((string)$x['texte']), 0, 200)];
+        if ($type === 'nutrition') $i['moment'] = in_array($x['moment'] ?? '', SANTE_MOMENTS_PLAN, true) ? $x['moment'] : 'dejeuner';
+        elseif (($d = sante_num($x['duree_min'] ?? null)) !== null && $d > 0 && $d <= 600) $i['duree_min'] = $d;
+        $items[] = $i;
+        if (count($items) >= 300) break;
+    }
+    if (!$items) return null;
+    return ['titre' => mb_substr((string)($p['titre'] ?? ''), 0, 120), 'source' => mb_substr((string)($p['source'] ?? ''), 0, 160),
+            'importe_le' => sante_date_ok($p['importe_le'] ?? null) ? $p['importe_le'] : null, 'items' => $items];
 }
 function sante_normaliser($e): array {
     $d = sante_etat_defaut();
@@ -68,6 +99,10 @@ function sante_normaliser($e): array {
         foreach ((array)($jour['repas'] ?? []) as $r) if (is_array($r) && is_array($r['items'] ?? null)) $jo['repas'][] = $r;
         foreach (['pas', 'zone2_min', 'marches_post', 'soleus_min', 'machines'] as $k) if (isset(($jour['activite'] ?? [])[$k])) $jo['activite'][$k] = $k === 'machines' ? !empty($jour['activite'][$k]) : sante_num($jour['activite'][$k]);
         foreach (['pas', 'kcal_actives', 'fc_moy', 'fc_repos', 'sommeil_min', 'poids'] as $k) if (isset(($jour['samsung'] ?? [])[$k]) && sante_num($jour['samsung'][$k]) !== null) $jo['samsung'][$k] = sante_num($jour['samsung'][$k]);
+        //  v1.4 — ce qui a été RÉALISÉ du plan ce jour-là : { id d'élément du plan: true }
+        $pf = [];
+        foreach ((array)($jour['plan_fait'] ?? []) as $id => $fait) if (!empty($fait) && is_string($id) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $id)) $pf[$id] = true;
+        if ($pf) $jo['plan_fait'] = $pf;
         $j[$date] = $jo;
     }
     ksort($j);
@@ -76,5 +111,8 @@ function sante_normaliser($e): array {
         ? ['nom' => mb_substr((string)$s['nom'], 0, 60), 'dose' => mb_substr((string)($s['dose'] ?? ''), 0, 60), 'moment' => mb_substr((string)($s['moment'] ?? ''), 0, 60), 'actif' => !isset($s['actif']) || !empty($s['actif'])]
         : null, (array)($e['supplements'] ?? []))));
     $o['protocole'] = array_values(array_filter(array_map(fn($x) => is_string($x) ? mb_substr($x, 0, 300) : null, (array)($e['protocole'] ?? []))));
+    $pl = is_array($e['plans'] ?? null) ? $e['plans'] : [];
+    $o['plans'] = new stdClass();
+    foreach (['nutrition', 'exercice'] as $t) if (($n = sante_norm_plan($pl[$t] ?? null, $t)) !== null) { $o['plans'] = (array)$o['plans']; $o['plans'][$t] = $n; }
     return $o;
 }

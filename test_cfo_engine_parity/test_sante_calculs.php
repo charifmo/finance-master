@@ -53,6 +53,19 @@ v('  → aliment inconnu : non « connu », valeurs fournies seulement', sante_i
 // ── E. Intégrité ──
 $e = sante_normaliser(['bilans' => [['date' => '2026-13-40', 'valeurs' => ['tg' => 2]], ['date' => '2026-04-02', 'valeurs' => ['tg' => '2,17', 'inconnu' => 5, 'hb' => 'abc']]], 'poids' => [['date' => '2026-10-01', 'kg' => 5000]]]);
 v('E. intégrité : date impossible écartée, biomarqueur inconnu et valeur illisible retirés, poids absurde ignoré', count($e['bilans']) === 1 && $e['bilans'][0]['valeurs'] === ['tg' => ['v' => 2.17]] && $e['poids'] === [], $e['bilans']);
+//  v1.4 — provenance des valeurs, documents, plans, réalisé : gardés ; le reste rejeté
+$e2 = sante_normaliser(['bilans' => [['date' => '2026-05-15', 'documents' => [['id' => 'd1', 'nom' => 'bilan.pdf', 'type' => 'pdf', 'importe_le' => '2026-11-04'], ['id' => '../x', 'nom' => 'pirate']],
+        'valeurs' => ['tg' => ['v' => 2.05, 'doc' => 'd1', 'edite' => true], 'hdl' => ['v' => 0.4, 'doc' => '<script>']]]],
+    'plans' => ['nutrition' => ['titre' => 'Plan', 'source' => 'plan.docx', 'importe_le' => '2026-11-01', 'items' => [['id' => 'n1', 'jour' => 'lundi', 'moment' => 'diner', 'texte' => ' soupe '], ['jour' => 'jamais', 'moment' => 'goûter', 'texte' => 'x y'], ['texte' => '']]],
+                'exercice' => ['items' => [['id' => 'e1', 'jour' => 'tous', 'texte' => 'marche', 'duree_min' => '45'], ['id' => 'e2', 'texte' => 'nage', 'duree_min' => 9999]]], 'autre' => ['items' => [['texte' => 'z']]]],
+    'journal' => ['2026-11-02' => ['plan_fait' => ['n1' => true, 'e1' => false, 'x y' => true]]]]);
+$b2 = $e2['bilans'][0];
+v('  → v1.4 : la valeur garde son document et « corrigée » ; un id de document douteux est écarté', $b2['valeurs']['tg'] === ['v' => 2.05, 'doc' => 'd1', 'edite' => true] && $b2['valeurs']['hdl'] === ['v' => 0.4]
+    && $b2['documents'] === [['id' => 'd1', 'nom' => 'bilan.pdf', 'type' => 'pdf', 'importe_le' => '2026-11-04']], $b2);
+$pn = $e2['plans']['nutrition'] ?? null; $pe = $e2['plans']['exercice'] ?? null;
+v('  → plans : jour / repas inconnus ramenés à « tous » / « déjeuner », ligne vide retirée, durée absurde ignorée, type inconnu rejeté', $pn && count($pn['items']) === 2 && $pn['items'][0] === ['id' => 'n1', 'jour' => 'lundi', 'texte' => 'soupe', 'moment' => 'diner']
+    && $pn['items'][1]['jour'] === 'tous' && $pn['items'][1]['moment'] === 'dejeuner' && $pe['items'][0]['duree_min'] == 45 && !isset($pe['items'][1]['duree_min']) && !isset($e2['plans']['autre']), $e2['plans']);
+v('  → réalisé : seuls les « vrai » aux identifiants sûrs sont gardés ; sans plan, « plans » reste un objet JSON', $e2['journal']['2026-11-02']['plan_fait'] === ['n1' => true] && json_encode(sante_normaliser([])['plans']) === '{}', $e2['journal']);
 
 // ── F. Moteur ──
 $etat = sante_normaliser(['profil' => ['naissance' => '1980-01-07', 'sexe' => 'H'], 'objectifs' => ['poids_kg' => 90]]);

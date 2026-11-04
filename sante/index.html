@@ -89,6 +89,7 @@
                         <span class="text-sm" :class="jour.checklist[c.id] ? 'line-through text-slate-400' : 'font-semibold'">{{ c.libelle }}</span>
                     </label>
                     <p class="text-xs font-black text-emerald-700" data-checklist-score>{{ checklistFaits }}/{{ CHECKLIST.length }} faits</p>
+                    <button v-if="TYPES_PLAN.some(t => suivis[t.id].du_jour.length)" type="button" data-plans-du-jour @click="onglet = 'plans'" class="w-full text-left mt-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100">📋 Plans du jour : <span v-for="(t, n) in TYPES_PLAN.filter(t => suivis[t.id].du_jour.length)" :key="t.id">{{ n ? ' · ' : '' }}{{ t.icone }} {{ suivis[t.id].du_jour.filter(i => i.fait).length }}/{{ suivis[t.id].du_jour.length }}</span> → cocher</button>
                 </div>
                 <div class="space-y-5">
                     <div class="carte p-4">
@@ -157,24 +158,41 @@
             <div class="carte p-4">
                 <div class="flex flex-wrap items-center gap-2 mb-3">
                     <button v-for="(lib, s) in catalogue.systemes || {}" :key="s" type="button" :data-systeme="s" @click="systeme = s"
-                            class="px-3 py-1 rounded-full text-xs font-black border" :class="systeme === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600'">{{ lib }}</button>
+                            class="px-3 py-1 rounded-full text-xs font-black border" :class="systeme === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600'">{{ lib }} <span class="opacity-70 font-bold">· {{ nbParSysteme[s] || 0 }}</span></button>
                     <span class="flex-1"></span>
                     <button type="button" data-merlin @click="merlin = !merlin" class="px-3 py-1 rounded-full text-xs font-black border" :class="merlin ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-700 border-purple-200'">🪄 Merlin {{ merlin ? '(cliquez un biomarqueur)' : '' }}</button>
-                    <button type="button" data-ouvrir-import @click="importOuvert = !importOuvert" class="px-3 py-1 rounded-full text-xs font-black bg-teal-600 text-white">📥 Importer un bilan</button>
+                    <button type="button" data-mode-edition @click="editionTable = !editionTable" class="px-3 py-1 rounded-full text-xs font-black border" :class="editionTable ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'">✏️ {{ editionTable ? 'Terminer les modifications' : 'Modifier les valeurs' }}</button>
+                    <button type="button" data-ouvrir-import @click="importOuvert = !importOuvert" class="px-3 py-1 rounded-full text-xs font-black bg-teal-600 text-white">📥 Importer des bilans</button>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm tabnum" data-table-biomarqueurs>
-                        <thead><tr class="text-left text-[11px] uppercase text-slate-500"><th class="py-1 pr-2">Biomarqueur</th><th class="pr-2">Normes</th><th v-for="b in etat.bilans" :key="b.id" class="pr-2 whitespace-nowrap">{{ dateCourte(b.date) }}</th><th>Cible</th></tr></thead>
+                <p v-if="editionTable" class="mb-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Mode modification : changez une valeur puis sortez de la case. Videz-la ou touchez ✕ pour la supprimer ; remplissez une case vide pour l’ajouter.</p>
+                <div class="overflow-x-auto -mx-4 px-4">
+                    <table class="w-full text-sm tabnum border-separate border-spacing-0" data-table-biomarqueurs>
+                        <thead><tr class="text-left text-[11px] uppercase text-slate-500">
+                            <th class="sticky left-0 z-10 bg-white py-2 pr-3 border-b border-slate-200">Biomarqueur</th>
+                            <th class="pr-3 border-b border-slate-200">Normes</th>
+                            <th v-for="b in etat.bilans" :key="b.id" class="px-2 border-b border-slate-200 whitespace-nowrap text-center align-bottom" :data-colonne-bilan="b.date" :title="(b.documents || []).map(d => d.nom).join('\n')">
+                                <span class="block text-slate-700">{{ dateCourte(b.date) }}</span>
+                                <span class="block text-[10px] normal-case font-semibold text-slate-400">{{ (b.documents || []).length ? '📄 ' + b.documents.length : '✍️' }}</span>
+                            </th>
+                            <th class="pl-2 border-b border-slate-200">Cible</th>
+                        </tr></thead>
                         <tbody>
-                            <tr v-for="k in lignesSysteme" :key="k" class="border-t hover:bg-slate-50 cursor-pointer" :data-marqueur="k" @click="cliquerMarqueur(k)" :class="marqueurChoisi === k ? 'bg-emerald-50' : ''">
-                                <td class="py-1 pr-2 font-semibold">{{ catalogue.marqueurs[k].libelle }} <span class="text-[10px] text-slate-400">{{ catalogue.marqueurs[k].unite }}</span></td>
-                                <td class="pr-2 text-[11px] text-slate-500 whitespace-nowrap">{{ normes(k) }}</td>
-                                <td v-for="b in etat.bilans" :key="b.id + k" class="pr-2 font-bold" :data-cellule="k + '|' + b.date" :class="couleurStatut(C.statut(b, k))">{{ C.val(b, k) ?? '' }}</td>
-                                <td class="text-[11px] font-bold text-emerald-700">{{ cible(k) }}</td>
+                            <tr v-for="k in lignesSysteme" :key="k" class="cursor-pointer group" :data-marqueur="k" @click="cliquerMarqueur(k)">
+                                <td class="sticky left-0 z-10 py-1.5 pr-3 font-semibold border-b border-slate-100" :class="marqueurChoisi === k ? 'bg-emerald-50' : 'bg-white group-hover:bg-slate-50'">{{ catalogue.marqueurs[k].libelle }} <span class="text-[10px] text-slate-400">{{ catalogue.marqueurs[k].unite }}</span></td>
+                                <td class="pr-3 text-[11px] text-slate-500 whitespace-nowrap border-b border-slate-100" :class="marqueurChoisi === k ? 'bg-emerald-50' : 'group-hover:bg-slate-50'">{{ normes(k) }}</td>
+                                <td v-for="b in etat.bilans" :key="b.id + k" class="px-2 py-1 font-bold text-center whitespace-nowrap border-b border-slate-100" :data-cellule="k + '|' + b.date" :title="sourceValeur(b, k)"
+                                    :class="[couleurStatut(C.statut(b, k)), docSurligne && b.valeurs[k] && b.valeurs[k].doc === docSurligne ? 'bg-amber-100 ring-1 ring-amber-300' : marqueurChoisi === k ? 'bg-emerald-50' : 'group-hover:bg-slate-50']">
+                                    <span v-if="editionTable" class="inline-flex items-center gap-1" @click.stop><saisie-valeur :bilan="b" :cle="k"></saisie-valeur><button v-if="b.valeurs[k]" type="button" data-supprimer-valeur @click="supprimerValeur(b, k)" class="text-slate-400 hover:text-rose-600 font-black" title="Supprimer cette valeur">✕</button></span>
+                                    <template v-else-if="C.val(b, k) !== null">{{ C.val(b, k) }}<span v-if="C.statut(b, k) === 'haut'" class="text-[10px]"> ▲</span><span v-else-if="C.statut(b, k) === 'bas'" class="text-[10px]"> ▼</span><sup v-if="b.valeurs[k] && b.valeurs[k].edite" class="text-slate-400" title="corrigée à la main">✎</sup></template>
+                                    <span v-else class="text-slate-300 font-normal">—</span>
+                                </td>
+                                <td class="pl-2 text-[11px] font-bold text-emerald-700 border-b border-slate-100 whitespace-nowrap">{{ cible(k) }}</td>
                             </tr>
+                            <tr v-if="!lignesSysteme.length"><td :colspan="etat.bilans.length + 3" class="py-6 text-center text-sm text-slate-400">Aucune valeur dans ce système pour l’instant.</td></tr>
                         </tbody>
                     </table>
                 </div>
+                <p class="mt-2 text-[11px] text-slate-500"><b class="text-rose-700">▲ au-dessus</b> · <b class="text-amber-600">▼ en dessous</b> · <b class="text-emerald-700">dans la norme</b> · ✎ corrigée à la main · survolez une valeur pour voir son document</p>
                 <div v-if="marqueurChoisi" class="mt-4"><canvas id="graphMarqueur" height="90"></canvas></div>
                 <div v-if="explication" data-explication class="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm space-y-1">
                     <p class="font-black text-purple-900">🪄 {{ catalogue.marqueurs[marqueurChoisi].libelle }} <span v-if="valeurChoisie !== null">— {{ valeurChoisie }} {{ catalogue.marqueurs[marqueurChoisi].unite }} ({{ C.statut(dernierAvec(marqueurChoisi), marqueurChoisi) }})</span></p>
@@ -184,21 +202,103 @@
                     <p v-if="impactProtocole" class="text-xs font-bold text-emerald-800" data-impact-protocole>Votre protocole actuel : {{ impactProtocole }}</p>
                 </div>
             </div>
-            <div v-if="importOuvert" class="carte p-4 space-y-2" data-import-bilan>
-                <h3 class="font-black text-teal-900">📥 Importer un bilan</h3>
-                <p class="text-xs text-slate-500">Collez le texte du compte rendu, ou choisissez un PDF / une photo (lu sur place, rien n’est envoyé).</p>
-                <input type="file" accept=".pdf,image/*,.txt" data-import-fichier @change="lireFichierBilan($event)" class="text-sm">
-                <textarea v-model="texteBilan" data-import-texte rows="6" class="w-full border rounded-lg p-2 text-xs font-mono" placeholder="Hémoglobine 14,70 g/dL 13 - 18&#10;Triglycérides 2.17 g/L < 1.50"></textarea>
+
+            <div v-if="importOuvert" class="carte p-4 space-y-3" data-import-bilan>
+                <div class="flex items-center gap-2"><h3 class="font-black text-teal-900 flex-1">📥 Importer des bilans</h3><button type="button" @click="importOuvert = false" class="text-slate-400 hover:text-slate-700 font-black" aria-label="Fermer">✕</button></div>
+                <p class="text-xs text-slate-500">PDF (même scannés), photos des comptes rendus (JPG, PNG…), fichiers texte — <b>plusieurs à la fois</b>. Tout est lu ici, dans votre navigateur : rien n’est envoyé ailleurs. La date de chaque bilan est trouvée toute seule (date de <b>prélèvement</b> en priorité) : vérifiez-la, corrigez une valeur si besoin, puis ajoutez.</p>
+                <label data-zone-depot @dragover.prevent="survolDepot = true" @dragleave="survolDepot = false" @drop.prevent="survolDepot = false; lireFichiersBilan($event.dataTransfer.files)"
+                       class="block border-2 border-dashed rounded-xl px-4 py-5 text-center cursor-pointer transition-colors" :class="survolDepot ? 'border-teal-500 bg-teal-50' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'">
+                    <span class="text-3xl">📂</span>
+                    <span class="block text-sm font-black text-slate-700">Glissez vos fichiers ici, ou touchez pour les choisir</span>
+                    <span class="block text-[11px] text-slate-500">PDF · photos JPG / PNG · texte — plusieurs fichiers d’un coup</span>
+                    <input type="file" multiple accept=".pdf,application/pdf,image/*,.txt,text/plain" data-import-fichier @change="lireFichiersBilan($event.target.files); $event.target.value = ''" class="sr-only">
+                </label>
+                <p class="text-xs font-bold text-slate-500">…ou collez le texte d’un compte rendu :</p>
+                <textarea v-model="texteBilan" data-import-texte rows="4" class="w-full border rounded-lg p-2 text-xs font-mono" placeholder="Prélevé le 15/05/2026&#10;Hémoglobine 14,70 g/dL 13 - 18&#10;Triglycérides 2.17 g/L < 1.50"></textarea>
                 <div class="flex flex-wrap gap-2 items-center">
-                    <button type="button" data-analyser-bilan @click="analyserBilan" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-black">🔎 Analyser</button>
+                    <button type="button" data-analyser-bilan @click="analyserBilan" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-black">🔎 Analyser ce texte</button>
                     <span v-if="lectureEnCours" class="text-xs font-bold text-slate-500">{{ lectureEnCours }}</span>
                 </div>
-                <div v-if="apercu" data-apercu-bilan class="space-y-2">
-                    <label class="text-sm font-bold">Date du bilan <input type="date" v-model="apercu.date" data-apercu-date class="border rounded-lg px-2 py-1"></label>
-                    <p class="text-xs font-bold" data-apercu-compte>{{ Object.keys(apercu.valeurs).length }} biomarqueur(s) reconnu(s) : {{ Object.keys(apercu.valeurs).map(k => catalogue.marqueurs[k].libelle + ' ' + apercu.valeurs[k].v).join(' · ') }}</p>
-                    <p v-if="apercu.nonReconnues.length" class="text-[11px] text-amber-700">Non reconnues (à vérifier) : {{ apercu.nonReconnues.slice(0, 8).join(' | ') }}</p>
-                    <button type="button" data-ajouter-bilan @click="ajouterBilanApercu" :disabled="!apercu.date || !Object.keys(apercu.valeurs).length" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-black disabled:opacity-40">✓ Ajouter ce bilan</button>
-                    <p v-if="messageBilan" class="text-xs font-bold" data-message-bilan>{{ messageBilan }}</p>
+                <div v-for="a in apercus" :key="a.id" data-apercu-bilan :data-apercu-nom="a.nom" class="rounded-xl border p-3 space-y-2" :class="a.etat === 'erreur' ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200'">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">{{ ICONES[a.type] || '📄' }}</span>
+                        <p class="flex-1 min-w-0 font-black text-sm break-all">{{ a.nom }}</p>
+                        <button type="button" data-retirer-apercu @click="retirerApercu(a)" class="text-xs font-bold text-slate-400 hover:text-rose-600">✕ Retirer</button>
+                    </div>
+                    <p v-if="a.etat === 'lecture'" class="text-xs font-bold text-slate-500">⏳ {{ a.message }}</p>
+                    <p v-else-if="a.etat === 'erreur'" class="text-xs font-bold text-rose-700" data-erreur-apercu>❌ {{ a.message }}</p>
+                    <template v-else>
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <label class="text-sm font-bold">Date du bilan <input type="date" v-model="a.date" data-apercu-date class="border rounded-lg px-2 py-1"></label>
+                            <span v-if="a.dateLigne" class="text-[11px] text-slate-500" data-apercu-date-source>lue sur : « {{ a.dateLigne }} »</span>
+                            <span v-else class="text-[11px] font-bold text-amber-700">⚠️ aucune date trouvée dans le document : vérifiez-la</span>
+                            <span v-if="etat.bilans.some(b => b.date === a.date)" class="text-[11px] font-bold text-sky-700">un bilan existe ce jour-là : ses valeurs seront complétées</span>
+                        </div>
+                        <p class="text-xs font-bold" data-apercu-compte>{{ Object.keys(a.valeurs).length }} biomarqueur(s) reconnu(s){{ a.message ? ' — ' + a.message : '' }}</p>
+                        <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-1.5" data-apercu-valeurs>
+                            <div v-for="(o, k) in a.valeurs" :key="k" class="flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1 text-xs" :data-apercu-valeur="k">
+                                <span class="flex-1 min-w-0 truncate font-semibold text-slate-700" :title="catalogue.marqueurs[k].libelle">{{ catalogue.marqueurs[k].libelle }}</span>
+                                <input type="number" step="any" v-model.number="o.v" class="w-20 border rounded px-1 py-0.5 text-right font-bold" :class="couleurStatut(C.statut({ valeurs: a.valeurs }, k))">
+                                <span class="w-14 truncate text-[10px] text-slate-400">{{ catalogue.marqueurs[k].unite }}</span>
+                                <button type="button" @click="retirerValeurApercu(a, k)" class="text-slate-400 hover:text-rose-600 font-black" title="Ne pas importer cette valeur">✕</button>
+                            </div>
+                        </div>
+                        <details v-if="a.nonReconnues.length" class="text-[11px] text-amber-800"><summary class="cursor-pointer font-bold">{{ a.nonReconnues.length }} ligne(s) non reconnue(s), à vérifier</summary><ul class="list-disc pl-5 mt-1 space-y-0.5"><li v-for="(l, i) in a.nonReconnues.slice(0, 60)" :key="i">{{ l }}</li></ul></details>
+                        <details class="text-[11px]"><summary class="cursor-pointer font-bold text-slate-500">Voir / corriger le texte lu</summary>
+                            <textarea v-model="a.texte" rows="6" class="w-full border rounded-lg p-2 font-mono mt-1"></textarea>
+                            <button type="button" @click="lireApercu(a)" class="mt-1 px-2 py-1 rounded-lg border text-xs font-black text-teal-700">🔁 Relire ce texte</button>
+                        </details>
+                        <button type="button" data-ajouter-bilan @click="ajouterApercu(a)" :disabled="!a.date || !Object.keys(a.valeurs).length" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-black disabled:opacity-40">✓ Ajouter ce bilan</button>
+                    </template>
+                </div>
+                <button v-if="apercusPrets.length > 1" type="button" data-ajouter-tous @click="ajouterTous" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm font-black">✓ Ajouter les {{ apercusPrets.length }} bilans</button>
+                <p v-if="messageBilan" class="text-xs font-bold text-emerald-800" data-message-bilan>{{ messageBilan }}</p>
+            </div>
+
+            <div class="carte p-4 space-y-3" data-documents>
+                <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-black text-emerald-900 flex-1">🗂️ Bilans et documents</h3>
+                    <button type="button" data-ouvrir-nettoyage @click="nettoyage.ouvert = !nettoyage.ouvert; nettoyage.mot = ''" class="px-3 py-1 rounded-full text-xs font-black border border-rose-200 text-rose-700 bg-white hover:bg-rose-50">🧹 Tout effacer…</button>
+                </div>
+                <div v-if="nettoyage.ouvert" data-nettoyage class="rounded-xl border-2 border-rose-300 bg-rose-50 p-3 space-y-2 text-sm">
+                    <p class="font-black text-rose-800">Effacer définitivement</p>
+                    <label class="flex items-start gap-2 cursor-pointer"><input type="radio" value="analyses" v-model="nettoyage.portee" data-portee="analyses" class="mt-1"><span><b>Les analyses</b> : {{ etat.bilans.length }} bilan(s), {{ nbDocuments }} document(s) et toutes leurs valeurs.</span></label>
+                    <label class="flex items-start gap-2 cursor-pointer"><input type="radio" value="tout" v-model="nettoyage.portee" data-portee="tout" class="mt-1"><span><b>Toute l’appli Santé</b> : analyses, pesées, journal, repas, plans, protocole et profil. Vous repartez de l’accueil.</span></label>
+                    <p class="text-[11px] text-slate-600">Le serveur garde ses 30 dernières sauvegardes (sante/backups/) : en cas d’erreur, un retour en arrière reste possible depuis le serveur.</p>
+                    <label class="block text-xs font-bold">Pour confirmer, tapez <code class="bg-white px-1 rounded border">EFFACER</code> <input v-model="nettoyage.mot" data-confirmation-nettoyage autocomplete="off" class="ml-1 border rounded px-2 py-1 w-32 uppercase"></label>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" data-confirmer-nettoyage @click="toutEffacer" :disabled="nettoyage.mot.trim().toUpperCase() !== 'EFFACER'" class="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-sm font-black disabled:opacity-40">🧹 Effacer définitivement</button>
+                        <button type="button" @click="nettoyage.ouvert = false" class="px-3 py-1.5 rounded-lg border text-sm font-bold">Annuler</button>
+                    </div>
+                </div>
+                <p v-if="messageNettoyage" class="text-xs font-bold text-emerald-800" data-message-nettoyage>{{ messageNettoyage }}</p>
+                <p v-if="!etat.bilans.length" class="text-sm text-slate-400">Aucun bilan. Importez vos comptes rendus (PDF, photos, texte) avec « 📥 Importer des bilans ».</p>
+                <div v-for="b in bilansRecents" :key="b.id" class="rounded-xl border border-slate-200 overflow-hidden" :data-bilan="b.date">
+                    <div class="flex flex-wrap items-center gap-2 px-3 py-2 bg-slate-50">
+                        <p class="flex-1 min-w-0 font-black text-sm">🩸 Bilan du {{ dateLisible(b.date) }} <span class="text-xs font-semibold text-slate-500">· {{ Object.keys(b.valeurs).length }} valeur(s){{ b.labo ? ' · ' + b.labo : '' }}</span></p>
+                        <button type="button" data-supprimer-bilan @click="confirmer('bilan:' + b.id, () => supprimerBilan(b))" class="px-2 py-1 rounded-lg text-xs font-black" :class="aConfirmer === 'bilan:' + b.id ? 'bg-rose-600 text-white' : 'border border-rose-200 text-rose-700 bg-white'">{{ aConfirmer === 'bilan:' + b.id ? 'Confirmer : supprimer le bilan ?' : '🗑 Bilan' }}</button>
+                    </div>
+                    <div v-for="g in groupesBilan(b)" :key="g.id" class="border-t border-slate-100 px-3 py-2" :data-document="g.nom">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span>{{ g.icone }}</span>
+                            <p class="flex-1 min-w-0 text-sm font-bold break-all">{{ g.nom }} <span class="text-xs font-semibold text-slate-500">· {{ g.cles.length }} ligne(s){{ g.importe_le ? ' · importé le ' + dateCourte(g.importe_le) : '' }}</span></p>
+                            <button v-if="g.document" type="button" data-surligner-document @click="docSurligne = docSurligne === g.id ? null : g.id" class="px-2 py-1 rounded-lg text-xs font-bold border" :class="docSurligne === g.id ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-white text-slate-600'" title="Surligner ses valeurs dans le tableau">🔦</button>
+                            <button type="button" data-voir-lignes @click="lignesOuvertes[g.id] = !lignesOuvertes[g.id]" class="px-2 py-1 rounded-lg text-xs font-bold border bg-white text-teal-700">{{ lignesOuvertes[g.id] ? '▴ Masquer' : '▾ Lignes' }}</button>
+                            <button v-if="g.document" type="button" data-supprimer-document @click="confirmer('doc:' + g.id, () => supprimerDocument(b, g.id))" class="px-2 py-1 rounded-lg text-xs font-black" :class="aConfirmer === 'doc:' + g.id ? 'bg-rose-600 text-white' : 'border border-rose-200 text-rose-700 bg-white'">{{ aConfirmer === 'doc:' + g.id ? 'Confirmer : supprimer ce document et ses valeurs ?' : '🗑' }}</button>
+                        </div>
+                        <div v-if="lignesOuvertes[g.id]" class="mt-2 overflow-x-auto">
+                            <table class="w-full text-sm tabnum" data-lignes-document><tbody>
+                                <tr v-for="k in g.cles" :key="k" class="border-t border-slate-100" :data-ligne="k">
+                                    <td class="py-1 pr-2 font-semibold">{{ catalogue.marqueurs[k].libelle }}</td>
+                                    <td class="pr-2 whitespace-nowrap"><saisie-valeur :bilan="b" :cle="k"></saisie-valeur> <span class="text-[10px] text-slate-400">{{ catalogue.marqueurs[k].unite }}</span></td>
+                                    <td class="pr-2 text-[11px] text-slate-500 whitespace-nowrap">{{ bornesTexte(b, k) }}</td>
+                                    <td class="pr-2 text-xs font-bold whitespace-nowrap" :class="couleurStatut(C.statut(b, k))">{{ C.statut(b, k) }}<span v-if="b.valeurs[k] && b.valeurs[k].edite" class="text-slate-400"> ✎</span></td>
+                                    <td class="text-right"><button type="button" data-supprimer-ligne @click="supprimerValeur(b, k)" class="text-xs font-black text-slate-400 hover:text-rose-600">✕</button></td>
+                                </tr>
+                                <tr v-if="!g.cles.length"><td class="py-1 text-xs text-slate-400">Plus aucune valeur de ce document (remplacées par un import plus récent ou supprimées).</td></tr>
+                            </tbody></table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -238,6 +338,70 @@
             </div>
         </section>
 
+        <!-- ═════ 3 bis. PLANS : NUTRITION ET EXERCICE, PRÉVU / RÉALISÉ ═════ -->
+        <section v-show="onglet === 'plans'" data-section="plans" class="space-y-5">
+            <div class="grid lg:grid-cols-2 gap-5">
+                <div v-for="t in TYPES_PLAN" :key="t.id" class="carte p-4 space-y-3" :data-plan="t.id">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="flex-1 min-w-0 font-black text-emerald-900">{{ t.icone }} {{ t.nom }}</h2>
+                        <span v-if="suivis[t.id].semaine.taux !== null" :data-taux-plan="t.id" class="text-xs font-black px-2 py-1 rounded-full"
+                              :class="suivis[t.id].semaine.taux >= 80 ? 'bg-emerald-100 text-emerald-800' : suivis[t.id].semaine.taux >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'">Semaine : {{ suivis[t.id].semaine.faits }}/{{ suivis[t.id].semaine.prevus }} réalisés · {{ suivis[t.id].semaine.taux }} %</span>
+                    </div>
+                    <template v-if="etat.plans && etat.plans[t.id]">
+                        <p class="text-xs text-slate-500">{{ etat.plans[t.id].titre || 'Plan' }}<span v-if="etat.plans[t.id].source"> · {{ etat.plans[t.id].source }}</span><span v-if="etat.plans[t.id].importe_le"> · depuis le {{ dateCourte(etat.plans[t.id].importe_le) }}</span> · {{ etat.plans[t.id].items.length }} élément(s)</p>
+                        <div class="grid grid-cols-7 gap-1 text-center" :data-semaine-plan="t.id">
+                            <button v-for="d in semaineGrille(t.id)" :key="d.date" type="button" @click="dateJour = d.date" class="rounded-lg border py-1 text-[10px] font-bold leading-tight"
+                                    :class="[d.choisi ? 'ring-2 ring-emerald-500' : '', d.prevus === 0 ? 'bg-slate-50 text-slate-300' : d.faits >= d.prevus ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : d.futur ? 'bg-white text-slate-500' : d.faits ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200']"
+                                    :title="dateLisible(d.date) + ' : ' + d.faits + ' réalisé(s) sur ' + d.prevus + ' prévu(s)'">
+                                <span class="block uppercase">{{ d.court }}</span><span class="block tabnum">{{ d.prevus ? d.faits + '/' + d.prevus : '—' }}</span>
+                            </button>
+                        </div>
+                        <p class="text-sm font-black text-slate-700">Prévu le {{ dateLisible(dateJour) }} ({{ suivis[t.id].jour }}) — cochez ce qui est réalisé</p>
+                        <p v-if="!suivis[t.id].du_jour.length" class="text-sm text-slate-400">Rien de prévu ce jour-là.</p>
+                        <div v-for="g in groupesDuJour(t.id)" :key="g.cle">
+                            <p class="text-[11px] font-black uppercase text-slate-500 mt-1">{{ g.libelle }}</p>
+                            <label v-for="i in g.items" :key="i.id" class="flex items-start gap-3 py-1 cursor-pointer" :data-element-plan="i.id">
+                                <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
+                                <span class="text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'">{{ i.texte }}<span v-if="i.duree_min" class="text-xs font-bold text-slate-500"> · {{ i.duree_min }} min</span><span v-if="i.jour === 'tous'" class="text-[10px] text-slate-400"> · tous les jours</span></span>
+                            </label>
+                        </div>
+                        <p v-if="t.id === 'exercice' && suivis[t.id].semaine.minutes_prevues" class="text-xs font-bold text-slate-600" data-minutes-plan>Minutes cette semaine : {{ suivis[t.id].semaine.minutes_faites }} réalisées sur {{ suivis[t.id].semaine.minutes_prevues }} prévues</p>
+                    </template>
+                    <p v-else class="text-sm text-slate-500">Pas encore de plan. Importez celui de votre nutritionniste ou de votre coach : PDF, Word (.docx), photo ou texte.</p>
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        <button type="button" :data-ouvrir-plan="t.id" @click="ouvrirEditeurPlan(t.id)" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-black">{{ etat.plans && etat.plans[t.id] ? '✏️ Modifier / remplacer' : '📥 Importer le plan' }}</button>
+                        <button v-if="etat.plans && etat.plans[t.id]" type="button" :data-supprimer-plan="t.id" @click="confirmer('plan:' + t.id, () => supprimerPlan(t.id))" class="px-3 py-1.5 rounded-lg text-xs font-black" :class="aConfirmer === 'plan:' + t.id ? 'bg-rose-600 text-white' : 'border border-rose-200 text-rose-700 bg-white'">{{ aConfirmer === 'plan:' + t.id ? 'Confirmer : supprimer le plan ?' : '🗑 Supprimer' }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="editeurPlan.type" class="carte p-4 space-y-3" data-editeur-plan>
+                <div class="flex items-center gap-2"><h3 class="flex-1 font-black text-teal-900">{{ (TYPES_PLAN.find(t => t.id === editeurPlan.type) || {}).icone }} {{ (TYPES_PLAN.find(t => t.id === editeurPlan.type) || {}).nom }} : importer, corriger, enregistrer</h3><button type="button" @click="editeurPlan.type = null" class="text-slate-400 hover:text-slate-700 font-black" aria-label="Fermer">✕</button></div>
+                <p class="text-xs text-slate-500">Choisissez le document (PDF, Word .docx, photo, texte) ou collez son texte. Les <b>jours</b> (« Lundi », « Tous les jours ») <span v-if="editeurPlan.type === 'nutrition'">et les <b>repas</b> (« Petit-déjeuner », « Déjeuner », « Collation », « Dîner »)</span> servent de titres ; chaque autre ligne devient un élément du plan<span v-if="editeurPlan.type === 'exercice'"> (une durée « 45 min », « 1 h » est lue)</span>. Corrigez la liste avant d’enregistrer.</p>
+                <input type="file" accept=".pdf,application/pdf,.docx,image/*,.txt,text/plain" data-import-plan @change="importerPlan($event.target.files[0]); $event.target.value = ''" class="text-sm max-w-full">
+                <textarea v-model="editeurPlan.texte" data-texte-plan rows="5" class="w-full border rounded-lg p-2 text-xs font-mono" :placeholder="editeurPlan.type === 'nutrition' ? 'Tous les jours\nPetit-déjeuner : café noir + huile MCT\nLundi\nDéjeuner : salade, poulet 150 g, pain d’orge' : 'Lundi : marche Zone 2 à jeun 45 min\nMercredi\n- Machines bas du corps 1 h'"></textarea>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" data-lire-plan @click="lireTextePlan" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-black">🔎 Lire ce texte</button>
+                    <span class="text-xs font-bold" :class="/^❌/.test(editeurPlan.message) ? 'text-rose-700' : 'text-slate-600'" data-message-plan>{{ editeurPlan.message }}</span>
+                </div>
+                <label class="block text-sm font-bold">Titre <input v-model="editeurPlan.titre" data-titre-plan class="ml-1 border rounded-lg px-2 py-1 w-full sm:w-96 max-w-full" placeholder="ex. Plan Dr X — novembre"></label>
+                <div class="space-y-1.5" data-elements-plan>
+                    <div v-for="(i, n) in editeurPlan.items" :key="i.id" class="flex flex-wrap sm:flex-nowrap items-center gap-1.5 rounded-lg border border-slate-200 p-1.5" data-element-editeur>
+                        <select v-model="i.jour" class="border rounded px-1 py-1 text-xs"><option v-for="[v, l] in JOURS_PLAN" :key="v" :value="v">{{ l }}</option></select>
+                        <select v-if="editeurPlan.type === 'nutrition'" v-model="i.moment" class="border rounded px-1 py-1 text-xs"><option v-for="[v, l] in MOMENTS_PLAN" :key="v" :value="v">{{ l }}</option></select>
+                        <input v-model="i.texte" class="flex-1 min-w-[10rem] border rounded px-2 py-1 text-sm" placeholder="élément du plan">
+                        <label v-if="editeurPlan.type === 'exercice'" class="text-xs text-slate-500 flex items-center gap-1"><input type="number" min="0" v-model.number="i.duree_min" class="w-16 border rounded px-1 py-1 text-right">min</label>
+                        <button type="button" @click="editeurPlan.items.splice(n, 1)" class="px-1 text-slate-400 hover:text-rose-600 font-black" title="Supprimer cette ligne">✕</button>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" @click="ajouterElementPlan" class="px-3 py-1.5 rounded-lg border text-sm font-bold text-teal-700">+ Ajouter une ligne</button>
+                    <button type="button" data-enregistrer-plan @click="enregistrerPlan" :disabled="!editeurPlan.items.some(i => String(i.texte || '').trim())" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-black disabled:opacity-40">✓ Enregistrer le plan ({{ editeurPlan.items.filter(i => String(i.texte || '').trim()).length }} éléments)</button>
+                    <button type="button" @click="editeurPlan.type = null" class="px-3 py-1.5 rounded-lg border text-sm font-bold">Annuler</button>
+                </div>
+            </div>
+        </section>
+
         <!-- ═════ 4. SAMSUNG HEALTH & POIDS ═════ -->
         <section v-show="onglet === 'poids'" data-section="poids" class="space-y-5">
             <div class="grid md:grid-cols-3 gap-4">
@@ -262,11 +426,34 @@
                 <h2 class="font-black text-emerald-900">📲 Samsung Health</h2>
                 <p class="text-sm" data-samsung-jour>Aujourd’hui : {{ fmt(jour.samsung.pas) }} pas · {{ fmt(jour.samsung.kcal_actives) }} kcal actives · FC repos {{ jour.samsung.fc_repos ?? '—' }} · sommeil {{ jour.samsung.sommeil_min == null ? '—' : Math.floor(jour.samsung.sommeil_min / 60) + ' h ' + String(jour.samsung.sommeil_min % 60).padStart(2, '0') }}</p>
                 <div class="text-sm space-y-1">
-                    <p class="font-bold">a) Synchronisation automatique (Health Connect → webhook)</p>
-                    <p class="text-xs">Adresse : <code class="bg-slate-100 px-1 rounded" data-url-webhook>{{ urlWebhook }}</code> · en-tête <code class="bg-slate-100 px-1 rounded">X-Sante-Token</code> (jeton à définir dans db_config.php, clé <code>sante_samsung_token</code>).</p>
-                    <p class="font-bold mt-2">b) Fichier CSV exporté de Samsung Health</p>
-                    <input type="file" accept=".csv,text/csv" data-import-csv @change="importerCsv($event)" class="text-sm">
-                    <p v-if="messageCsv" class="text-xs font-bold" data-message-csv>{{ messageCsv }}</p>
+                    <p class="font-bold">1. Le plus simple : importer l’export de Samsung Health (sur le téléphone ou l’ordinateur)</p>
+                    <label class="flex items-center justify-center gap-2 w-full sm:w-auto sm:inline-flex px-4 py-3 rounded-xl bg-emerald-600 text-white font-black cursor-pointer hover:bg-emerald-700" data-bouton-csv>📲 Importer les fichiers Samsung Health (CSV)
+                        <input type="file" multiple accept=".csv,text/csv" data-import-csv @change="importerCsv($event)" class="sr-only"></label>
+                    <p v-if="messageCsv" class="text-sm font-bold" :class="/^❌/.test(messageCsv) ? 'text-rose-700' : 'text-emerald-800'" data-message-csv>{{ messageCsv }}</p>
+                    <details class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs" data-aide-csv>
+                        <summary class="cursor-pointer font-black text-slate-700">Comment exporter et importer vos données (2 minutes)</summary>
+                        <ol class="list-decimal pl-5 mt-2 space-y-1.5">
+                            <li>Sur le téléphone, ouvrez <b>Samsung Health</b> → menu <b>≡</b> (ou <b>⋮</b>) → <b>Paramètres</b>.</li>
+                            <li>Descendez jusqu’à <b>« Télécharger les données personnelles »</b> → <b>Télécharger</b>, puis confirmez avec votre compte Samsung.</li>
+                            <li>À la fin, Samsung Health indique le dossier créé : <b>Mes fichiers › Stockage interne › Download › Samsung Health › <i>date_heure</i></b>. Il contient un fichier CSV par mesure.</li>
+                            <li>Envoyez-vous les fichiers utiles (Quick Share, Drive, e-mail) ou ouvrez cette page sur le téléphone, puis choisissez-les ci-dessous — <b>plusieurs à la fois</b> :
+                                <ul class="list-disc pl-5 mt-1 space-y-0.5">
+                                    <li><code>…pedometer_day_summary….csv</code> : pas et calories actives par jour</li>
+                                    <li><code>…health.weight….csv</code> : pesées (elles rejoignent la courbe de poids)</li>
+                                    <li><code>…heart_rate….csv</code> : fréquence cardiaque · <code>…sleep….csv</code> : sommeil</li>
+                                </ul>
+                            </li>
+                            <li>Les jours déjà présents sont mis à jour, rien n’est dupliqué : vous pouvez réimporter un export plus récent à tout moment.</li>
+                        </ol>
+                        <p class="mt-2 text-slate-500">Autre application ou tableur : un CSV avec une colonne <code>date</code> (AAAA-MM-JJ) et au choix <code>steps</code> / <code>pas</code>, <code>active_calorie</code> / <code>kcal</code>, <code>weight</code> / <code>poids</code>, <code>resting_heart_rate</code>, <code>sleep_minutes</code>. Séparateur virgule ou point-virgule.</p>
+                    </details>
+                    <details class="mt-3 rounded-lg border border-slate-200 px-3 py-2 text-xs" data-aide-webhook>
+                        <summary class="cursor-pointer font-bold text-slate-700">2. Option avancée : synchronisation automatique, sans bouton</summary>
+                        <p class="mt-2">Une page web ne peut pas lire Samsung Health : Android ne le permet pas aux sites. L’automatique passe donc par une <b>appli relais sur le téléphone</b>, qui lit vos données dans <b>Health Connect</b> (où Samsung Health les partage) et les envoie chaque jour à Santé Master. N’importe quelle appli capable de lire Health Connect et d’envoyer une requête web convient (appli d’automatisation, appli « Health Connect → webhook »…).</p>
+                        <p class="mt-1">À lui donner : l’adresse <code class="bg-slate-100 px-1 rounded break-all" data-url-webhook>{{ urlWebhook }}</code>, l’en-tête <code class="bg-slate-100 px-1 rounded">X-Sante-Token</code> avec votre jeton secret (défini une fois sur le serveur, dans db_config.php, clé <code>sante_samsung_token</code>), et le mot de passe du site. Format accepté : <code>{"date":"2026-11-04","steps":8200,"active_calories":480,"resting_heart_rate":60,"sleep_minutes":412,"weight":97.2}</code> (un jour, ou une liste de jours).</p>
+                        <p class="mt-1 text-slate-500">Sans appli relais, l’import du fichier (1.) fait le même travail : quelques secondes, quand vous voulez.</p>
+                    </details>
+
                 </div>
             </div>
         </section>
@@ -303,7 +490,7 @@ createApp({
         const VERSION = '1.4';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
-            { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
+            { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
         ].map(o => ({ ...o, libelle: o.icone + ' ' + o.nom }));
         const CHECKLIST = [
             { id: 'zone2', libelle: 'Marche Zone 2 à jeun (40-45 min)' }, { id: 'cafe_mct', libelle: 'Café noir + 1 c. à c. d’huile MCT C8' },
@@ -320,13 +507,13 @@ createApp({
         const explications = ref({});
         let C = SanteCalc.creer({});
         const Cref = shallowRef(C);
-        const etat = reactive({ profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [] });
+        const etat = reactive({ profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {} });
         const version = ref(null), statut = ref('chargement'), charge = ref(false);
         const onglet = ref('pilotage'), dateJour = ref(aujourdhui());
         const messageImport = ref('');
 
         // ── chargement et sauvegarde ──
-        const remplacer = (d) => { Object.keys(etat).forEach(k => delete etat[k]); Object.assign(etat, { profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [] }, d || {}); if (Array.isArray(etat.journal)) etat.journal = {}; };
+        const remplacer = (d) => { Object.keys(etat).forEach(k => delete etat[k]); Object.assign(etat, { profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {} }, d || {}); if (Array.isArray(etat.journal)) etat.journal = {}; if (!etat.plans || Array.isArray(etat.plans)) etat.plans = {}; };
         const charger = async () => {
             const [cat, al, ex] = await Promise.all(['biomarqueurs.json', 'aliments.json', 'explications.json'].map(f => fetch(f, { cache: 'no-store' }).then(r => r.json())));
             catalogue.value = cat; aliments.value = al.aliments || {}; explications.value = ex.marqueurs || {};
@@ -406,10 +593,12 @@ createApp({
         const energie = computed(() => C.bilanEnergie(kcalJour.value || null, bmr.value, C.num(jour.value.samsung.kcal_actives)));
 
         // ── analyses ──
-        const systeme = ref('cardio'), merlin = ref(false), marqueurChoisi = ref(null), importOuvert = ref(false);
+        const systeme = ref('cardio'), merlin = ref(false), marqueurChoisi = ref(null), importOuvert = ref(false), editionTable = ref(false), docSurligne = ref(null);
         const dernierBilan = computed(() => etat.bilans.length ? etat.bilans[etat.bilans.length - 1] : null);
         const ind = computed(() => dernierBilan.value ? C.indicateurs(dernierBilan.value, etat.profil) : null);
-        const lignesSysteme = computed(() => Object.keys(catalogue.value.marqueurs || {}).filter(k => catalogue.value.marqueurs[k].systeme === systeme.value && etat.bilans.some(b => C.val(b, k) !== null)));
+        //  v1.4 — en mode édition, tous les biomarqueurs du système (pour remplir une case vide) ; sinon, ceux qui ont une valeur
+        const lignesSysteme = computed(() => Object.keys(catalogue.value.marqueurs || {}).filter(k => catalogue.value.marqueurs[k].systeme === systeme.value && (editionTable.value || etat.bilans.some(b => C.val(b, k) !== null))));
+        const nbParSysteme = computed(() => { const o = {}; Object.entries(catalogue.value.marqueurs || {}).forEach(([k, m]) => { if (etat.bilans.some(b => C.val(b, k) !== null)) o[m.systeme] = (o[m.systeme] || 0) + 1; }); return o; });
         const dernierAvec = (k) => [...etat.bilans].reverse().find(b => C.val(b, k) !== null) || {};
         const normes = (k) => { const [mn, mx] = C.bornes(dernierAvec(k), k); return mn !== null && mx !== null ? mn + ' – ' + mx : mn !== null ? '> ' + mn : mx !== null ? '< ' + mx : ''; };
         const cible = (k) => { const c = CIBLES[k]; const v = c ? etat.objectifs[c] : null; if (v === null || v === undefined) return ''; return (k === 'vitd' ? '> ' : '< ') + v; };
@@ -440,38 +629,136 @@ createApp({
         };
         watch([marqueurChoisi, () => etat.bilans.length, onglet], dessinerMarqueur);
 
-        // ── import d'un bilan ──
-        const texteBilan = ref(''), apercu = ref(null), lectureEnCours = ref(''), messageBilan = ref('');
-        const charger_script = (src) => new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => ko(new Error('chargement de ' + src)); document.head.appendChild(s); });
-        const lireFichierBilan = async (ev) => {
-            const f = ev.target.files && ev.target.files[0]; if (!f) return;
-            try {
-                if (/\.txt$/i.test(f.name)) { texteBilan.value = await f.text(); }
-                else if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
-                    lectureEnCours.value = 'Lecture du PDF…';
-                    if (!window.pdfjsLib) { await charger_script('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
-                    const pdf = await window.pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise; const lignes = [];
-                    for (let p = 1; p <= pdf.numPages; p++) {
-                        const c = await (await pdf.getPage(p)).getTextContent(), rangs = {};
-                        c.items.forEach(it => { const y = Math.round(it.transform[5]); (rangs[y] = rangs[y] || []).push(it); });
-                        Object.keys(rangs).map(Number).sort((a, b) => b - a).forEach(y => lignes.push(rangs[y].sort((a, b) => a.transform[4] - b.transform[4]).map(i => i.str).join(' ')));
-                    }
-                    texteBilan.value = lignes.join('\n');
-                } else {
-                    lectureEnCours.value = 'Lecture de l’image (OCR, 20-40 s)…';
-                    if (!window.Tesseract) await charger_script('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
-                    const r = await window.Tesseract.recognize(f, 'fra');
-                    texteBilan.value = r.data.text;
-                }
-                lectureEnCours.value = ''; analyserBilan();
-            } catch (e) { lectureEnCours.value = '❌ ' + e.message; }
+        // ── import des bilans (v1.4) ──
+        //  Plusieurs fichiers à la fois : PDF (texte, ou scanné → OCR page par page), photos (OCR), texte, Word (.docx, pour les plans).
+        //  Chaque fichier donne un APERÇU (date trouvée, valeurs reconnues, modifiables) ; « Ajouter » range ses valeurs dans le bilan
+        //  de cette date et note le DOCUMENT d'origine : chaque valeur garde son doc → supprimer le document retire ses valeurs.
+        const texteBilan = ref(''), apercus = ref([]), lectureEnCours = ref(''), messageBilan = ref(''), survolDepot = ref(false);
+        const uid = () => Math.random().toString(16).slice(2, 14);
+        const charger_script = (src) => new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => ko(new Error('chargement de ' + src + ' impossible (hors ligne ?)')); document.head.appendChild(s); });
+        const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js', MAMMOTH = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js';
+        const ICONES = { pdf: '📄', image: '🖼️', texte: '📝', word: '📘', saisie: '✍️' };
+        const typeFichier = (f) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf' ? 'pdf'
+            : /\.docx$/i.test(f.name) ? 'word' : /\.doc$/i.test(f.name) ? 'doc'
+            : /\.(txt|csv|md)$/i.test(f.name) || f.type === 'text/plain' ? 'texte'
+            : (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|tiff?|heic|heif)$/i.test(f.name) ? 'image' : 'autre';
+        const ocr = async (source, maj) => {
+            if (!window.Tesseract) await charger_script(TESSERACT);
+            const r = await window.Tesseract.recognize(source, 'fra', { logger: (m) => { if (maj && m && m.status === 'recognizing text') maj('Lecture de l’image (OCR) : ' + Math.round(100 * (m.progress || 0)) + ' %'); } });
+            return (r && r.data && r.data.text) || '';
         };
-        const analyserBilan = () => { const r = SanteImport.lireBilan(texteBilan.value, catalogue.value); apercu.value = { date: r.date || dateJour.value, valeurs: r.valeurs, nonReconnues: r.nonReconnues }; messageBilan.value = ''; };
-        const ajouterBilanApercu = () => {
-            const a = apercu.value; if (!a) return;
-            const ex = etat.bilans.find(b => b.date === a.date);
-            if (ex) { Object.assign(ex.valeurs, a.valeurs); messageBilan.value = 'Bilan du ' + dateLisible(a.date) + ' complété (' + Object.keys(a.valeurs).length + ' valeurs).'; }
-            else { etat.bilans.push({ id: Math.random().toString(16).slice(2, 14), date: a.date, labo: '', source: 'import', valeurs: a.valeurs }); etat.bilans.sort((x, y) => x.date < y.date ? -1 : 1); messageBilan.value = 'Bilan du ' + dateLisible(a.date) + ' ajouté.'; }
+        const extraireTexte = async (f, maj) => {
+            const t = typeFichier(f);
+            if (t === 'texte') return await f.text();
+            if (t === 'word') { maj('Lecture du document Word…'); if (!window.mammoth) await charger_script(MAMMOTH); return (await window.mammoth.extractRawText({ arrayBuffer: await f.arrayBuffer() })).value; }
+            if (t === 'doc') throw new Error('ancien format Word (.doc) : ouvrez-le et enregistrez-le en .docx, ou en PDF');
+            if (t === 'image') {
+                if (/\.hei[cf]$/i.test(f.name)) throw new Error('photo HEIC (iPhone) non lisible par le navigateur : partagez-la en JPG');
+                maj('Lecture de l’image (OCR, 20-40 s)…'); return await ocr(f, maj);
+            }
+            if (t !== 'pdf') throw new Error('format non pris en charge — PDF, Word (.docx), photo (JPG, PNG…) ou texte');
+            maj('Lecture du PDF…');
+            if (!window.pdfjsLib) { await charger_script(PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS.replace('pdf.min.js', 'pdf.worker.min.js'); }
+            const pdf = await window.pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise, lignes = [];
+            for (let p = 1; p <= pdf.numPages; p++) {
+                const c = await (await pdf.getPage(p)).getTextContent(), rangs = {};
+                c.items.forEach(it => { const y = Math.round(it.transform[5]); (rangs[y] = rangs[y] || []).push(it); });
+                Object.keys(rangs).map(Number).sort((a, b) => b - a).forEach(y => lignes.push(rangs[y].sort((a, b) => a.transform[4] - b.transform[4]).map(i => i.str).join(' ')));
+            }
+            const texte = lignes.join('\n');
+            if (texte.replace(/\s/g, '').length >= 40) return texte;
+            //  PDF scanné (des images, pas de texte) : chaque page est dessinée puis lue par OCR
+            const morceaux = [];
+            for (let p = 1; p <= pdf.numPages; p++) {
+                maj('PDF scanné : lecture de la page ' + p + '/' + pdf.numPages + ' (OCR)…');
+                const page = await pdf.getPage(p), vp = page.getViewport({ scale: 2 }), cv = document.createElement('canvas');
+                cv.width = vp.width; cv.height = vp.height;
+                await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+                morceaux.push(await ocr(cv, null));
+            }
+            return morceaux.join('\n');
+        };
+        const lireApercu = (a) => {
+            const r = SanteImport.lireBilan(a.texte, catalogue.value, { aujourdhui: aujourdhui() });
+            Object.assign(a, { date: r.date || a.date || dateJour.value, dateLigne: r.dateLigne || '', valeurs: r.valeurs, nonReconnues: r.nonReconnues, etat: 'pret', message: '' });
+        };
+        const nouvelApercu = (nom, type) => ({ id: uid(), nom, type, texte: '', date: '', dateLigne: '', valeurs: {}, nonReconnues: [], etat: 'lecture', message: 'En attente…' });
+        const lireFichiersBilan = async (liste) => {
+            const fichiers = Array.from(liste || []); if (!fichiers.length) return;
+            messageBilan.value = ''; importOuvert.value = true;
+            const debut = apercus.value.length;
+            fichiers.forEach(f => apercus.value.push(nouvelApercu(f.name, typeFichier(f))));
+            const cibles = apercus.value.slice(debut);
+            for (let i = 0; i < fichiers.length; i++) {          // un par un : l'OCR est lourd
+                const a = cibles[i];
+                try { a.texte = await extraireTexte(fichiers[i], (m) => { a.message = m; }); lireApercu(a); if (!Object.keys(a.valeurs).length) a.message = 'aucun biomarqueur reconnu : vérifiez le texte lu ci-dessous'; }
+                catch (e) { a.etat = 'erreur'; a.message = e.message || String(e); }
+            }
+        };
+        const analyserBilan = () => {
+            if (!texteBilan.value.trim()) return;
+            let a = apercus.value.find(x => x.type === 'saisie');
+            if (!a) { apercus.value.unshift(nouvelApercu('Texte collé', 'saisie')); a = apercus.value[0]; }
+            a.texte = texteBilan.value; lireApercu(a); messageBilan.value = '';
+        };
+        const retirerApercu = (a) => { apercus.value = apercus.value.filter(x => x.id !== a.id); };
+        const retirerValeurApercu = (a, k) => { delete a.valeurs[k]; };
+        const apercusPrets = computed(() => apercus.value.filter(a => a.etat === 'pret' && a.date && Object.keys(a.valeurs).length));
+        const ajouterApercu = (a) => {
+            const cles = Object.keys(a.valeurs).filter(k => C.num(a.valeurs[k].v) !== null);
+            if (!a.date || !cles.length) return null;
+            let b = etat.bilans.find(x => x.date === a.date); const neuf = !b;
+            if (!b) { etat.bilans.push({ id: uid(), date: a.date, labo: '', source: 'import', valeurs: {}, documents: [] }); b = etat.bilans[etat.bilans.length - 1]; etat.bilans.sort((x, y) => x.date < y.date ? -1 : 1); }
+            if (!Array.isArray(b.documents)) b.documents = [];
+            const doc = { id: uid(), nom: a.nom, type: a.type, importe_le: aujourdhui() };
+            b.documents.push(doc);
+            cles.forEach(k => { const o = Object.assign({}, a.valeurs[k], { v: C.num(a.valeurs[k].v), doc: doc.id }); delete o.edite; b.valeurs[k] = o; });
+            retirerApercu(a); if (a.type === 'saisie') texteBilan.value = '';
+            messageBilan.value = 'Bilan du ' + dateLisible(a.date) + (neuf ? ' ajouté' : ' complété') + ' : ' + cles.length + ' valeur(s) de « ' + a.nom + ' ».';
+            return cles.length;
+        };
+        const ajouterTous = () => { const l = apercusPrets.value.slice(); let n = 0; l.forEach(a => { n += ajouterApercu(a) || 0; }); messageBilan.value = l.length + ' document(s) ajouté(s) : ' + n + ' valeur(s).'; };
+
+        //  ── les bilans enregistrés : documents, lignes, suppressions ──
+        const nomSource = (b) => b.source === 'demo' ? 'Démo' : b.source === 'cmo' || b.source === 'ia' ? 'Médecin-Chef IA' : b.source === 'import' ? 'Import (sans document)' : 'Saisie manuelle';
+        const docDe = (b, k) => { const o = b.valeurs[k]; return o && o.doc ? (b.documents || []).find(d => d.id === o.doc) || null : null; };
+        const sourceValeur = (b, k) => { const o = b.valeurs[k]; if (!o) return ''; const d = docDe(b, k); return 'Source : ' + (d ? d.nom : nomSource(b)) + (o.edite ? ' · corrigée à la main' : ''); };
+        const groupesBilan = (b) => {
+            const cles = Object.keys(b.valeurs || {}).filter(k => catalogue.value.marqueurs && catalogue.value.marqueurs[k]);
+            const g = (b.documents || []).map(d => ({ id: d.id, nom: d.nom, icone: ICONES[d.type] || '📄', importe_le: d.importe_le, document: true, cles: cles.filter(k => b.valeurs[k].doc === d.id) }));
+            const seules = cles.filter(k => !docDe(b, k));
+            if (seules.length) g.push({ id: 'sans-' + (b.id || b.date), nom: nomSource(b), icone: ICONES.saisie, importe_le: null, document: false, cles: seules });
+            return g;
+        };
+        const bilansRecents = computed(() => [...etat.bilans].reverse());
+        const nbDocuments = computed(() => etat.bilans.reduce((n, b) => n + (b.documents || []).length, 0));
+        const lignesOuvertes = reactive({});
+        const bornesTexte = (b, k) => { const [mn, mx] = C.bornes(b, k); return mn !== null && mx !== null ? mn + ' – ' + mx : mn !== null ? '> ' + mn : mx !== null ? '< ' + mx : ''; };
+        //  une suppression se confirme d'un second clic (5 s)
+        const aConfirmer = ref(null); let minuteurConfirmer = null;
+        const confirmer = (cle, action) => {
+            clearTimeout(minuteurConfirmer);
+            if (aConfirmer.value === cle) { aConfirmer.value = null; action(); return; }
+            aConfirmer.value = cle; minuteurConfirmer = setTimeout(() => { aConfirmer.value = null; }, 5000);
+        };
+        const retirerBilanSiVide = (b) => { if (!Object.keys(b.valeurs || {}).length && !(b.documents || []).length) etat.bilans = etat.bilans.filter(x => x !== b); };
+        const supprimerValeur = (b, k) => { delete b.valeurs[k]; retirerBilanSiVide(b); };
+        const supprimerDocument = (b, id) => {
+            const d = (b.documents || []).find(x => x.id === id);
+            Object.keys(b.valeurs).forEach(k => { if (b.valeurs[k].doc === id) delete b.valeurs[k]; });
+            b.documents = (b.documents || []).filter(x => x.id !== id);
+            if (docSurligne.value === id) docSurligne.value = null;
+            if (!Object.keys(b.valeurs).length) etat.bilans = etat.bilans.filter(x => x !== b);
+            messageNettoyage.value = '« ' + (d ? d.nom : 'document') + ' » supprimé, avec ses valeurs.';
+        };
+        const supprimerBilan = (b) => { etat.bilans = etat.bilans.filter(x => x !== b); if (marqueurChoisi.value && !etat.bilans.length) marqueurChoisi.value = null; messageNettoyage.value = 'Bilan du ' + dateLisible(b.date) + ' supprimé.'; };
+        //  le grand ménage : confirmé en tapant EFFACER
+        const nettoyage = reactive({ ouvert: false, portee: 'analyses', mot: '' }), messageNettoyage = ref('');
+        const toutEffacer = () => {
+            if (nettoyage.mot.trim().toUpperCase() !== 'EFFACER') return;
+            if (nettoyage.portee === 'tout') { remplacer({}); onglet.value = 'pilotage'; messageImport.value = 'Toutes les données Santé ont été effacées.'; messageNettoyage.value = ''; }
+            else { const n = etat.bilans.length, d = nbDocuments.value; etat.bilans = []; messageNettoyage.value = n + ' bilan(s) et ' + d + ' document(s) effacés.'; }
+            Object.assign(nettoyage, { ouvert: false, mot: '' }); apercus.value = []; marqueurChoisi.value = null; docSurligne.value = null; editionTable.value = false;
         };
 
         // ── nutrition ──
@@ -511,28 +798,100 @@ createApp({
         watch([() => etat.poids.length, onglet, () => etat.objectifs.poids_kg], dessinerPoids);
         const urlWebhook = computed(() => location.origin + location.pathname.replace(/[^/]*$/, '') + 'sync_samsung.php');
         const messageCsv = ref('');
-        const importerCsv = async (ev) => {
-            const f = ev.target.files && ev.target.files[0]; if (!f) return;
-            const lignes = (await f.text()).split(/\r?\n/).filter(l => l.trim());
-            const sep = (lignes[0].match(/;/g) || []).length > (lignes[0].match(/,/g) || []).length ? ';' : ',';
-            const tete = lignes[0].split(sep).map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
-            const col = (noms) => tete.findIndex(h => noms.some(n => h === n || h.endsWith('.' + n) || h.includes(n)));
-            const iD = col(['date', 'day_time', 'day', 'jour']), C2 = { pas: col(['step_count', 'steps', 'pas', 'count']), kcal_actives: col(['active_calorie', 'calorie', 'kcal']), poids: col(['weight', 'poids']), fc_repos: col(['resting', 'fc_repos']), sommeil_min: col(['sleep', 'sommeil']) };
-            if (iD < 0) { messageCsv.value = '❌ Colonne de date introuvable'; return; }
-            let n = 0;
-            lignes.slice(1).forEach(l => {
-                const c = l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
-                let d = c[iD] || ''; if (/^\d{12,13}$/.test(d)) d = new Date(Number(d)).toISOString().slice(0, 10); d = d.slice(0, 10).replace(/\//g, '-');
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
-                if (!etat.journal[d]) etat.journal[d] = jourVide();
-                const j = etat.journal[d]; if (!j.samsung || Array.isArray(j.samsung)) j.samsung = {};
-                Object.entries(C2).forEach(([k, i]) => { if (i >= 0 && C.num(c[i]) !== null) j.samsung[k] = C.num(c[i]); });
-                if (j.samsung.poids) { etat.poids = etat.poids.filter(p => !(p.date === d && p.source === 'samsung')); etat.poids.push({ date: d, kg: j.samsung.poids, source: 'samsung' }); }
-                n++;
-            });
-            etat.poids.sort((a, b) => a.date < b.date ? -1 : 1);
-            messageCsv.value = n + ' jour(s) importé(s).';
+        //  v1.4 — plusieurs fichiers d'un coup ; l'export Samsung Health met une ligne de description AVANT l'en-tête (on la saute) ;
+        //  la date peut être day_time (ms), start_time (« 2026-11-01 07:12:00 ») ou date ; plusieurs lignes le même jour (téléphone +
+        //  montre) : on garde le maximum de pas / kcal et la moyenne de la fréquence cardiaque.
+        const lireCsv = (texte) => {
+            const lignes = texte.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+            const RE_DATE = /(^|[._])(date|day_time|start_time|day|jour|create_time)$/;
+            let iT = lignes.slice(0, 4).findIndex(l => l.split(/[;,]/).some(h => RE_DATE.test(h.trim().toLowerCase().replace(/^"|"$/g, ''))));
+            if (iT < 0) iT = 0;
+            const sep = (lignes[iT].match(/;/g) || []).length > (lignes[iT].match(/,/g) || []).length ? ';' : ',';
+            const tete = lignes[iT].split(sep).map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+            //  le nom de colonne Samsung est préfixé (« com.samsung.health.weight.start_time ») : on compare d'abord son DERNIER segment
+            const fin = (h) => h.slice(h.lastIndexOf('.') + 1);
+            const col = (noms, sauf) => {
+                for (const n of noms) { const i = tete.findIndex(h => fin(h) === n); if (i >= 0) return i; }
+                for (const n of noms) { const i = tete.findIndex(h => fin(h).includes(n) && !(sauf && sauf.test(fin(h)))); if (i >= 0) return i; }
+                return -1;
+            };
+            const iD = col(['date', 'day_time', 'start_time', 'day', 'jour', 'create_time']);
+            const C2 = { pas: col(['step_count', 'steps', 'pas', 'count']), kcal_actives: col(['active_calorie', 'calorie', 'kcal']), poids: col(['weight', 'poids'], /height/),
+                         fc_repos: col(['resting', 'fc_repos']), fc_moy: col(['heart_rate', 'fc_moy'], /resting|min|max/), sommeil_min: col(['sleep_minutes', 'sleep_duration', 'sleep', 'sommeil'], /score|time/) };
+            return { lignes: lignes.slice(iT + 1), sep, iD, C2 };
         };
+        const importerCsv = async (ev) => {
+            const fichiers = Array.from((ev.target && ev.target.files) || []); if (!fichiers.length) return;
+            const jours = new Set(), erreurs = [], fc = {};
+            for (const f of fichiers) {
+                const { lignes, sep, iD, C2 } = lireCsv(await f.text());
+                if (iD < 0) { erreurs.push(f.name + ' : colonne de date introuvable'); continue; }
+                lignes.forEach(l => {
+                    const c = l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+                    let d = c[iD] || ''; if (/^\d{12,13}$/.test(d)) d = new Date(Number(d)).toISOString().slice(0, 10); d = d.slice(0, 10).replace(/\//g, '-');
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+                    if (!etat.journal[d]) etat.journal[d] = jourVide();
+                    const j = etat.journal[d]; if (!j.samsung || Array.isArray(j.samsung)) j.samsung = {};
+                    let lu = false;
+                    Object.entries(C2).forEach(([k, i]) => {
+                        const x = i >= 0 ? C.num(c[i]) : null; if (x === null) return; lu = true;
+                        if (k === 'fc_moy') { const a = fc[d] || (fc[d] = [0, 0]); a[0] += x; a[1]++; j.samsung.fc_moy = Math.round(a[0] / a[1]); }
+                        else if ((k === 'pas' || k === 'kcal_actives') && jours.has(d) && j.samsung[k] != null) j.samsung[k] = Math.max(j.samsung[k], x);
+                        else j.samsung[k] = x;
+                    });
+                    if (j.samsung.poids) { etat.poids = etat.poids.filter(p => !(p.date === d && p.source === 'samsung')); etat.poids.push({ date: d, kg: j.samsung.poids, source: 'samsung' }); }
+                    if (lu) jours.add(d);
+                });
+            }
+            etat.poids.sort((a, b) => a.date < b.date ? -1 : 1);
+            messageCsv.value = (erreurs.length && !jours.size ? '❌ ' : '') + jours.size + ' jour(s) importé(s)' + (fichiers.length > 1 ? ' depuis ' + fichiers.length + ' fichiers' : '') + '.' + (erreurs.length ? ' ⚠️ ' + erreurs.join(' ; ') : '');
+            if (ev.target) ev.target.value = '';
+        };
+
+        // ── plans nutrition et exercice : prévu / réalisé (v1.4) ──
+        const TYPES_PLAN = [{ id: 'nutrition', icone: '🥗', nom: 'Plan nutritionnel' }, { id: 'exercice', icone: '🏋️', nom: 'Plan d’exercice' }];
+        const JOURS_PLAN = [['tous', 'Tous les jours'], ['lundi', 'Lundi'], ['mardi', 'Mardi'], ['mercredi', 'Mercredi'], ['jeudi', 'Jeudi'], ['vendredi', 'Vendredi'], ['samedi', 'Samedi'], ['dimanche', 'Dimanche']];
+        const MOMENTS_PLAN = [['petit_dejeuner', 'Petit-déjeuner'], ['dejeuner', 'Déjeuner'], ['collation', 'Collation'], ['diner', 'Dîner']];
+        const suivis = computed(() => Object.fromEntries(TYPES_PLAN.map(t => [t.id, Cref.value.suiviPlan(etat.plans && etat.plans[t.id], etat.journal, dateJour.value)])));
+        const groupesDuJour = (type) => {
+            const l = suivis.value[type].du_jour;
+            if (type !== 'nutrition') return l.length ? [{ cle: 'seances', libelle: 'Séances prévues', items: l }] : [];
+            return MOMENTS_PLAN.map(([m, lib]) => ({ cle: m, libelle: lib, items: l.filter(i => i.moment === m) })).filter(g => g.items.length);
+        };
+        const semaineGrille = (type) => {
+            const s = suivis.value[type].semaine, plan = etat.plans && etat.plans[type];
+            return Array.from({ length: 7 }, (_, k) => {
+                const d = Cref.value.decaler(s.du, k), x = Cref.value.suiviPlan(plan, etat.journal, d);
+                return { date: d, court: x.jour.slice(0, 3), prevus: x.du_jour.length, faits: x.du_jour.filter(i => i.fait).length, futur: d > aujourdhui(), choisi: d === dateJour.value };
+            });
+        };
+        const cocherPlan = (id, fait) => { const j = jour.value; if (!j.plan_fait || Array.isArray(j.plan_fait)) j.plan_fait = {}; if (fait) j.plan_fait[id] = true; else delete j.plan_fait[id]; };
+        const editeurPlan = reactive({ type: null, titre: '', source: '', texte: '', items: [], message: '' });
+        const ouvrirEditeurPlan = (type) => {
+            const p = etat.plans && etat.plans[type];
+            Object.assign(editeurPlan, { type, titre: p ? p.titre : '', source: p ? p.source : '', texte: '', message: '', items: p ? p.items.map(i => Object.assign({}, i)) : [] });
+        };
+        const appliquerLecturePlan = (texte, source) => {
+            const r = SanteImport.lirePlan(texte, editeurPlan.type);
+            editeurPlan.items = r.items.map(i => Object.assign({ id: uid() }, i));
+            if (r.titre) editeurPlan.titre = r.titre;
+            if (source) editeurPlan.source = source;
+            editeurPlan.message = r.items.length ? r.items.length + ' élément(s) lu(s) : vérifiez-les puis enregistrez.' : '❌ aucun élément lu : les jours (Lundi…) et les repas servent de titres, une ligne = un élément.';
+        };
+        const importerPlan = async (f) => {
+            if (!f) return;
+            try { editeurPlan.message = 'Lecture…'; const t = await extraireTexte(f, (m) => { editeurPlan.message = m; }); editeurPlan.texte = t; appliquerLecturePlan(t, f.name); }
+            catch (e) { editeurPlan.message = '❌ ' + (e.message || e); }
+        };
+        const lireTextePlan = () => appliquerLecturePlan(editeurPlan.texte, editeurPlan.source || 'texte collé');
+        const ajouterElementPlan = () => editeurPlan.items.push(editeurPlan.type === 'nutrition' ? { id: uid(), jour: 'tous', moment: 'dejeuner', texte: '' } : { id: uid(), jour: 'tous', texte: '', duree_min: null });
+        const enregistrerPlan = () => {
+            const items = editeurPlan.items.filter(i => String(i.texte || '').trim()).map(i => { const o = { id: i.id || uid(), jour: i.jour || 'tous', texte: String(i.texte).trim().slice(0, 200) }; if (editeurPlan.type === 'nutrition') o.moment = i.moment || 'dejeuner'; else if (C.num(i.duree_min)) o.duree_min = C.num(i.duree_min); return o; });
+            if (!items.length) return;
+            etat.plans[editeurPlan.type] = { titre: editeurPlan.titre.trim(), source: editeurPlan.source || '', importe_le: aujourdhui(), items };
+            editeurPlan.type = null;
+        };
+        const supprimerPlan = (type) => { delete etat.plans[type]; if (editeurPlan.type === type) editeurPlan.type = null; };
 
         // ── Médecin-Chef IA ──
         const cmoUrl = ref((() => { try { return localStorage.getItem('sante_cmo_url') || ''; } catch (_) { return ''; } })() || (location.origin + '/webhook/sante-cmo'));
@@ -564,11 +923,25 @@ createApp({
         onMounted(() => { setTimeout(verifierVersion, 2500); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verifierVersion(); }); });
         return { VERSION, ONGLETS, menuOuvert, erreurSauvegarde, sauver, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
                  fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, saisie, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
-                 systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
-                 texteBilan, apercu, lectureEnCours, messageBilan, lireFichierBilan, analyserBilan, ajouterBilanApercu,
+                 systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
+                 texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
+                 editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
+                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv,
                  cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, C: Cref };
     }
+}).component('saisie-valeur', {
+    //  v1.4 — une valeur de bilan, modifiable sur place. Vide = supprimée ; une case vide remplie = valeur ajoutée (« corrigée à la main »).
+    props: ['bilan', 'cle'],
+    setup(p) {
+        const num = SanteCalc.creer({}).num;
+        const val = Vue.computed({
+            get: () => (p.bilan.valeurs[p.cle] || {}).v ?? '',
+            set: (x) => { const n = num(x); if (n === null) { delete p.bilan.valeurs[p.cle]; return; } if (p.bilan.valeurs[p.cle]) Object.assign(p.bilan.valeurs[p.cle], { v: n, edite: true }); else p.bilan.valeurs[p.cle] = { v: n, edite: true }; },
+        });
+        return { val };
+    },
+    template: '<input type="number" step="any" v-model.lazy="val" data-saisie-valeur @click.stop class="w-20 border border-slate-300 rounded px-1 py-0.5 text-right font-bold text-slate-800 bg-white">',
 }).mount('#app');
 </script>
 <script>/* v37.99 : le lanceur des applis — exécuté seulement s'il est servi comme un vrai script */

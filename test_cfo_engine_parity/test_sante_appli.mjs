@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 const ICI = path.dirname(fileURLToPath(import.meta.url)), RACINE = path.resolve(ICI, '..');
@@ -52,7 +52,7 @@ try {
         const f = lireFichier();
         v('  → démo chargée et ENREGISTRÉE par save_sante.php (fichier), profil fictif', f.bilans.length === 2 && /TESTEUR/.test(f.profil.nom) && !(await page.isVisible('[data-accueil]')), f.profil);
         const onglets = await page.$$eval('[data-onglet]', l => l.map(x => x.textContent.trim()));
-        v('  → les 5 onglets', onglets.length === 5 && /Pilotage/.test(onglets[0]) && /Analyses/.test(onglets[1]) && /Nutrition/.test(onglets[2]) && /Samsung/.test(onglets[3]) && /Médecin-Chef/.test(onglets[4]), onglets);
+        v('  → les 6 onglets (v1.4 : + Plans, après Nutrition)', onglets.length === 6 && /Pilotage/.test(onglets[0]) && /Analyses/.test(onglets[1]) && /Nutrition/.test(onglets[2]) && /Plans/.test(onglets[3]) && /Samsung/.test(onglets[4]) && /Médecin-Chef/.test(onglets[5]), onglets);
     });
     await section('B', async () => {
         await page.click('[data-onglet="analyses"]'); await page.waitForTimeout(300);
@@ -165,6 +165,108 @@ try {
         await p3.waitForFunction(() => /enregistré/.test(document.querySelector('[data-statut-sauvegarde]').textContent) && !/non enregistré/.test(document.querySelector('[data-statut-sauvegarde]').textContent) && !document.querySelector('[data-erreur-sauvegarde]'), null, { timeout: 8000 });
         v('  → « ↻ Réessayer » une fois le serveur réparé : enregistré, le bandeau disparaît, rien n\u2019a été perdu', lireFichier().profil.nom === 'PERSONNE ESSAI ERREUR', lireFichier().profil);
         await p3.close();
+    });
+    await section('K', async () => {
+        //  v1.4 — plusieurs fichiers d'un coup (texte, photo → OCR), date trouvée seule, chaque valeur liée à son document,
+        //  modification et suppression ligne par ligne, document supprimé avec ses valeurs, grand ménage confirmé, plans.
+        fs.rmSync(DATA, { force: true });
+        const p4 = await ouvrir();
+        await p4.click('[data-charger-demo]'); await p4.waitForTimeout(300); await attendreEnregistre(p4);
+        await p4.evaluate(() => { window.Tesseract = { recognize: async () => ({ data: { text: 'LABO FICTIF\nPrélevé le 15/05/2026\nVitamine D 27.5 ng/mL > 30\nTSHus 1.400 µUI/mL 0.27 - 4.20' } }) }; });
+        const fa = path.join(tmp, 'bilan_a.txt'), fb = path.join(tmp, 'bilan_b.txt'), fp = path.join(tmp, 'photo.jpg');
+        fs.writeFileSync(fa, 'Dossier ouvert le : 15−05−2026\nMr TESTEUR Fictif\nNé le 02/02/1980\n Prélevé le : 15−05−2026 à 09:29   Réf dossier: 1234\nEdité le : 21−05−2026\nAntériorités du 20/02/2025\nHématies 5.06 T/L (4.28−6.00) 5.17\nTriglycérides 2.17 g/L < 1.50\nHémoglobine glyquée HbA1c 5.8 % 4.0 – 5.6\n');
+        fs.writeFileSync(fb, 'Résultats du 12/09/2026\nHDL 0.44 g/L > 0.40\nTriglycérides 1.62 g/L < 1.50\n');
+        fs.writeFileSync(fp, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+        await p4.click('[data-onglet="analyses"]'); await p4.click('[data-ouvrir-import]');
+        await p4.setInputFiles('[data-import-fichier]', [fa, fb, fp]);
+        await p4.waitForFunction(() => document.querySelectorAll('[data-apercu-bilan] [data-apercu-date]').length === 3, null, { timeout: 8000 });
+        const ap = await p4.$$eval('[data-apercu-bilan]', l => l.map(x => [x.getAttribute('data-apercu-nom'), x.querySelector('[data-apercu-date]').value, x.querySelector('[data-apercu-compte]').textContent]));
+        v('K. 3 fichiers d\'un coup (2 textes + 1 photo lue par OCR) : 3 aperçus', ap.length === 3 && ap.map(x => x[0]).join() === 'bilan_a.txt,bilan_b.txt,photo.jpg', ap);
+        v('  → date trouvée seule : PRÉLÈVEMENT 15/05/2026 (tirets « − » du PDF ; ni naissance, ni antériorité 20/02/2025, ni édition)', ap[0][1] === '2026-05-15' && /Prélevé/.test(await p4.textContent('[data-apercu-bilan] [data-apercu-date-source]')), ap);
+        v('  → « Résultats du 12/09/2026 » ; la photo : 15/05/2026', ap[1][1] === '2026-09-12' && ap[2][1] === '2026-05-15', ap);
+        v('  → HbA1c lue 5,8 (pas le « 1 » de « A1c ») ; 3 + 2 + 2 biomarqueurs', /^3 /.test(ap[0][2]) && /^2 /.test(ap[1][2]) && /^2 /.test(ap[2][2]) && await p4.inputValue('[data-apercu-bilan] [data-apercu-valeur="hba1c"] input') === '5.8', ap);
+        await p4.click('[data-ajouter-tous]'); await p4.waitForTimeout(200); await attendreEnregistre(p4);
+        let f = lireFichier(), b15 = f.bilans.find(b => b.date === '2026-05-15');
+        const docA = b15 && b15.documents.find(d => d.nom === 'bilan_a.txt'), docP = b15 && b15.documents.find(d => d.nom === 'photo.jpg');
+        v('  → « Ajouter les 3 » : 2 bilans créés ; le 15/05 réunit 2 documents, chaque valeur garde le sien (enregistré)', f.bilans.length === 4 && docA && docP && b15.valeurs.tg.doc === docA.id && b15.valeurs.vitd.doc === docP.id && f.bilans.some(b => b.date === '2026-09-12' && b.documents.length === 1), b15);
+        await p4.click('[data-systeme="cardio"]');
+        v('  → le tableau dit d\'où vient chaque valeur (survol : « Source : bilan_a.txt »)', /bilan_a\.txt/.test(await p4.getAttribute('[data-cellule="tg|2026-05-15"]', 'title')));
+        const doc = (nom) => `[data-bilan="2026-05-15"] [data-document="${nom}"]`;
+        await p4.click(doc('photo.jpg') + ' [data-supprimer-document]');
+        v('  → supprimer un document demande une confirmation (second clic)', /Confirmer/.test(await p4.textContent(doc('photo.jpg') + ' [data-supprimer-document]')) && lireFichier().bilans.find(b => b.date === '2026-05-15').valeurs.vitd);
+        await p4.click(doc('photo.jpg') + ' [data-supprimer-document]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+        b15 = lireFichier().bilans.find(b => b.date === '2026-05-15');
+        v('  → document supprimé : ses 2 valeurs partent, celles de bilan_a.txt restent', b15 && !b15.valeurs.vitd && !b15.valeurs.tsh && b15.valeurs.tg && b15.documents.length === 1, b15);
+        await p4.click(doc('bilan_a.txt') + ' [data-voir-lignes]');
+        await p4.fill(doc('bilan_a.txt') + ' [data-ligne="tg"] [data-saisie-valeur]', '2.05'); await p4.press(doc('bilan_a.txt') + ' [data-ligne="tg"] [data-saisie-valeur]', 'Tab');
+        await p4.click(doc('bilan_a.txt') + ' [data-ligne="hba1c"] [data-supprimer-ligne]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+        b15 = lireFichier().bilans.find(b => b.date === '2026-05-15');
+        v('  → une ligne modifiée (TG 2,17 → 2,05, marquée « corrigée », toujours liée au document) ; une ligne supprimée', b15.valeurs.tg.v === 2.05 && b15.valeurs.tg.edite === true && b15.valeurs.tg.doc === docA.id && !b15.valeurs.hba1c, b15.valeurs);
+        await p4.click('[data-mode-edition]');
+        await p4.fill('[data-cellule="hdl|2026-05-15"] [data-saisie-valeur]', '0.5'); await p4.press('[data-cellule="hdl|2026-05-15"] [data-saisie-valeur]', 'Tab'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+        v('  → mode « Modifier les valeurs » : une case vide du tableau remplie devient une valeur', lireFichier().bilans.find(b => b.date === '2026-05-15').valeurs.hdl.v === 0.5);
+        await p4.click('[data-mode-edition]');
+        await p4.click('[data-ouvrir-nettoyage]');
+        const bloque = await p4.isDisabled('[data-confirmer-nettoyage]');
+        await p4.fill('[data-confirmation-nettoyage]', 'effacer');
+        const libre = !(await p4.isDisabled('[data-confirmer-nettoyage]'));
+        await p4.click('[data-confirmer-nettoyage]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+        f = lireFichier();
+        v('  → « Tout effacer » : bloqué tant que EFFACER n\'est pas tapé ; puis toutes les analyses partent, le reste (profil) demeure', bloque && libre && f.bilans.length === 0 && /TESTEUR/.test(f.profil.nom), [bloque, libre, f.bilans.length]);
+
+        //  les plans
+        await p4.evaluate((ST) => { eval(ST).dateJour = '2026-11-02'; }, ST);      // un lundi
+        await p4.click('[data-onglet="plans"]'); await p4.click('[data-ouvrir-plan="nutrition"]');
+        await p4.fill('[data-texte-plan]', 'Plan nutritionnel — novembre\nTous les jours\nPetit-déjeuner : café noir + MCT\nLundi\nDéjeuner\n- salade, poulet 150 g, pain d\'orge\nDîner : soupe de légumes\nMardi\nDéjeuner : poisson 150 g');
+        await p4.click('[data-lire-plan]');
+        v('  → plan nutritionnel lu : 4 éléments rangés par jour et par repas, titre repris', (await p4.$$('[data-element-editeur]')).length === 4 && await p4.inputValue('[data-titre-plan]') === 'Plan nutritionnel - novembre');
+        await p4.click('[data-enregistrer-plan]'); await p4.waitForTimeout(100);
+        const prevus = await p4.$$eval('[data-plan="nutrition"] [data-element-plan]', l => l.map(x => x.textContent.trim()));
+        v('  → lundi : 3 éléments prévus (petit-déjeuner de tous les jours + déjeuner + dîner du lundi), pas celui du mardi', prevus.length === 3 && !prevus.some(t => /poisson/.test(t)), prevus);
+        await p4.check('[data-plan="nutrition"] [data-element-plan] input'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+        f = lireFichier();
+        const idPdj = f.plans.nutrition.items.find(i => /café/.test(i.texte)).id;
+        v('  → cocher = RÉALISÉ, enregistré dans la journée ; semaine 1/3 · 33 %', f.journal['2026-11-02'].plan_fait[idPdj] === true && /1\/3/.test(await p4.textContent('[data-taux-plan="nutrition"]')) && /33 %/.test(await p4.textContent('[data-taux-plan="nutrition"]')), f.journal['2026-11-02']);
+        const mammoth = essai(() => require.resolve('mammoth/mammoth.browser.min.js'));
+        if (!mammoth) console.log('  ⏭️  plan Word (.docx) ignoré : mammoth absent (npm install --no-save mammoth@1.8.0)');
+        else {
+            await p4.route('https://cdn.jsdelivr.net/npm/mammoth@*/**', r => r.fulfill({ body: fs.readFileSync(mammoth), contentType: 'text/javascript' }));
+            const docx = path.join(tmp, 'programme.docx');
+            const para = ['Programme exercice', 'Lundi : Marche Zone 2 à jeun 45 min', 'Mercredi', 'Machines bas du corps 1 h', 'Soleus pushups 10 min'].map(t => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`).join('');
+            execFileSync('python3', ['-c', `import zipfile,sys
+z=zipfile.ZipFile(sys.argv[1],'w')
+z.writestr('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
+z.writestr('_rels/.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
+z.writestr('word/document.xml','<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+sys.argv[2]+'</w:body></w:document>')
+z.close()`, docx, para]);
+            await p4.click('[data-ouvrir-plan="exercice"]');
+            await p4.setInputFiles('[data-import-plan]', docx);
+            await p4.waitForFunction(() => document.querySelectorAll('[data-element-editeur]').length === 3, null, { timeout: 8000 }).catch(() => {});
+            await p4.click('[data-enregistrer-plan]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+            const ex = lireFichier().plans.exercice;
+            v('  → plan d\'exercice importé d\'un fichier Word (.docx) : 3 séances, durées lues (45 / 60 / 10 min)', ex && ex.source === 'programme.docx' && ex.items.map(i => i.duree_min).join() === '45,60,10' && ex.items[0].jour === 'lundi', ex);
+            v('  → lundi : la marche Zone 2 est prévue, minutes de la semaine affichées', /Zone 2/.test(await p4.textContent('[data-plan="exercice"]')) && /0 réalisées sur 45 prévues/.test(await p4.textContent('[data-minutes-plan]')));
+        }
+        const lecture = await (await fetch(U + 'sante_api.php?lecture=1&date=2026-11-02')).json();
+        v('  → le Médecin-Chef IA lit le plan du jour et le réalisé de la semaine', lecture.plans && lecture.plans.nutrition.suivi.semaine.faits === 1 && lecture.plans.nutrition.suivi.du_jour.length === 3, lecture.plans);
+        //  CSV au format réel de Samsung Health : une ligne de description avant l'en-tête, day_time en millisecondes,
+        //  téléphone + montre le même jour (on garde le maximum) ; et un second fichier, les pesées (start_time)
+        const c1 = path.join(tmp, 'com.samsung.shealth.tracker.pedometer_day_summary.20261104.csv'), c2 = path.join(tmp, 'com.samsung.health.weight.20261104.csv');
+        const ms = (d) => String(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)));
+        fs.writeFileSync(c1, `com.samsung.shealth.tracker.pedometer_day_summary,6313005,3\nstep_count,calorie,day_time,deviceuuid\n6200,250.5,${ms('2026-10-20')},tel\n9100,380.2,${ms('2026-10-20')},montre\n7000,300,${ms('2026-10-21')},tel\n`);
+        fs.writeFileSync(c2, 'com.samsung.health.weight,6312004,5\ncom.samsung.health.weight.start_time,com.samsung.health.weight.weight,com.samsung.health.weight.height\n2026-10-21 07:12:00.000,96.8,178\n');
+        await p4.click('[data-onglet="poids"]');
+        await p4.setInputFiles('[data-import-csv]', [c1, c2]); await p4.waitForTimeout(300); await attendreEnregistre(p4);
+        f = lireFichier();
+        v('  → CSV réels de Samsung Health (2 fichiers d\'un coup) : en-tête en 2ᵉ ligne lu, téléphone + montre → le maximum, pesée reprise', /2 jour\(s\) importé\(s\) depuis 2 fichiers/.test(await p4.textContent('[data-message-csv]'))
+          && f.journal['2026-10-20'].samsung.pas === 9100 && f.journal['2026-10-21'].samsung.pas === 7000 && f.poids.some(p => p.date === '2026-10-21' && p.kg === 96.8 && p.source === 'samsung'), [await p4.textContent('[data-message-csv]'), f.journal['2026-10-20']]);
+        await p4.click('[data-onglet="analyses"]'); await p4.click('[data-ouvrir-nettoyage]'); await p4.check('[data-portee="tout"]');
+        await p4.fill('[data-confirmation-nettoyage]', 'EFFACER'); await p4.click('[data-confirmer-nettoyage]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+        f = lireFichier();
+        v('  → « Toute l\'appli » : profil, plans, journal effacés, retour à l\'accueil', !f.profil.nom && !Object.keys(f.plans).length && f.bilans.length === 0 && f.poids.length === 0
+          && Object.values(f.journal).every(j => !Object.values(j.checklist).some(Boolean) && !j.repas.length && !Object.keys(j.activite).length && !Object.keys(j.samsung).length && !j.plan_fait)   // (le jour affiché renaît vide, comme toujours)
+          && await p4.isVisible('[data-accueil]'), { nom: f.profil.nom, plans: f.plans, journal: f.journal, accueil: await p4.isVisible('[data-accueil]') });
+        await p4.close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

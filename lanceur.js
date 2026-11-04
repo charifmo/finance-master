@@ -9,7 +9,7 @@
     var base = new URL((cs && cs.dataset && cs.dataset.base) || './', location.href);
     var DEFAUT = [
         { id: 'finance', nom: 'Finance', icone: '💰', description: 'Budget, comptes, épargne, CFO', url: './' },
-        { id: 'sante', nom: 'Santé', icone: '🩺', description: 'Bilans, nutrition, activité, CMO', url: 'sante/' }
+        { id: 'sante', nom: 'Santé', icone: '🩺', description: 'Bilans, nutrition, plans, activité, CMO', url: 'sante/' }
     ];
     var applis = null;
     var charger = function () {

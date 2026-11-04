@@ -220,3 +220,22 @@ function sante_indicateurs(array $bilan, array $profil = []): array {
         'gilbert'      => sante_gilbert($bilan),
     ];
 }
+
+/** v1.4 — PLAN PRÉVU / RÉALISÉ (parité exacte avec suiviPlan de sante_calculs.js). */
+const SANTE_JOURS_SEM = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+function sante_jour_semaine(string $d): string { return SANTE_JOURS_SEM[(int)gmdate('N', strtotime($d . ' 12:00:00 UTC')) - 1]; }
+function sante_decaler(string $d, int $n): string { return gmdate('Y-m-d', strtotime($d . ' 12:00:00 UTC') + $n * 86400); }
+function sante_suivi_plan($plan, $journal, string $date): array {
+    $items = is_array($plan) && is_array($plan['items'] ?? null) ? $plan['items'] : [];
+    $journal = json_decode(json_encode($journal ?: []), true) ?: [];
+    $duJour = fn($d) => array_values(array_filter($items, fn($i) => ($i['jour'] ?? '') === 'tous' || ($i['jour'] ?? '') === sante_jour_semaine($d)));
+    $fait = fn($d, $id) => !empty((($journal[$d] ?? [])['plan_fait'] ?? [])[$id]);
+    $idx = array_search(sante_jour_semaine($date), SANTE_JOURS_SEM, true);
+    $prevus = 0; $faits = 0; $minP = 0; $minF = 0;
+    for ($k = 0; $k <= $idx; $k++) {
+        $d = sante_decaler($date, $k - $idx);
+        foreach ($duJour($d) as $i) { $prevus++; $minP += (float)($i['duree_min'] ?? 0); if ($fait($d, $i['id'] ?? '')) { $faits++; $minF += (float)($i['duree_min'] ?? 0); } }
+    }
+    return ['jour' => sante_jour_semaine($date), 'du_jour' => array_map(fn($i) => array_merge($i, ['fait' => $fait($date, $i['id'] ?? '')]), $duJour($date)),
+            'semaine' => ['du' => sante_decaler($date, -$idx), 'prevus' => $prevus, 'faits' => $faits, 'taux' => $prevus ? (int)round(100 * $faits / $prevus) : null, 'minutes_prevues' => $minP, 'minutes_faites' => $minF]];
+}

@@ -214,6 +214,9 @@ function sante_lecture(array $etat, ?string $date = null): array {
         'aujourdhui' => ['checklist' => $j['checklist'] ?? null, 'activite' => $j['activite'] ?? null, 'samsung' => $j['samsung'] ?? null,
                          'calories_ingerees' => (int)$ingere, 'bmr' => $bmr, 'bilan_energie' => sante_bilan_energie($ingere ?: null, $bmr, $j['samsung']['kcal_actives'] ?? null)],
         'poids' => ['dernier' => $kg, 'projection' => sante_projection_poids($etat['poids'], $etat['objectifs']['poids_kg'], null, $date)],
-        'supplements' => $etat['supplements'], 'catalogue' => array_map(fn($d) => $d['desc'], sante_catalogue_fonctions()),
+        'supplements' => $etat['supplements'],
+        //  v1.4 — les plans (nutrition, exercice) : ce qui est prévu aujourd'hui, ce qui est coché fait, la semaine en cours
+        'plans' => array_map(fn($p) => ['titre' => $p['titre'], 'suivi' => sante_suivi_plan($p, $etat['journal'], $date)], (array)$etat['plans']),
+        'catalogue' => array_map(fn($d) => $d['desc'], sante_catalogue_fonctions()),
     ];
 }

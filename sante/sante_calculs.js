@@ -149,7 +149,25 @@
                 gilbert: gilbert(bilan),
             };
         };
-        return { num, norm, age, val, bornes, statut, ratioTgHdl, nonHdl, homaIr, tyg, score2, gilbert, bmr, bilanEnergie, projectionPoids, aliment, item, scoreSequencage, totauxRepas, indicateurs, KCAL_PAR_KG };
+        //  v1.4 — PLAN PRÉVU / RÉALISÉ : les éléments du plan pour une date (« tous les jours » + ceux de son jour de semaine),
+        //  cochés ou non dans journal[date].plan_fait, et la semaine en cours (lundi → date) : prévus, faits, taux, minutes.
+        const JOURS_SEM = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+        const jourSemaine = (d) => JOURS_SEM[(new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7];
+        const decaler = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+        function suiviPlan(plan, journal, date) {
+            const items = plan && Array.isArray(plan.items) ? plan.items : [];
+            const duJour = (d) => items.filter(i => i.jour === 'tous' || i.jour === jourSemaine(d));
+            const fait = (d, id) => !!((((journal || {})[d] || {}).plan_fait || {})[id]);
+            const idx = JOURS_SEM.indexOf(jourSemaine(date));
+            let prevus = 0, faits = 0, minP = 0, minF = 0;
+            for (let k = 0; k <= idx; k++) {
+                const d = decaler(date, k - idx);
+                duJour(d).forEach(i => { prevus++; minP += Number(i.duree_min || 0); if (fait(d, i.id)) { faits++; minF += Number(i.duree_min || 0); } });
+            }
+            return { jour: jourSemaine(date), du_jour: duJour(date).map(i => Object.assign({}, i, { fait: fait(date, i.id) })),
+                     semaine: { du: decaler(date, -idx), prevus, faits, taux: prevus ? Math.round(100 * faits / prevus) : null, minutes_prevues: minP, minutes_faites: minF } };
+        }
+        return { num, norm, age, val, bornes, statut, ratioTgHdl, nonHdl, homaIr, tyg, score2, gilbert, bmr, bilanEnergie, projectionPoids, aliment, item, scoreSequencage, totauxRepas, indicateurs, suiviPlan, jourSemaine, decaler, JOURS_SEM, KCAL_PAR_KG };
     }
     return { creer };
 });
