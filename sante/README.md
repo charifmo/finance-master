@@ -85,6 +85,27 @@ Play Store `com.hcwebhook.app`) lit Samsung Health via Health Connect et POSTe s
 - L'ancien format « un jour » (`{"date", "steps", …}`) reste accepté ; jeton aussi possible dans `db_config.php`
   (`sante_samsung_token`).
 
+## Importer un protocole (v1.8)
+
+Onglet **Plans → 📥 Importer mon protocole** : PDF, Word, photo ou texte, de n'importe quelle forme. `sante_protocole.js`
+range chaque ligne **par règles** (pas d'IA) :
+
+- **cases du jour**, par moment (réveil … coucher, toute la journée), avec heure, jours précis ou rythme
+  (1×/semaine, 1×/mois) ; les aliments d'un repas forment UNE case, le menu en détail ; les explications d'une action
+  en détail ;
+- **suppléments** (fiches POURQUOI / COMBIEN / QUAND, tableau de synthèse), **règles** à relire (interdits,
+  avertissements, conseils), **objectifs** (tableau Marqueur / Départ / Cible → cibles des biomarqueurs dans Analyses),
+  **ignoré** (titres, sommaire, explications « Pourquoi »).
+
+Indices utilisés, valables pour tout document : phrases coupées recollées (minuscule, ligne non finie, suite de puce ;
+une ligne vide termine un paragraphe), titres numérotés / à emoji / en capitales / courts, heures et mots de moment,
+partie en gras d'une puce, quantités et gestes, « jamais / éviter / zéro / si », colonnes des tableaux, doublons.
+
+**Écran de tri** : chaque ligne peut changer de catégorie, de moment, de texte, ou être supprimée avant d'enregistrer.
+Chaque correction devient une **leçon** (`lecons_plan`), appliquée d'office aux imports suivants (🧠) ; le compteur
+de corrections montre le progrès d'un import à l'autre. Le protocole remplace la checklist fixe de Pilotage. Étape
+suivante prévue : une vérification optionnelle par l'IA, qui proposera des corrections à accepter une à une.
+
 ## L'agent Telegram « Médecin-Chef IA » (v1.7)
 
 Workflow n8n `[SANTÉ] - Médecin-Chef IA`, modèle dans `n8n/agent_sante.json`, consignes dans `sante/cmo_system_prompt.md`.

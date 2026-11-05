@@ -54,6 +54,8 @@ function sante_norm_bilan($b): ?array {
 /** v1.4 — Un plan (nutrition ou exercice) : titre, document d'origine, éléments rangés par jour (et par repas). */
 const SANTE_JOURS_PLAN = ['tous', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
 const SANTE_MOMENTS_PLAN = ['petit_dejeuner', 'dejeuner', 'collation', 'diner'];
+//  v1.8 — le protocole (« Ma journée ») : moments de toute la journée
+const SANTE_MOMENTS_PROTOCOLE = ['reveil', 'matin', 'petit_dejeuner', 'dejeuner', 'apres_midi', 'collation', 'diner', 'soir', 'coucher', 'journee'];
 function sante_norm_plan($p, string $type): ?array {
     if (!is_array($p)) return null;
     $items = [];
@@ -63,12 +65,24 @@ function sante_norm_plan($p, string $type): ?array {
               'jour' => in_array($x['jour'] ?? '', SANTE_JOURS_PLAN, true) ? $x['jour'] : 'tous', 'texte' => mb_substr(trim((string)$x['texte']), 0, 200)];
         if ($type === 'nutrition') $i['moment'] = in_array($x['moment'] ?? '', SANTE_MOMENTS_PLAN, true) ? $x['moment'] : 'dejeuner';
         elseif (($d = sante_num($x['duree_min'] ?? null)) !== null && $d > 0 && $d <= 600) $i['duree_min'] = $d;
+        if ($type === 'protocole') {
+            $i['moment'] = in_array($x['moment'] ?? '', SANTE_MOMENTS_PROTOCOLE, true) ? $x['moment'] : 'journee';
+            if (is_string($x['heure'] ?? null) && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $x['heure'])) $i['heure'] = $x['heure'];
+            if (!empty($x['detail']) && is_string($x['detail'])) $i['detail'] = mb_substr($x['detail'], 0, 1500);
+            $jours = array_values(array_intersect(SANTE_JOURS_PLAN, (array)($x['jours'] ?? [])));
+            $jours = array_values(array_diff($jours, ['tous']));
+            if ($jours && count($jours) < 7) $i['jours'] = $jours;
+            if (in_array($x['frequence'] ?? '', ['semaine', 'mois'], true)) $i['frequence'] = $x['frequence'];
+            if (!empty($x['repas'])) $i['repas'] = true;
+        }
         $items[] = $i;
         if (count($items) >= 300) break;
     }
     if (!$items) return null;
-    return ['titre' => mb_substr((string)($p['titre'] ?? ''), 0, 120), 'source' => mb_substr((string)($p['source'] ?? ''), 0, 160),
-            'importe_le' => sante_date_ok($p['importe_le'] ?? null) ? $p['importe_le'] : null, 'items' => $items];
+    $o = ['titre' => mb_substr((string)($p['titre'] ?? ''), 0, 120), 'source' => mb_substr((string)($p['source'] ?? ''), 0, 160),
+          'importe_le' => sante_date_ok($p['importe_le'] ?? null) ? $p['importe_le'] : null, 'items' => $items];
+    foreach (['corrections', 'corrections_avant'] as $k) if (sante_num($p[$k] ?? null) !== null) $o[$k] = (int)sante_num($p[$k]);
+    return $o;
 }
 function sante_normaliser($e): array {
     $d = sante_etat_defaut();
@@ -118,7 +132,8 @@ function sante_normaliser($e): array {
     ksort($j);
     $o['journal'] = $j ?: new stdClass();
     $o['supplements'] = array_values(array_filter(array_map(fn($s) => is_array($s) && !empty($s['nom'])
-        ? ['nom' => mb_substr((string)$s['nom'], 0, 60), 'dose' => mb_substr((string)($s['dose'] ?? ''), 0, 60), 'moment' => mb_substr((string)($s['moment'] ?? ''), 0, 60), 'actif' => !isset($s['actif']) || !empty($s['actif'])]
+        ? array_filter(['nom' => mb_substr((string)$s['nom'], 0, 80), 'dose' => mb_substr((string)($s['dose'] ?? ''), 0, 160), 'moment' => mb_substr((string)($s['moment'] ?? ''), 0, 200), 'actif' => !isset($s['actif']) || !empty($s['actif']),
+                        'pourquoi' => mb_substr((string)($s['pourquoi'] ?? ''), 0, 500), 'notes' => mb_substr((string)($s['notes'] ?? ''), 0, 800)], fn($v) => $v !== '')
         : null, (array)($e['supplements'] ?? []))));
     $o['protocole'] = array_values(array_filter(array_map(fn($x) => is_string($x) ? mb_substr($x, 0, 300) : null, (array)($e['protocole'] ?? []))));
     //  v1.5 — la dernière synchro automatique reçue du téléphone (affichée dans l'onglet Samsung & Poids)
@@ -126,6 +141,26 @@ function sante_normaliser($e): array {
         $o['sync_auto'] = ['derniere' => substr($e['sync_auto']['derniere'], 0, 30), 'source' => mb_substr((string)($e['sync_auto']['source'] ?? ''), 0, 60), 'jours' => (int)($e['sync_auto']['jours'] ?? 0)];
     $pl = is_array($e['plans'] ?? null) ? $e['plans'] : [];
     $o['plans'] = new stdClass();
-    foreach (['nutrition', 'exercice'] as $t) if (($n = sante_norm_plan($pl[$t] ?? null, $t)) !== null) { $o['plans'] = (array)$o['plans']; $o['plans'][$t] = $n; }
+    foreach (['nutrition', 'exercice', 'protocole'] as $t) if (($n = sante_norm_plan($pl[$t] ?? null, $t)) !== null) { $o['plans'] = (array)$o['plans']; $o['plans'][$t] = $n; }
+    //  v1.8 — ce que l'import d'un protocole range ailleurs que dans les cases du jour
+    $o['regles'] = [];
+    foreach ((array)($e['regles'] ?? []) as $r) if (is_array($r) && trim((string)($r['texte'] ?? '')) !== '' && count($o['regles']) < 400)
+        $o['regles'][] = ['id' => is_string($r['id'] ?? null) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $r['id']) ? $r['id'] : sante_uid(), 'section' => mb_substr((string)($r['section'] ?? ''), 0, 120), 'texte' => mb_substr(trim((string)$r['texte']), 0, 700)];
+    $M = sante_catalogue()['marqueurs']; $o['cibles'] = new stdClass(); $cib = [];
+    foreach ((array)($e['cibles'] ?? []) as $k => $c) if (isset($M[$k]) && is_array($c) && in_array($c['op'] ?? '', ['<', '>'], true) && sante_num($c['v'] ?? null) !== null) $cib[$k] = ['op' => $c['op'], 'v' => sante_num($c['v'])];
+    if ($cib) $o['cibles'] = $cib;
+    $o['objectifs_suivi'] = [];
+    foreach ((array)($e['objectifs_suivi'] ?? []) as $x) if (is_array($x) && trim((string)($x['libelle'] ?? '')) !== '' && count($o['objectifs_suivi']) < 60)
+        $o['objectifs_suivi'][] = ['libelle' => mb_substr(trim((string)$x['libelle']), 0, 80), 'depart' => mb_substr((string)($x['depart'] ?? ''), 0, 40), 'cible' => mb_substr((string)($x['cible'] ?? ''), 0, 60)];
+    $o['lecons_plan'] = [];
+    foreach ((array)($e['lecons_plan'] ?? []) as $l) {
+        if (!is_array($l) || !is_string($l['cle'] ?? null) || $l['cle'] === '' || count($o['lecons_plan']) >= 600) continue;
+        $x = ['cle' => mb_substr($l['cle'], 0, 120)];
+        if (in_array($l['bucket'] ?? '', ['action', 'supplement', 'regle', 'objectif', 'ignorer'], true)) $x['bucket'] = $l['bucket'];
+        if (in_array($l['moment'] ?? '', SANTE_MOMENTS_PROTOCOLE, true)) $x['moment'] = $l['moment'];
+        if (is_string($l['texte'] ?? null) && trim($l['texte']) !== '') $x['texte'] = mb_substr(trim($l['texte']), 0, 200);
+        if (sante_date_ok($l['date'] ?? null)) $x['date'] = $l['date'];
+        if (count($x) > 1) $o['lecons_plan'][] = $x;
+    }
     return $o;
 }

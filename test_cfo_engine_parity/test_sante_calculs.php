@@ -65,6 +65,21 @@ v('  → v1.4 : la valeur garde son document et « corrigée » ; un id de docum
 $pn = $e2['plans']['nutrition'] ?? null; $pe = $e2['plans']['exercice'] ?? null;
 v('  → plans : jour / repas inconnus ramenés à « tous » / « déjeuner », ligne vide retirée, durée absurde ignorée, type inconnu rejeté', $pn && count($pn['items']) === 2 && $pn['items'][0] === ['id' => 'n1', 'jour' => 'lundi', 'texte' => 'soupe', 'moment' => 'diner']
     && $pn['items'][1]['jour'] === 'tous' && $pn['items'][1]['moment'] === 'dejeuner' && $pe['items'][0]['duree_min'] == 45 && !isset($pe['items'][1]['duree_min']) && !isset($e2['plans']['autre']), $e2['plans']);
+$e3 = sante_normaliser(['plans' => ['protocole' => ['titre' => 'Protocole', 'corrections' => 3, 'corrections_avant' => 11, 'items' => [
+        ['id' => 'a1', 'texte' => 'Marche Zone 2', 'moment' => 'reveil', 'heure' => '07:15', 'detail' => 'Zone 2 = 105-125 bpm', 'repas' => false],
+        ['id' => 'a2', 'texte' => 'Machines', 'jours' => ['lundi', 'jeudi', 'funday'], 'moment' => 'nulle_part', 'heure' => '25:99'],
+        ['id' => 'a3', 'texte' => 'Pesée', 'frequence' => 'semaine'], ['id' => 'a4', 'texte' => 'X', 'frequence' => 'annee']]]],
+    'regles' => [['id' => 'r1', 'section' => 'Alimentation — À éviter', 'texte' => 'Sucre rapide'], ['texte' => '']],
+    'cibles' => ['tg' => ['op' => '<', 'v' => '1,5'], 'inconnu' => ['op' => '<', 'v' => 1], 'hdl' => ['op' => '=', 'v' => 1]],
+    'objectifs_suivi' => [['libelle' => 'Triglycérides', 'depart' => '2,10', 'cible' => '<1,5']],
+    'lecons_plan' => [['cle' => 'echauffement 5 min', 'bucket' => 'action', 'moment' => 'matin', 'date' => '2026-11-05'], ['cle' => 'x', 'bucket' => 'pirate'], ['bucket' => 'action']],
+    'supplements' => [['nom' => 'Oméga-3', 'dose' => '2 capsules = 1000 mg', 'moment' => 'Au petit-déjeuner', 'pourquoi' => 'TG', 'notes' => 'Frigo', 'actif' => false]]]);
+$pr = $e3['plans']['protocole'] ?? null;
+v('  → v1.8 protocole : moment, heure, détail, jours, fréquence gardés ; moment / heure / jour / fréquence invalides corrigés ou retirés', $pr && $pr['items'][0]['moment'] === 'reveil' && $pr['items'][0]['heure'] === '07:15' && $pr['items'][0]['detail'] === 'Zone 2 = 105-125 bpm'
+    && $pr['items'][1]['jours'] === ['lundi', 'jeudi'] && $pr['items'][1]['moment'] === 'journee' && !isset($pr['items'][1]['heure']) && $pr['items'][2]['frequence'] === 'semaine' && !isset($pr['items'][3]['frequence']) && $pr['corrections'] === 3 && $pr['corrections_avant'] === 11, $pr);
+v('  → règles, cibles (catalogue seulement, opérateur < ou >), objectifs, leçons (une leçon sans rien de valide est écartée), suppléments enrichis', count($e3['regles']) === 1 && $e3['regles'][0]['section'] === 'Alimentation — À éviter' && $e3['cibles'] === ['tg' => ['op' => '<', 'v' => 1.5]]
+    && $e3['objectifs_suivi'][0]['cible'] === '<1,5' && count($e3['lecons_plan']) === 1 && $e3['lecons_plan'][0]['moment'] === 'matin' && $e3['lecons_plan'][0]['bucket'] === 'action'
+    && $e3['supplements'][0]['pourquoi'] === 'TG' && $e3['supplements'][0]['actif'] === false && $e3['supplements'][0]['dose'] === '2 capsules = 1000 mg', [$e3['cibles'], $e3['lecons_plan'], $e3['supplements']]);
 v('  → réalisé : seuls les « vrai » aux identifiants sûrs sont gardés ; sans plan, « plans » reste un objet JSON', $e2['journal']['2026-11-02']['plan_fait'] === ['n1' => true] && json_encode(sante_normaliser([])['plans']) === '{}', $e2['journal']);
 
 // ── F. Moteur ──

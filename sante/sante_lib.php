@@ -228,8 +228,16 @@ function sante_decaler(string $d, int $n): string { return gmdate('Y-m-d', strto
 function sante_suivi_plan($plan, $journal, string $date): array {
     $items = is_array($plan) && is_array($plan['items'] ?? null) ? $plan['items'] : [];
     $journal = json_decode(json_encode($journal ?: []), true) ?: [];
-    $duJour = fn($d) => array_values(array_filter($items, fn($i) => ($i['jour'] ?? '') === 'tous' || ($i['jour'] ?? '') === sante_jour_semaine($d)));
+    //  v1.8 — jours précis (jours[]) ; périodiques (frequence semaine | mois) rendus à part, cochés une fois dans la période
+    $vise = fn($i, $d) => empty($i['frequence']) && (is_array($i['jours'] ?? null) && $i['jours'] ? in_array(sante_jour_semaine($d), $i['jours'], true) : (($i['jour'] ?? '') === 'tous' || ($i['jour'] ?? '') === sante_jour_semaine($d)));
+    $duJour = fn($d) => array_values(array_filter($items, fn($i) => $vise($i, $d)));
     $fait = fn($d, $id) => !empty((($journal[$d] ?? [])['plan_fait'] ?? [])[$id]);
+    $faitPeriode = function ($i) use ($date, $fait) {
+        if (($i['frequence'] ?? '') === 'semaine') { $k0 = (int)gmdate('N', strtotime($date . ' 12:00:00 UTC')) - 1; for ($k = 0; $k < 7; $k++) if ($fait(sante_decaler($date, $k - $k0), $i['id'] ?? '')) return true; return false; }
+        $fin = (int)gmdate('t', strtotime($date . ' 12:00:00 UTC'));
+        for ($j = 1; $j <= $fin; $j++) if ($fait(substr($date, 0, 8) . sprintf('%02d', $j), $i['id'] ?? '')) return true;
+        return false;
+    };
     $idx = array_search(sante_jour_semaine($date), SANTE_JOURS_SEM, true);
     $prevus = 0; $faits = 0; $minP = 0; $minF = 0;
     for ($k = 0; $k <= $idx; $k++) {
@@ -237,5 +245,6 @@ function sante_suivi_plan($plan, $journal, string $date): array {
         foreach ($duJour($d) as $i) { $prevus++; $minP += (float)($i['duree_min'] ?? 0); if ($fait($d, $i['id'] ?? '')) { $faits++; $minF += (float)($i['duree_min'] ?? 0); } }
     }
     return ['jour' => sante_jour_semaine($date), 'du_jour' => array_map(fn($i) => array_merge($i, ['fait' => $fait($date, $i['id'] ?? '')]), $duJour($date)),
+            'periodiques' => array_values(array_map(fn($i) => array_merge($i, ['fait' => $faitPeriode($i)]), array_filter($items, fn($i) => in_array($i['frequence'] ?? '', ['semaine', 'mois'], true)))),
             'semaine' => ['du' => sante_decaler($date, -$idx), 'prevus' => $prevus, 'faits' => $faits, 'taux' => $prevus ? (int)round(100 * $faits / $prevus) : null, 'minutes_prevues' => $minP, 'minutes_faites' => $minF]];
 }

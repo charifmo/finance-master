@@ -92,13 +92,21 @@ const pe = I.lirePlan('Programme exercice\nLundi : Marche Zone 2 à jeun 45 min\
 v('  → plan d\'exercice : durées « 45 min », « 1 h », « 1h30 » lues (45, 60, 90 min)', pe.items.map(i => i.jour + ':' + i.duree_min).join() === 'lundi:45,mercredi:60,mercredi:10,samedi:90', pe.items);
 const plan = { items: pe.items.map((x, i) => Object.assign({ id: 'e' + i }, x)).concat([{ id: 'q', jour: 'tous', texte: 'soleus', duree_min: 5 }]) };
 const journal = { '2026-11-02': { plan_fait: { e0: true, q: true } }, '2026-11-03': { plan_fait: { q: true } }, '2026-11-04': { plan_fait: { e1: true } } };
-const casPlan = [[plan, journal, '2026-11-04'], [plan, journal, '2026-11-08'], [plan, journal, '2026-11-02'], [plan, {}, '2026-11-09'], [null, journal, '2026-11-04']];
+//  v1.8 — protocole : jours précis (mardi + vendredi) et gestes périodiques (1×/semaine, 1×/mois), cochés une fois dans la période
+const proto = { items: [{ id: 'q1', jour: 'tous', texte: 'eau', moment: 'reveil' }, { id: 'm1', jour: 'tous', jours: ['mardi', 'vendredi'], texte: 'machines', duree_min: 30 },
+                        { id: 'h1', jour: 'tous', frequence: 'semaine', texte: 'pesée' }, { id: 'o1', jour: 'tous', frequence: 'mois', texte: 'tour de taille' }] };
+const jProto = { '2026-11-03': { plan_fait: { m1: true, h1: true } }, '2026-10-30': { plan_fait: { o1: true } }, '2026-11-20': { plan_fait: { o1: true } } };
+const casPlan = [[plan, journal, '2026-11-04'], [plan, journal, '2026-11-08'], [plan, journal, '2026-11-02'], [plan, {}, '2026-11-09'], [null, journal, '2026-11-04'],
+                 [proto, jProto, '2026-11-03'], [proto, jProto, '2026-11-05'], [proto, jProto, '2026-11-10'], [proto, jProto, '2026-10-31']];
 const fp = path.join(ICI, '.tmp_sante_plan.json'); fs.writeFileSync(fp, JSON.stringify(casPlan));
 const phpPlan = JSON.parse(execFileSync('php', ['-r', `require '${path.join(S, 'sante_lib.php')}'; $d = json_decode(file_get_contents('${fp}'), true); echo json_encode(array_map(fn($c) => sante_suivi_plan(...$c), $d), JSON_UNESCAPED_UNICODE);`], { encoding: 'utf8' }));
 fs.rmSync(fp, { force: true });
 const jsPlan = casPlan.map(c => C.suiviPlan(...c));
 v(`  → prévu / réalisé : ${casPlan.length} cas identiques en JS et en PHP`, egal(jsPlan, phpPlan), [jsPlan[0], phpPlan[0]]);
 v('  → mercredi 04/11 : prévus lun→mer 1+1+1 « tous les jours » + 1 + 2 = 6, faits 4, taux 67 %, minutes 45+5+5+60+10+5 / 45+5+5+60', JSON.stringify(jsPlan[0].semaine) === JSON.stringify({ du: '2026-11-02', prevus: 6, faits: 4, taux: 67, minutes_prevues: 130, minutes_faites: 115 }) && jsPlan[0].du_jour.length === 3 && jsPlan[0].du_jour[0].fait === true, jsPlan[0]);
+v('  → protocole : machines les mardis et vendredis seulement ; pesée cochée mardi = faite toute la semaine ; tour de taille : le mois', jsPlan[5].du_jour.map(i => i.id).join() === 'q1,m1' && jsPlan[6].du_jour.map(i => i.id).join() === 'q1'
+  && jsPlan[6].periodiques.find(i => i.id === 'h1').fait === true && jsPlan[7].periodiques.find(i => i.id === 'h1').fait === false && jsPlan[6].periodiques.find(i => i.id === 'o1').fait === true && jsPlan[8].periodiques.find(i => i.id === 'o1').fait === true
+  && jsPlan[5].semaine.prevus === 3, [jsPlan[5], jsPlan[6].periodiques]);
 v('  → dimanche : la semaine entière ; lundi suivant : nouvelle semaine ; sans plan : rien de prévu', jsPlan[1].semaine.du === '2026-11-02' && jsPlan[3].semaine.du === '2026-11-09' && jsPlan[3].semaine.faits === 0 && jsPlan[4].semaine.taux === null);
 console.log(ko === 0 ? `\n  ✅ TOUT PASSE — ${n} contrôles` : `\n  ❌ ${ko} contrôle(s) en échec sur ${n}`);
 process.exit(ko === 0 ? 0 : 1);

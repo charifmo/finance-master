@@ -272,7 +272,7 @@ z.close()`, docx, para]);
         //  v1.4 — la page blanche après une mise à jour : la nouvelle page tournait avec les anciens fichiers JS gardés en cache
         const html = fs.readFileSync(path.join(RACINE, 'sante/index.html'), 'utf8'), version = /const VERSION = '([^']+)'/.exec(html)[1];
         const srcs = [...html.matchAll(/<script src="(sante_[^"]+)"/g)].map(m => m[1]);
-        v('L. chaque script local porte la version de la page (?v=' + version + ') : une mise à jour recharge toujours les bons fichiers', srcs.length === 3 && srcs.every(x => x.endsWith('?v=' + version)), srcs);
+        v('L. chaque script local porte la version de la page (?v=' + version + ') : une mise à jour recharge toujours les bons fichiers', srcs.length === 4 && srcs.every(x => x.endsWith('?v=' + version)), srcs);
         const vieux = (f) => execFileSync('git', ['show', 'origin/main:sante/' + f], { cwd: RACINE, encoding: 'utf8' });
         const anciens = essai(() => ({ calculs: vieux('sante_calculs.js'), import: vieux('sante_import.js') }));
         if (!anciens || /suiviPlan/.test(anciens.calculs)) { console.log('  ⏭️  fichiers d\'avant la v1.4 introuvables (origin/main) : contrôle du cache périmé ignoré'); return; }
@@ -351,6 +351,55 @@ z.close()`, src, zip]);
         await p7.waitForSelector('[data-derniere-synchro]', { timeout: 5000 });
         v('  → de retour sur la page : « ✓ dernière synchro à l\'instant », les pas du jour affichés', /dernière synchro à l’instant/.test(await p7.textContent('[data-derniere-synchro]')) && (await p7.textContent('[data-samsung-jour]')).replace(/\D/g, '').startsWith('6543'), await p7.textContent('[data-samsung-jour]'));
         await p7.close();
+    });
+    await section('O', async () => {
+        //  v1.8 — importer un protocole : rangé par règles, écran de tri, corrections → leçons, Pilotage, cibles des analyses
+        const SP = require(path.join(RACINE, 'sante', 'sante_protocole.js'));
+        const PROTO = ['PROTOCOLE ESSAI — V1', '1. La journée heure par heure', '🌅  RÉVEIL', ' •   1 grand verre d’eau', ' •   30 minutes de marche à jeun, en Zone 2.   Le levier principal.',
+            '🍳  PETIT-DÉJEUNER — ~400 kcal | 25 g protéines', ' •   2 œufs entiers', ' •   40 g de pain d’orge', ' Suppléments à la première bouchée :   Oméga-3 ×2',
+            '🛏️  22h00 — COUCHER', ' •   1 comprimé de magnésium.   Le soir uniquement.', '2. Fiches compléments', ' OMÉGA-3 (EPA + DHA)', ' COMBIEN   2 capsules = 1000 mg.', ' QUAND   Au petit-déjeuner.',
+            '3. Activité physique', ' Règles de sécurité', ' •   Échauffement 5 min obligatoire avant chaque séance.', '4. KPI — bilan à 3 mois', ' Marqueur   Départ   Cible réaliste', ' Triglycérides   2,10   <1,5', ' HDL   0,38   >0,42'].join('\n');
+        const analyse = SP.analyser(PROTO).elements;
+        const cleEchauf = analyse.find(e => /Échauffement/.test(e.texte)).cle, cleVerre = analyse.find(e => /grand verre/.test(e.texte)).cle;
+        fs.writeFileSync(DATA, '{}');
+        const p8 = await ouvrir();
+        await p8.click('[data-charger-demo]'); await p8.waitForTimeout(300); await attendreEnregistre(p8);
+        await p8.evaluate((ST) => { eval(ST).dateJour = '2026-11-05'; }, ST);
+        await p8.click('[data-onglet="plans"]'); await p8.click('[data-importer-protocole]');
+        await p8.click('[data-tri-protocole] details summary'); await p8.fill('[data-texte-protocole]', PROTO); await p8.click('[data-lire-protocole]');
+        const msg = await p8.textContent('[data-message-tri]');
+        v('O. protocole collé : rangé en cases du jour / suppléments / règles / objectifs, à vérifier', /5 cases du jour · 1 suppléments · 1 règles · 2 objectifs/.test(msg), msg);
+        //  deux corrections : la règle d'échauffement devient une case du matin ; le verre d'eau est supprimé
+        await p8.click('[data-tri-bucket="regle"] summary');
+        await p8.selectOption(`[data-tri-element="${cleEchauf}"] [data-tri-vers]`, 'action');
+        await p8.selectOption(`[data-tri-element="${cleEchauf}"] [data-tri-moment]`, 'matin');
+        await p8.click(`[data-tri-element="${cleVerre}"] [data-tri-supprimer]`);
+        v('  → les corrections sont comptées en direct (2) et seront retenues', /^2 correction/.test(await p8.textContent('[data-tri-corrections]')));
+        await p8.click('[data-enregistrer-protocole]'); await p8.waitForTimeout(150); await attendreEnregistre(p8);
+        let f = lireFichier();
+        const it = f.plans.protocole.items;
+        v('  → enregistré : la case d’échauffement au matin, plus de verre d’eau ; le petit-déjeuner = une case, menu en détail', it.length === 5 && it.some(i => /Échauffement/.test(i.texte) && i.moment === 'matin') && !it.some(i => /grand verre/.test(i.texte))
+          && it.some(i => i.texte === 'Petit-déjeuner' && /2 œufs entiers/.test(i.detail)) && it.some(i => /magnésium/.test(i.texte) && i.heure === '22:00'), it);
+        v('  → suppléments, cibles (TG < 1,5 ; HDL > 0,42) et objectifs mis à jour ; 2 leçons retenues', f.supplements.length === 1 && /OMÉGA/.test(f.supplements[0].nom) && f.supplements[0].dose === '2 capsules = 1000 mg'
+          && JSON.stringify(f.cibles) === '{"tg":{"op":"<","v":1.5},"hdl":{"op":">","v":0.42}}' && f.objectifs.tg_gl === 1.5 && f.objectifs_suivi.length === 2 && f.lecons_plan.length === 2 && f.plans.protocole.corrections === 2, [f.cibles, f.lecons_plan, f.supplements]);
+        //  Pilotage : les cases du protocole remplacent la checklist fixe
+        await p8.click('[data-onglet="pilotage"]');
+        const casesPilotage = await p8.$$('[data-pilotage-item]');
+        await p8.check('[data-pilotage-item] input'); await p8.waitForTimeout(100); await attendreEnregistre(p8);
+        f = lireFichier();
+        v('  → Pilotage : les 5 cases du protocole (plus la checklist fixe) ; cocher = réalisé enregistré', casesPilotage.length === 5 && !(await p8.$('[data-check="zone2"]')) && Object.keys(f.journal['2026-11-05'].plan_fait || {}).length === 1, casesPilotage.length);
+        //  le même document réimporté : la leçon s'applique d'office, plus aucune correction à faire
+        await p8.click('[data-onglet="plans"]'); await p8.click('[data-importer-protocole]');
+        if (!(await p8.isVisible('[data-texte-protocole]'))) await p8.click('[data-tri-protocole] details summary');
+        await p8.fill('[data-texte-protocole]', PROTO); await p8.click('[data-lire-protocole]');
+        const msg2 = await p8.textContent('[data-message-tri]');
+        v('  → réimport : rangé d’après les corrections passées (🧠, le verre d’eau en « Ignoré »), 0 correction à refaire', /rangé\(s\) d’après vos corrections passées/.test(msg2) && /5 cases du jour/.test(msg2) && /^0 correction/.test(await p8.textContent('[data-tri-corrections]'))
+          && await p8.isVisible(`[data-tri-bucket="action"] [data-tri-element="${cleEchauf}"]`) && !!(await p8.$(`[data-tri-bucket="ignorer"] [data-tri-element="${cleVerre}"]`)) && !(await p8.$(`[data-tri-bucket="action"] [data-tri-element="${cleVerre}"]`)), msg2);
+        await p8.click('[data-enregistrer-protocole]'); await p8.waitForTimeout(150); await attendreEnregistre(p8);
+        v('  → et le compteur montre le progrès : 0 correction (import précédent : 2)', /0 correction\(s\) \(import précédent : 2\)/.test(await p8.textContent('[data-resultat-protocole]')), await p8.textContent('[data-resultat-protocole]'));
+        await p8.click('[data-onglet="analyses"]');
+        v('  → onglet Analyses : la cible des triglycérides vient du protocole (« < 1.5 »)', /< 1\.5/.test(await p8.textContent('[data-marqueur="tg"]')));
+        await p8.close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

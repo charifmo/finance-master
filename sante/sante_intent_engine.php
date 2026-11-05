@@ -217,6 +217,9 @@ function sante_lecture(array $etat, ?string $date = null): array {
         'supplements' => $etat['supplements'],
         //  v1.4 — les plans (nutrition, exercice) : ce qui est prévu aujourd'hui, ce qui est coché fait, la semaine en cours
         'plans' => array_map(fn($p) => ['titre' => $p['titre'], 'suivi' => sante_suivi_plan($p, $etat['journal'], $date)], (array)$etat['plans']),
+        //  v1.8 — le reste du protocole importé : règles à respecter, objectifs (cibles des biomarqueurs)
+        'regles' => array_slice(array_map(fn($r) => ($r['section'] ? $r['section'] . ' : ' : '') . $r['texte'], $etat['regles'] ?? []), 0, 120),
+        'objectifs_suivi' => $etat['objectifs_suivi'] ?? [], 'cibles' => $etat['cibles'] ?? new stdClass(),
         'catalogue' => array_map(fn($d) => $d['desc'], sante_catalogue_fonctions()),
     ];
 }

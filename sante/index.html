@@ -10,9 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.7"></script>
-    <script src="sante_import.js?v=1.7"></script>
-    <script src="sante_samsung.js?v=1.7"></script>
+    <script src="sante_calculs.js?v=1.8"></script>
+    <script src="sante_import.js?v=1.8"></script>
+    <script src="sante_samsung.js?v=1.8"></script>
+    <script src="sante_protocole.js?v=1.8"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -104,11 +105,23 @@
             <div class="grid md:grid-cols-2 gap-5">
                 <div class="carte p-4 space-y-2">
                     <h2 class="font-black text-emerald-900">✅ La journée du {{ dateLisible(dateJour) }}</h2>
+                    <template v-if="protocole">
+                        <div v-for="g in groupesProto" :key="g.m" :data-pilotage-moment="g.m">
+                            <p class="text-[11px] font-black uppercase tracking-wide text-slate-500 mt-1">{{ g.lib }}</p>
+                            <label v-for="i in g.items" :key="i.id" class="flex items-start gap-3 py-1 cursor-pointer" :data-pilotage-item="i.id">
+                                <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
+                                <span class="text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'"><span v-if="i.heure" class="text-xs font-black text-emerald-700 tabnum">{{ i.heure }} · </span>{{ i.texte }}</span>
+                            </label>
+                        </div>
+                        <p class="text-xs font-black text-emerald-700" data-score-protocole>{{ suiviProto.du_jour.filter(i => i.fait).length }}/{{ suiviProto.du_jour.length }} faits · protocole « {{ protocole.titre }} » <button type="button" class="underline font-bold" @click="onglet = 'plans'">détails</button></p>
+                    </template>
+                    <template v-else>
                     <label v-for="c in CHECKLIST" :key="c.id" class="flex items-center gap-3 py-1 cursor-pointer" :data-check="c.id">
                         <input type="checkbox" class="w-5 h-5 accent-emerald-600" :checked="jour.checklist[c.id]" @change="jour.checklist[c.id] = $event.target.checked">
                         <span class="text-sm" :class="jour.checklist[c.id] ? 'line-through text-slate-400' : 'font-semibold'">{{ c.libelle }}</span>
                     </label>
                     <p class="text-xs font-black text-emerald-700" data-checklist-score>{{ checklistFaits }}/{{ CHECKLIST.length }} faits</p>
+                    </template>
                     <button v-if="TYPES_PLAN.some(t => suivis[t.id].du_jour.length)" type="button" data-plans-du-jour @click="onglet = 'plans'" class="w-full text-left mt-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100">📋 Plans du jour : <span v-for="(t, n) in TYPES_PLAN.filter(t => suivis[t.id].du_jour.length)" :key="t.id">{{ n ? ' · ' : '' }}{{ t.icone }} {{ suivis[t.id].du_jour.filter(i => i.fait).length }}/{{ suivis[t.id].du_jour.length }}</span> → cocher</button>
                 </div>
                 <div class="space-y-5">
@@ -360,6 +373,123 @@
 
         <!-- ═════ 3 bis. PLANS : NUTRITION ET EXERCICE, PRÉVU / RÉALISÉ ═════ -->
         <section v-show="onglet === 'plans'" data-section="plans" class="space-y-5">
+            <!-- v1.8 — MA JOURNÉE : le protocole importé, rangé par moment -->
+            <div class="carte p-4 space-y-3" data-protocole-jour>
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="flex-1 min-w-0 font-black text-emerald-900">📋 Ma journée — {{ protocole ? protocole.titre || 'mon protocole' : 'mon protocole' }}</h2>
+                    <span v-if="protocole && tauxJourProto !== null" class="text-xs font-black px-2 py-1 rounded-full" :class="tauxJourProto >= 80 ? 'bg-emerald-100 text-emerald-800' : tauxJourProto >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'" data-taux-protocole>aujourd’hui {{ suiviProto.du_jour.filter(i => i.fait).length }}/{{ suiviProto.du_jour.length }} · semaine {{ suiviProto.semaine.taux ?? '—' }} %</span>
+                </div>
+                <template v-if="protocole">
+                    <p class="text-xs text-slate-500">{{ protocole.source }}<span v-if="protocole.importe_le"> · depuis le {{ dateCourte(protocole.importe_le) }}</span> · {{ protocole.items.length }} cases<span v-if="protocole.corrections !== undefined"> · {{ protocole.corrections }} correction(s) à l’import<span v-if="protocole.corrections_avant !== null && protocole.corrections_avant !== undefined"> (précédent : {{ protocole.corrections_avant }})</span></span></p>
+                    <div v-for="g in groupesProto" :key="g.m" :data-moment-protocole="g.m">
+                        <p class="text-[11px] font-black uppercase tracking-wide text-slate-500 mt-1">{{ g.lib }}</p>
+                        <div v-for="i in g.items" :key="i.id" class="py-1" :data-item-protocole="i.id">
+                            <label class="flex items-start gap-3 cursor-pointer">
+                                <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
+                                <span class="flex-1 text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'"><span v-if="i.heure" class="text-xs font-black text-emerald-700 tabnum">{{ i.heure }} · </span>{{ i.texte }}<span v-if="i.jours" class="text-[10px] text-slate-400"> · {{ i.jours.join(', ') }}</span></span>
+                                <button v-if="i.detail" type="button" @click.prevent="detailsOuverts[i.id] = !detailsOuverts[i.id]" class="text-xs font-bold text-teal-700 px-1" :aria-label="'Détail : ' + i.texte">{{ detailsOuverts[i.id] ? '▴' : '▸' }}</button>
+                            </label>
+                            <p v-if="detailsOuverts[i.id]" class="ml-8 mt-1 text-xs text-slate-600 whitespace-pre-line" data-detail-protocole>{{ i.detail }}</p>
+                        </div>
+                    </div>
+                    <p v-if="!suiviProto.du_jour.length" class="text-sm text-slate-400">Rien de prévu ce jour-là.</p>
+                    <div v-if="suiviProto.periodiques.length" class="rounded-lg border border-slate-200 p-2" data-periodiques>
+                        <p class="text-[11px] font-black uppercase tracking-wide text-slate-500">Cette semaine / ce mois</p>
+                        <label v-for="i in suiviProto.periodiques" :key="i.id" class="flex items-start gap-3 py-1 cursor-pointer">
+                            <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
+                            <span class="text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'">{{ i.texte }} <span class="text-[10px] font-bold text-slate-400">{{ i.frequence === 'mois' ? '1×/mois' : '1×/semaine' }}</span></span>
+                        </label>
+                    </div>
+                </template>
+                <p v-else class="text-sm text-slate-500">Importez le protocole de votre médecin, nutritionniste ou coach (PDF, Word, photo, texte) : l’appli le range en cases à cocher par moment de la journée, suppléments, règles et objectifs — vous vérifiez avant d’enregistrer.</p>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-importer-protocole @click="ouvrirTri" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-black">{{ protocole ? '📥 Remplacer par un nouveau protocole' : '📥 Importer mon protocole' }}</button>
+                    <button v-if="protocole" type="button" data-supprimer-protocole @click="confirmer('protocole', supprimerProtocole)" class="px-3 py-1.5 rounded-lg text-xs font-black" :class="aConfirmer === 'protocole' ? 'bg-rose-600 text-white' : 'border border-rose-200 text-rose-700 bg-white'">{{ aConfirmer === 'protocole' ? 'Confirmer : supprimer le protocole ?' : '🗑 Supprimer' }}</button>
+                </div>
+                <p v-if="tri.resultat" class="text-xs font-bold text-emerald-800" data-resultat-protocole>{{ tri.resultat }}</p>
+            </div>
+
+            <!-- v1.8 — L'ÉCRAN DE TRI : ce que les règles ont rangé, à vérifier avant d'enregistrer -->
+            <div v-if="tri.ouvert" class="carte p-4 space-y-3" data-tri-protocole>
+                <div class="flex items-center gap-2"><h3 class="flex-1 font-black text-teal-900">📥 Importer un protocole — vérifier le rangement</h3><button type="button" @click="tri.ouvert = false" class="text-slate-400 hover:text-slate-700 font-black" aria-label="Fermer">✕</button></div>
+                <p class="text-xs text-slate-500">PDF, Word (.docx), photo ou texte. L’appli range chaque ligne : <b>cases du jour</b> (par moment), <b>suppléments</b>, <b>règles</b> à relire, <b>objectifs</b>, ou <b>ignoré</b> (titres, explications). Changez la catégorie d’une ligne avec son menu, corrigez son texte, supprimez-la avec ✕ : chaque correction est <b>retenue</b> pour les prochains imports.</p>
+                <input type="file" accept=".pdf,application/pdf,.docx,image/*,.txt,text/plain" data-import-protocole @change="importerProtocole($event.target.files[0]); $event.target.value = ''" class="text-sm max-w-full">
+                <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-500">…ou coller le texte</summary>
+                    <textarea v-model="tri.texte" data-texte-protocole rows="5" class="mt-1 w-full border rounded-lg p-2 font-mono"></textarea>
+                    <button type="button" data-lire-protocole @click="lireTexteProtocole" class="mt-1 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-black">🔎 Ranger ce texte</button>
+                </details>
+                <p v-if="tri.message" class="text-xs font-bold" :class="/^❌/.test(tri.message) ? 'text-rose-700' : 'text-slate-600'" data-message-tri>{{ tri.message }}</p>
+                <template v-if="tri.elements.length">
+                    <details v-for="b in BUCKETS" :key="b[0]" class="rounded-xl border border-slate-200" :open="b[0] === 'action' || b[0] === 'supplement' || b[0] === 'objectif'" :data-tri-bucket="b[0]">
+                        <summary class="cursor-pointer px-3 py-2 font-black text-sm bg-slate-50 rounded-xl">{{ b[1] }} <span class="font-bold text-slate-400">· {{ triPar(b[0]).length }}</span></summary>
+                        <div class="px-2 pb-2">
+                            <div v-for="e in triPar(b[0])" :key="e.id" class="border-t border-slate-100 py-1.5 flex flex-wrap items-center gap-1.5" :data-tri-element="e.cle" :class="estCorrige(e) ? 'bg-amber-50/60' : ''">
+                                <select v-model="e.bucket" class="border rounded text-xs px-1 py-1" data-tri-vers :aria-label="'Catégorie de : ' + e.texte"><option v-for="x in BUCKETS" :key="x[0]" :value="x[0]">{{ x[1] }}</option></select>
+                                <template v-if="e.bucket === 'action'">
+                                    <select v-model="e.moment" class="border rounded text-xs px-1 py-1" data-tri-moment aria-label="Moment"><option v-for="m in MOMENTS_P" :key="m[0]" :value="m[0]">{{ m[1] }}</option></select>
+                                    <input v-model="e.heure" placeholder="hh:mm" class="w-14 border rounded text-xs px-1 py-1 tabnum" aria-label="Heure">
+                                    <select v-model="e.freq" class="border rounded text-xs px-1 py-1" data-tri-frequence aria-label="Fréquence"><option value="jour">chaque jour</option><option value="jours">certains jours</option><option value="semaine">1×/semaine</option><option value="mois">1×/mois</option></select>
+                                    <span v-if="e.freq === 'jours'" class="inline-flex gap-0.5"><button v-for="j in JOURS7" :key="j" type="button" @click="basculerJour(e, j)" class="w-6 h-6 rounded border text-[10px] font-black" :class="e.jours.includes(j) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500'" :aria-label="j">{{ j.slice(0, 2) }}</button></span>
+                                </template>
+                                <input v-model="e.texte" class="order-first w-full sm:order-none sm:w-auto sm:flex-1 sm:min-w-[12rem] border rounded px-2 py-1 text-sm" data-tri-texte aria-label="Texte">
+                                <span v-if="e.appris" class="text-[10px] font-black text-purple-700" title="Rangé d’après une correction passée">🧠 appris</span>
+                                <button type="button" @click="e.voir = !e.voir" class="px-1 text-xs font-bold text-teal-700" aria-label="Plus de détails">{{ e.voir ? '▴' : '▸' }}</button>
+                                <button type="button" @click="supprimerTri(e)" data-tri-supprimer class="px-1 text-slate-400 hover:text-rose-600 font-black" aria-label="Supprimer cette ligne">✕</button>
+                                <div v-if="e.voir" class="w-full pl-1 space-y-1 text-xs">
+                                    <textarea v-if="e.bucket === 'action'" v-model="e.detail" rows="3" class="w-full border rounded p-1" placeholder="Détail (menu, consignes…)"></textarea>
+                                    <div v-else-if="e.bucket === 'supplement'" class="grid sm:grid-cols-2 gap-1"><input v-model="e.dose" class="border rounded px-1 py-1" placeholder="Dose"><input v-model="e.quand" class="border rounded px-1 py-1" placeholder="Quand"><textarea v-model="e.notes" rows="2" class="sm:col-span-2 border rounded p-1" placeholder="Précautions, notes"></textarea></div>
+                                    <div v-else-if="e.bucket === 'objectif'" class="flex gap-1"><input v-model="e.depart" class="border rounded px-1 py-1 w-28" placeholder="Départ"><input v-model="e.cible" class="border rounded px-1 py-1 w-28" placeholder="Cible (ex. < 1,5)"></div>
+                                    <input v-else-if="e.bucket === 'regle'" v-model="e.section" class="w-full border rounded px-1 py-1" placeholder="Rubrique">
+                                    <p class="text-slate-400">Ligne d’origine : « {{ String(e.ligne || '').slice(0, 220) }} » — {{ e.raison }}</p>
+                                </div>
+                            </div>
+                            <p v-if="!triPar(b[0]).length" class="text-xs text-slate-400 py-1">Rien ici.</p>
+                        </div>
+                    </details>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold">
+                        <label class="flex items-center gap-1"><input type="checkbox" v-model="tri.options.supplements"> remplacer mes suppléments</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" v-model="tri.options.regles"> remplacer mes règles</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" v-model="tri.options.objectifs"> mettre à jour mes objectifs</label>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" data-enregistrer-protocole @click="enregistrerProtocole" :disabled="!triPar('action').length" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-black disabled:opacity-40">✓ Enregistrer ({{ triPar('action').length }} cases du jour)</button>
+                        <span class="text-xs font-bold" :class="triCorrections ? 'text-amber-700' : 'text-slate-500'" data-tri-corrections>{{ triCorrections }} correction(s) — elles seront retenues</span>
+                    </div>
+                </template>
+                <details v-if="(etat.lecons_plan || []).length" class="text-xs" data-lecons>
+                    <summary class="cursor-pointer font-bold text-purple-800">🧠 Leçons apprises ({{ etat.lecons_plan.length }})</summary>
+                    <ul class="mt-1 space-y-0.5">
+                        <li v-for="l in etat.lecons_plan.slice().reverse().slice(0, 80)" :key="l.cle" class="flex items-start gap-2"><span class="flex-1 text-slate-600">« {{ l.cle.slice(0, 80) }} » → <b>{{ (BUCKETS.find(b => b[0] === l.bucket) || [0, ''])[1] }}</b><span v-if="l.moment"> · {{ LIB_MOMENT[l.moment] }}</span><span v-if="l.texte"> · « {{ l.texte }} »</span></span><button type="button" @click="oublierLecon(l.cle)" class="text-slate-400 hover:text-rose-600" aria-label="Oublier cette leçon">✕</button></li>
+                    </ul>
+                </details>
+            </div>
+
+            <div v-if="(etat.supplements || []).length || reglesParSection.length || (etat.objectifs_suivi || []).length" class="grid lg:grid-cols-3 gap-5">
+                <div v-if="(etat.supplements || []).length" class="carte p-4 space-y-2 text-sm" data-supplements>
+                    <h3 class="font-black text-emerald-900">💊 Suppléments</h3>
+                    <details v-for="sp in etat.supplements" :key="sp.nom" class="rounded-lg border border-slate-200 px-2 py-1">
+                        <summary class="cursor-pointer"><b :class="sp.actif === false ? 'line-through text-slate-400' : ''">{{ sp.nom }}</b><span class="text-xs text-slate-500">{{ sp.dose ? ' · ' + sp.dose : '' }}</span></summary>
+                        <p v-if="sp.moment" class="text-xs mt-1"><b>Quand :</b> {{ sp.moment }}</p>
+                        <p v-if="sp.pourquoi" class="text-xs"><b>Pourquoi :</b> {{ sp.pourquoi }}</p>
+                        <p v-if="sp.notes" class="text-xs text-amber-800">{{ sp.notes }}</p>
+                    </details>
+                </div>
+                <div v-if="reglesParSection.length" class="carte p-4 space-y-2 text-sm" data-regles>
+                    <h3 class="font-black text-emerald-900">📜 Règles à relire</h3>
+                    <details v-for="[sec, liste] in reglesParSection" :key="sec" class="rounded-lg border border-slate-200 px-2 py-1">
+                        <summary class="cursor-pointer font-bold text-slate-700">{{ sec }} <span class="text-xs text-slate-400">· {{ liste.length }}</span></summary>
+                        <ul class="list-disc pl-5 mt-1 space-y-1 text-xs"><li v-for="r in liste" :key="r.id">{{ r.texte }}</li></ul>
+                    </details>
+                </div>
+                <div v-if="(etat.objectifs_suivi || []).length" class="carte p-4 space-y-1 text-sm" data-objectifs>
+                    <h3 class="font-black text-emerald-900">🎯 Objectifs</h3>
+                    <table class="w-full text-xs tabnum"><tbody>
+                        <tr v-for="o in etat.objectifs_suivi" :key="o.libelle" class="border-t border-slate-100"><td class="py-1 pr-2 font-semibold">{{ o.libelle }}</td><td class="pr-2 text-slate-500">{{ o.depart }}</td><td class="font-black text-emerald-700">{{ o.cible }}</td></tr>
+                    </tbody></table>
+                    <p class="text-[11px] text-slate-500">Les cibles des biomarqueurs s’affichent aussi dans l’onglet Analyses.</p>
+                </div>
+            </div>
+
             <div class="grid lg:grid-cols-2 gap-5">
                 <div v-for="t in TYPES_PLAN" :key="t.id" class="carte p-4 space-y-3" :data-plan="t.id">
                     <div class="flex flex-wrap items-center gap-2">
@@ -542,7 +672,7 @@
 //  v1.4 — FICHIERS PÉRIMÉS EN CACHE : si sante_calculs.js / sante_import.js sont d'une version plus ancienne que cette page,
 //  on les recharge depuis le serveur (cache: 'reload' met le cache à jour) puis on recharge la page — une seule fois.
 (function () {
-    var perimes = typeof SanteCalc === 'undefined' || typeof SanteCalc.creer({}).suiviPlan !== 'function' || typeof SanteImport === 'undefined' || typeof SanteImport.lirePlan !== 'function' || typeof SanteSamsung === 'undefined' || typeof SanteSamsung.lireZip !== 'function';
+    var perimes = typeof SanteCalc === 'undefined' || typeof SanteCalc.creer({}).suiviPlan !== 'function' || typeof SanteImport === 'undefined' || typeof SanteImport.lirePlan !== 'function' || typeof SanteSamsung === 'undefined' || typeof SanteSamsung.lireZip !== 'function' || typeof SanteProtocole === 'undefined' || typeof SanteProtocole.analyser !== 'function';
     if (!perimes) return;
     var deja = false; try { deja = sessionStorage.getItem('sante_fichiers_rafraichis') === location.href; sessionStorage.setItem('sante_fichiers_rafraichis', location.href); } catch (e) { /* navigation privée */ }
     if (!deja) Promise.all(Array.prototype.map.call(document.querySelectorAll('script[src*="sante_"]'), function (x) { return fetch(x.src, { cache: 'reload' }).catch(function () { return null; }); })).then(function () { location.reload(); });
@@ -551,7 +681,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.7';
+        const VERSION = '1.8';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -571,13 +701,13 @@ createApp({
         const explications = ref({});
         let C = SanteCalc.creer({});
         const Cref = shallowRef(C);
-        const etat = reactive({ profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {} });
+        const etat = reactive({ profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {}, regles: [], cibles: {}, objectifs_suivi: [], lecons_plan: [] });
         const version = ref(null), statut = ref('chargement'), charge = ref(false);
         const onglet = ref('pilotage'), dateJour = ref(aujourdhui());
         const messageImport = ref('');
 
         // ── chargement et sauvegarde ──
-        const remplacer = (d) => { Object.keys(etat).forEach(k => delete etat[k]); Object.assign(etat, { profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {} }, d || {}); if (Array.isArray(etat.journal)) etat.journal = {}; if (!etat.plans || Array.isArray(etat.plans)) etat.plans = {}; };
+        const remplacer = (d) => { Object.keys(etat).forEach(k => delete etat[k]); Object.assign(etat, { profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {}, regles: [], cibles: {}, objectifs_suivi: [], lecons_plan: [] }, d || {}); if (Array.isArray(etat.journal)) etat.journal = {}; if (!etat.plans || Array.isArray(etat.plans)) etat.plans = {}; if (!etat.cibles || Array.isArray(etat.cibles)) etat.cibles = {}; };
         const charger = async () => {
             const [cat, al, ex] = await Promise.all(['biomarqueurs.json', 'aliments.json', 'explications.json'].map(f => fetch(f, { cache: 'no-store' }).then(r => r.json())));
             catalogue.value = cat; aliments.value = al.aliments || {}; explications.value = ex.marqueurs || {};
@@ -665,7 +795,7 @@ createApp({
         const nbParSysteme = computed(() => { const o = {}; Object.entries(catalogue.value.marqueurs || {}).forEach(([k, m]) => { if (etat.bilans.some(b => C.val(b, k) !== null)) o[m.systeme] = (o[m.systeme] || 0) + 1; }); return o; });
         const dernierAvec = (k) => [...etat.bilans].reverse().find(b => C.val(b, k) !== null) || {};
         const normes = (k) => { const [mn, mx] = C.bornes(dernierAvec(k), k); return mn !== null && mx !== null ? mn + ' – ' + mx : mn !== null ? '> ' + mn : mx !== null ? '< ' + mx : ''; };
-        const cible = (k) => { const c = CIBLES[k]; const v = c ? etat.objectifs[c] : null; if (v === null || v === undefined) return ''; return (k === 'vitd' ? '> ' : '< ') + v; };
+        const cible = (k) => { const p = etat.cibles && etat.cibles[k]; if (p && p.op && p.v !== undefined) return p.op + ' ' + p.v; const c = CIBLES[k]; const v = c ? etat.objectifs[c] : null; if (v === null || v === undefined) return ''; return (k === 'vitd' ? '> ' : '< ') + v; };
         const couleurStatut = (s) => s === 'haut' ? 'text-rose-700' : s === 'bas' ? 'text-amber-600' : s === 'normal' ? 'text-emerald-700' : 'text-slate-400';
         const cliquerMarqueur = (k) => { marqueurChoisi.value = k; };
         const explication = computed(() => merlin.value && marqueurChoisi.value ? explications.value[marqueurChoisi.value] || { role: 'Pas encore d’explication pour ce biomarqueur.' } : null);
@@ -1039,6 +1169,90 @@ createApp({
         };
         const supprimerPlan = (type) => { delete etat.plans[type]; if (editeurPlan.type === type) editeurPlan.type = null; };
 
+        // ── le protocole (« Ma journée ») : import rangé par règles, écran de tri, leçons apprises (v1.8) ──
+        const MOMENTS_P = SanteProtocole.MOMENTS, LIB_MOMENT = SanteProtocole.LIB_MOMENTS, JOURS7 = SanteProtocole.JOURS;
+        const BUCKETS = [['action', '✅ Cases du jour'], ['supplement', '💊 Suppléments'], ['regle', '📜 Règles à relire'], ['objectif', '🎯 Objectifs'], ['ignorer', '🗑️ Ignoré']];
+        const protocole = computed(() => (etat.plans && etat.plans.protocole) || null);
+        const suiviProto = computed(() => Cref.value.suiviPlan(protocole.value, etat.journal, dateJour.value));
+        const ordreMoment = (m) => { const i = MOMENTS_P.findIndex(x => x[0] === m); return i < 0 ? 99 : i; };
+        //  dans un moment, l'ordre du document (le repas entre la prise de 12h30 et la marche de 13h30)
+        const parMoment = (liste) => MOMENTS_P.map(([m, lib]) => ({ m, lib, items: liste.filter(i => (i.moment || 'journee') === m) })).filter(g => g.items.length);
+        const groupesProto = computed(() => parMoment(suiviProto.value.du_jour));
+        const detailsOuverts = reactive({});
+        const tauxJourProto = computed(() => { const l = suiviProto.value.du_jour; return l.length ? Math.round(100 * l.filter(i => i.fait).length / l.length) : null; });
+        const tri = reactive({ ouvert: false, nom: '', titre: '', texte: '', message: '', elements: [], supprimes: [], options: { supplements: true, regles: true, objectifs: true }, resultat: '' });
+        const texteInitial = (e) => String(e.texte || '').trim();
+        const preparerTri = (r, nom) => {
+            tri.titre = r.titre || ''; tri.nom = nom; tri.supprimes = []; tri.resultat = '';
+            tri.elements = r.elements.map(e => Object.assign(e, { freq: e.frequence || (e.jours && e.jours.length ? 'jours' : 'jour'), jours: e.jours || [], heure: e.heure || '', detail: e.detail || '', voir: false,
+                                                                  _init: { bucket: e.bucket, moment: e.moment || null, texte: texteInitial(e) } }));
+            const n = (b) => tri.elements.filter(e => e.bucket === b).length, appris = tri.elements.filter(e => e.appris).length;
+            tri.message = r.elements.length ? n('action') + ' cases du jour · ' + n('supplement') + ' suppléments · ' + n('regle') + ' règles · ' + n('objectif') + ' objectifs · ' + n('ignorer') + ' ignorés' + (appris ? ' — ' + appris + ' rangé(s) d’après vos corrections passées 🧠' : '') + '. Vérifiez, corrigez, puis enregistrez.'
+                : '❌ rien de lisible dans ce document.';
+        };
+        const analyserTexteProtocole = (texte, nom) => preparerTri(SanteProtocole.analyser(texte, { lecons: etat.lecons_plan || [] }), nom);
+        const ouvrirTri = () => { tri.ouvert = true; tri.message = ''; tri.resultat = ''; };
+        const importerProtocole = async (f) => {
+            if (!f) return;
+            tri.ouvert = true; tri.message = '⏳ Lecture…';
+            try { const t = await extraireTexte(f, (m) => { tri.message = '⏳ ' + m; }); tri.texte = t; analyserTexteProtocole(t, f.name); }
+            catch (e) { tri.message = '❌ ' + (e.message || e); }
+        };
+        const lireTexteProtocole = () => { if (tri.texte.trim()) analyserTexteProtocole(tri.texte, tri.nom || 'texte collé'); };
+        const triPar = (b) => { const l = tri.elements.filter(e => e.bucket === b); return b === 'action' ? l.map((e, i) => [e, i]).sort((x, y) => ordreMoment(x[0].moment) - ordreMoment(y[0].moment) || x[1] - y[1]).map(x => x[0]) : l; };
+        const basculerJour = (e, j) => { e.jours = e.jours.includes(j) ? e.jours.filter(x => x !== j) : JOURS7.filter(x => x === j || e.jours.includes(x)); };
+        const supprimerTri = (e) => { tri.supprimes.push(e); tri.elements = tri.elements.filter(x => x.id !== e.id); };
+        const estCorrige = (e) => e.bucket !== e._init.bucket || (e.bucket === 'action' && (e.moment || null) !== (e._init.moment || null)) || texteInitial(e) !== e._init.texte;
+        const triCorrections = computed(() => tri.elements.filter(estCorrige).length + tri.supprimes.length);
+        const enregistrerProtocole = () => {
+            const els = tri.elements, ancien = protocole.value;
+            const anciensIds = {}; ((ancien && ancien.items) || []).forEach(i => { anciensIds[SanteProtocole.cle(i.texte)] = i.id; });
+            const items = els.filter(e => e.bucket === 'action' && texteInitial(e)).map(e => {
+                const o = { id: anciensIds[SanteProtocole.cle(e.texte)] || e.id, jour: 'tous', moment: e.moment || 'journee', texte: texteInitial(e).slice(0, 200) };
+                if (/^([01]\d|2[0-3]):[0-5]\d$/.test(e.heure || '')) o.heure = e.heure;
+                if (e.detail) o.detail = String(e.detail).slice(0, 1500);
+                if (e.freq === 'semaine' || e.freq === 'mois') o.frequence = e.freq;
+                else if (e.freq === 'jours' && e.jours.length && e.jours.length < 7) o.jours = e.jours.slice();
+                if (e.repas) o.repas = true;
+                return o;
+            });
+            const n = triCorrections.value;
+            if (items.length) etat.plans.protocole = { titre: (tri.titre || tri.nom || 'Mon protocole').slice(0, 120), source: tri.nom || '', importe_le: aujourdhui(), items, corrections: n,
+                                                      corrections_avant: ancien && Number.isFinite(ancien.corrections) ? ancien.corrections : null };
+            const supps = els.filter(e => e.bucket === 'supplement' && texteInitial(e));
+            if (tri.options.supplements && supps.length) etat.supplements = supps.map(e => ({ nom: texteInitial(e), dose: e.dose || '', moment: e.quand || e.prises || '', pourquoi: e.pourquoi || '', notes: e.notes || '', actif: true }));
+            const regles = els.filter(e => e.bucket === 'regle' && texteInitial(e));
+            if (tri.options.regles && regles.length) etat.regles = regles.map(e => ({ id: e.id, section: e.section || 'Règles', texte: texteInitial(e) }));
+            const objs = els.filter(e => e.bucket === 'objectif' && texteInitial(e));
+            if (tri.options.objectifs && objs.length) {
+                etat.objectifs_suivi = objs.map(e => ({ libelle: texteInitial(e), depart: e.depart || '', cible: e.cible || '' }));
+                const cib = {};
+                objs.forEach(e => { const r = SanteProtocole.resoudreObjectif({ libelle: texteInitial(e), cible: e.cible }, catalogue.value); if (r.cle && r.op && r.v !== null) cib[r.cle] = { op: r.op, v: r.v }; });
+                etat.cibles = cib;
+                [['tg', 'tg_gl'], ['apob', 'apob_gl'], ['vitd', 'vitd_ngml']].forEach(([k, o]) => { if (cib[k]) etat.objectifs[o] = cib[k].v; });
+            }
+            //  les leçons : chaque correction (catégorie, moment, libellé, suppression) servira au prochain import
+            const lecons = (etat.lecons_plan || []).slice(), parCle = {}; lecons.forEach((l, i) => { parCle[l.cle] = i; });
+            const retenir = (l) => { if (l.cle in parCle) lecons[parCle[l.cle]] = Object.assign({}, lecons[parCle[l.cle]], l); else { parCle[l.cle] = lecons.length; lecons.push(l); } };
+            let nL = 0;
+            els.filter(estCorrige).forEach(e => {
+                const l = { cle: e.cle, date: aujourdhui() };
+                if (e.bucket !== e._init.bucket) l.bucket = e.bucket;
+                if (e.bucket === 'action' && (e.moment || null) !== (e._init.moment || null)) l.moment = e.moment;
+                if (texteInitial(e) !== e._init.texte) l.texte = texteInitial(e);
+                retenir(l); nL++;
+            });
+            tri.supprimes.forEach(e => { retenir({ cle: e.cle, bucket: 'ignorer', date: aujourdhui() }); nL++; });
+            etat.lecons_plan = lecons.slice(-600);
+            const av = etat.plans.protocole && etat.plans.protocole.corrections_avant;
+            tri.resultat = '✓ Enregistré : ' + items.length + ' cases du jour' + (tri.options.supplements && supps.length ? ', ' + supps.length + ' suppléments' : '') + (tri.options.regles && regles.length ? ', ' + regles.length + ' règles' : '')
+                + (tri.options.objectifs && objs.length ? ', ' + objs.length + ' objectifs' : '') + '. ' + n + ' correction(s)' + (av !== null && av !== undefined ? ' (import précédent : ' + av + ')' : '') + (nL ? ' · ' + nL + ' leçon(s) retenue(s) pour la prochaine fois.' : '.');
+            tri.ouvert = false; tri.elements = []; tri.supprimes = [];
+        };
+        const oublierLecon = (cle) => { etat.lecons_plan = (etat.lecons_plan || []).filter(l => l.cle !== cle); };
+        const reglesParSection = computed(() => { const o = {}; (etat.regles || []).forEach(r => { (o[r.section || 'Règles'] = o[r.section || 'Règles'] || []).push(r); }); return Object.entries(o); });
+        const supprimerProtocole = () => { delete etat.plans.protocole; };
+
         // ── Médecin-Chef IA ──
         //  v1.6 — par défaut, le relais sante_cmo.php (même site : le mot de passe du site suit) ; une ancienne adresse
         //  « /webhook/sante-cmo » gardée dans le navigateur est oubliée (le webhook refuse désormais les appels directs)
@@ -1074,7 +1288,8 @@ createApp({
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
-                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
+                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
+                 triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, C: Cref };
     }
