@@ -138,7 +138,8 @@ function sante_normaliser($e): array {
     $o['protocole'] = array_values(array_filter(array_map(fn($x) => is_string($x) ? mb_substr($x, 0, 300) : null, (array)($e['protocole'] ?? []))));
     //  v1.5 — la dernière synchro automatique reçue du téléphone (affichée dans l'onglet Samsung & Poids)
     if (is_array($e['sync_auto'] ?? null) && is_string($e['sync_auto']['derniere'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}T[\d:]{8}/', $e['sync_auto']['derniere']))
-        $o['sync_auto'] = ['derniere' => substr($e['sync_auto']['derniere'], 0, 30), 'source' => mb_substr((string)($e['sync_auto']['source'] ?? ''), 0, 60), 'jours' => (int)($e['sync_auto']['jours'] ?? 0)];
+        $o['sync_auto'] = ['derniere' => substr($e['sync_auto']['derniere'], 0, 30), 'source' => mb_substr((string)($e['sync_auto']['source'] ?? ''), 0, 60), 'jours' => (int)($e['sync_auto']['jours'] ?? 0)]
+        + (!empty($e['sync_auto']['erreur']) ? ['erreur' => mb_substr((string)$e['sync_auto']['erreur'], 0, 400)] : []);
     $pl = is_array($e['plans'] ?? null) ? $e['plans'] : [];
     $o['plans'] = new stdClass();
     foreach (['nutrition', 'exercice', 'protocole'] as $t) if (($n = sante_norm_plan($pl[$t] ?? null, $t)) !== null) { $o['plans'] = (array)$o['plans']; $o['plans'][$t] = $n; }

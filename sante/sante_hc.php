@@ -149,3 +149,14 @@ function sante_auth_amont(): ?string {
     if (stripos((string)$h, 'basic ') === 0) { $d = base64_decode(substr((string)$h, 6), true); if ($d !== false && strpos($d, ':') !== false) return explode(':', $d, 2)[0]; }
     return null;
 }
+
+/** Les données de démonstration du bouton « Test » de l'appli : une montre « Pixel Watch » et l'appli Google Fit imaginaires. */
+function sante_hc_est_demo($p): bool {
+    if (!is_array($p) || array_is_list($p)) return false;
+    if (!empty($p['test'])) return true;
+    foreach (SANTE_HC_TYPES as $t) foreach ((array)($p[$t] ?? []) as $r) {
+        $m = is_array($r) ? ($r['metadata'] ?? null) : null;
+        if (is_array($m) && ($m['data_origin'] ?? '') === 'com.google.android.apps.fitness' && (($m['device']['model'] ?? '') === 'Pixel Watch')) return true;
+    }
+    return false;
+}

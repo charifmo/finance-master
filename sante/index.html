@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.13"></script>
-    <script src="sante_import.js?v=1.13"></script>
-    <script src="sante_samsung.js?v=1.13"></script>
-    <script src="sante_protocole.js?v=1.13"></script>
+    <script src="sante_calculs.js?v=1.14"></script>
+    <script src="sante_import.js?v=1.14"></script>
+    <script src="sante_samsung.js?v=1.14"></script>
+    <script src="sante_protocole.js?v=1.14"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -608,6 +608,7 @@
                             <p class="w-full font-black text-emerald-900">⚡ 1. Synchro automatique <span class="font-semibold text-emerald-800">— à régler une fois, ensuite plus rien à faire</span></p>
                             <span v-if="etat.sync_auto" class="text-xs font-black px-2 py-1 rounded-full bg-emerald-600 text-white" data-derniere-synchro>✓ dernière synchro {{ depuisQuand(etat.sync_auto.derniere) }}<span v-if="etat.sync_auto.jours"> · {{ etat.sync_auto.jours }} jour(s)</span></span>
                             <span v-else class="text-xs font-black px-2 py-1 rounded-full bg-amber-100 text-amber-800">pas encore reçue</span>
+                            <p v-if="etat.sync_auto && etat.sync_auto.erreur" class="w-full text-[11px] font-bold text-rose-700 break-words" data-erreur-synchro>⚠️ Dernier envoi : certains jours refusés par le serveur — {{ etat.sync_auto.erreur }}</p>
                         </div>
                         <p class="text-xs text-slate-600">Une page web ne peut pas lire Samsung Health toute seule (Android l’interdit aux sites). La petite appli gratuite <b>HC Webhook</b> le fait pour elle : elle lit Samsung Health (via Health Connect) et envoie ici vos pas, calories, sommeil, poids et fréquence cardiaque — toute seule toutes les heures, ou d’un appui sur son widget « Synchroniser ».</p>
                         <ol class="list-decimal pl-5 space-y-1.5 text-xs">
@@ -790,7 +791,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.13';
+        const VERSION = '1.14';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1381,7 +1382,8 @@ createApp({
             try {
                 const r = await fetch(cmoUrl.value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'verifier_protocole', titre: tri.titre, elements: lignes }) });
                 const j = await r.json().catch(() => ({}));
-                if (!r.ok || !Array.isArray(j.corrections)) throw new Error(j.erreur || j.output || ('réponse ' + r.status));
+                if (r.ok && !Array.isArray(j.corrections) && (j.output || j.text)) throw new Error('l’agent n’est pas à jour (il répond comme un chat). Sur le serveur : sudo bash install.sh sante');
+                if (!r.ok || !Array.isArray(j.corrections)) throw new Error(String(j.erreur || j.output || ('réponse ' + r.status)).replace(/<[^>]+>/g, ' ').slice(0, 300));
                 let rejetees = 0, n = 0;
                 j.corrections.forEach(c => {
                     const p = { id: 'ia' + (++n), raison: String(c.raison || '').slice(0, 200), changes: {} };

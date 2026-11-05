@@ -354,11 +354,25 @@ z.close()`, src, zip]);
         const avantTest = fs.readFileSync(DATA, 'utf8');
         const repTest = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'UTC', test: true, steps: [{ count: 8432, start_time: `${dj}T00:00:00Z`, end_time: `${dj}T10:30:00Z` }], weight: [{ kilograms: 75.5, time: `${dj}T07:30:00Z` }] }) });
         v('  → « Test » de l’appli (fausses données, test: true) : 200 « connexion OK », RIEN d’écrit dans le journal', repTest.status === 200 && /Connexion OK/.test((await repTest.json()).message) && fs.readFileSync(DATA, 'utf8') === avantTest, repTest.status);
+        //  v1.14 — le test de l'appli reconnu à sa « montre Pixel » imaginaire même sans drapeau ; un vrai envoi (heure locale, ~530
+        //  mesures de fréquence cardiaque à la minute, identifiants Health Connect) est enregistré, et le serveur dit ce qu'il fait
+        const metaDemo = { data_origin: 'com.google.android.apps.fitness', recording_method: 'automatically_recorded', device: { manufacturer: 'Google', model: 'Pixel Watch', type: 1 } };
+        const avantDemo = fs.readFileSync(DATA, 'utf8');
+        const repDemo = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'Africa/Casablanca', steps: [{ count: 8432, start_time: `${dj}T00:00:00+01:00`, end_time: `${dj}T10:30:00+01:00`, metadata: metaDemo }], weight: [{ kilograms: 75.5, time: `${dj}T07:30:00+01:00`, metadata: metaDemo }] }) });
+        v('  → données de démonstration de l’appli reconnues SANS drapeau « test » (Pixel Watch imaginaire) : 200 et rien d’écrit', repDemo.status === 200 && (await repDemo.json()).test === true && fs.readFileSync(DATA, 'utf8') === avantDemo, repDemo.status);
+        const hier = new Date(Date.now() - 864e5).toISOString().slice(0, 10), minute = (m) => `${dj}T${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00+01:00`;
+        const vraiEnvoi = { timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'Africa/Casablanca',
+            steps: [{ count: 4210, start_time: `${hier}T00:00:00+01:00`, end_time: `${hier}T23:59:59+01:00`, metadata: { id: 'hc-step-1', data_origin: 'com.sec.android.app.shealth', recording_method: 'automatically_recorded' } }, { count: 8, start_time: `${dj}T00:00:00+01:00`, end_time: `${dj}T10:40:00+01:00`, metadata: { id: 'hc-step-2', data_origin: 'com.sec.android.app.shealth' } }],
+            active_calories: [{ calories: 187.4, start_time: `${hier}T00:00:00+01:00`, end_time: `${hier}T23:59:59+01:00`, metadata: { id: 'hc-cal-1' } }],
+            heart_rate: Array.from({ length: 530 }, (_, i) => ({ avg: 60 + (i % 40), min: 58, max: 99, bpm: 60 + (i % 40), time: minute(i + 1), metadata: { id: 'hc-hr-' + i } })) };
+        const repVrai = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify(vraiEnvoi) });
+        const corpsVrai = await repVrai.json(), fVrai = lireFichier();
+        v('  → vrai envoi (heure locale, 530 mesures de FC, identifiants Health Connect) : 200 ; pas hier 4 210, kcal 187, FC du jour écrits', repVrai.status === 200 && corpsVrai.jours >= 2 && fVrai.journal[hier].samsung.pas === 4210 && fVrai.journal[hier].samsung.kcal_actives === 187 && fVrai.journal[dj].samsung.fc_moy > 0 && !fVrai.sync_auto.erreur, [repVrai.status, corpsVrai]);
         const mauvais = await fetch(U + 'sync_samsung.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sante-Token': 'faux-jeton-faux-jeton' }, body: JSON.stringify(envoi) });
         v('  → avec un mauvais jeton : 403', mauvais.status === 403);
         await p7.evaluate((ST) => eval(ST).rechargerEtat(), ST);          // revenir sur la page (visibilitychange)
         await p7.waitForSelector('[data-derniere-synchro]', { timeout: 5000 });
-        v('  → de retour sur la page : « ✓ dernière synchro à l\'instant », les pas du jour affichés', /dernière synchro à l’instant/.test(await p7.textContent('[data-derniere-synchro]')) && (await p7.textContent('[data-samsung-jour]')).replace(/\D/g, '').startsWith('6543'), await p7.textContent('[data-samsung-jour]'));
+        v('  → de retour sur la page : « ✓ dernière synchro à l\'instant », les pas du jour affichés', /dernière synchro à l’instant/.test(await p7.textContent('[data-derniere-synchro]')) && (await p7.textContent('[data-samsung-jour]')).replace(/\D/g, '').startsWith('8'), await p7.textContent('[data-samsung-jour]'));
         await p7.close();
     });
     await section('O', async () => {

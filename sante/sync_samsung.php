@@ -26,7 +26,7 @@ if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, '
 
 //  v1.12 — le bouton « Test » de HC Webhook envoie de FAUSSES données de démonstration (« test »: true) : on confirme la
 //  connexion (jeton et mot de passe sont bons) sans rien écrire dans le journal
-if (!array_is_list($p) && !empty($p['test'])) {
+if (sante_hc_est_demo($p)) {
     echo json_encode(['ok' => true, 'test' => true, 'message' => 'Connexion OK : Santé Master a bien reçu le test (données de démonstration, rien n’est enregistré).'], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -37,12 +37,22 @@ if (sante_hc_est_payload($p)) {
     $etat = json_decode($t, true) ?: [];
     $etat = sante_normaliser($etat); $etat = json_decode(json_encode($etat), true);
     $r = sante_hc_integrer($p, $etat);
-    $etat['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => count($r['dates'])];
-    $c = $r['calls'] ? sante_compiler($r['calls'], $etat) : ['status' => 'ok', 'etat' => sante_normaliser($etat), 'journal' => []];
-    if ($c['status'] !== 'ok') { http_response_code(422); echo json_encode(['ok' => false, 'journal' => $c['journal']], JSON_UNESCAPED_UNICODE); exit; }
-    $w = sante_ecrire($c['etat']);
-    if (!$w['ok']) http_response_code(500);
-    echo json_encode(['ok' => $w['ok'], 'source' => 'hc_webhook', 'jours' => count($r['dates']), 'dates' => $r['dates'], 'ignores' => $r['ignores']], JSON_UNESCAPED_UNICODE);
+    //  v1.14 — jour par jour : un jour refusé ne bloque plus les autres, et la raison est gardée (affichée dans l'appli)
+    $courant = $etat; $appliques = 0; $refus = [];
+    foreach ($r['calls'] as $call) {
+        $c1 = sante_compiler([$call], $courant);
+        if ($c1['status'] === 'ok') { $courant = json_decode(json_encode($c1['etat']), true); $appliques++; continue; }
+        $raisons = [];
+        foreach ((array)$c1['journal'] as $j) if (is_array($j) && empty($j['ok'])) $raisons[] = (string)($j['erreur'] ?? ($j['message'] ?? '?'));
+        $refus[] = ($call['args']['date'] ?? '?') . ' : ' . implode(', ', $raisons) . ' ' . json_encode($call['args'], JSON_UNESCAPED_UNICODE);
+    }
+    if ($refus) error_log('[sante_sync] jours refusés : ' . implode(' | ', $refus));
+    $courant['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => $appliques];
+    if ($refus) $courant['sync_auto']['erreur'] = mb_substr(implode(' ; ', $refus), 0, 400);
+    $w = sante_ecrire($courant);
+    $tout_refuse = $r['calls'] && !$appliques;
+    http_response_code(!$w['ok'] ? 500 : ($tout_refuse ? 422 : 200));
+    echo json_encode(['ok' => $w['ok'] && !$tout_refuse, 'source' => 'hc_webhook', 'jours' => $appliques, 'dates' => $r['dates'], 'ignores' => $r['ignores'], 'refus' => $refus], JSON_UNESCAPED_UNICODE);
     exit;
 }
 $jours = array_is_list($p) ? $p : (isset($p['jours']) && is_array($p['jours']) ? $p['jours'] : [$p]);
