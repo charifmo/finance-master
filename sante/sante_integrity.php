@@ -112,7 +112,7 @@ function sante_normaliser($e): array {
         $jo = ['checklist' => $c, 'repas' => [], 'activite' => [], 'samsung' => []];
         foreach ((array)($jour['repas'] ?? []) as $r) if (is_array($r) && is_array($r['items'] ?? null)) $jo['repas'][] = $r;
         foreach (['pas', 'zone2_min', 'marches_post', 'soleus_min', 'machines'] as $k) if (isset(($jour['activite'] ?? [])[$k])) $jo['activite'][$k] = $k === 'machines' ? !empty($jour['activite'][$k]) : sante_num($jour['activite'][$k]);
-        foreach (['pas', 'kcal_actives', 'fc_moy', 'fc_repos', 'sommeil_min', 'poids'] as $k) if (isset(($jour['samsung'] ?? [])[$k]) && sante_num($jour['samsung'][$k]) !== null) $jo['samsung'][$k] = sante_num($jour['samsung'][$k]);
+        foreach (SANTE_CHAMPS_SAMSUNG as $k) if (isset(($jour['samsung'] ?? [])[$k]) && sante_num($jour['samsung'][$k]) !== null) $jo['samsung'][$k] = sante_num($jour['samsung'][$k]);
         //  v1.4 — ce qui a été RÉALISÉ du plan ce jour-là : { id d'élément du plan: true }
         $pf = [];
         foreach ((array)($jour['plan_fait'] ?? []) as $id => $fait) if (!empty($fait) && is_string($id) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $id)) $pf[$id] = true;
@@ -120,7 +120,7 @@ function sante_normaliser($e): array {
         //  v1.5 — les morceaux reçus de HC Webhook (pour qu'un renvoi remplace au lieu d'additionner) : 8 derniers jours seulement
         if (is_array($jour['hc'] ?? null) && $date >= gmdate('Y-m-d', time() - 8 * 86400)) {
             $hc = [];
-            foreach (['pas', 'kcal', 'fc', 'sommeil'] as $t) if (is_array($jour['hc'][$t] ?? null)) {
+            foreach (['pas', 'kcal', 'fc', 'sommeil', 'dist', 'kcalt', 'eau', 'exo', 'vfc'] as $t) if (is_array($jour['hc'][$t] ?? null)) {
                 $m = [];
                 foreach ($jour['hc'][$t] as $k => $v) { if (count($m) >= 1500) break; if (is_string($k) && strlen($k) <= 70 && is_numeric($v)) $m[$k] = (float)$v; }
                 if ($m) $hc[$t] = $m;
@@ -139,7 +139,9 @@ function sante_normaliser($e): array {
     //  v1.5 — la dernière synchro automatique reçue du téléphone (affichée dans l'onglet Samsung & Poids)
     if (is_array($e['sync_auto'] ?? null) && is_string($e['sync_auto']['derniere'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}T[\d:]{8}/', $e['sync_auto']['derniere']))
         $o['sync_auto'] = ['derniere' => substr($e['sync_auto']['derniere'], 0, 30), 'source' => mb_substr((string)($e['sync_auto']['source'] ?? ''), 0, 60), 'jours' => (int)($e['sync_auto']['jours'] ?? 0)]
-        + (!empty($e['sync_auto']['erreur']) ? ['erreur' => mb_substr((string)$e['sync_auto']['erreur'], 0, 400)] : []);
+        + (!empty($e['sync_auto']['erreur']) ? ['erreur' => mb_substr((string)$e['sync_auto']['erreur'], 0, 400)] : [])
+        //  v1.16 — ce que le téléphone a envoyé la dernière fois ({ type: nombre de mesures })
+        + (is_array($e['sync_auto']['recu'] ?? null) ? ['recu' => (object)array_slice(array_filter(array_map(fn($n) => is_numeric($n) ? (int)$n : null, $e['sync_auto']['recu']), fn($n, $k) => $n !== null && is_string($k) && preg_match('/^[a-z_]{1,40}$/', $k), ARRAY_FILTER_USE_BOTH), 0, 20, true)] : []);
     $pl = is_array($e['plans'] ?? null) ? $e['plans'] : [];
     $o['plans'] = new stdClass();
     foreach (['nutrition', 'exercice', 'protocole'] as $t) if (($n = sante_norm_plan($pl[$t] ?? null, $t)) !== null) { $o['plans'] = (array)$o['plans']; $o['plans'][$t] = $n; }

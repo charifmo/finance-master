@@ -66,6 +66,30 @@ v('  → pas : téléphone et montre comptent les mêmes pas → la source la pl
 v('  → FC moyenne 80 ; pesée 96,4 ; kcal : 150 + 50 000 cal (= 50 kcal) = 200', ($sB['fc_moy'] ?? 0) == 80 && ($sB['poids'] ?? 0) == 96.4 && ($sB['kcal_actives'] ?? 0) == 200, $sB);
 [$eB2] = $appliquer($conv, $eB);
 v('  → le même envoi renvoyé : rien n\'est compté deux fois', ($eB2['journal'][$d1]['samsung']['pas'] ?? 0) == 2200 && ($eB2['journal'][$d1]['samsung']['kcal_actives'] ?? 0) == 200);
+//  v1.16 — synchro sans nouveauté (« data »: {}), sources complémentaires, mesures en plus, taille
+$vide = json_decode('{"metadata":{"app_version":"1.0","timezone":"Africa/Casablanca"},"data":{}}', true);
+$rv = sante_hc_integrer(sante_hc_convertir_b($vide), $eB);
+v('H. synchro vide (« data »: {}) : reconnue comme un envoi normal, rien à écrire (pas un refus 422)', sante_hc_est_format_b($vide) && sante_hc_est_payload($vide) && $rv['calls'] === [] && $rv['recu'] === []);
+$C = ['metadata' => $B['metadata'], 'data' => ['steps' => array_merge($pasB($srcTel, '08:00:00', 100, 30), $pasB($srcMontre, '15:00:00', 100, 25))]];
+[$eC] = $appliquer(sante_hc_convertir_b($C), []);
+v('  → le téléphone le matin, la montre l\'après-midi : les heures s\'additionnent (3 000 + 2 500 = 5 500)', ($eC['journal'][$d1]['samsung']['pas'] ?? 0) == 5500, $eC['journal'][$d1]['samsung'] ?? []);
+$m1 = fn($t, $u, $v, $x = []) => ['start_time' => "{$d1}T{$t}.000Z", 'end_time' => "{$d1}T{$t}.000Z", 'unit' => $u, 'source' => $srcTel, 'value' => $v] + $x;
+$D = ['metadata' => $B['metadata'], 'data' => [
+    'distance' => [$m1('09:00:00', 'm', 1200.0), $m1('10:00:00', 'km', 2.3)],
+    'total_calories' => [$m1('09:00:00', 'kcal', 2400.0)],
+    'height' => [$m1('07:00:00', 'm', 1.77)],
+    'oxygen_saturation' => [$m1('07:00:00', '%', 96.0), $m1('22:00:00', '%', 97.0)],
+    'blood_pressure' => [['start_time' => "{$d1}T08:00:00.000Z", 'source' => $srcTel, 'value' => ['systolic' => 128, 'diastolic' => 82]]],
+    'hydration' => [$m1('09:00:00', 'L', 0.5), $m1('12:00:00', 'ml', 750.0)],
+    'exercise' => [['start_time' => "{$d1}T17:00:00.000Z", 'end_time' => "{$d1}T17:45:00.000Z", 'source' => $srcTel, 'exercise_type' => 'walking']],
+    'body_fat' => [$m1('07:00:00', '%', 31.5)], 'heart_rate_variability' => [$m1('03:00:00', 'ms', 42.0)]]];
+$tmp = json_decode(json_encode(sante_normaliser([])), true); $rD = sante_hc_integrer(sante_hc_convertir_b($D), $tmp);
+[$eD] = $appliquer(sante_hc_convertir_b($D), []);
+$sD = $eD['journal'][$d1]['samsung'] ?? [];
+v('  → distance 3,5 km, kcal totales 2 400, eau 1 250 ml, séance 45 min, SpO2 97, tension 128/82, masse grasse 31,5, VFC 42', ($sD['distance_km'] ?? 0) == 3.5 && ($sD['kcal_totales'] ?? 0) == 2400 && ($sD['hydratation_ml'] ?? 0) == 1250 && ($sD['exercice_min'] ?? 0) == 45 && ($sD['spo2'] ?? 0) == 97 && ($sD['tension_sys'] ?? 0) == 128 && ($sD['tension_dia'] ?? 0) == 82 && ($sD['graisse_pct'] ?? 0) == 31.5 && ($sD['vfc_ms'] ?? 0) == 42, $sD);
+v('  → la taille (1,77 m) est lue : 177 cm pour le profil ; le détail reçu est compté par type', $rD['taille_cm'] == 177 && ($rD['recu']['distance'] ?? 0) === 2 && ($rD['recu']['height'] ?? 0) === 1, $rD);
+$eT = sante_compiler([['function' => 'sync_samsung_health', 'args' => ['date' => $d1, 'taille_cm' => 177]]], json_decode(json_encode(sante_normaliser([])), true));
+v('  → le moteur range la taille dans le profil (le métabolisme de base peut se calculer)', $eT['status'] === 'ok' && (float)$eT['etat']['profil']['taille_cm'] === 177.0, $eT['status']);
 @unlink(getenv('SANTE_DATA_FILE'));
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

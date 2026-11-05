@@ -377,6 +377,9 @@ z.close()`, src, zip]);
         const corpsB = await repB.json(), fB = lireFichier();
         const joursB = Object.values(fB.journal).filter(j => j.samsung && j.samsung.pas);
         v('  → format réel de l\'appli installée (metadata + data, 540 mesures) : 200, 4 800 pas écrits (400 × 12), FC moyenne', repB.status === 200 && corpsB.jours >= 1 && joursB.reduce((s, j) => s + j.samsung.pas, 0) >= 4800 && Object.values(fB.journal).some(j => j.samsung && j.samsung.fc_moy > 59), [repB.status, corpsB]);
+        //  v1.16 — synchro sans nouveauté (« data »: {}) : 200, pas « aucune donnée reconnue » (422)
+        const repVide = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ metadata: formatB.metadata, data: {} }) });
+        v('  → synchro sans nouveauté (« data »: {}) : 200, rien de refusé', repVide.status === 200 && (await repVide.json()).ok === true, repVide.status);
         const mauvais = await fetch(U + 'sync_samsung.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sante-Token': 'faux-jeton-faux-jeton' }, body: JSON.stringify(envoi) });
         v('  → avec un mauvais jeton : 403', mauvais.status === 403);
         await p7.evaluate((ST) => eval(ST).rechargerEtat(), ST);          // revenir sur la page (visibilitychange)
@@ -560,7 +563,45 @@ z.close()`, src, zip]);
         const envoi = await tel.$eval('[data-cmo-envoyer]', e => e.getBoundingClientRect().width);
         const deborde = await tel.evaluate(() => document.documentElement.scrollWidth > innerWidth);
         v('  → téléphone : Entrée va à la ligne au lieu d’envoyer ; bouton d’envoi ≥ 40 px ; pas de débordement', appelsTel === 0 && (await tel.inputValue('[data-cmo-question]')).includes('\n') && (!MISE_EN_PAGE || (envoi >= 40 && !deborde)), [appelsTel, envoi, deborde]);
+        //  v1.16 — Pilotage sur téléphone : les indicateurs sur 2 colonnes, rien ne déborde
+        await tel.evaluate((ST) => { eval(ST).onglet = 'pilotage'; }, ST); await tel.waitForTimeout(300);
+        const pil = await tel.evaluate(() => { const t = [...document.querySelectorAll('[data-kpi]')].map(e => e.getBoundingClientRect()); return { n: t.length, cols: new Set(t.map(r => Math.round(r.left))).size, deborde: document.documentElement.scrollWidth > innerWidth }; });
+        v('  → téléphone : Pilotage, indicateurs sur 2 colonnes, pas de débordement horizontal', pil.n >= 8 && (!MISE_EN_PAGE || (pil.cols === 2 && !pil.deborde)), pil);
         await tel.close();
+    });
+    await section('R', async () => {
+        //  v1.16 — Pilotage refait comme le cockpit de Finance : indicateurs clés et courbes en haut, le plan (même long) ensuite
+        const ici = (k) => { const d = new Date(Date.now() + k * 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+        const journal = {};
+        for (let k = 13; k >= 0; k--) journal[ici(-k)] = { checklist: {}, repas: [], activite: {}, samsung: { pas: 6000 + 100 * (13 - k), sommeil_min: 400 + k, fc_repos: 60 + (k % 3), kcal_actives: 300 + k } };
+        Object.assign(journal[ici(0)].samsung, { distance_km: 5.2, kcal_totales: 2650, tension_sys: 128, tension_dia: 82, spo2: 97, fc_moy: 74, fc_min: 55, fc_max: 131 });
+        const items = Array.from({ length: 40 }, (_, i) => ({ id: 'p' + i, jour: 'tous', texte: 'Étape ' + i + ' du protocole', moment: ['reveil', 'matin', 'dejeuner', 'apres_midi', 'diner', 'coucher'][i % 6], heure: String(6 + Math.floor(i / 3)).padStart(2, '0') + ':00' }));
+        fs.writeFileSync(DATA, JSON.stringify({ profil: { nom: 'TESTEUR', sexe: 'H', naissance: '1980-01-01', pas_objectif: 10000 }, objectifs: { poids_kg: 95 },
+            poids: [{ date: ici(-45), kg: 113.2, source: 'saisie' }, { date: ici(-12), kg: 110.7, source: 'samsung' }], journal, plans: { protocole: { titre: 'Protocole long', items } } }));
+        const pr = await ouvrir();
+        await pr.click('[data-onglet="pilotage"]'); await pr.waitForTimeout(400);
+        const pos = await pr.evaluate(() => ({ kpi: document.querySelector('[data-kpis]').getBoundingClientRect().top, courbes: document.querySelector('[data-courbes]').getBoundingClientRect().top, plan: document.querySelector('[data-ma-journee]').getBoundingClientRect().top,
+            liste: document.querySelector('[data-liste-journee]').getBoundingClientRect().height, items: document.querySelectorAll('[data-pilotage-item]').length }));
+        v('R. Pilotage : indicateurs clés, puis courbes, puis le plan (40 étapes, liste bornée en hauteur et défilante)', pos.kpi < pos.courbes && pos.courbes < pos.plan && pos.items === 40 && pos.liste <= 460, pos);
+        const ids = await pr.$$eval('[data-kpi]', l => l.map(e => e.dataset.kpi));
+        v('  → indicateurs : pas, calories, bilan net, poids, sommeil, FC repos, protocole, exercice ; + SpO2 et tension reçues', ['pas', 'kcal', 'energie', 'poids', 'sommeil', 'coeur', 'protocole', 'exercice', 'spo2', 'tension'].every(i => ids.includes(i)), ids);
+        const t = async (id) => (await pr.textContent(`[data-kpi="${id}"]`)).replace(/\s+/g, ' ');
+        const [tPas, tPoids, tTension, tKcal] = [await t('pas'), await t('poids'), await t('tension'), await t('kcal')];
+        v('  → pas 7 300 avec moyenne 7 j et tendance ; poids 110,7, Δ 30 j −2,5 ; tension 128/82 ; 5,2 km', /7\s300/.test(tPas) && /moy\. 7 j/.test(tPas) && /%/.test(tPas) && /110,7/.test(tPoids) && /2,5 kg/.test(tPoids) && /128\/82/.test(tTension) && /5,2 km/.test(tKcal), [tPas, tPoids, tTension, tKcal]);
+        const dessins = [(await pr.$$('[data-kpi] svg polyline')).length, await pr.evaluate(() => ['graphActivite', 'graphPoidsPilotage', 'graphSommeil', 'graphEnergie'].filter(id => !Chart.getChart(document.getElementById(id))))];
+        v('  → petites courbes dans les tuiles ; les 4 graphiques sont dessinés (Chart.js)', dessins[0] >= 6 && dessins[1].length === 0, dessins);
+        const nbLabels = () => pr.evaluate(() => Chart.getChart(document.getElementById('graphActivite')).data.labels.length);
+        const n30 = await nbLabels(); await pr.click('[data-periode-choix="7"]'); await pr.waitForTimeout(200); const n7 = await nbLabels(); await pr.click('[data-periode-choix="90"]'); await pr.waitForTimeout(200); const n90 = await nbLabels();
+        v('  → période 7 / 30 / 90 jours (30 par défaut)', n30 === 30 && n7 === 7 && n90 === 90, [n30, n7, n90]);
+        const mes = await pr.$$eval('[data-mesure]', l => l.map(e => e.dataset.mesure));
+        v('  → « Mesures du jour » : tout le détail reçu (distance, calories totales, FC 55–131, SpO2, tension…)', ['pas', 'distance', 'kcal_totales', 'fc_moy', 'fc_repos', 'spo2', 'tension', 'sommeil'].every(i => mes.includes(i)) && /55–131/.test(await pr.textContent('[data-mesure="fc_moy"]')), mes);
+        v('  → ce qui manque est signalé : la taille (métabolisme de base), la pesée de plus de 7 jours', await pr.isVisible('[data-manque="taille"]') && /12 jours/.test(await pr.textContent('[data-manque="pesee"]')));
+        await pr.click('[data-manque="taille"] button'); await pr.waitForTimeout(500);
+        v('  → « Renseigner ma taille » amène au champ Taille du profil', await pr.evaluate(() => !!document.activeElement && document.activeElement.hasAttribute('data-profil-taille')));
+        await pr.fill('[data-profil-taille]', '177'); await pr.press('[data-profil-taille]', 'Tab'); await pr.waitForTimeout(200);
+        v('  → taille saisie : l’alerte disparaît, le bilan net n’attend plus que les repas', !(await pr.$('[data-manque="taille"]')) && !/il manque la taille/.test(await t('energie')));
+        v('  → la synchro du téléphone : état visible en tête (pas encore réglée ici)', /pas encore réglée/.test(await pr.textContent('[data-statut-synchro]')));
+        await pr.close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

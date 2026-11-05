@@ -38,6 +38,8 @@ if (sante_hc_est_payload($p)) {
     $etat = json_decode($t, true) ?: [];
     $etat = sante_normaliser($etat); $etat = json_decode(json_encode($etat), true);
     $r = sante_hc_integrer($p, $etat);
+    //  v1.16 — la taille (Health Connect « Height ») remplit le profil : c'est elle qui manquait au métabolisme de base
+    if ($r['taille_cm'] !== null && (float)($etat['profil']['taille_cm'] ?? 0) !== (float)$r['taille_cm']) $r['calls'][] = ['function' => 'sync_samsung_health', 'args' => ['date' => gmdate('Y-m-d'), 'taille_cm' => $r['taille_cm']]];
     //  v1.14 — jour par jour : un jour refusé ne bloque plus les autres, et la raison est gardée (affichée dans l'appli)
     $courant = $etat; $appliques = 0; $refus = [];
     foreach ($r['calls'] as $call) {
@@ -48,7 +50,7 @@ if (sante_hc_est_payload($p)) {
         $refus[] = ($call['args']['date'] ?? '?') . ' : ' . implode(', ', $raisons) . ' ' . json_encode($call['args'], JSON_UNESCAPED_UNICODE);
     }
     if ($refus) error_log('[sante_sync] jours refusés : ' . implode(' | ', $refus));
-    $courant['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => $appliques];
+    $courant['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => $appliques, 'recu' => $r['recu']];
     if ($refus) $courant['sync_auto']['erreur'] = mb_substr(implode(' ; ', $refus), 0, 400);
     $w = sante_ecrire($courant);
     $tout_refuse = $r['calls'] && !$appliques;

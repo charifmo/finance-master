@@ -82,6 +82,20 @@ libre ; sur le Play Store `com.hcwebhook.app` en paiement unique d'environ 52 MA
   Pas / kcal « Quotidien » (défaut de l'appli) : le total du jour remplace. Siestes écartées. Dates locales (décalage
   de la mesure, sinon Africa/Casablanca).
 - `sync_auto` (dernière synchro reçue) s'affiche dans l'onglet ; revenir sur la page relit l'état.
+- v1.16 : une synchro sans nouveauté (`"data": {}`) répond 200 (plus de 422). Plusieurs sources (téléphone, montre) :
+  comparées **heure par heure** (la plus complète de chaque heure, puis somme des heures). Mesures en plus :
+  distance, calories totales, séances d'exercice, SpO2, tension, hydratation, masse grasse, VFC, FC min/max ; la
+  **taille** remplit `profil.taille_cm` (métabolisme de base). `sync_auto.recu` garde le nombre de mesures par type du
+  dernier envoi. L'appli n'envoie que le nouveau : une pesée antérieure à la première synchro se note à la main.
+
+## Pilotage (v1.16)
+
+Même esprit que le cockpit de Finance : en tête l'état de la synchro, le choix de la période (7 / 30 / 90 j) et ce qui
+manque (taille, pesée ancienne) ; puis les indicateurs clés (pas, calories actives, bilan net, poids, sommeil,
+FC au repos, protocole, exercice, et SpO2 / tension / eau / VFC / masse grasse quand le téléphone les envoie), chacun
+avec sa tendance sur 7 jours et une mini-courbe ; puis 4 graphiques (activité, poids, sommeil + FC repos, bilan
+énergétique + protocole suivi). La journée (plan, en liste bornée et défilante, avec « À faire ensuite »), les
+mesures du jour, la saisie et le bilan énergétique viennent après.
 - L'ancien format « un jour » (`{"date", "steps", …}`) reste accepté ; jeton aussi possible dans `db_config.php`
   (`sante_samsung_token`).
 

@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.15"></script>
-    <script src="sante_import.js?v=1.15"></script>
-    <script src="sante_samsung.js?v=1.15"></script>
-    <script src="sante_protocole.js?v=1.15"></script>
+    <script src="sante_calculs.js?v=1.16"></script>
+    <script src="sante_import.js?v=1.16"></script>
+    <script src="sante_samsung.js?v=1.16"></script>
+    <script src="sante_protocole.js?v=1.16"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -112,35 +112,94 @@
         <p v-if="messageImport" class="text-sm font-bold text-emerald-800" data-message-import>{{ messageImport }}</p>
 
         <!-- ═════ 1. PILOTAGE QUOTIDIEN ═════ -->
+        <!-- v1.16 — même esprit que le cockpit de Finance : les indicateurs clés et les courbes d'abord, la journée (plan) ensuite -->
         <section v-show="onglet === 'pilotage'" data-section="pilotage" class="space-y-5">
-            <div class="grid md:grid-cols-2 gap-5">
-                <div class="carte p-4 space-y-2">
-                    <h2 class="font-black text-emerald-900">✅ La journée du {{ dateLisible(dateJour) }}</h2>
-                    <template v-if="protocole">
-                        <div v-for="g in groupesProto" :key="g.m" :data-pilotage-moment="g.m">
-                            <p class="text-[11px] font-black uppercase tracking-wide text-slate-500 mt-1">{{ g.lib }}</p>
-                            <label v-for="i in g.items" :key="i.id" class="flex items-start gap-3 py-1 cursor-pointer" :data-pilotage-item="i.id">
-                                <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
-                                <span class="text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'"><span v-if="i.heure" class="text-xs font-black text-emerald-700 tabnum">{{ i.heure }} · </span>{{ i.texte }}</span>
+            <div class="flex flex-wrap items-center justify-between gap-3" data-pilotage-entete>
+                <div class="min-w-0">
+                    <h2 class="text-lg font-black text-emerald-900">📊 Tableau de bord — {{ dateLisible(dateJour) }}</h2>
+                    <p class="text-xs text-slate-500 truncate">{{ resumeProfil }}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" data-statut-synchro @click="onglet = 'poids'" class="text-xs font-black px-3 py-1.5 rounded-full border" :class="fraicheurSync.classe">{{ fraicheurSync.texte }}</button>
+                    <div class="inline-flex rounded-full border border-slate-200 bg-white p-0.5 text-xs font-black" role="group" aria-label="Période des courbes" data-periode>
+                        <button v-for="p in [7, 30, 90]" :key="p" type="button" :data-periode-choix="p" @click="periodePilotage = p" class="px-3 py-1 rounded-full" :class="periodePilotage === p ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'">{{ p }} j</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ce qui manque pour que les chiffres soient complets -->
+            <div v-if="manquesPilotage.length" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs space-y-1" data-manques>
+                <p v-for="m in manquesPilotage" :key="m.id" :data-manque="m.id" class="flex flex-wrap items-center gap-2 text-amber-900"><span class="font-bold">⚠️ {{ m.texte }}</span><button type="button" class="underline font-black" @click="m.action()">{{ m.bouton }}</button></p>
+            </div>
+
+            <!-- les indicateurs clés -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3" data-kpis>
+                <button v-for="k in kpis" :key="k.id" type="button" :data-kpi="k.id" @click="k.onglet && (onglet = k.onglet)" class="carte p-3 text-left flex flex-col gap-1 min-w-0" :class="k.onglet ? 'hover:border-emerald-300 cursor-pointer' : 'cursor-default'">
+                    <span class="flex items-center justify-between gap-1">
+                        <span class="text-[10px] sm:text-[11px] font-black uppercase tracking-wide text-slate-500 truncate">{{ k.icone }} {{ k.label }}</span>
+                        <span v-if="k.tendance" class="text-[10px] font-black px-1.5 rounded-full shrink-0" :class="k.tendance.bon === null ? 'bg-slate-100 text-slate-600' : k.tendance.bon ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'" :title="'par rapport à la moyenne des 7 jours précédents'">{{ k.tendance.txt }}</span>
+                    </span>
+                    <span class="flex items-baseline gap-1 min-w-0">
+                        <span class="text-2xl font-black tabnum truncate" :class="k.etat === 'ok' ? 'text-emerald-700' : k.etat === 'alerte' ? 'text-rose-700' : 'text-slate-900'" :data-pas="k.id === 'pas' ? '' : null">{{ k.valeur }}</span>
+                        <span class="text-[11px] font-bold text-slate-500 truncate">{{ k.unite }}</span>
+                    </span>
+                    <span v-if="k.progres !== null && k.progres !== undefined" class="block h-1.5 rounded-full bg-slate-100 overflow-hidden"><span class="block h-full rounded-full" :class="k.progres >= 100 ? 'bg-emerald-500' : 'bg-emerald-400'" :style="{ width: Math.min(100, k.progres) + '%' }"></span></span>
+                    <span class="text-[11px] text-slate-500 leading-snug">{{ k.sous }}</span>
+                    <svg v-if="k.spark" viewBox="0 0 100 28" preserveAspectRatio="none" class="w-full h-7 mt-auto" aria-hidden="true"><polyline :points="k.spark" fill="none" stroke="#10b981" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+
+            <!-- les courbes -->
+            <div class="grid lg:grid-cols-2 gap-5" data-courbes>
+                <div class="carte p-4"><h3 class="font-black text-emerald-900 text-sm mb-2">🚶 Activité — pas par jour</h3><div class="relative" style="height: 14rem"><canvas id="graphActivite"></canvas></div></div>
+                <div class="carte p-4"><h3 class="font-black text-emerald-900 text-sm mb-2">⚖️ Poids</h3><div class="relative" style="height: 14rem"><canvas id="graphPoidsPilotage"></canvas></div></div>
+                <div class="carte p-4"><h3 class="font-black text-emerald-900 text-sm mb-2">😴 Sommeil et ❤️ fréquence cardiaque au repos</h3><div class="relative" style="height: 14rem"><canvas id="graphSommeil"></canvas></div></div>
+                <div class="carte p-4"><h3 class="font-black text-emerald-900 text-sm mb-2">🔥 Bilan énergétique et ✅ protocole suivi</h3><div class="relative" style="height: 14rem"><canvas id="graphEnergie"></canvas></div></div>
+            </div>
+
+            <!-- la journée : le plan (borné en hauteur), la saisie, le bilan, les mesures -->
+            <div class="grid lg:grid-cols-5 gap-5">
+                <div class="carte p-4 space-y-2 lg:col-span-3" data-ma-journee>
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="font-black text-emerald-900">✅ Ma journée</h2>
+                        <span v-if="protocole" class="text-xs font-black text-emerald-700" data-score-protocole>{{ suiviProto.du_jour.filter(i => i.fait).length }}/{{ suiviProto.du_jour.length }} faits · « {{ protocole.titre }} » <button type="button" class="underline font-bold" @click="onglet = 'plans'">détails</button></span>
+                        <span v-else class="text-xs font-black text-emerald-700" data-checklist-score>{{ checklistFaits }}/{{ CHECKLIST.length }} faits</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" :style="{ width: tauxJournee + '%' }"></div></div>
+                    <div v-if="prochainesEtapes.length" class="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs" data-prochaines>
+                        <p class="font-black text-emerald-900 mb-0.5">⏭️ À faire ensuite</p>
+                        <p v-for="e in prochainesEtapes" :key="e.id" class="truncate"><span v-if="e.heure" class="font-black tabnum" :class="e.retard ? 'text-rose-700' : 'text-emerald-700'">{{ e.heure }}{{ e.retard ? ' (en retard)' : '' }} · </span>{{ e.texte }}</p>
+                    </div>
+                    <div class="overflow-y-auto pr-1" style="max-height: 28rem" data-liste-journee>
+                        <template v-if="protocole">
+                            <div v-for="g in groupesProto" :key="g.m" :data-pilotage-moment="g.m">
+                                <p class="text-[11px] font-black uppercase tracking-wide text-slate-500 mt-1 sticky top-0 bg-white">{{ g.lib }}</p>
+                                <label v-for="i in g.items" :key="i.id" class="flex items-start gap-3 py-1 cursor-pointer" :data-pilotage-item="i.id">
+                                    <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
+                                    <span class="text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'"><span v-if="i.heure" class="text-xs font-black text-emerald-700 tabnum">{{ i.heure }} · </span>{{ i.texte }}</span>
+                                </label>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <label v-for="c in CHECKLIST" :key="c.id" class="flex items-center gap-3 py-1 cursor-pointer" :data-check="c.id">
+                                <input type="checkbox" class="w-5 h-5 accent-emerald-600" :checked="jour.checklist[c.id]" @change="jour.checklist[c.id] = $event.target.checked">
+                                <span class="text-sm" :class="jour.checklist[c.id] ? 'line-through text-slate-400' : 'font-semibold'">{{ c.libelle }}</span>
                             </label>
-                        </div>
-                        <p class="text-xs font-black text-emerald-700" data-score-protocole>{{ suiviProto.du_jour.filter(i => i.fait).length }}/{{ suiviProto.du_jour.length }} faits · protocole « {{ protocole.titre }} » <button type="button" class="underline font-bold" @click="onglet = 'plans'">détails</button></p>
-                    </template>
-                    <template v-else>
-                    <label v-for="c in CHECKLIST" :key="c.id" class="flex items-center gap-3 py-1 cursor-pointer" :data-check="c.id">
-                        <input type="checkbox" class="w-5 h-5 accent-emerald-600" :checked="jour.checklist[c.id]" @change="jour.checklist[c.id] = $event.target.checked">
-                        <span class="text-sm" :class="jour.checklist[c.id] ? 'line-through text-slate-400' : 'font-semibold'">{{ c.libelle }}</span>
-                    </label>
-                    <p class="text-xs font-black text-emerald-700" data-checklist-score>{{ checklistFaits }}/{{ CHECKLIST.length }} faits</p>
-                    </template>
+                        </template>
+                    </div>
                     <button v-if="TYPES_PLAN.some(t => suivis[t.id].du_jour.length)" type="button" data-plans-du-jour @click="onglet = 'plans'" class="w-full text-left mt-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100">📋 Plans du jour : <span v-for="(t, n) in TYPES_PLAN.filter(t => suivis[t.id].du_jour.length)" :key="t.id">{{ n ? ' · ' : '' }}{{ t.icone }} {{ suivis[t.id].du_jour.filter(i => i.fait).length }}/{{ suivis[t.id].du_jour.length }}</span> → cocher</button>
                 </div>
-                <div class="space-y-5">
+                <div class="space-y-5 lg:col-span-2">
+                    <div class="carte p-4" data-mesures-jour>
+                        <h2 class="font-black text-emerald-900 mb-1">📲 Mesures du jour <span class="text-[11px] font-bold text-slate-500">(Samsung Health)</span></h2>
+                        <table v-if="mesuresJour.length" class="w-full text-sm tabnum"><tbody>
+                            <tr v-for="m in mesuresJour" :key="m.id" :data-mesure="m.id" class="border-b border-slate-100 last:border-0"><td class="py-1">{{ m.icone }} {{ m.label }}</td><td class="py-1 text-right font-bold">{{ m.valeur }}</td></tr>
+                        </tbody></table>
+                        <p v-else class="text-xs text-slate-500">Rien de reçu du téléphone pour ce jour.</p>
+                    </div>
                     <div class="carte p-4">
-                        <h2 class="font-black text-emerald-900 mb-2">🚶 Pas du jour</h2>
-                        <div class="flex items-end justify-between"><span class="text-3xl font-black tabnum" data-pas>{{ fmt(pasJour) }}</span><span class="text-sm text-slate-500">objectif {{ fmt(etat.profil.pas_objectif || 10000) }}</span></div>
-                        <div class="h-3 rounded-full bg-slate-100 mt-2 overflow-hidden"><div class="h-full bg-emerald-500" :style="{ width: Math.min(100, 100 * pasJour / (etat.profil.pas_objectif || 10000)) + '%' }"></div></div>
-                        <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                        <h2 class="font-black text-emerald-900 mb-2">✍️ Saisie du jour</h2>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
                             <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pas (saisie)</span><input type="number" min="0" data-saisie-pas v-model.lazy="saisie.pas" class="border rounded-lg px-2 py-1"></label>
                             <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Zone 2 à jeun (min)</span><input type="number" min="0" data-saisie-zone2 v-model.lazy="saisie.zone2_min" class="border rounded-lg px-2 py-1"></label>
                             <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Marches de 15 min après repas</span><input type="number" min="0" v-model.lazy="saisie.marches_post" class="border rounded-lg px-2 py-1"></label>
@@ -157,12 +216,12 @@
                             <tr><td>Calories actives (Samsung Health)</td><td class="text-right font-bold">{{ jour.samsung.kcal_actives == null ? '—' : fmt(jour.samsung.kcal_actives) + ' kcal' }}</td></tr>
                             <tr class="border-t"><td class="font-black">Bilan net</td><td class="text-right font-black" data-bilan-net :class="energie.net === null ? '' : energie.net < 0 ? 'text-emerald-700' : 'text-rose-700'">{{ energie.net === null ? '—' : (energie.net > 0 ? '+' : '') + fmt(energie.net) + ' kcal' }}</td></tr>
                         </tbody></table>
-                        <p v-if="bmr === null" class="text-[11px] text-amber-700 font-bold mt-1">Pour le métabolisme de base : une pesée (onglet Poids) et votre taille (profil).</p>
+                        <p v-if="bmr === null" class="text-[11px] text-amber-700 font-bold mt-1">Pour le métabolisme de base : une pesée (onglet Poids) et votre taille (profil, juste en dessous).</p>
                         <p v-else-if="energie.net !== null" class="text-[11px] font-bold mt-1" :class="energie.net < 0 ? 'text-emerald-700' : 'text-rose-700'">{{ energie.net < 0 ? 'Déficit de ' + fmt(-energie.net) + ' kcal' : 'Excédent de ' + fmt(energie.net) + ' kcal' }}</p>
                     </div>
                 </div>
             </div>
-            <div class="carte p-4" data-profil>
+            <div class="carte p-4" data-profil id="profil-sante">
                 <h2 class="font-black text-emerald-900 mb-2">👤 Profil</h2>
                 <div class="grid sm:grid-cols-3 gap-2 text-sm">
                     <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Taille (cm)</span><input type="number" data-profil-taille v-model.lazy="saisie.taille_cm" class="border rounded-lg px-2 py-1"></label>
@@ -608,6 +667,7 @@
                             <p class="w-full font-black text-emerald-900">⚡ 1. Synchro automatique <span class="font-semibold text-emerald-800">— à régler une fois, ensuite plus rien à faire</span></p>
                             <span v-if="etat.sync_auto" class="text-xs font-black px-2 py-1 rounded-full bg-emerald-600 text-white" data-derniere-synchro>✓ dernière synchro {{ depuisQuand(etat.sync_auto.derniere) }}<span v-if="etat.sync_auto.jours"> · {{ etat.sync_auto.jours }} jour(s)</span></span>
                             <span v-else class="text-xs font-black px-2 py-1 rounded-full bg-amber-100 text-amber-800">pas encore reçue</span>
+                            <p v-if="etat.sync_auto && etat.sync_auto.recu && Object.keys(etat.sync_auto.recu).length" class="w-full text-[11px] text-slate-600" data-recu-synchro>📦 Dernier envoi du téléphone : <span v-for="(n, t, i) in etat.sync_auto.recu" :key="t">{{ i ? ' · ' : '' }}{{ LIB_HC[t] || t }} {{ n }}</span><span class="text-slate-400"> (seulement le nouveau depuis l’envoi précédent)</span></p>
                             <p v-if="etat.sync_auto && etat.sync_auto.erreur" class="w-full text-[11px] font-bold text-rose-700 break-words" data-erreur-synchro>⚠️ Dernier envoi : certains jours refusés par le serveur — {{ etat.sync_auto.erreur }}</p>
                         </div>
                         <p class="text-xs text-slate-600">Une page web ne peut pas lire Samsung Health toute seule (Android l’interdit aux sites). La petite appli gratuite <b>HC Webhook</b> le fait pour elle : elle lit Samsung Health (via Health Connect) et envoie ici vos pas, calories, sommeil, poids et fréquence cardiaque — toute seule toutes les heures, ou d’un appui sur son widget « Synchroniser ».</p>
@@ -619,7 +679,7 @@
                                     <li><b>Gratuit</b> : l’appli est libre. Installez <a href="https://github.com/ImranR98/Obtainium" target="_blank" rel="noopener" class="font-bold text-emerald-700 underline">Obtainium</a>, ajoutez l’adresse <code class="bg-slate-100 px-1 rounded break-all">https://github.com/mcnaveen/health-connect-webhook</code> : il télécharge et met à jour l’APK officiel (autorisez l’installation depuis cette source quand Android le demande).</li>
                                     <li><b>Sans aucune appli</b> : l’import du .zip de Samsung Health (option 2, juste en dessous).</li>
                                 </ul>
-                                Puis ouvrez-la → <b>Accorder les autorisations</b> : Pas, Calories actives, Poids, Sommeil, Fréquence cardiaque, Fréquence cardiaque au repos ; acceptez aussi l’autorisation d’arrière-plan.</li>
+                                Puis ouvrez-la → <b>Accorder les autorisations</b> : Pas, Calories actives, Poids, <b>Taille</b>, Sommeil, Fréquence cardiaque, Fréquence cardiaque au repos — et, si l’appli les propose, Distance, Calories totales, Exercice, SpO2, Tension, Hydratation, Masse grasse, VFC (tout ce qui est coché s’affiche dans Pilotage) ; acceptez aussi l’autorisation d’arrière-plan.</li>
                             <li>
                                 Ici : <button type="button" data-preparer-synchro @click="preparerSynchro()" class="px-2 py-1 rounded-lg bg-emerald-600 text-white font-black">🔑 Préparer ma synchro automatique</button>
                                 <span v-if="configAuto.message" class="ml-1 font-bold" :class="/^❌/.test(configAuto.message) ? 'text-rose-700' : 'text-slate-500'" data-message-synchro>{{ configAuto.message }}</span>
@@ -791,7 +851,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.15';
+        const VERSION = '1.16';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1213,6 +1273,8 @@ createApp({
         const valeurAuth = computed(() => configAuto.utilisateur && configAuto.motDePasse ? 'Basic ' + btoa(unescape(encodeURIComponent(configAuto.utilisateur + ':' + configAuto.motDePasse))) : '');
         const enTetesAuto = computed(() => { const o = {}; if (configAuto.utilisateur && configAuto.motDePasse) o.Authorization = 'Basic ' + btoa(unescape(encodeURIComponent(configAuto.utilisateur + ':' + configAuto.motDePasse))); o['X-Sante-Token'] = configAuto.jeton; return JSON.stringify(o); });
         const copier = async (texte, quoi) => { try { await navigator.clipboard.writeText(texte); configAuto.copie = quoi; } catch (e) { configAuto.copie = 'manuel'; } setTimeout(() => { if (configAuto.copie === quoi || configAuto.copie === 'manuel') configAuto.copie = ''; }, 3000); };
+        const LIB_HC = { steps: 'pas', active_calories: 'calories actives', weight: 'poids', sleep: 'sommeil', heart_rate: 'FC', resting_heart_rate: 'FC repos', distance: 'distance', total_calories: 'calories totales',
+            exercise: 'séances', oxygen_saturation: 'SpO2', blood_pressure: 'tension', hydration: 'eau', body_fat: 'masse grasse', height: 'taille', heart_rate_variability: 'VFC' };
         const depuisQuand = (iso) => { const t = Date.parse(iso); if (!t) return ''; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'à l’instant' : m < 60 ? 'il y a ' + m + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'le ' + dateCourte(new Date(t).toISOString().slice(0, 10)); };
         //  revenir sur la page (après un appui sur le widget du téléphone) : l'état est relu, sauf modification en cours
         const rechargerEtat = async () => {
@@ -1292,6 +1354,162 @@ createApp({
         //  dans un moment, l'ordre du document (le repas entre la prise de 12h30 et la marche de 13h30)
         const parMoment = (liste) => MOMENTS_P.map(([m, lib]) => ({ m, lib, items: liste.filter(i => (i.moment || 'journee') === m) })).filter(g => g.items.length);
         const groupesProto = computed(() => parMoment(suiviProto.value.du_jour));
+
+        // ── v1.16 — PILOTAGE : les indicateurs clés et les courbes d'abord (même esprit que le cockpit de Finance) ──
+        const periodePilotage = ref((() => { try { const p = Number(localStorage.getItem('sante_periode_pilotage')); return [7, 30, 90].includes(p) ? p : 30; } catch (_) { return 30; } })());
+        watch(periodePilotage, (p) => { try { localStorage.setItem('sante_periode_pilotage', String(p)); } catch (_) { /* stockage bloqué */ } });
+        const valeur = (x) => (x === null || x === undefined || x === '' || Number.isNaN(Number(x))) ? null : Number(x);
+        const moyenne = (l) => { const v = l.filter(x => x !== null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+        const pasDuJour = (j) => { if (!j) return null; const a = valeur((j.activite || {}).pas), b = valeur((j.samsung || {}).pas); return a === null && b === null ? null : Math.max(a || 0, b || 0); };
+        const mesure = (d, k) => { const j = etat.journal[d]; return j && j.samsung ? valeur(j.samsung[k]) : null; };
+        const tauxDuJour = (d) => {
+            const j = etat.journal[d]; if (!j || d > aujourdhui()) return null;
+            if (protocole.value) { const x = Cref.value.suiviPlan(protocole.value, etat.journal, d); return x.du_jour.length ? Math.round(100 * x.du_jour.filter(i => i.fait).length / x.du_jour.length) : null; }
+            return j.checklist ? Math.round(100 * CHECKLIST.filter(c => j.checklist[c.id]).length / CHECKLIST.length) : null;
+        };
+        const netDuJour = (d) => { const j = etat.journal[d]; if (!j) return null; const k = (j.repas || []).reduce((s, r) => s + Number((r.totaux || {}).kcal || 0), 0); return k ? C.bilanEnergie(k, bmr.value, mesure(d, 'kcal_actives')).net : null; };
+        const joursAvant = (fin, n) => { const l = []; for (let k = n - 1; k >= 0; k--) l.push(Cref.value.decaler(fin, -k)); return l; };
+        //  les séries de la période (une valeur par jour, null quand rien n'est connu)
+        const seriesPilotage = computed(() => {
+            const jours = joursAvant(dateJour.value, periodePilotage.value), poidsPar = {};
+            pesees.value.forEach(p => { poidsPar[p.date] = p.kg; });
+            const S = (k) => jours.map(d => mesure(d, k));
+            return { jours, pas: jours.map(d => pasDuJour(etat.journal[d])), poids: jours.map(d => poidsPar[d] ?? null), net: jours.map(netDuJour), taux: jours.map(tauxDuJour),
+                     kcal: S('kcal_actives'), sommeil: S('sommeil_min'), fc_repos: S('fc_repos'), fc_moy: S('fc_moy'), distance: S('distance_km'), exercice: S('exercice_min'),
+                     spo2: S('spo2'), tension_sys: S('tension_sys'), tension_dia: S('tension_dia'), eau: S('hydratation_ml'), vfc: S('vfc_ms'), graisse: S('graisse_pct'),
+                     zone2: jours.map(d => valeur(((etat.journal[d] || {}).activite || {}).zone2_min)) };
+        });
+        //  la moyenne des 7 jours AVANT le jour affiché (pour les tendances)
+        const moyennes7 = computed(() => {
+            const j7 = joursAvant(Cref.value.decaler(dateJour.value, -1), 7), M = (f) => moyenne(j7.map(f));
+            return { pas: M(d => pasDuJour(etat.journal[d])), kcal: M(d => mesure(d, 'kcal_actives')), sommeil: M(d => mesure(d, 'sommeil_min')), fc_repos: M(d => mesure(d, 'fc_repos')), taux: M(tauxDuJour), net: M(netDuJour) };
+        });
+        const sparkline = (l) => {
+            const pts = l.map((x, i) => [i, x]).filter(p => p[1] !== null); if (pts.length < 2) return null;
+            const v = pts.map(p => p[1]), lo = Math.min(...v), hi = Math.max(...v), n = Math.max(1, l.length - 1);
+            return pts.map(([i, x]) => (100 * i / n).toFixed(1) + ',' + (26 - (hi === lo ? 12 : 24 * (x - lo) / (hi - lo))).toFixed(1)).join(' ');
+        };
+        const tendance = (v, m, plusEstMieux) => {
+            if (v === null || m === null || !m) return null;
+            const pct = Math.round(100 * (v - m) / Math.abs(m)); if (!Number.isFinite(pct)) return null;
+            return { txt: (pct > 0 ? '+' : '') + pct + ' %', bon: pct === 0 || plusEstMieux === null ? null : (pct > 0) === plusEstMieux };
+        };
+        const fmt1 = (n) => n === null || n === undefined ? '—' : Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        const duree = (min) => min === null || min === undefined ? '—' : Math.floor(min / 60) + ' h ' + String(Math.round(min % 60)).padStart(2, '0');
+        const derniere = (l, jours) => { for (let i = l.length - 1; i >= 0; i--) if (l[i] !== null) return { v: l[i], d: jours[i] }; return null; };
+        const tauxJournee = computed(() => protocole.value
+            ? (suiviProto.value.du_jour.length ? Math.round(100 * suiviProto.value.du_jour.filter(i => i.fait).length / suiviProto.value.du_jour.length) : 0)
+            : Math.round(100 * checklistFaits.value / CHECKLIST.length));
+        const kpis = computed(() => {
+            const s = seriesPilotage.value, m = moyennes7.value, J = jour.value.samsung || {}, obj = etat.profil.pas_objectif || 10000, l = [];
+            l.push({ id: 'pas', icone: '🚶', label: 'Pas', valeur: fmt(pasJour.value), unite: 'pas', progres: 100 * pasJour.value / obj, etat: pasJour.value >= obj ? 'ok' : null,
+                     sous: 'objectif ' + fmt(obj) + ' · moy. 7 j ' + fmt(m.pas), tendance: tendance(pasJour.value || null, m.pas, true), spark: sparkline(s.pas) });
+            const kc = valeur(J.kcal_actives), dist = valeur(J.distance_km), tot = valeur(J.kcal_totales);
+            l.push({ id: 'kcal', icone: '🔥', label: 'Calories actives', valeur: fmt(kc), unite: 'kcal', progres: null, etat: null,
+                     sous: [dist !== null ? fmt1(dist) + ' km' : null, tot !== null ? fmt(tot) + ' kcal au total' : null, 'moy. 7 j ' + fmt(m.kcal)].filter(Boolean).join(' · '), tendance: tendance(kc, m.kcal, true), spark: sparkline(s.kcal) });
+            const n = energie.value.net;
+            l.push({ id: 'energie', icone: '⚖️', label: 'Bilan net', valeur: n === null ? '—' : (n > 0 ? '+' : '') + fmt(n), unite: 'kcal', progres: null, etat: n === null ? null : n < 0 ? 'ok' : 'alerte',
+                     sous: bmr.value === null ? 'métabolisme de base : il manque la taille ou une pesée' : (kcalJour.value ? 'ingéré ' + fmt(kcalJour.value) + ' − base ' + fmt(bmr.value) + ' − actif ' + fmt(kc || 0) : 'aucun repas noté ce jour'),
+                     tendance: null, spark: sparkline(s.net) });
+            const P = pesees.value, der = P.length ? P[P.length - 1] : null;
+            let delta = null;
+            if (der) { const limite = Cref.value.decaler(der.date, -30), avant = P.filter(p => p.date <= limite); const ref0 = avant.length ? avant[avant.length - 1] : (P.length > 1 ? P[0] : null); if (ref0 && ref0 !== der) delta = der.kg - ref0.kg; }
+            const cible = C.num(etat.objectifs.poids_kg);
+            l.push({ id: 'poids', icone: '⚖️', label: 'Poids', valeur: der ? fmt1(der.kg) : '—', unite: 'kg', onglet: 'poids', progres: null, etat: delta === null ? null : delta < 0 ? 'ok' : delta > 0.5 ? 'alerte' : null,
+                     sous: [der ? 'pesée du ' + dateCourte(der.date) : 'aucune pesée', delta !== null ? 'Δ 30 j ' + (delta > 0 ? '+' : '') + fmt1(delta) + ' kg' : null, cible !== null ? 'objectif ' + fmt1(cible) : null].filter(Boolean).join(' · '),
+                     tendance: null, spark: sparkline(P.slice(-12).map(p => p.kg)) });
+            const so = valeur(J.sommeil_min);
+            l.push({ id: 'sommeil', icone: '😴', label: 'Sommeil', valeur: duree(so), unite: '', progres: so === null ? null : 100 * so / 450, etat: so === null ? null : so >= 420 ? 'ok' : so < 360 ? 'alerte' : null,
+                     sous: 'moy. 7 j ' + duree(m.sommeil === null ? null : Math.round(m.sommeil)), tendance: tendance(so, m.sommeil, true), spark: sparkline(s.sommeil) });
+            const fr = valeur(J.fc_repos), fm = valeur(J.fc_moy);
+            l.push({ id: 'coeur', icone: '❤️', label: 'FC au repos', valeur: fr === null ? '—' : fmt(fr), unite: 'bpm', progres: null, etat: null,
+                     sous: [fm !== null ? 'moyenne ' + fmt(fm) + (J.fc_min != null && J.fc_max != null ? ' (' + fmt(J.fc_min) + '–' + fmt(J.fc_max) + ')' : '') : null, 'moy. 7 j ' + fmt(m.fc_repos)].filter(Boolean).join(' · '),
+                     tendance: tendance(fr, m.fc_repos, false), spark: sparkline(s.fc_repos) });
+            const faits = protocole.value ? suiviProto.value.du_jour.filter(i => i.fait).length : checklistFaits.value, total = protocole.value ? suiviProto.value.du_jour.length : CHECKLIST.length;
+            l.push({ id: 'protocole', icone: '✅', label: protocole.value ? 'Protocole' : 'Checklist', valeur: faits + '/' + total, unite: 'faits', onglet: protocole.value ? 'plans' : null, progres: tauxJournee.value, etat: total && faits === total ? 'ok' : null,
+                     sous: 'moy. 7 j ' + (m.taux === null ? '—' : Math.round(m.taux) + ' %'), tendance: null, spark: sparkline(s.taux) });
+            const z2 = valeur(jour.value.activite.zone2_min), ex = valeur(J.exercice_min);
+            l.push({ id: 'exercice', icone: '🏃', label: 'Exercice', valeur: fmt(z2 || 0), unite: 'min Zone 2', progres: 100 * (z2 || 0) / 40, etat: (z2 || 0) >= 40 ? 'ok' : null,
+                     sous: [ex !== null ? fmt(ex) + ' min de séances (montre)' : null, machinesSemaine.value + '/' + (etat.profil.seances_machines_semaine || 2) + ' séances machines'].filter(Boolean).join(' · '), tendance: null, spark: sparkline(s.zone2) });
+            //  les autres mesures, seulement si le téléphone en envoie (la plus récente de la période)
+            const extra = (id, icone, label, serie, f, unite) => { const x = derniere(serie, s.jours); if (x) l.push({ id, icone, label, valeur: f(x.v), unite, progres: null, etat: null, sous: x.d === dateJour.value ? 'aujourd’hui' : 'le ' + dateCourte(x.d), tendance: null, spark: sparkline(serie) }); };
+            extra('spo2', '🫁', 'SpO2', s.spo2, v => fmt(v), '%');
+            const ts = derniere(s.tension_sys, s.jours);
+            if (ts) { const i = s.jours.indexOf(ts.d); l.push({ id: 'tension', icone: '🩺', label: 'Tension', valeur: fmt(ts.v) + '/' + fmt(s.tension_dia[i]), unite: 'mmHg', progres: null, etat: ts.v >= 140 ? 'alerte' : ts.v < 130 ? 'ok' : null, sous: ts.d === dateJour.value ? 'aujourd’hui' : 'le ' + dateCourte(ts.d), tendance: null, spark: sparkline(s.tension_sys) }); }
+            extra('eau', '💧', 'Eau', s.eau, v => fmt1(v / 1000), 'L');
+            extra('vfc', '📈', 'VFC', s.vfc, v => fmt(v), 'ms');
+            extra('graisse', '🧈', 'Masse grasse', s.graisse, v => fmt1(v), '%');
+            return l;
+        });
+        //  les mesures reçues du téléphone pour le jour affiché (tout le détail)
+        const mesuresJour = computed(() => {
+            const J = jour.value.samsung || {}, l = [], a = (id, icone, label, v) => { if (v !== null) l.push({ id, icone, label, valeur: v }); }, V = (k) => valeur(J[k]);
+            a('pas', '🚶', 'Pas', V('pas') === null ? null : fmt(V('pas')));
+            a('distance', '📏', 'Distance', V('distance_km') === null ? null : fmt1(V('distance_km')) + ' km');
+            a('kcal', '🔥', 'Calories actives', V('kcal_actives') === null ? null : fmt(V('kcal_actives')) + ' kcal');
+            a('kcal_totales', '🔥', 'Calories totales', V('kcal_totales') === null ? null : fmt(V('kcal_totales')) + ' kcal');
+            a('exercice', '🏃', 'Séances (montre)', V('exercice_min') === null ? null : fmt(V('exercice_min')) + ' min');
+            a('sommeil', '😴', 'Sommeil', V('sommeil_min') === null ? null : duree(V('sommeil_min')));
+            a('fc_moy', '❤️', 'FC moyenne', V('fc_moy') === null ? null : fmt(V('fc_moy')) + ' bpm' + (V('fc_min') !== null && V('fc_max') !== null ? ' (' + fmt(V('fc_min')) + '–' + fmt(V('fc_max')) + ')' : ''));
+            a('fc_repos', '💤', 'FC au repos', V('fc_repos') === null ? null : fmt(V('fc_repos')) + ' bpm');
+            a('vfc', '📈', 'VFC', V('vfc_ms') === null ? null : fmt(V('vfc_ms')) + ' ms');
+            a('spo2', '🫁', 'SpO2', V('spo2') === null ? null : fmt(V('spo2')) + ' %');
+            a('tension', '🩺', 'Tension', V('tension_sys') === null ? null : fmt(V('tension_sys')) + '/' + fmt(V('tension_dia')) + ' mmHg');
+            a('eau', '💧', 'Eau', V('hydratation_ml') === null ? null : fmt1(V('hydratation_ml') / 1000) + ' L');
+            a('poids', '⚖️', 'Poids', V('poids') === null ? null : fmt1(V('poids')) + ' kg');
+            a('graisse', '🧈', 'Masse grasse', V('graisse_pct') === null ? null : fmt1(V('graisse_pct')) + ' %');
+            return l;
+        });
+        const prochainesEtapes = computed(() => {
+            const reste = protocole.value ? suiviProto.value.du_jour.filter(i => !i.fait) : CHECKLIST.filter(c => !jour.value.checklist[c.id]).map(c => ({ id: c.id, texte: c.libelle }));
+            const maintenant = dateJour.value === aujourdhui() ? new Date().toTimeString().slice(0, 5) : null;
+            return reste.slice().sort((a, b) => (a.heure || '99:99').localeCompare(b.heure || '99:99')).slice(0, 3).map(i => ({ id: i.id, texte: i.texte, heure: i.heure || '', retard: !!(maintenant && i.heure && i.heure < maintenant) }));
+        });
+        const fraicheurSync = computed(() => {
+            const s = etat.sync_auto; if (!s || !s.derniere) return { texte: '⚡ Synchro du téléphone : pas encore réglée', classe: 'border-amber-300 bg-amber-50 text-amber-800' };
+            const min = (Date.now() - Date.parse(s.derniere)) / 60000;
+            return { texte: '⚡ Synchro ' + depuisQuand(s.derniere) + (s.erreur ? ' · ⚠️ jours refusés' : ''), classe: s.erreur || min > 24 * 60 ? 'border-rose-300 bg-rose-50 text-rose-800' : min > 3 * 60 ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-emerald-300 bg-emerald-50 text-emerald-800' };
+        });
+        const allerProfil = async () => { await nextTick(); const e = document.querySelector('[data-profil-taille]'); if (e) { e.scrollIntoView({ behavior: 'smooth', block: 'center' }); e.focus(); } };
+        const manquesPilotage = computed(() => {
+            const l = [], P = pesees.value, der = P.length ? P[P.length - 1] : null;
+            if (!C.num(etat.profil.taille_cm)) l.push({ id: 'taille', texte: 'Taille non renseignée : le métabolisme de base et le bilan net ne peuvent pas se calculer.', bouton: 'Renseigner ma taille', action: allerProfil });
+            if (!der) l.push({ id: 'pesee', texte: 'Aucune pesée enregistrée.', bouton: 'Ajouter une pesée', action: () => { onglet.value = 'poids'; } });
+            else { const j = Math.round((Date.parse(dateJour.value) - Date.parse(der.date)) / 864e5); if (j > 7) l.push({ id: 'pesee', texte: 'Dernière pesée il y a ' + j + ' jours (' + fmt1(der.kg) + ' kg) : le téléphone n’envoie que les nouvelles mesures.', bouton: 'Noter une pesée', action: () => { onglet.value = 'poids'; } }); }
+            return l;
+        });
+        //  les courbes (Chart.js), redessinées quand la période ou les données changent et que l'onglet est affiché
+        const graphsPilotage = {};
+        const dessinerPilotage = async () => {
+            if (onglet.value !== 'pilotage' || typeof Chart === 'undefined') return;
+            Chart.defaults.locale = 'fr-FR';
+            await nextTick();
+            const s = seriesPilotage.value, labels = s.jours.map(d => d.slice(8, 10) + '/' + d.slice(5, 7)), obj = etat.profil.pas_objectif || 10000, cible = C.num(etat.objectifs.poids_kg);
+            const base = { animation: false, responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                           plugins: { legend: { labels: { boxWidth: 10, font: { size: 11 } } } }, scales: { x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } } } };
+            const faire = (id, data, scales) => {
+                const cv = document.getElementById(id); if (!cv) return;
+                if (graphsPilotage[id]) graphsPilotage[id].destroy();
+                graphsPilotage[id] = new Chart(cv, { type: 'bar', data: { labels, datasets: data }, options: { ...base, scales: { ...base.scales, ...scales } } });
+            };
+            faire('graphActivite', [
+                { type: 'bar', label: 'Pas', data: s.pas, backgroundColor: s.pas.map(v => v !== null && v >= obj ? '#10b981' : '#6ee7b7'), borderRadius: 3, order: 2 },
+                { type: 'line', label: 'Objectif', data: s.jours.map(() => obj), borderColor: '#047857', borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5, order: 1 }],
+                { y: { beginAtZero: true, ticks: { font: { size: 10 } } } });
+            faire('graphPoidsPilotage', [
+                { type: 'line', label: 'Poids (kg)', data: s.poids, borderColor: '#0d9488', backgroundColor: '#0d9488', spanGaps: true, tension: 0.25, pointRadius: 3 },
+                ...(cible !== null ? [{ type: 'line', label: 'Objectif', data: s.jours.map(() => cible), borderColor: '#10b981', borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 }] : [])],
+                { y: { beginAtZero: false, grace: '5%', ticks: { font: { size: 10 } } } });
+            faire('graphSommeil', [
+                { type: 'bar', label: 'Sommeil (h)', data: s.sommeil.map(v => v === null ? null : Math.round(v / 6) / 10), backgroundColor: '#a5b4fc', borderRadius: 3, yAxisID: 'y', order: 2 },
+                { type: 'line', label: 'FC au repos (bpm)', data: s.fc_repos, borderColor: '#e11d48', backgroundColor: '#e11d48', spanGaps: true, tension: 0.25, pointRadius: 2, yAxisID: 'y1', order: 1 }],
+                { y: { beginAtZero: true, suggestedMax: 9, ticks: { font: { size: 10 } } }, y1: { position: 'right', suggestedMin: 40, suggestedMax: 90, grid: { display: false }, ticks: { font: { size: 10 } } } });
+            faire('graphEnergie', [
+                { type: 'bar', label: 'Bilan net (kcal)', data: s.net, backgroundColor: s.net.map(v => v !== null && v > 0 ? '#fda4af' : '#6ee7b7'), borderRadius: 3, yAxisID: 'y', order: 2 },
+                { type: 'line', label: (protocole.value ? 'Protocole' : 'Checklist') + ' suivi (%)', data: s.taux, borderColor: '#7c3aed', backgroundColor: '#7c3aed', spanGaps: true, tension: 0.25, pointRadius: 2, yAxisID: 'y1', order: 1 }],
+                { y: { ticks: { font: { size: 10 } } }, y1: { position: 'right', min: 0, max: 100, grid: { display: false }, ticks: { font: { size: 10 } } } });
+        };
+        watch([onglet, seriesPilotage, () => etat.objectifs.poids_kg, () => etat.profil.pas_objectif], dessinerPilotage);
         const detailsOuverts = reactive({});
         const tauxJourProto = computed(() => { const l = suiviProto.value.du_jour; return l.length ? Math.round(100 * l.filter(i => i.fait).length / l.length) : null; });
         const tri = reactive({ ouvert: false, nom: '', titre: '', texte: '', message: '', elements: [], supprimes: [], options: { supplements: true, regles: true, objectifs: true }, resultat: '' });
@@ -1529,10 +1747,10 @@ createApp({
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
-                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
+                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, urlAvecJeton, valeurAuth, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
-                 cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,
+                 cmoUrl, sauverCmoUrl, LIB_HC, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,
                  cmoPhrase, cmoChrono, grandirChampCmo, toucheCmo, dicteeDispo, cmoDictee, dicterCmo, C: Cref };
     }
 }).component('saisie-valeur', {
