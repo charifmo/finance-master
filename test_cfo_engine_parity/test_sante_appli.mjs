@@ -368,6 +368,15 @@ z.close()`, src, zip]);
         const repVrai = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify(vraiEnvoi) });
         const corpsVrai = await repVrai.json(), fVrai = lireFichier();
         v('  → vrai envoi (heure locale, 530 mesures de FC, identifiants Health Connect) : 200 ; pas hier 4 210, kcal 187, FC du jour écrits', repVrai.status === 200 && corpsVrai.jours >= 2 && fVrai.journal[hier].samsung.pas === 4210 && fVrai.journal[hier].samsung.kcal_actives === 187 && fVrai.journal[dj].samsung.fc_moy > 0 && !fVrai.sync_auto.erreur, [repVrai.status, corpsVrai]);
+        //  v1.15 — le format de l'appli réellement installée sur le téléphone (metadata + data), 542 mesures : le 422 d'origine
+        const dB = (j) => new Date(Date.now() - j * 864e5).toISOString().slice(0, 10), src = 'com.android.healthconnect.phone.j1ed985a04c873383a77768f335b9fe26';
+        const pas24 = Array.from({ length: 400 }, (_, i) => { const s = Date.parse(`${dB(1)}T10:00:00Z`) + i * 24000; return { start_time: new Date(s).toISOString(), end_time: new Date(s + 24000).toISOString(), unit: 'steps', source: src, recording_method: 'automatically_recorded', value: 12.0 }; });
+        const formatB = { metadata: { app_version: '1.0', schema_version: 1, sync_timestamp: new Date().toISOString(), device_model: 'SM-S926B', os_version: 'Android 17', timezone: 'Africa/Casablanca' },
+            data: { steps: pas24, heart_rate: Array.from({ length: 140 }, (_, i) => ({ start_time: `${dB(1)}T0${i % 9}:${String(i % 60).padStart(2, '0')}:00.000Z`, end_time: `${dB(1)}T0${i % 9}:${String(i % 60).padStart(2, '0')}:00.000Z`, unit: 'bpm', source: src, value: 60 + (i % 30) })) } };
+        const repB = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify(formatB) });
+        const corpsB = await repB.json(), fB = lireFichier();
+        const joursB = Object.values(fB.journal).filter(j => j.samsung && j.samsung.pas);
+        v('  → format réel de l\'appli installée (metadata + data, 540 mesures) : 200, 4 800 pas écrits (400 × 12), FC moyenne', repB.status === 200 && corpsB.jours >= 1 && joursB.reduce((s, j) => s + j.samsung.pas, 0) >= 4800 && Object.values(fB.journal).some(j => j.samsung && j.samsung.fc_moy > 59), [repB.status, corpsB]);
         const mauvais = await fetch(U + 'sync_samsung.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sante-Token': 'faux-jeton-faux-jeton' }, body: JSON.stringify(envoi) });
         v('  → avec un mauvais jeton : 403', mauvais.status === 403);
         await p7.evaluate((ST) => eval(ST).rechargerEtat(), ST);          // revenir sur la page (visibilitychange)

@@ -26,6 +26,7 @@ if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, '
 
 //  v1.12 — le bouton « Test » de HC Webhook envoie de FAUSSES données de démonstration (« test »: true) : on confirme la
 //  connexion (jeton et mot de passe sont bons) sans rien écrire dans le journal
+if (sante_hc_est_format_b($p)) $p = sante_hc_convertir_b($p);   // v1.15 : l'appli installée envoie metadata / data
 if (sante_hc_est_demo($p)) {
     echo json_encode(['ok' => true, 'test' => true, 'message' => 'Connexion OK : Santé Master a bien reçu le test (données de démonstration, rien n’est enregistré).'], JSON_UNESCAPED_UNICODE);
     exit;

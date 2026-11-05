@@ -21,9 +21,50 @@ require_once __DIR__ . '/sante_lib.php';
 const SANTE_HC_TYPES = ['steps', 'active_calories', 'weight', 'sleep', 'heart_rate', 'resting_heart_rate'];
 const SANTE_HC_ZONE = 'Africa/Casablanca';
 
-/** Est-ce un envoi de HC Webhook ? (racine avec timestamp/app_version, ou une de ses listes) */
+/**
+ * Format B (v1.15) : l'appli « Health Connect Webhook » installée sur le téléphone range ses mesures sous
+ * { metadata: { app_version, schema_version, sync_timestamp, device_model, os_version, timezone }, data: { steps: [ { start_time,
+ * end_time, unit, source, recording_method, value } … ], … } }. Convertit en format A (celui de la doc de l'appli de Naveen MC,
+ * lu par sante_hc_integrer) : chaque mesure reçoit une clé stable « source courte | début » (un renvoi remplace), la valeur est
+ * ramenée en kg / kcal, le fuseau de l'envoi sert aux heures « Z ».
+ */
+function sante_hc_est_format_b($p): bool {
+    return is_array($p) && !array_is_list($p) && is_array($p['metadata'] ?? null) && is_array($p['data'] ?? null) && !array_is_list($p['data']);
+}
+function sante_hc_convertir_b(array $p): array {
+    $m = $p['metadata']; $zone = is_string($m['timezone'] ?? null) ? $m['timezone'] : 'UTC';
+    $out = ['timestamp' => (string)($m['sync_timestamp'] ?? gmdate('c')), 'app_version' => (string)($m['app_version'] ?? ''), 'timezone' => $zone];
+    if (!empty($p['test']) || !empty($m['test'])) $out['test'] = true;
+    $norm = fn($k) => preg_replace('/[^a-z]/', '', strtolower((string)$k));
+    $cle = function ($r) { $deb = (string)($r['start_time'] ?? ($r['time'] ?? '')); return 's' . substr(md5((string)($r['source'] ?? '')), 0, 6) . '|' . preg_replace('/[^0-9TZ]/', '', substr($deb, 0, 23)); };
+    $kcal = function ($r) { $v = (float)$r['value']; $u = strtolower((string)($r['unit'] ?? 'kcal')); return $u === 'cal' ? $v / 1000 : ($u === 'kj' ? $v / 4.184 : ($u === 'j' ? $v / 4184 : $v)); };
+    $kg = function ($r) { $v = (float)$r['value']; $u = strtolower((string)($r['unit'] ?? 'kg')); return in_array($u, ['g', 'gram', 'grams'], true) ? $v / 1000 : (in_array($u, ['lb', 'lbs', 'pound', 'pounds'], true) ? $v * 0.45359237 : $v); };
+    foreach ($p['data'] as $type => $liste) {
+        if (!is_array($liste) || !array_is_list($liste)) continue;
+        $t = $norm($type);
+        foreach ($liste as $r) {
+            if (!is_array($r)) continue;
+            $meta = ['id' => $cle($r)]; $deb = $r['start_time'] ?? ($r['time'] ?? null); $fin = $r['end_time'] ?? $deb;
+            if (in_array($t, ['steps', 'stepscount', 'step'], true) && is_numeric($r['value'] ?? null)) $out['steps'][] = ['count' => (float)$r['value'], 'start_time' => $deb, 'end_time' => $fin, 'metadata' => $meta];
+            elseif (in_array($t, ['activecalories', 'activecaloriesburned', 'activeenergy', 'activeenergyburned', 'caloriesactive'], true) && is_numeric($r['value'] ?? null)) $out['active_calories'][] = ['calories' => $kcal($r), 'start_time' => $deb, 'end_time' => $fin, 'metadata' => $meta];
+            elseif (in_array($t, ['heartrate', 'heartratesamples', 'heartratebpm'], true) && is_numeric($r['value'] ?? ($r['bpm'] ?? null))) $out['heart_rate'][] = ['bpm' => (float)($r['value'] ?? $r['bpm']), 'time' => $deb, 'metadata' => $meta];
+            elseif (in_array($t, ['restingheartrate', 'restingheartratebpm'], true) && is_numeric($r['value'] ?? null)) $out['resting_heart_rate'][] = ['bpm' => (float)$r['value'], 'time' => $deb, 'metadata' => $meta];
+            elseif (in_array($t, ['weight', 'bodyweight'], true) && is_numeric($r['value'] ?? null)) $out['weight'][] = ['kilograms' => $kg($r), 'time' => $deb, 'metadata' => $meta];
+            elseif (in_array($t, ['sleep', 'sleepsession', 'sleepsessions', 'sleepstage', 'sleepstages'], true)) {
+                if (preg_match('/awake|out_?of_?bed/i', (string)($r['stage'] ?? ($r['type'] ?? '')))) continue;      // l'éveil ne compte pas comme sommeil
+                $a = sante_hc_local($deb, [], 'x', $zone); $b = sante_hc_local($fin, [], 'x', $zone);
+                $dur = $a && $b && $b[2] > $a[2] ? $b[2] - $a[2] : (is_numeric($r['value'] ?? null) ? (float)$r['value'] * (strtolower((string)($r['unit'] ?? '')) === 'min' ? 60 : 1) : null);
+                if ($dur) $out['sleep'][] = ['session_end_time' => $fin, 'duration_seconds' => $dur, 'metadata' => $meta];
+            }
+        }
+    }
+    return $out;
+}
+
+/** Est-ce un envoi de HC Webhook ? (racine avec timestamp/app_version, ou une de ses listes ; ou le format B) */
 function sante_hc_est_payload($p): bool {
     if (!is_array($p) || array_is_list($p)) return false;
+    if (sante_hc_est_format_b($p)) return true;
     if (isset($p['app_version']) && isset($p['timestamp'])) return true;
     foreach (SANTE_HC_TYPES as $t) if (isset($p[$t]) && is_array($p[$t]) && array_is_list($p[$t])) return true;
     return false;
@@ -76,7 +117,7 @@ function sante_hc_integrer(array $p, array &$etat): array {
         $v = is_array($r) ? ($r['avg'] ?? ($r['bpm'] ?? null)) : null;
         $a = is_array($r) ? sante_hc_local($r['time'] ?? null, $r['metadata'] ?? [], 'zone_offset_seconds', $zone) : null;
         if (!is_numeric($v) || !$a || $v < 25 || $v > 230) { $ignores++; continue; }
-        $morceau($a[0], 'fc', 't:' . $a[1], round((float)$v, 1));
+        $morceau($a[0], 'fc', $cle($r, 't:' . $a[1]), round((float)$v, 1));
     }
     //  sommeil : par jour de réveil, une séance = une clé ; siestes écartées
     foreach ((array)($p['sleep'] ?? []) as $r) {
@@ -105,8 +146,8 @@ function sante_hc_integrer(array $p, array &$etat): array {
     foreach ($dates as $d) {
         $hc = $etat['journal'][$d]['hc'] ?? [];
         $args = ['date' => $d];
-        if (!empty($touches[$d]['pas'])) $args['pas'] = (int)round(array_sum($hc['pas'] ?? []));
-        if (!empty($touches[$d]['kcal'])) $args['kcal_actives'] = (int)round(array_sum($hc['kcal'] ?? []));
+        if (!empty($touches[$d]['pas'])) $args['pas'] = (int)round(sante_hc_somme_sources($hc['pas'] ?? []));
+        if (!empty($touches[$d]['kcal'])) $args['kcal_actives'] = (int)round(sante_hc_somme_sources($hc['kcal'] ?? []));
         if (!empty($touches[$d]['fc']) && !empty($hc['fc'])) $args['fc_moy'] = (int)round(array_sum($hc['fc']) / count($hc['fc']));
         if (!empty($touches[$d]['sommeil'])) $args['sommeil_min'] = (int)round(array_sum($hc['sommeil'] ?? []));
         if (isset($poids[$d]) && $poids[$d][1] >= 20 && $poids[$d][1] <= 400) $args['poids'] = round($poids[$d][1], 1);
@@ -159,4 +200,14 @@ function sante_hc_est_demo($p): bool {
         if (is_array($m) && ($m['data_origin'] ?? '') === 'com.google.android.apps.fitness' && (($m['device']['model'] ?? '') === 'Pixel Watch')) return true;
     }
     return false;
+}
+
+/**
+ * Somme d'un jour de pas / kcal : les morceaux d'une même source (clé « …sXXXXXX|début ») s'additionnent ; si plusieurs
+ * sources ont écrit (téléphone ET montre comptent les mêmes pas), on garde la plus complète au lieu de tout additionner.
+ */
+function sante_hc_somme_sources(array $morceaux): float {
+    $par = [];
+    foreach ($morceaux as $k => $v) { $g = preg_match('/^(?:id:)?(s[0-9a-f]{6})\|/', (string)$k, $m) ? $m[1] : '_'; $par[$g] = ($par[$g] ?? 0) + (float)$v; }
+    return $par ? max($par) : 0.0;
 }

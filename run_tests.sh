@@ -70,6 +70,7 @@ suite "Semaine écoulée sans saisie = son prévu"               node test_cfo_e
 suite "L'interface se souvient · le découvert d'abord"          node test_cfo_engine_parity/test_memoire_alerte.mjs
 suite "La Météo montre où finit chaque compte"                 node test_cfo_engine_parity/test_atterrissage_comptes.mjs
 suite "Un flux pointé n'est plus projeté · tiroirs"         node test_cfo_engine_parity/test_pointage_tiroirs.mjs
+suite "Une ligne de détail est prélevée sur le compte de sa dépense (plus sur Courant)"  node test_cfo_engine_parity/test_compte_detail.mjs
 suite "Les virements internes bougent les soldes"             node test_cfo_engine_parity/test_virements_internes.mjs
 suite "L'épargne du mois, même déjà versée"                  node test_cfo_engine_parity/test_epargne_du_mois.mjs
 suite "Le virement vers le compte des charges sort du surplus" node test_cfo_engine_parity/test_surplus_virements.mjs

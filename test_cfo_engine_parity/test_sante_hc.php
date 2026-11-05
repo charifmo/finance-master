@@ -49,6 +49,23 @@ v('  → valeurs absurdes (999 999 pas, poids illisible) : écartées, l\'envoi 
 $vieux = $J(20);
 $e7 = json_decode(json_encode(sante_normaliser(['journal' => [$vieux => ['hc' => ['pas' => ['jour' => 5]]], $d1 => $e4['journal'][$d1]]])), true);
 v('F. les morceaux ne restent que 8 jours (les totaux, eux, restent)', !isset($e7['journal'][$vieux]['hc']) && isset($e7['journal'][$d1]['hc']['fc']));
+//  v1.15 — le format de l'appli réellement installée : { metadata, data: { steps: [ { start_time, end_time, unit, source, recording_method, value } ] } }
+$srcTel = 'com.android.healthconnect.phone.j1ed985a04c873383a77768f335b9fe26'; $srcMontre = 'com.samsung.android.wear.watch';
+$pasB = function ($src, $debut, $n, $v) use ($d1) { $o = []; for ($i = 0; $i < $n; $i++) { $s = strtotime("$d1 $debut UTC") + $i * 24; $o[] = ['start_time' => gmdate('Y-m-d\TH:i:s', $s) . '.597Z', 'end_time' => gmdate('Y-m-d\TH:i:s', $s + 24) . '.597Z', 'unit' => 'steps', 'source' => $src, 'recording_method' => 'automatically_recorded', 'value' => (float)$v]; } return $o; };
+$B = ['metadata' => ['app_version' => '1.0', 'schema_version' => 1, 'sync_timestamp' => gmdate('Y-m-d\TH:i:s') . '.660Z', 'device_model' => 'SM-S926B', 'os_version' => 'Android 17', 'timezone' => 'Africa/Casablanca'],
+      'data' => ['steps' => array_merge($pasB($srcTel, '10:00:00', 100, 12), $pasB($srcMontre, '10:00:00', 100, 12), $pasB($srcTel, '12:00:00', 50, 20)),
+                 'heart_rate' => [['start_time' => "{$d1}T08:00:00.000Z", 'end_time' => "{$d1}T08:00:00.000Z", 'unit' => 'bpm', 'source' => $srcTel, 'value' => 70.0], ['start_time' => "{$d1}T08:00:20.000Z", 'end_time' => "{$d1}T08:00:20.000Z", 'unit' => 'bpm', 'source' => $srcTel, 'value' => 90.0]],
+                 'weight' => [['start_time' => "{$d1}T06:00:00.000Z", 'end_time' => "{$d1}T06:00:00.000Z", 'unit' => 'kg', 'source' => $srcTel, 'value' => 96.4]],
+                 'active_calories' => [['start_time' => "{$d1}T10:00:00.000Z", 'end_time' => "{$d1}T10:30:00.000Z", 'unit' => 'kcal', 'source' => $srcTel, 'value' => 150.0], ['start_time' => "{$d1}T11:00:00.000Z", 'end_time' => "{$d1}T11:30:00.000Z", 'unit' => 'cal', 'source' => $srcTel, 'value' => 50000.0]]]];
+v('G. format de l\'appli installée (metadata + data) : reconnu comme un envoi de santé', sante_hc_est_payload($B) && sante_hc_est_format_b($B) && !sante_hc_est_format_b($p1));
+$conv = sante_hc_convertir_b($B);
+v('  → converti : 250 mesures de pas, 2 de FC, 1 pesée, 2 de calories ; fuseau et version repris', count($conv['steps']) === 250 && count($conv['heart_rate']) === 2 && count($conv['weight']) === 1 && count($conv['active_calories']) === 2 && $conv['timezone'] === 'Africa/Casablanca' && $conv['app_version'] === '1.0', array_map('count', array_intersect_key($conv, array_flip(['steps', 'heart_rate', 'weight', 'active_calories']))));
+[$eB, $rB] = $appliquer($conv, []);
+$sB = $eB['journal'][$d1]['samsung'] ?? [];
+v('  → pas : téléphone et montre comptent les mêmes pas → la source la plus complète (100×12 + 50×20 = 2 200), pas la somme (3 400)', ($sB['pas'] ?? 0) == 2200, $sB);
+v('  → FC moyenne 80 ; pesée 96,4 ; kcal : 150 + 50 000 cal (= 50 kcal) = 200', ($sB['fc_moy'] ?? 0) == 80 && ($sB['poids'] ?? 0) == 96.4 && ($sB['kcal_actives'] ?? 0) == 200, $sB);
+[$eB2] = $appliquer($conv, $eB);
+v('  → le même envoi renvoyé : rien n\'est compté deux fois', ($eB2['journal'][$d1]['samsung']['pas'] ?? 0) == 2200 && ($eB2['journal'][$d1]['samsung']['kcal_actives'] ?? 0) == 200);
 @unlink(getenv('SANTE_DATA_FILE'));
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);
