@@ -68,8 +68,8 @@ la dernière année ; les pesées, tout l'historique. Un CSV « maison » (colon
 ## Synchro automatique depuis le téléphone (v1.5)
 
 Une page web ne peut pas lire Samsung Health (Android ne donne pas accès aux fichiers ni à Health Connect aux sites).
-Le relais : l'appli Android gratuite **HC Webhook** ([mcnaveen/health-connect-webhook](https://github.com/mcnaveen/health-connect-webhook),
-Play Store `com.hcwebhook.app`) lit Samsung Health via Health Connect et POSTe sur `sync_samsung.php` — à intervalle,
+Le relais : l'appli Android **Health Connect Webhook** de Naveen MC ([mcnaveen/health-connect-webhook](https://github.com/mcnaveen/health-connect-webhook),
+libre ; sur le Play Store `com.hcwebhook.app` en paiement unique d'environ 52 MAD, ou gratuite via l'APK des versions GitHub / Obtainium) lit Samsung Health via Health Connect et POSTe sur `sync_samsung.php` — à intervalle,
 à heure fixe, ou d'un appui sur son widget « Synchroniser ».
 
 - Réglage depuis l'onglet Samsung & Poids → « 🔑 Préparer ma synchro automatique » : `sante_jeton.php` (réservé à une
