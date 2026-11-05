@@ -9,12 +9,6 @@ require_once __DIR__ . '/sante_store.php';
 require_once __DIR__ . '/sante_hc.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
-function sante_auth_amont(): ?string {
-    foreach (['PHP_AUTH_USER', 'REMOTE_USER', 'REDIRECT_REMOTE_USER'] as $k) if (!empty($_SERVER[$k])) return (string)$_SERVER[$k];
-    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
-    if (stripos((string)$h, 'basic ') === 0) { $d = base64_decode(substr((string)$h, 6), true); if ($d !== false && strpos($d, ':') !== false) return explode(':', $d, 2)[0]; }
-    return null;
-}
 $utilisateur = sante_auth_amont();
 if ($utilisateur === null) { http_response_code(403); echo json_encode(['ok' => false, 'erreur' => "accès non authentifié : cette page doit être derrière le mot de passe du site (basic_auth)"], JSON_UNESCAPED_UNICODE); exit; }
 $jetons = sante_jetons_valides();

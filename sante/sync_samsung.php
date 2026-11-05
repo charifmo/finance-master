@@ -15,9 +15,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_
 //  v1.5 — jetons valides : db_config.php (sante_samsung_token), SANTE_SAMSUNG_TOKEN, ou celui créé depuis l'appli (sante_jeton.php)
 $valides = sante_jetons_valides();
 $recu = (string)($_SERVER['HTTP_X_SANTE_TOKEN'] ?? ($_GET['token'] ?? ''));
-if (!$valides) { http_response_code(503); echo json_encode(['ok' => false, 'erreur' => "jeton non configuré : onglet Samsung & Poids → « Préparer ma synchro automatique »"]); exit; }
-$bon = false; foreach ($valides as $v) if ($recu !== '' && hash_equals($v, $recu)) $bon = true;
-if (!$bon) { http_response_code(403); echo json_encode(['ok' => false, 'erreur' => 'jeton invalide']); exit; }
+//  v1.13 — autorisé par le jeton (en-tête ou ?token=) OU par le mot de passe du site, déjà vérifié par Caddy : l'appli
+//  HC Webhook n'a qu'un champ d'en-tête et peut retirer le jeton de l'adresse ; le mot de passe suffit alors.
+$bon = sante_auth_amont() !== null;
+foreach ($valides as $v) if ($recu !== '' && hash_equals($v, $recu)) $bon = true;
+if (!$bon && !$valides) { http_response_code(503); echo json_encode(['ok' => false, 'erreur' => "non autorisé : envoyez le mot de passe du site (en-tête Authorization) ou configurez un jeton (onglet Samsung & Poids)"], JSON_UNESCAPED_UNICODE); exit; }
+if (!$bon) { http_response_code(403); echo json_encode(['ok' => false, 'erreur' => 'jeton invalide et pas de mot de passe du site'], JSON_UNESCAPED_UNICODE); exit; }
 $p = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, 'erreur' => 'JSON attendu']); exit; }
 

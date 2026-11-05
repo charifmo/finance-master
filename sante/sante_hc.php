@@ -138,3 +138,14 @@ function sante_creer_jeton(): ?string {
     @chmod($f, 0600);
     return $j;
 }
+
+/**
+ * L'authentification faite EN AMONT (basic_auth de Caddy sur /finance/) : si une requête atteint PHP avec un en-tête
+ * Authorization Basic, Caddy a déjà vérifié le mot de passe (sinon il aurait répondu 401). Même preuve que get_ai_memory.php.
+ */
+function sante_auth_amont(): ?string {
+    foreach (['PHP_AUTH_USER', 'REMOTE_USER', 'REDIRECT_REMOTE_USER'] as $k) if (!empty($_SERVER[$k])) return (string)$_SERVER[$k];
+    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+    if (stripos((string)$h, 'basic ') === 0) { $d = base64_decode(substr((string)$h, 6), true); if ($d !== false && strpos($d, ':') !== false) return explode(':', $d, 2)[0]; }
+    return null;
+}

@@ -346,9 +346,11 @@ z.close()`, src, zip]);
         const corps = await rep.json(), f = lireFichier();
         v('  → un envoi HC Webhook accepté (200) et écrit : pas 6 543, sommeil 420 min, FC 72 ; « dernière synchro » notée', rep.status === 200 && corps.source === 'hc_webhook' && f.journal[dj].samsung.pas === 6543 && f.journal[dj].samsung.sommeil_min === 420 && f.journal[dj].samsung.fc_moy === 72 && /HC Webhook/.test(f.sync_auto.source), [rep.status, corps, f.journal[dj] && f.journal[dj].samsung]);
         //  v1.12 — l'appli n'a qu'un champ d'en-tête : jeton dans l'adresse, mot de passe du site dans l'en-tête unique
-        const urlJ = await p7.inputValue('[data-url-jeton]'), valAuth = await p7.inputValue('[data-valeur-auth]');
+        const urlJ = (await p7.inputValue('[data-url-webhook]')), valAuth = await p7.inputValue('[data-valeur-auth]');
         const repJ = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'UTC' }) });
-        v('  → formulaire à un seul en-tête : URL avec ?token=, Header Value « Basic … » ; un envoi ainsi réglé est accepté (200)', /sync_samsung\.php\?token=/.test(urlJ) && valAuth === basic && repJ.status === 200, [urlJ.slice(-30), repJ.status]);
+        v('  → formulaire à un seul en-tête : URL SANS jeton + Header Value « Basic … » (le jeton peut disparaître de l’adresse) : accepté (200)', !/\?token=/.test(urlJ) && valAuth === basic && repJ.status === 200, [urlJ.slice(-30), repJ.status]);
+        const sansRien = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32' }) });
+        v('  → sans jeton ni mot de passe du site : refusé (403)', sansRien.status === 403, sansRien.status);
         const avantTest = fs.readFileSync(DATA, 'utf8');
         const repTest = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'UTC', test: true, steps: [{ count: 8432, start_time: `${dj}T00:00:00Z`, end_time: `${dj}T10:30:00Z` }], weight: [{ kilograms: 75.5, time: `${dj}T07:30:00Z` }] }) });
         v('  → « Test » de l’appli (fausses données, test: true) : 200 « connexion OK », RIEN d’écrit dans le journal', repTest.status === 200 && /Connexion OK/.test((await repTest.json()).message) && fs.readFileSync(DATA, 'utf8') === avantTest, repTest.status);
