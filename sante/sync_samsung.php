@@ -21,6 +21,13 @@ if (!$bon) { http_response_code(403); echo json_encode(['ok' => false, 'erreur' 
 $p = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, 'erreur' => 'JSON attendu']); exit; }
 
+//  v1.12 — le bouton « Test » de HC Webhook envoie de FAUSSES données de démonstration (« test »: true) : on confirme la
+//  connexion (jeton et mot de passe sont bons) sans rien écrire dans le journal
+if (!array_is_list($p) && !empty($p['test'])) {
+    echo json_encode(['ok' => true, 'test' => true, 'message' => 'Connexion OK : Santé Master a bien reçu le test (données de démonstration, rien n’est enregistré).'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 //  v1.5 — l'appli Android « HC Webhook » (Health Connect → ici) : son format tel quel, envois incrémentaux
 if (sante_hc_est_payload($p)) {
     [$t] = sante_lire();

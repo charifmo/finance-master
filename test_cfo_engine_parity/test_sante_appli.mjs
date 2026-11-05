@@ -349,6 +349,9 @@ z.close()`, src, zip]);
         const urlJ = await p7.inputValue('[data-url-jeton]'), valAuth = await p7.inputValue('[data-valeur-auth]');
         const repJ = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'UTC' }) });
         v('  → formulaire à un seul en-tête : URL avec ?token=, Header Value « Basic … » ; un envoi ainsi réglé est accepté (200)', /sync_samsung\.php\?token=/.test(urlJ) && valAuth === basic && repJ.status === 200, [urlJ.slice(-30), repJ.status]);
+        const avantTest = fs.readFileSync(DATA, 'utf8');
+        const repTest = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'UTC', test: true, steps: [{ count: 8432, start_time: `${dj}T00:00:00Z`, end_time: `${dj}T10:30:00Z` }], weight: [{ kilograms: 75.5, time: `${dj}T07:30:00Z` }] }) });
+        v('  → « Test » de l’appli (fausses données, test: true) : 200 « connexion OK », RIEN d’écrit dans le journal', repTest.status === 200 && /Connexion OK/.test((await repTest.json()).message) && fs.readFileSync(DATA, 'utf8') === avantTest, repTest.status);
         const mauvais = await fetch(U + 'sync_samsung.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sante-Token': 'faux-jeton-faux-jeton' }, body: JSON.stringify(envoi) });
         v('  → avec un mauvais jeton : 403', mauvais.status === 403);
         await p7.evaluate((ST) => eval(ST).rechargerEtat(), ST);          // revenir sur la page (visibilitychange)
