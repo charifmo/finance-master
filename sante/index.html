@@ -10,15 +10,26 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.9"></script>
-    <script src="sante_import.js?v=1.9"></script>
-    <script src="sante_samsung.js?v=1.9"></script>
-    <script src="sante_protocole.js?v=1.9"></script>
+    <script src="sante_calculs.js?v=1.10"></script>
+    <script src="sante_import.js?v=1.10"></script>
+    <script src="sante_samsung.js?v=1.10"></script>
+    <script src="sante_protocole.js?v=1.10"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
         .tabnum { font-variant-numeric: tabular-nums; }
         [v-cloak] { display: none; }
+        /* v1.10 — le chat du Médecin-Chef IA : corps 16 px, interligne 1,65, paragraphes et listes espacés */
+        .cmo-html { font-size: 16px; line-height: 1.65; white-space: pre-line; overflow-wrap: anywhere; }
+        .cmo-html p { margin: 0 0 .75em; } .cmo-html ul, .cmo-html ol { margin: .4em 0 .8em; padding-left: 1.4em; white-space: normal; }
+        .cmo-html ul { list-style: disc; } .cmo-html ol { list-style: decimal; } .cmo-html li { margin: .2em 0; }
+        .cmo-html b, .cmo-html strong { font-weight: 800; color: #064e3b; } .cmo-html a { color: #047857; text-decoration: underline; }
+        .cmo-html code { background: #f1f5f9; padding: 0 .3em; border-radius: .3em; font-size: .9em; } .cmo-html pre { white-space: pre-wrap; background: #f1f5f9; padding: .6em; border-radius: .5em; }
+        .cmo-prompt { max-height: 12rem; overflow-y: hidden; }
+        .cmo-barre { height: 3px; border-radius: 9999px; background: #d1fae5; overflow: hidden; position: relative; }
+        .cmo-barre span { position: absolute; inset: 0 auto 0 0; width: 35%; background: #10b981; border-radius: 9999px; animation: cmo-va 1.4s ease-in-out infinite; }
+        @keyframes cmo-va { 0% { left: -35%; } 100% { left: 100%; } }
+        .cmo-pouls { animation: cmo-pouls 1.2s ease-in-out infinite; } @keyframes cmo-pouls { 50% { transform: scale(1.08); } }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -661,16 +672,83 @@
 
         <!-- ═════ 5. MÉDECIN-CHEF IA ═════ -->
         <section v-show="onglet === 'cmo'" data-section="cmo" class="space-y-5">
-            <div class="carte p-4 space-y-3">
-                <h2 class="font-black text-emerald-900">🧠 Médecin-Chef IA</h2>
-                <p class="text-sm">Le Médecin-Chef IA lit les chiffres calculés par l’appli et agit par un catalogue strict (bilans, repas, activité, Samsung, suppléments, objectifs) : il ne calcule rien de tête.</p>
-                <p class="text-xs text-slate-600" data-cmo-info>Même agent que sur Telegram (« Telegram santé account ») : il lit votre dossier, vos plans et vos suppléments, et n’enregistre rien sans votre « OUI ». Publication et mise à jour : <code class="bg-slate-100 px-1 rounded">sudo bash install.sh sante</code> sur le serveur.</p>
-                <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-500">Réglage avancé</summary><label class="mt-1 font-bold flex flex-col">Adresse du relais<input v-model="cmoUrl" data-cmo-url @change="sauverCmoUrl" class="border rounded-lg px-2 py-1 font-mono"></label></details>
-                <div class="space-y-2 max-h-80 overflow-y-auto" data-cmo-fil>
-                    <div v-for="(m, i) in cmoMessages" :key="i" class="text-sm rounded-xl px-3 py-2" :class="m.role === 'user' ? 'bg-emerald-50 ml-10' : 'bg-slate-100 mr-10'">{{ m.texte }}</div>
+            <!-- v1.10 — LE CHAT DU MÉDECIN-CHEF IA, sur le modèle de celui du CFO : fil à défilement propre, colonne de lecture,
+                 avatar, bulles, mise en forme conservée (nettoyée), attente chronométrée, champ qui grandit, Entrée envoie. -->
+            <div class="carte overflow-hidden flex flex-col" data-cmo-chat style="height: min(78vh, 760px)">
+                <div class="shrink-0 flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100 bg-white">
+                    <span class="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center shadow-sm select-none">🩺</span>
+                    <div class="flex-1 min-w-0">
+                        <h2 class="font-black text-emerald-900 leading-tight">Médecin-Chef IA</h2>
+                        <p class="text-[11px] text-slate-500 truncate" data-cmo-info>Lit votre dossier, vos plans et suppléments ; n’enregistre rien sans votre « OUI ». Même agent que sur Telegram.</p>
+                    </div>
+                    <button v-if="cmoMessages.length" type="button" data-cmo-nouvelle @click="nouvelleConversationCmo" class="shrink-0 px-3 py-1.5 rounded-lg border text-xs font-bold text-slate-600 hover:bg-slate-50">＋ Nouvelle<span class="hidden sm:inline"> conversation</span></button>
                 </div>
-                <div class="flex gap-2"><input v-model="cmoQuestion" data-cmo-question @keydown.enter="demanderCmo" class="flex-1 border rounded-lg px-2 py-1 text-sm" placeholder="Que disent mes triglycérides ?"><button type="button" data-cmo-envoyer @click="demanderCmo" :disabled="cmoAttente" class="px-3 py-1 rounded-lg bg-emerald-600 text-white font-black text-sm">{{ cmoAttente ? '…' : 'Envoyer' }}</button></div>
-                <button type="button" disabled class="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-500 text-sm font-black" title="Phase 2 : workflow n8n + identifiant Google Drive">📁 Indexer mes fichiers Santé (Google Drive) — phase 2</button>
+
+                <div ref="cmoFil" class="cmo-fil flex-1 min-h-0 overflow-y-auto bg-slate-50" data-cmo-fil>
+                    <div v-if="!cmoMessages.length && !cmoAttente" class="max-w-3xl mx-auto px-5 py-12 text-center">
+                        <p class="text-5xl mb-3">🩺</p>
+                        <p class="text-slate-700 font-black text-base mb-1">Votre Médecin-Chef est prêt</p>
+                        <p class="text-slate-500 text-sm leading-relaxed max-w-md mx-auto">Il lit vos bilans, votre journée et votre protocole avant de répondre, et calcule tout par le moteur de l’appli. Il ne remplace pas votre médecin.</p>
+                    </div>
+                    <div v-else class="max-w-3xl mx-auto px-4 md:px-6 py-6 space-y-6">
+                        <template v-for="(m, i) in cmoMessages" :key="i">
+                            <div v-if="m.role === 'user'" class="flex justify-end" data-cmo-msg-user>
+                                <div class="max-w-[85%] rounded-3xl rounded-br-lg bg-emerald-100 text-slate-800 px-5 py-3">
+                                    <p class="text-base leading-relaxed whitespace-pre-wrap">{{ m.texte }}</p>
+                                    <p v-if="m.heure" class="text-[10px] font-mono text-emerald-600/70 mt-1 text-right">{{ m.heure }}</p>
+                                </div>
+                            </div>
+                            <div v-else class="flex gap-3 md:gap-4" data-cmo-msg-agent>
+                                <div class="shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center text-sm shadow-sm select-none">🩺</div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="cmo-html text-slate-800" :class="m.erreur ? 'rounded-xl border-l-4 border-rose-400 bg-rose-50 px-3 py-2' : ''" v-html="m.html"></div>
+                                    <div class="flex flex-wrap items-center gap-3 mt-1.5">
+                                        <span v-if="m.heure" class="text-[10px] font-mono text-slate-400">{{ m.heure }}</span>
+                                        <button v-if="!m.erreur" type="button" data-cmo-copier @click="copierCmo(m, i)" class="text-[11px] font-bold text-slate-400 hover:text-emerald-700">{{ cmoCopie === i ? '✓ copié' : '⧉ Copier' }}</button>
+                                        <button v-if="m.erreur && m.question" type="button" data-cmo-renvoyer @click="envoyerCmo(m.question)" class="text-[11px] font-black text-white bg-emerald-600 rounded-md px-2 py-0.5">↻ Renvoyer la question</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <div v-if="cmoAttente" class="flex gap-3 md:gap-4" data-cmo-attente>
+                            <div class="cmo-pouls shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center text-sm shadow-sm select-none">🩺</div>
+                            <div class="flex-1 min-w-0 max-w-md rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-sm">
+                                <div class="flex items-center justify-between gap-3">
+                                    <span class="text-sm font-bold text-slate-700" data-cmo-attente-phrase>{{ cmoPhrase }}</span>
+                                    <span class="shrink-0 font-mono text-sm font-black text-emerald-600 tabnum" data-cmo-chrono>{{ cmoChrono }}</span>
+                                </div>
+                                <div class="cmo-barre mt-2"><span></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="!cmoMessages.length && !cmoAttente" class="shrink-0 bg-slate-50 border-t border-slate-100">
+                    <div class="max-w-3xl mx-auto px-4 md:px-6 pt-3 flex gap-2 overflow-x-auto sm:grid sm:grid-cols-3 sm:overflow-visible" data-cmo-suggestions>
+                        <button v-for="s in CMO_SUGGESTIONS" :key="s.titre" type="button" @click="envoyerCmo(s.question)" class="shrink-0 w-44 sm:w-auto px-4 py-3 bg-white border border-slate-200 rounded-2xl text-left hover:border-emerald-400 hover:shadow-sm transition-all">
+                            <p class="text-[11px] font-black uppercase tracking-widest text-emerald-700 mb-0.5">{{ s.titre }}</p>
+                            <p class="text-xs text-slate-500">{{ s.sous }}</p>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="shrink-0 bg-slate-50 border-t border-slate-100 px-3 md:px-6 pt-3 pb-3">
+                    <div class="max-w-3xl mx-auto">
+                        <div class="bg-white border border-slate-300 rounded-3xl shadow-sm px-3 py-2 flex items-end gap-2 focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-100 transition-all">
+                            <button v-if="dicteeDispo" type="button" data-cmo-dictee @click="dicterCmo" :title="cmoDictee ? 'Arrêter la dictée' : 'Dicter la question'" :aria-label="cmoDictee ? 'Arrêter la dictée' : 'Dicter la question'"
+                                    class="shrink-0 w-10 h-10 mb-0.5 rounded-full flex items-center justify-center" :class="cmoDictee ? 'bg-rose-500 text-white animate-pulse' : 'text-slate-500 hover:bg-slate-100'">🎙️</button>
+                            <textarea v-model="cmoQuestion" data-cmo-question rows="1" ref="cmoChamp" @input="grandirChampCmo" @keydown="toucheCmo" :disabled="cmoAttente"
+                                      :placeholder="estMobile ? 'Votre question…' : 'Votre question au Médecin-Chef…  (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)'"
+                                      class="cmo-prompt flex-1 min-w-0 bg-transparent border-0 outline-none text-base leading-relaxed text-slate-800 placeholder:text-slate-400 disabled:opacity-60 py-2 resize-none"></textarea>
+                            <button type="button" data-cmo-envoyer @click="envoyerCmo()" :disabled="cmoAttente || !cmoQuestion.trim()" :title="cmoAttente ? 'Réponse en cours…' : 'Envoyer'" aria-label="Envoyer"
+                                    class="shrink-0 w-11 h-11 mb-0.5 rounded-full flex items-center justify-center transition-all" :class="cmoAttente || !cmoQuestion.trim() ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow hover:scale-105'">
+                                <svg v-if="!cmoAttente" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                                <span v-else class="w-3 h-3 rounded-full bg-slate-400 animate-pulse"></span>
+                            </button>
+                        </div>
+                        <details class="mt-1 text-[11px] text-slate-400"><summary class="cursor-pointer">Réglage avancé</summary><label class="mt-1 font-bold flex flex-col">Adresse du relais<input v-model="cmoUrl" data-cmo-url @change="sauverCmoUrl" class="border rounded-lg px-2 py-1 font-mono text-slate-700"></label></details>
+                    </div>
+                </div>
             </div>
             <div class="carte p-4 text-sm space-y-1" data-protocole>
                 <h3 class="font-black text-emerald-900">📋 Protocole & suppléments</h3>
@@ -697,7 +775,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.9';
+        const VERSION = '1.10';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1342,17 +1420,75 @@ createApp({
         //  « /webhook/sante-cmo » gardée dans le navigateur est oubliée (le webhook refuse désormais les appels directs)
         const cmoUrl = ref((() => { try { const u = localStorage.getItem('sante_cmo_url') || ''; return /\/webhook\/sante-cmo$/.test(u) ? '' : u; } catch (_) { return ''; } })() || 'sante_cmo.php');
         const sauverCmoUrl = () => { try { localStorage.setItem('sante_cmo_url', cmoUrl.value); } catch (_) { /* stockage bloqué */ } };
-        const cmoMessages = ref([]), cmoQuestion = ref(''), cmoAttente = ref(false);
-        const demanderCmo = async () => {
-            const q = cmoQuestion.value.trim(); if (!q || cmoAttente.value) return;
-            cmoMessages.value.push({ role: 'user', texte: q }); cmoQuestion.value = ''; cmoAttente.value = true;
+        //  v1.10 — le chat (sur le modèle du CFO) : historique gardé dans ce navigateur, réponses mises en forme mais NETTOYÉES
+        //  (seules quelques balises de texte survivent, liens http seulement), attente chronométrée, Entrée envoie.
+        const CMO_HISTO = 'sante_cmo_historique';
+        const nettoyerHtml = (brut) => {
+            let h = String(brut || '').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+            if (typeof document === 'undefined') return h.replace(/<[^>]+>/g, '');
+            const t = document.createElement('template'); t.innerHTML = h;
+            const PERMIS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'CODE', 'PRE', 'BR', 'P', 'UL', 'OL', 'LI', 'A', 'H3', 'H4', 'BLOCKQUOTE']);
+            const parcourir = (noeud) => Array.from(noeud.childNodes).forEach(n => {
+                if (n.nodeType === 3) return;
+                if (n.nodeType !== 1 || ['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED'].includes(n.tagName)) { n.remove(); return; }
+                parcourir(n);
+                if (!PERMIS.has(n.tagName)) { n.replaceWith(...Array.from(n.childNodes)); return; }
+                Array.from(n.attributes).forEach(at => { if (!(n.tagName === 'A' && at.name === 'href' && /^https?:\/\//i.test(at.value))) n.removeAttribute(at.name); });
+                if (n.tagName === 'A') { n.setAttribute('target', '_blank'); n.setAttribute('rel', 'noopener noreferrer'); }
+            });
+            parcourir(t.content);
+            return t.innerHTML.trim();
+        };
+        const echapper = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const cmoMessages = ref((() => { try { const l = JSON.parse(localStorage.getItem(CMO_HISTO) || '[]'); return Array.isArray(l) ? l.slice(-40) : []; } catch (_) { return []; } })());
+        watch(cmoMessages, (l) => { try { localStorage.setItem(CMO_HISTO, JSON.stringify(l.filter(m => !m.erreur).slice(-40))); } catch (_) { /* stockage bloqué */ } }, { deep: true });
+        const cmoQuestion = ref(''), cmoAttente = ref(false), cmoFil = ref(null), cmoChamp = ref(null), cmoCopie = ref(null);
+        const estMobile = ref(typeof matchMedia === 'function' && matchMedia('(max-width: 767px)').matches);
+        const CMO_SUGGESTIONS = [
+            { titre: '🩸 Mon bilan', sous: 'Ce qui sort des normes', question: 'Analyse mon dernier bilan : qu’est-ce qui sort des normes et qu’est-ce que je peux faire ?' },
+            { titre: '📋 Aujourd’hui', sous: 'Où j’en suis du protocole', question: 'Où j’en suis de mon protocole aujourd’hui, et qu’est-ce qu’il me reste à faire ?' },
+            { titre: '🥗 Ce soir', sous: 'Que manger selon mon plan', question: 'Que puis-je manger ce soir en respectant mon plan et mes règles ?' }];
+        const PHRASES = ['Je lis votre dossier…', 'Je regarde vos derniers bilans…', 'Je relis votre protocole…', 'Je vérifie vos règles et suppléments…', 'Je prépare ma réponse…'];
+        const cmoPhrase = ref(PHRASES[0]), cmoChrono = ref('0:00'); let minuteurCmo = null;
+        const heureMaintenant = () => new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        const defilerBas = async () => { await nextTick(); const f = cmoFil.value; if (f) f.scrollTop = f.scrollHeight; };
+        const grandirChampCmo = () => { const t = cmoChamp.value; if (!t) return; t.style.height = 'auto'; const h = Math.min(t.scrollHeight, 192); t.style.height = h + 'px'; t.style.overflowY = t.scrollHeight > 192 ? 'auto' : 'hidden'; };
+        //  ordinateur : Entrée envoie, Maj+Entrée va à la ligne ; téléphone : Entrée va à la ligne (le bouton envoie)
+        const toucheCmo = (ev) => { if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && !estMobile.value) { ev.preventDefault(); envoyerCmo(); } };
+        const envoyerCmo = async (texte) => {
+            const q = String(texte !== undefined ? texte : cmoQuestion.value).trim(); if (!q || cmoAttente.value) return;
+            //  « ↻ Renvoyer » : la question restée sans réponse et son message d'erreur s'effacent (pas de bulle en double)
+            const iErr = cmoMessages.value.findIndex(m => m.erreur && m.question === q);
+            if (iErr >= 0) { const l = cmoMessages.value.slice(); l.splice(iErr, 1); if (iErr > 0 && l[iErr - 1].role === 'user' && l[iErr - 1].texte === q) l.splice(iErr - 1, 1); cmoMessages.value = l; }
+            cmoMessages.value.push({ role: 'user', texte: q, heure: heureMaintenant() });
+            if (texte === undefined) cmoQuestion.value = '';
+            await nextTick(); grandirChampCmo(); defilerBas();
+            cmoAttente.value = true; const debut = Date.now(); let k = 0; cmoPhrase.value = PHRASES[0]; cmoChrono.value = '0:00';
+            minuteurCmo = setInterval(() => { const s2 = Math.floor((Date.now() - debut) / 1000); cmoChrono.value = Math.floor(s2 / 60) + ':' + String(s2 % 60).padStart(2, '0'); if (s2 && s2 % 4 === 0) cmoPhrase.value = PHRASES[Math.min(++k, PHRASES.length - 1)]; }, 1000);
             try {
                 const r = await fetch(cmoUrl.value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, source: 'web', session_id: 'sante-web' }) });
-                const t = await r.text(); let txt = t; try { const j = JSON.parse(t); txt = j.output || j.text || j.html || t; } catch (_) { /* texte brut */ }
-                cmoMessages.value.push({ role: 'cmo', texte: r.ok ? String(txt).replace(/<[^>]+>/g, '') : '⚠️ ' + String(txt).replace(/<[^>]+>/g, '').slice(0, 400) + ' (' + r.status + ')' });
-            } catch (e) { cmoMessages.value.push({ role: 'cmo', texte: '⚠️ Le Médecin-Chef IA est injoignable (réseau).' }); }
-            cmoAttente.value = false;
+                const t = await r.text(); let txt = t; try { const j = JSON.parse(t); txt = j.output || j.text || j.html || j.erreur || t; } catch (_) { /* texte brut */ }
+                if (r.ok) cmoMessages.value.push({ role: 'cmo', html: nettoyerHtml(txt) || '<i>(réponse vide)</i>', heure: heureMaintenant() });
+                else cmoMessages.value.push({ role: 'cmo', erreur: true, question: q, html: '<b>❌ Le Médecin-Chef IA n’a pas pu répondre</b> (' + r.status + ')\n' + echapper(String(txt).replace(/<[^>]+>/g, '').slice(0, 400)), heure: heureMaintenant() });
+            } catch (e) { cmoMessages.value.push({ role: 'cmo', erreur: true, question: q, html: '<b>❌ Médecin-Chef IA injoignable</b>\nVérifiez la connexion, puis renvoyez la question.', heure: heureMaintenant() }); }
+            finally { clearInterval(minuteurCmo); cmoAttente.value = false; defilerBas(); await nextTick(); if (cmoChamp.value && !estMobile.value) cmoChamp.value.focus(); }
         };
+        const demanderCmo = () => envoyerCmo();
+        const nouvelleConversationCmo = () => { cmoMessages.value = []; };
+        const copierCmo = async (m, i) => { const t = document.createElement('div'); t.innerHTML = m.html; try { await navigator.clipboard.writeText(t.innerText); } catch (_) { /* copie refusée */ } cmoCopie.value = i; setTimeout(() => { if (cmoCopie.value === i) cmoCopie.value = null; }, 2000); };
+        //  dictée vocale (si le navigateur la propose : Chrome, Android)
+        const Reconnaissance = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+        const dicteeDispo = !!Reconnaissance, cmoDictee = ref(false); let reco = null;
+        const dicterCmo = () => {
+            if (!Reconnaissance) return;
+            if (cmoDictee.value && reco) { reco.stop(); return; }
+            reco = new Reconnaissance(); reco.lang = 'fr-FR'; reco.interimResults = false; reco.continuous = false;
+            const avant = cmoQuestion.value;
+            reco.onresult = (ev) => { const t = Array.from(ev.results).map(r => r[0].transcript).join(' '); cmoQuestion.value = (avant ? avant + ' ' : '') + t; nextTick(grandirChampCmo); };
+            reco.onend = () => { cmoDictee.value = false; }; reco.onerror = () => { cmoDictee.value = false; };
+            cmoDictee.value = true; reco.start();
+        };
+        watch(onglet, (o) => { if (o === 'cmo') defilerBas(); });
 
         const menuOuvert = ref(false);
         //  Une nouvelle version publiée : la page se recharge seule (une fois par version), comme Finance
@@ -1375,7 +1511,8 @@ createApp({
                  TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
-                 cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, C: Cref };
+                 cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,
+                 cmoPhrase, cmoChrono, grandirChampCmo, toucheCmo, dicteeDispo, cmoDictee, dicterCmo, C: Cref };
     }
 }).component('saisie-valeur', {
     //  v1.4 — une valeur de bilan, modifiable sur place. Vide = supprimée ; une case vide remplie = valeur ajoutée (« corrigée à la main »).

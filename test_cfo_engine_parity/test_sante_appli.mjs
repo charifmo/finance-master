@@ -450,6 +450,86 @@ z.close()`, src, zip]);
         v('  → agent non publié : message clair (quoi faire), l’écran de tri reste utilisable', /install\.sh sante/.test(await p9.textContent('[data-message-verif]')) && await p9.isEnabled('[data-enregistrer-protocole]'));
         await p9.close();
     });
+    await section('Q', async () => {
+        //  v1.10 — le chat du Médecin-Chef IA, au niveau de celui du CFO (relais n8n simulé). Les mesures de mise en page
+        //  utilisent la vraie feuille Tailwind, reconstruite à partir de sante/index.html (comme test_chat_ui.mjs pour le CFO).
+        const twBin = path.join(RACINE, 'node_modules/.bin/tailwindcss');
+        const twCss = essai(() => {
+            if (!fs.existsSync(twBin)) return null;
+            fs.writeFileSync(path.join(tmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
+            fs.writeFileSync(path.join(tmp, 'tw.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'sante', 'index.html')) + ']};');
+            execFileSync(twBin, ['-c', path.join(tmp, 'tw.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'tw.css'), '--minify'], { stdio: 'ignore' });
+            const css = fs.readFileSync(path.join(tmp, 'tw.css'), 'utf8'); return css.length > 5000 ? css : null;
+        });
+        const MISE_EN_PAGE = !!twCss;
+        if (!MISE_EN_PAGE) console.log('  ⏭️  feuille Tailwind non reconstruite (npm install --no-save tailwindcss@3) : mesures de mise en page du chat ignorées');
+        const ouvrirStyle = async (viewport) => {
+            const pg = await browser.newPage({ viewport });
+            pg.on('pageerror', e => erreurs.push(String(e)));
+            await pg.route('https://unpkg.com/**', r => r.fulfill({ body: fs.readFileSync(vueJs), contentType: 'text/javascript' }));
+            await pg.route('https://cdn.jsdelivr.net/npm/chart.js', r => r.fulfill({ body: fs.readFileSync(chartJs), contentType: 'text/javascript' }));
+            await pg.route('https://cdn.tailwindcss.com/**', r => r.fulfill({ contentType: 'text/javascript', body: twCss ? 'document.head.insertAdjacentHTML("beforeend", ' + JSON.stringify('<style>' + twCss + '</style>') + ')' : '' }));
+            await pg.goto(U, { waitUntil: 'load' });
+            await pg.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__ && !document.querySelector('[data-statut-sauvegarde]').textContent.includes('chargement'); }, null, { timeout: 20000 });
+            return pg;
+        };
+        const pq = await ouvrirStyle({ width: 1300, height: 1000 });
+        let appels = 0, mode = 'ok';
+        await pq.route('**/sante_cmo.php', async (r) => {
+            appels++;
+            const q = JSON.parse(r.request().postData() || '{}').question || '';
+            if (mode === 'panne') return r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ output: 'agent pas encore publié', erreur: 'agent pas encore publié' }) });
+            await new Promise(ok => setTimeout(ok, mode === 'lent' ? 1500 : 50));
+            await r.fulfill({ contentType: 'application/json', body: JSON.stringify({ output: '<b>Bilan</b>\nTriglycérides : 2,17 (haut) pour « ' + q.slice(0, 30) + ' ».\n<script>window.pirate = 1</script><a href="javascript:alert(1)">piège</a> <a href="https://example.org/etude">source</a> **important**' }) });
+        });
+        await pq.click('[data-onglet="cmo"]');
+        v('Q. chat : accueil, 3 suggestions, envoi désactivé tant que le champ est vide', await pq.isVisible('[data-cmo-suggestions]') && (await pq.$$('[data-cmo-suggestions] button')).length === 3 && await pq.isDisabled('[data-cmo-envoyer]'));
+        const champ = '[data-cmo-question]';
+        const h1 = await pq.$eval(champ, e => e.getBoundingClientRect().height);
+        await pq.fill(champ, 'ligne 1\nligne 2\nligne 3\nligne 4'); await pq.dispatchEvent(champ, 'input');
+        const h4 = await pq.$eval(champ, e => e.getBoundingClientRect().height);
+        await pq.fill(champ, Array.from({ length: 30 }, (_, i) => 'ligne ' + i).join('\n')); await pq.dispatchEvent(champ, 'input');
+        const h30 = await pq.$eval(champ, e => [e.getBoundingClientRect().height, getComputedStyle(e).overflowY]);
+        v('  → le champ grandit avec le texte, puis plafonne et défile', h4 > h1 + 20 && h30[0] <= 200 && h30[1] === 'auto', [h1, h4, h30]);
+        await pq.fill(champ, 'première ligne'); await pq.press(champ, 'Shift+Enter');
+        v('  → Maj+Entrée va à la ligne sans envoyer', appels === 0 && (await pq.inputValue(champ)).includes('\n'));
+        mode = 'lent';
+        await pq.fill(champ, 'Que disent mes triglycérides ?'); await pq.press(champ, 'Enter');
+        await pq.waitForSelector('[data-cmo-attente]', { timeout: 3000 });
+        const attente = [await pq.isVisible('[data-cmo-chrono]'), await pq.textContent('[data-cmo-attente-phrase]')];
+        await pq.waitForSelector('[data-cmo-msg-agent]', { timeout: 5000 });
+        v('  → Entrée envoie, le champ se vide ; attente chronométrée pendant la réponse', appels === 1 && (await pq.inputValue(champ)) === '' && attente[0] && /dossier/.test(attente[1]) && (await pq.$$('[data-cmo-msg-user]')).length === 1, attente);
+        const rendu = await pq.$eval('[data-cmo-msg-agent] .cmo-html', e => ({ html: e.innerHTML, taille: parseFloat(getComputedStyle(e).fontSize), ligne: parseFloat(getComputedStyle(e).lineHeight) }));
+        v('  → réponse mise en forme (gras, retours à la ligne, **…** compris), corps ≥ 16 px, interligne ≥ 1,6', /<b>Bilan<\/b>/.test(rendu.html) && /<b>important<\/b>/.test(rendu.html) && rendu.taille >= 16 && rendu.ligne / rendu.taille >= 1.6, rendu);
+        v('  → et NETTOYÉE : aucun script exécuté, lien « javascript: » neutralisé, lien https ouvert à part', !/<script/i.test(rendu.html) && await pq.evaluate(() => window.pirate === undefined) && !/javascript:/i.test(rendu.html) && /href="https:\/\/example\.org\/etude" target="_blank" rel="noopener noreferrer"/.test(rendu.html), rendu.html);
+        v('  → bouton « Copier » sous la réponse ; bulle de l’utilisateur à droite, réponse en colonne de lecture bornée', await pq.isVisible('[data-cmo-copier]')
+          && (!MISE_EN_PAGE || ((await pq.$eval('[data-cmo-msg-user]', e => getComputedStyle(e).justifyContent)) === 'flex-end' && (await pq.$eval('[data-cmo-msg-agent]', e => e.getBoundingClientRect().width)) <= 800)));
+        mode = 'panne';
+        await pq.fill(champ, 'Question qui échoue'); await pq.click('[data-cmo-envoyer]');
+        await pq.waitForSelector('[data-cmo-renvoyer]', { timeout: 5000 });
+        mode = 'ok';
+        await pq.click('[data-cmo-renvoyer]');
+        await pq.waitForFunction(() => document.querySelectorAll('[data-cmo-msg-agent]').length === 2 && !document.querySelector('[data-cmo-renvoyer]'), null, { timeout: 5000 });
+        v('  → panne : message d’erreur clair et « ↻ Renvoyer la question », qui renvoie et remplace l’erreur', appels === 3 && (await pq.$$('[data-cmo-msg-user]')).length === 2);
+        await pq.reload(); await pq.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__; });
+        await pq.click('[data-onglet="cmo"]');
+        v('  → l’historique survit au rechargement ; « Nouvelle conversation » repart de zéro', (await pq.$$('[data-cmo-msg-agent]')).length === 2 && await pq.isVisible('[data-cmo-nouvelle]'));
+        await pq.click('[data-cmo-nouvelle]');
+        await pq.click('[data-cmo-suggestions] button');
+        await pq.waitForSelector('[data-cmo-msg-agent]', { timeout: 5000 });
+        v('  → une suggestion envoie sa question', /Analyse mon dernier bilan/.test(await pq.textContent('[data-cmo-msg-user]')) && appels === 4);
+        await pq.close();
+        //  téléphone : Entrée va à la ligne (le bouton envoie), bouton d'envoi ≥ 40 px, pas de débordement
+        const tel = await ouvrirStyle({ width: 390, height: 800 });
+        let appelsTel = 0;
+        await tel.route('**/sante_cmo.php', r => { appelsTel++; return r.fulfill({ contentType: 'application/json', body: '{"output":"ok"}' }); });
+        await tel.evaluate((ST) => { eval(ST).onglet = 'cmo'; }, ST);
+        await tel.fill('[data-cmo-question]', 'Bonjour'); await tel.press('[data-cmo-question]', 'Enter');
+        const envoi = await tel.$eval('[data-cmo-envoyer]', e => e.getBoundingClientRect().width);
+        const deborde = await tel.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+        v('  → téléphone : Entrée va à la ligne au lieu d’envoyer ; bouton d’envoi ≥ 40 px ; pas de débordement', appelsTel === 0 && (await tel.inputValue('[data-cmo-question]')).includes('\n') && (!MISE_EN_PAGE || (envoi >= 40 && !deborde)), [appelsTel, envoi, deborde]);
+        await tel.close();
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close(); php.kill();
