@@ -85,6 +85,23 @@ Play Store `com.hcwebhook.app`) lit Samsung Health via Health Connect et POSTe s
 - L'ancien format « un jour » (`{"date", "steps", …}`) reste accepté ; jeton aussi possible dans `db_config.php`
   (`sante_samsung_token`).
 
+## L'agent Telegram « Médecin-Chef IA » (v1.7)
+
+Workflow n8n `[SANTÉ] - Médecin-Chef IA`, modèle dans `n8n/agent_sante.json`, consignes dans `sante/cmo_system_prompt.md`.
+Publication (et republication après un `git pull`) : `sudo bash install.sh sante` — sauvegarde des workflows, puis
+`n8n/maj_workflow_sante.php` reprend l'id du workflow Santé existant (l'agent maître l'appelle par cet id), le bot
+**« Telegram santé account »** (jamais un autre), les identifiants Postgres / Gemini / OpenAI / Deepseek, les tables et
+modèles déjà choisis, et y injecte les consignes et le catalogue des fonctions (`sante_catalogue_fonctions()`).
+Retour arrière : `sudo bash install.sh sante-retour`.
+
+- Entrées : Telegram (texte, vocal transcrit), la page (onglet Médecin-Chef IA → `sante_cmo.php`, qui relaie avec
+  l'authentification du site ; le webhook `sante-cmo` refuse tout autre appel), l'agent maître (sous-workflow).
+- Outils : `sante_lire` (GET `sante_api.php?lecture=1`), `sante_simuler` puis `sante_enregistrer` après « OUI »
+  (POST `sante_api.php`, mode simulate / commit), `memoire_sante` (mémoire vectorielle existante).
+- Les appels au VPS s'authentifient avec `FINANCE_USER` / `FINANCE_PASS` de n8n (voir `N8N_AUTH_CADDY.md`) ;
+  `install.sh sante` vérifie leur présence.
+- Réponses : texte (mise en forme Telegram du CFO, repli en texte brut), voix si la question était vocale.
+
 ## Phase 2
 
 Workflow n8n du Médecin-Chef IA (Telegram « Telegram santé account », lecture `sante_api.php`, mémoire `sante_vectors`),

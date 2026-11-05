@@ -18,6 +18,8 @@
 #           sudo bash install.sh securite  (controle anti-hameconnage, lecture seule)
 #           sudo bash install.sh cfo       (v37.69 : workflow CFO -> coquille, une fois)
 #           sudo bash install.sh cfo-retour (remet le workflow CFO d'avant)
+#           sudo bash install.sh sante      (reecrit et publie l'agent Telegram Sante : Medecin-Chef IA)
+#           sudo bash install.sh sante-retour (remet l'agent Sante d'avant)
 #           sudo bash install.sh sauvegarde (v37.96 : sauvegarde quotidienne envoyee sur Telegram + surveillance horaire)
 # ==============================================================================
 set -euo pipefail
@@ -448,6 +450,78 @@ retour_cfo() {
 }
 
 # -----------------------------------------------------------------------------
+# Sante v1.6 — L'agent Telegram « [SANTE] - Medecin-Chef IA »
+#   sudo bash install.sh sante        : reecrit le workflow Sante depuis n8n/agent_sante.json et le publie
+#   sudo bash install.sh sante-retour : remet la version d'avant (derniere sauvegarde)
+# Reprend l'id du workflow Sante existant (l'agent maitre continue de l'appeler), le bot « Telegram sante »,
+# les identifiants Postgres / Gemini / OpenAI / Deepseek deja en place. Consignes : sante/cmo_system_prompt.md.
+# -----------------------------------------------------------------------------
+installer_sante() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker ps --format '{{.Names}}' | grep -qx "${N8N_CONTAINER}"; then
+    die "Conteneur ${N8N_CONTAINER} introuvable."
+  fi
+  command -v php >/dev/null 2>&1 || die "php introuvable sur l'hote."
+  local dir; dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  [[ -f "${dir}/n8n/maj_workflow_sante.php" && -f "${dir}/n8n/agent_sante.json" ]] || die "n8n/maj_workflow_sante.php absent : faites d'abord git pull."
+  local ici patch resume id creds base
+  ici="$(mktemp)"; patch="$(mktemp)"; creds="$(mktemp)"
+  n8n_exporter_tout "${ici}" || die "Export des workflows impossible (n8n export:workflow)."
+  mkdir -p "${CFO_SAUVEGARDES}"
+  cp "${ici}" "${CFO_SAUVEGARDES}/n8n_workflows_$(date +%Y%m%d_%H%M%S).json"
+  ok "Sauvegarde des workflows : ${CFO_SAUVEGARDES}/"
+  local dansc="/tmp/fm_creds_$$.json"
+  if n8n_cmd export:credentials --all --output="${dansc}" >/dev/null 2>&1; then
+    docker exec "${N8N_CONTAINER}" cat "${dansc}" > "${creds}" 2>/dev/null || true
+    docker exec -u root "${N8N_CONTAINER}" rm -f "${dansc}" >/dev/null 2>&1 || true
+  fi
+  base="$(docker exec "${N8N_CONTAINER}" printenv WEBHOOK_URL 2>/dev/null | sed -E 's#^(https?://[^/]+).*#\1#' || true)"
+  if [[ -n "${base}" ]]; then
+    resume="$(php "${dir}/n8n/maj_workflow_sante.php" "${ici}" "${patch}" "${creds}" "${base}")" || { rm -f "${creds}"; die "Reecriture du workflow Sante impossible (voir message ci-dessus)."; }
+  else
+    resume="$(php "${dir}/n8n/maj_workflow_sante.php" "${ici}" "${patch}" "${creds}")" || { rm -f "${creds}"; die "Reecriture du workflow Sante impossible (voir message ci-dessus)."; }
+  fi
+  rm -f "${creds}"
+  log "Workflow : ${resume}"
+  if grep -q '"deja_a_jour":true' <<<"${resume}"; then
+    ok "L'agent Sante est deja a jour. Rien a faire."
+  else
+    id="$(php -r '$r=json_decode($argv[1],true); echo $r["id"] ?? "";' "${resume}")"
+    n8n_importer_et_publier "${patch}" "${id}" || die "Import dans n8n impossible."
+    local verif; verif="$(mktemp)"
+    if n8n_exporter_tout "${verif}" && grep -q 'MÉDECIN-CHEF IA v1' "${verif}"; then
+      ok "Agent Sante (Medecin-Chef IA) publie dans n8n, sur le bot « Telegram sante »."
+    else
+      warn "Mise a jour non retrouvee dans l'export : ouvrez le workflow dans n8n pour verifier."
+    fi
+    rm -f "${verif}"
+  fi
+  # Les outils de l'agent lisent et ecrivent via /finance/sante/sante_api.php, derriere le mot de passe du site
+  local envs; envs="$(docker exec "${N8N_CONTAINER}" sh -c 'echo "${FINANCE_USER:+OK} ${FINANCE_PASS:+OK} ${N8N_BLOCK_ENV_ACCESS_IN_NODE:-}"' 2>/dev/null || true)"
+  if [[ "${envs}" == "OK OK false" ]]; then
+    ok "n8n connait FINANCE_USER / FINANCE_PASS : l'agent peut lire le dossier Sante."
+  else
+    warn "n8n ne voit pas FINANCE_USER / FINANCE_PASS (ou N8N_BLOCK_ENV_ACCESS_IN_NODE n'est pas false) : l'agent recevra 401. Voir N8N_AUTH_CADDY.md."
+  fi
+  grep -q '"avertissements":\[\]' <<<"${resume}" || warn "Avertissements : voir le resume ci-dessus."
+  rm -f "${ici}" "${patch}"
+}
+
+retour_sante() {
+  local der; der="$(ls -1t "${CFO_SAUVEGARDES}"/n8n_workflows_*.json 2>/dev/null | head -1 || true)"
+  [[ -n "${der}" ]] || die "Aucune sauvegarde dans ${CFO_SAUVEGARDES}."
+  local un id; un="$(mktemp)"
+  id="$(php -r '
+    $l = json_decode(file_get_contents($argv[1]), true); if (isset($l["nodes"])) $l = [$l];
+    $s = fn($x) => strtolower(strtr((string)$x, ["É" => "e", "é" => "e"]));
+    foreach ($l as $w) { $agent = false; foreach ($w["nodes"] ?? [] as $n) if (($n["type"] ?? "") === "@n8n/n8n-nodes-langchain.agent") $agent = true;
+      if ($agent && str_contains($s($w["name"] ?? ""), "sante")) { file_put_contents($argv[2], json_encode($w, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); echo $w["id"] ?? ""; exit(0); } }
+    exit(1);' "${der}" "${un}")" || die "Workflow Sante introuvable dans ${der}."
+  n8n_importer_et_publier "${un}" "${id}" || die "Import impossible."
+  ok "Agent Sante remis comme dans ${der}."
+  rm -f "${un}"
+}
+
+# -----------------------------------------------------------------------------
 # v37.96 — Sauvegarde hors du VPS (Telegram) + surveillance horaire
 #   Le jeton du bot du CFO est lu dans n8n (export dechiffre, efface aussitot, jamais affiche) et range
 #   dans /etc/finance-master/sauvegarde.conf (root seul). Le chat : TELEGRAM_CHAT_IDS de n8n, sinon la
@@ -513,6 +587,14 @@ main() {
   fi
   if [[ "${1:-}" == "cfo-retour" ]]; then
     retour_cfo
+    return 0
+  fi
+  if [[ "${1:-}" == "sante" ]]; then
+    installer_sante
+    return 0
+  fi
+  if [[ "${1:-}" == "sante-retour" ]]; then
+    retour_sante
     return 0
   fi
   install_php_extensions

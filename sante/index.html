@@ -10,9 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.6"></script>
-    <script src="sante_import.js?v=1.6"></script>
-    <script src="sante_samsung.js?v=1.6"></script>
+    <script src="sante_calculs.js?v=1.7"></script>
+    <script src="sante_import.js?v=1.7"></script>
+    <script src="sante_samsung.js?v=1.7"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -518,8 +518,8 @@
             <div class="carte p-4 space-y-3">
                 <h2 class="font-black text-emerald-900">🧠 Médecin-Chef IA</h2>
                 <p class="text-sm">Le Médecin-Chef IA lit les chiffres calculés par l’appli et agit par un catalogue strict (bilans, repas, activité, Samsung, suppléments, objectifs) : il ne calcule rien de tête.</p>
-                <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900" data-cmo-phase2>Phase 2 : le workflow n8n du Médecin-Chef IA (Telegram « Telegram santé account », Google Drive) n’est pas encore installé. L’API qu’il utilisera est prête : <code>sante_api.php</code>. En attendant, 🪄 Merlin explique chaque biomarqueur dans l’onglet Analyses.</div>
-                <label class="text-xs font-bold flex flex-col">Adresse du webhook n8n<input v-model="cmoUrl" data-cmo-url @change="sauverCmoUrl" class="border rounded-lg px-2 py-1 font-mono"></label>
+                <p class="text-xs text-slate-600" data-cmo-info>Même agent que sur Telegram (« Telegram santé account ») : il lit votre dossier, vos plans et vos suppléments, et n’enregistre rien sans votre « OUI ». Publication et mise à jour : <code class="bg-slate-100 px-1 rounded">sudo bash install.sh sante</code> sur le serveur.</p>
+                <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-500">Réglage avancé</summary><label class="mt-1 font-bold flex flex-col">Adresse du relais<input v-model="cmoUrl" data-cmo-url @change="sauverCmoUrl" class="border rounded-lg px-2 py-1 font-mono"></label></details>
                 <div class="space-y-2 max-h-80 overflow-y-auto" data-cmo-fil>
                     <div v-for="(m, i) in cmoMessages" :key="i" class="text-sm rounded-xl px-3 py-2" :class="m.role === 'user' ? 'bg-emerald-50 ml-10' : 'bg-slate-100 mr-10'">{{ m.texte }}</div>
                 </div>
@@ -551,7 +551,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.6';
+        const VERSION = '1.7';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1040,7 +1040,9 @@ createApp({
         const supprimerPlan = (type) => { delete etat.plans[type]; if (editeurPlan.type === type) editeurPlan.type = null; };
 
         // ── Médecin-Chef IA ──
-        const cmoUrl = ref((() => { try { return localStorage.getItem('sante_cmo_url') || ''; } catch (_) { return ''; } })() || (location.origin + '/webhook/sante-cmo'));
+        //  v1.6 — par défaut, le relais sante_cmo.php (même site : le mot de passe du site suit) ; une ancienne adresse
+        //  « /webhook/sante-cmo » gardée dans le navigateur est oubliée (le webhook refuse désormais les appels directs)
+        const cmoUrl = ref((() => { try { const u = localStorage.getItem('sante_cmo_url') || ''; return /\/webhook\/sante-cmo$/.test(u) ? '' : u; } catch (_) { return ''; } })() || 'sante_cmo.php');
         const sauverCmoUrl = () => { try { localStorage.setItem('sante_cmo_url', cmoUrl.value); } catch (_) { /* stockage bloqué */ } };
         const cmoMessages = ref([]), cmoQuestion = ref(''), cmoAttente = ref(false);
         const demanderCmo = async () => {
@@ -1049,8 +1051,8 @@ createApp({
             try {
                 const r = await fetch(cmoUrl.value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, source: 'web', session_id: 'sante-web' }) });
                 const t = await r.text(); let txt = t; try { const j = JSON.parse(t); txt = j.output || j.text || j.html || t; } catch (_) { /* texte brut */ }
-                cmoMessages.value.push({ role: 'cmo', texte: r.ok ? String(txt).replace(/<[^>]+>/g, '') : 'Le Médecin-Chef IA ne répond pas (' + r.status + ') : son workflow n8n n’est pas encore installé (phase 2).' });
-            } catch (e) { cmoMessages.value.push({ role: 'cmo', texte: 'Le Médecin-Chef IA est injoignable : son workflow n8n n’est pas encore installé (phase 2).' }); }
+                cmoMessages.value.push({ role: 'cmo', texte: r.ok ? String(txt).replace(/<[^>]+>/g, '') : '⚠️ ' + String(txt).replace(/<[^>]+>/g, '').slice(0, 400) + ' (' + r.status + ')' });
+            } catch (e) { cmoMessages.value.push({ role: 'cmo', texte: '⚠️ Le Médecin-Chef IA est injoignable (réseau).' }); }
             cmoAttente.value = false;
         };
 
