@@ -27,6 +27,8 @@ if (!is_array($export)) { fwrite(STDERR, "export illisible\n"); exit(3); }
 $liste = isset($export['nodes']) ? [$export] : array_values($export);
 $modele = json_decode((string)file_get_contents($ici . '/agent_sante.json'), true);
 $consignes = (string)file_get_contents($racine . '/sante/cmo_system_prompt.md');
+$consignesVerif = (string)@file_get_contents($racine . '/sante/verif_protocole_prompt.md');
+if (strlen($consignesVerif) < 300) { fwrite(STDERR, "consignes de vérification sante/verif_protocole_prompt.md manquantes\n"); exit(6); }
 if (!is_array($modele) || strlen($consignes) < 500) { fwrite(STDERR, "modèle n8n/agent_sante.json ou consignes sante/cmo_system_prompt.md manquants\n"); exit(6); }
 $avert = [];
 $sansAccent = fn($s) => strtolower(strtr((string)$s, ['é' => 'e', 'É' => 'e', 'è' => 'e', 'ê' => 'e', 'à' => 'a']));
@@ -124,6 +126,8 @@ foreach ($wf['nodes'] as $n) {
     if ($n['parameters'] === '__PARAMS_DEEPSEEK__') $n['parameters'] = $ancienDeepseek['parameters'] ?? ['model' => ['__rl' => true, 'value' => 'deepseek-chat', 'mode' => 'id'], 'options' => []];
     $json = json_encode($n['parameters'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $json = str_replace('__FINANCE_BASE__', $base, $json);
+    //  les consignes du vérificateur : une chaîne JavaScript dans le code du nœud « Préparer la vérification »
+    $json = str_replace('__PROMPT_VERIF__', substr(json_encode(json_encode($consignesVerif, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 1, -1), $json);
     $json = str_replace('"__PROMPT__"', json_encode($prompt, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $json);
     $json = str_replace('"__DESC_SIMULER__"', json_encode($desc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $json);
     $json = str_replace('__MEMOIRE_TABLE__', (string)($ancienMem['parameters']['tableName'] ?? 'chat_history'), $json);
@@ -174,5 +178,5 @@ $empreinte = function ($w) { $n = array_map(function ($x) { unset($x['position']
 $dejaAJour = $ancien && $empreinte($ancien) === $empreinte($wf);
 file_put_contents($argv[2], $sortie);
 echo json_encode(['id' => $wf['id'], 'nom' => $wf['name'], 'remplace' => $ancien['name'] ?? null, 'telegram' => $telegram['name'], 'base' => $base,
-                  'trace' => $traceChat ? 'oui' : 'non', 'outils' => ['sante_lire', 'sante_simuler', 'sante_enregistrer', 'memoire_sante'], 'catalogue' => count($cat),
+                  'trace' => $traceChat ? 'oui' : 'non', 'outils' => ['sante_lire', 'sante_simuler', 'sante_enregistrer', 'memoire_sante'], 'verification_protocole' => in_array('Vérificateur', $noms, true), 'catalogue' => count($cat),
                   'deja_a_jour' => $dejaAJour, 'avertissements' => $avert], JSON_UNESCAPED_UNICODE), "\n";

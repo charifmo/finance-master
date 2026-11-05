@@ -401,6 +401,55 @@ z.close()`, src, zip]);
         v('  → onglet Analyses : la cible des triglycérides vient du protocole (« < 1.5 »)', /< 1\.5/.test(await p8.textContent('[data-marqueur="tg"]')));
         await p8.close();
     });
+    await section('P', async () => {
+        //  v1.9 — « ✨ Vérifier avec l'IA » : le Médecin-Chef IA (n8n, simulé ici) propose des corrections, acceptées une à une
+        const SP = require(path.join(RACINE, 'sante', 'sante_protocole.js'));
+        const PROTO = ['PROTOCOLE ESSAI — V1', '1. La journée heure par heure', '🌅  RÉVEIL', ' •   1 grand verre d’eau', ' •   30 minutes de marche à jeun, en Zone 2.   Le levier principal.',
+            '🍳  PETIT-DÉJEUNER — ~400 kcal | 25 g protéines', ' •   2 œufs entiers', ' •   40 g de pain d’orge',
+            '🛏️  22h00 — COUCHER', ' •   1 comprimé de magnésium glycinate le soir.   Le soir uniquement.',
+            '2. Activité physique', ' Règles de sécurité', ' •   Échauffement 5 min obligatoire avant chaque séance.'].join('\n');
+        const els = SP.analyser(PROTO).elements, idx = (re) => els.findIndex(e => re.test(e.texte));
+        const iEchauf = idx(/Échauffement/), iMagn = idx(/magnésium/), iVerre = idx(/grand verre/), iMarche = idx(/marche à jeun/), iPdj = idx(/^Petit-déjeuner$/);
+        fs.writeFileSync(DATA, '{}');
+        const p9 = await ouvrir();
+        let demande = null;
+        await p9.route('**/sante_cmo.php', async (r) => {
+            demande = JSON.parse(r.request().postData() || '{}');
+            await r.fulfill({ contentType: 'application/json', body: JSON.stringify({ corrections: [
+                { i: iEchauf, categorie: 'action', moment: 'matin', raison: 'geste quotidien concret' },
+                { i: iMagn, texte: 'Magnésium : 1 comprimé', raison: 'libellé plus court' },
+                { i: 999, categorie: 'regle', raison: 'numéro inventé' },
+                { i: iPdj, raison: 'ne change rien' },
+                { i: iVerre, fusionner_avec: iMarche, raison: 'même moment, même geste' },
+                { ajout: { texte: 'Kegel : 3 séries', moment: 'journee' }, raison: 'geste oublié' }] }) });
+        });
+        await p9.click('[data-charger-demo]'); await p9.waitForTimeout(300); await attendreEnregistre(p9);
+        await p9.click('[data-onglet="plans"]'); await p9.click('[data-importer-protocole]');
+        await p9.click('[data-tri-protocole] details summary'); await p9.fill('[data-texte-protocole]', PROTO); await p9.click('[data-lire-protocole]');
+        await p9.click('[data-verifier-ia]');
+        await p9.waitForSelector('[data-proposition-ia]', { timeout: 5000 });
+        const msgV = await p9.textContent('[data-message-verif]');
+        v('P. « Vérifier avec l’IA » : les lignes rangées partent à l’agent (mode verifier_protocole), rien d’autre du dossier', demande && demande.mode === 'verifier_protocole' && demande.elements.length === els.length && demande.elements[iEchauf].cat === 'regle' && !('bilans' in demande) && !('journal' in demande), demande && Object.keys(demande));
+        v('  → 4 corrections proposées ; numéro inventé et proposition sans effet écartés (2)', /4 correction\(s\) proposée\(s\)/.test(msgV) && /2 proposition\(s\) inapplicable\(s\)/.test(msgV) && (await p9.$$('[data-proposition-ia]')).length === 4, msgV);
+        await p9.click('[data-proposition-ia] [data-accepter-ia]');            // l'échauffement devient une case du matin
+        await p9.click('[data-proposition-ia] [data-refuser-ia]');             // le libellé du magnésium : refusé
+        await p9.click('[data-tout-accepter]');                                // fusion + ajout
+        v('  → acceptées : marquées ✨ IA ; elles comptent comme des corrections', (await p9.$$('[data-tri-protocole] [title="Correction proposée par l’IA et acceptée"]')).length >= 3 && /^[3-9] correction/.test(await p9.textContent('[data-tri-corrections]')), await p9.textContent('[data-tri-corrections]'));
+        await p9.click('[data-enregistrer-protocole]'); await p9.waitForTimeout(150); await attendreEnregistre(p9);
+        const f = lireFichier(), it = f.plans.protocole.items;
+        v('  → enregistré : échauffement au matin, Kegel ajouté, verre d’eau fusionné dans la marche, magnésium inchangé', it.some(i => /Échauffement/.test(i.texte) && i.moment === 'matin') && it.some(i => i.texte === 'Kegel : 3 séries')
+          && !it.some(i => /grand verre/.test(i.texte)) && /grand verre/.test(it.find(i => /marche à jeun/.test(i.texte)).detail) && it.some(i => /magnésium glycinate/.test(i.texte)), it.map(i => i.texte));
+        const lecons = f.lecons_plan.map(l => l.cle);
+        v('  → et l’appli en tire les leçons : échauffement → case du matin, verre d’eau → ignoré, pour les prochains imports', lecons.includes(els[iEchauf].cle) && f.lecons_plan.find(l => l.cle === els[iEchauf].cle).moment === 'matin' && f.lecons_plan.find(l => l.cle === els[iVerre].cle).bucket === 'ignorer', f.lecons_plan);
+        await p9.unroute('**/sante_cmo.php');
+        await p9.route('**/sante_cmo.php', r => r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ output: 'x', erreur: 'agent pas encore publié dans n8n (sudo bash install.sh sante)' }) }));
+        await p9.click('[data-importer-protocole]');
+        if (!(await p9.isVisible('[data-texte-protocole]'))) await p9.click('[data-tri-protocole] details summary');
+        await p9.fill('[data-texte-protocole]', PROTO); await p9.click('[data-lire-protocole]'); await p9.click('[data-verifier-ia]');
+        await p9.waitForFunction(() => /❌/.test(document.querySelector('[data-message-verif]').textContent), null, { timeout: 5000 });
+        v('  → agent non publié : message clair (quoi faire), l’écran de tri reste utilisable', /install\.sh sante/.test(await p9.textContent('[data-message-verif]')) && await p9.isEnabled('[data-enregistrer-protocole]'));
+        await p9.close();
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close(); php.kill();

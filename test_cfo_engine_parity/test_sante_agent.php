@@ -54,6 +54,22 @@ foreach ($wf['nodes'] as $x) if (isset($x['parameters']['jsCode'])) { $js++; fil
     $o = shell_exec('node -e ' . escapeshellarg("const AF=Object.getPrototypeOf(async function(){}).constructor;try{new AF('\$input','\$','\$env','query','Buffer',require('fs').readFileSync(process.argv[1],'utf8'));}catch(e){console.log(e.message)}") . ' ' . escapeshellarg("$tmp/c.js") . ' 2>&1');
     if (trim((string)$o) !== '') $jsKo[] = $x['name'] . ' : ' . trim($o); }
 v("  → les $js codes JavaScript du workflow compilent", $js >= 6 && !$jsKo, $jsKo);
+//  la vérification d'un protocole (écran de tri) : branche dédiée, modèle sans outils ni mémoire, JSON contrôlé
+$modeOk = isset($noeuds['Mode de la demande'], $noeuds['Préparer la vérification'], $noeuds['Vérificateur'], $noeuds['Lire les corrections'], $noeuds['Réponse vérification'])
+  && ($wf['connections']['Accès autorisé ?']['main'][0][0]['node'] ?? '') === 'Mode de la demande' && ($wf['connections']['Mode de la demande']['main'][1][0]['node'] ?? '') === 'Normalize Input'
+  && ($noeuds['Modèle du vérificateur']['credentials']['googlePalmApi']['id'] ?? '') === 'GEM1' && !isset($wf['connections']['Vérificateur']['ai_tool']);
+v('F. vérification d\'un protocole : branche à part (mode verifier_protocole), le reste va à la conversation', $modeOk);
+$run = function (string $nom, array $entree) use ($noeuds, $tmp) {
+    file_put_contents("$tmp/c.js", $noeuds[$nom]['parameters']['jsCode']); file_put_contents("$tmp/in.json", json_encode($entree, JSON_UNESCAPED_UNICODE));
+    $o = shell_exec('node -e ' . escapeshellarg("const fs=require('fs');const AF=Object.getPrototypeOf(async function(){}).constructor;const e=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));"
+        . "new AF('\$input',fs.readFileSync(process.argv[1],'utf8'))({first:()=>({json:e})}).then(r=>console.log(JSON.stringify(r[0].json)))") . ' ' . escapeshellarg("$tmp/c.js") . ' ' . escapeshellarg("$tmp/in.json") . ' 2>&1');
+    return json_decode((string)$o, true) ?? $o;
+};
+$prep = $run('Préparer la vérification', ['body' => ['mode' => 'verifier_protocole', 'titre' => 'Protocole test', 'elements' => [['i' => 0, 'cat' => 'action', 'texte' => 'Marche 30 min']]]]);
+v('  → « Préparer » : les consignes du dépôt (catégories, JSON strict) + les lignes rangées', is_array($prep) && str_contains($prep['prompt'] ?? '', 'RANGEMENT AUTOMATIQUE') && str_contains($prep['prompt'], '"texte":"Marche 30 min"') && $prep['n'] === 1, $prep);
+$lu = $run('Lire les corrections', ['text' => "Voici :\n```json\n{\"corrections\":[{\"i\":0,\"categorie\":\"regle\",\"raison\":\"r\"}]}\n```"]);
+$illisible = $run('Lire les corrections', ['text' => 'Je ne peux pas.']);
+v('  → « Lire » : le JSON est extrait même entouré de texte ; une réponse sans JSON donne une erreur claire', ($lu['corrections'][0]['categorie'] ?? '') === 'regle' && ($illisible['erreur'] ?? '') === 'réponse de l’IA illisible', [$lu, $illisible]);
 shell_exec('php ' . escapeshellarg("$R/n8n/maj_workflow_sante.php") . ' ' . escapeshellarg("$tmp/wf.json") . ' ' . escapeshellarg("$tmp/wf2.json") . ' ' . escapeshellarg("$tmp/creds.json") . ' https://hote-fictif.example 2>&1');
 $res2 = json_decode((string)shell_exec('php ' . escapeshellarg("$R/n8n/maj_workflow_sante.php") . ' ' . escapeshellarg("$tmp/wf2.json") . ' ' . escapeshellarg("$tmp/wf3.json") . ' ' . escapeshellarg("$tmp/creds.json") . ' https://hote-fictif.example 2>&1'), true);
 v('  → relancé sur son propre résultat : « déjà à jour » (idempotent)', ($res2['deja_a_jour'] ?? null) === true, $res2);
@@ -64,16 +80,19 @@ v('  → sans identifiant « Telegram santé » : refus clair, rien n\'est produ
 
 //  le relais du chat de la page : sans authentification → 403 ; avec → la question part au webhook, Authorization transmis
 $port1 = 23000 + random_int(0, 1500); $port2 = $port1 + 1700;
-file_put_contents("$tmp/hook.php", '<?php header("Content-Type: application/json"); $b = json_decode(file_get_contents("php://input"), true); echo json_encode(["output" => "reçu : " . ($b["question"] ?? "") . " | auth : " . ($_SERVER["HTTP_AUTHORIZATION"] ?? "aucune")], JSON_UNESCAPED_UNICODE);');
+file_put_contents("$tmp/hook.php", '<?php header("Content-Type: application/json"); $b = json_decode(file_get_contents("php://input"), true); if (($b["mode"] ?? "") === "verifier_protocole") { echo json_encode(["corrections" => [], "recu" => count($b["elements"] ?? []), "titre" => $b["titre"] ?? ""]); exit; } echo json_encode(["output" => "reçu : " . ($b["question"] ?? "") . " | auth : " . ($_SERVER["HTTP_AUTHORIZATION"] ?? "aucune")], JSON_UNESCAPED_UNICODE);');
 $env = array_merge(getenv(), ['SANTE_CMO_WEBHOOK' => "http://127.0.0.1:$port2/hook.php", 'SANTE_DATA_FILE' => "$tmp/d.json"]);
 $p1 = proc_open(['php', '-S', "127.0.0.1:$port1", '-t', $R], [['pipe', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pp1, null, $env);
 $p2 = proc_open(['php', '-S', "127.0.0.1:$port2", '-t', $tmp], [['pipe', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pp2);
 $post = function ($auth) use ($port1) { $h = "Content-Type: application/json\r\n" . ($auth ? "Authorization: $auth\r\n" : ''); $c = stream_context_create(['http' => ['method' => 'POST', 'header' => $h, 'content' => '{"question":"Que disent mes triglycérides ?"}', 'ignore_errors' => true, 'timeout' => 10]]); $r = null; for ($i = 0; $i < 40 && $r === null; $i++) { $r = @file_get_contents("http://127.0.0.1:$port1/sante/sante_cmo.php", false, $c); if ($r === false) { $r = null; usleep(150000); } } return [$http_response_header[0] ?? '', $r]; };
 [$s1, $b1] = $post(null);
 [$s2, $b2] = $post('Basic ' . base64_encode('testeur:secret'));
+$cv = stream_context_create(['http' => ['method' => 'POST', 'header' => "Content-Type: application/json\r\nAuthorization: Basic " . base64_encode('testeur:secret') . "\r\n", 'content' => json_encode(['mode' => 'verifier_protocole', 'titre' => 'T', 'elements' => [['i' => 0, 'cat' => 'action', 'texte' => 'Kegel']]]), 'ignore_errors' => true, 'timeout' => 10]]);
+$b3 = @file_get_contents("http://127.0.0.1:$port1/sante/sante_cmo.php", false, $cv);
 proc_terminate($p1); proc_terminate($p2);
 v('E. chat de la page (sante_cmo.php) : sans le mot de passe du site → 403', str_contains($s1, '403'), [$s1, $b1]);
 v('  → avec : la question est relayée au webhook de l\'agent, l\'authentification transmise, la réponse rendue', str_contains($s2, '200') && str_contains((string)$b2, 'reçu : Que disent mes triglycérides ?') && str_contains((string)$b2, 'Basic ' . base64_encode('testeur:secret')), [$s2, $b2]);
+v('  → la demande de vérification (mode + lignes rangées) est relayée telle quelle à l\'agent', ($j3 = json_decode((string)$b3, true)) && $j3['recu'] === 1 && $j3['titre'] === 'T', $b3);
 array_map('unlink', glob("$tmp/*")); @rmdir($tmp);
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

@@ -103,8 +103,13 @@ partie en gras d'une puce, quantités et gestes, « jamais / éviter / zéro / s
 
 **Écran de tri** : chaque ligne peut changer de catégorie, de moment, de texte, ou être supprimée avant d'enregistrer.
 Chaque correction devient une **leçon** (`lecons_plan`), appliquée d'office aux imports suivants (🧠) ; le compteur
-de corrections montre le progrès d'un import à l'autre. Le protocole remplace la checklist fixe de Pilotage. Étape
-suivante prévue : une vérification optionnelle par l'IA, qui proposera des corrections à accepter une à une.
+de corrections montre le progrès d'un import à l'autre. Le protocole remplace la checklist fixe de Pilotage.
+
+**✨ Vérifier avec l'IA** (facultatif, v1.9) : le rangement (texte des lignes seulement) part par `sante_cmo.php` au
+webhook de l'agent (`mode: verifier_protocole`) ; une branche dédiée du workflow (modèle sans outils ni mémoire,
+consignes `sante/verif_protocole_prompt.md`, JSON contrôlé) rend des corrections : catégorie, moment, libellé, rythme,
+fusion, ajout. L'appli écarte celles qui sont inapplicables, vous acceptez ou refusez chacune ; une correction acceptée
+devient une leçon comme les autres.
 
 ## L'agent Telegram « Médecin-Chef IA » (v1.7)
 

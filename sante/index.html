@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.8"></script>
-    <script src="sante_import.js?v=1.8"></script>
-    <script src="sante_samsung.js?v=1.8"></script>
-    <script src="sante_protocole.js?v=1.8"></script>
+    <script src="sante_calculs.js?v=1.9"></script>
+    <script src="sante_import.js?v=1.9"></script>
+    <script src="sante_samsung.js?v=1.9"></script>
+    <script src="sante_protocole.js?v=1.9"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -420,6 +420,21 @@
                 </details>
                 <p v-if="tri.message" class="text-xs font-bold" :class="/^❌/.test(tri.message) ? 'text-rose-700' : 'text-slate-600'" data-message-tri>{{ tri.message }}</p>
                 <template v-if="tri.elements.length">
+                    <div class="rounded-xl border border-purple-200 bg-purple-50/50 p-2 space-y-2" data-verif-ia>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" data-verifier-ia @click="verifierAvecIA" :disabled="verif.enCours" class="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-black disabled:opacity-50">✨ Vérifier avec l’IA</button>
+                            <span class="text-xs font-bold" :class="/^❌/.test(verif.message) ? 'text-rose-700' : 'text-purple-900'" data-message-verif>{{ verif.message }}</span>
+                        </div>
+                        <p v-if="!verif.message" class="text-[11px] text-slate-500">Facultatif. Le rangement (le texte des lignes, rien d’autre de votre dossier) est relu par votre Médecin-Chef IA (n8n), qui propose des corrections ; rien ne s’applique sans votre accord.</p>
+                        <div v-if="verif.propositions.length" class="space-y-1" data-propositions-ia>
+                            <div class="flex items-center gap-2"><p class="flex-1 text-xs font-black text-purple-900">Corrections proposées ({{ verif.propositions.length }})</p><button type="button" data-tout-accepter @click="toutAccepterIA" class="text-xs font-black text-purple-800 underline">Tout accepter</button></div>
+                            <div v-for="p in verif.propositions" :key="p.id" class="flex flex-wrap items-start gap-2 border-t border-purple-100 pt-1 text-xs" data-proposition-ia>
+                                <p class="flex-1 min-w-[12rem]"><b>{{ p.titre }}</b> → {{ p.resume }}<br><span class="text-slate-500">{{ p.raison }}</span></p>
+                                <button type="button" data-accepter-ia @click="accepterIA(p)" class="px-2 py-1 rounded bg-emerald-600 text-white font-black" aria-label="Accepter">✓</button>
+                                <button type="button" data-refuser-ia @click="refuserIA(p)" class="px-2 py-1 rounded border bg-white font-black" aria-label="Refuser">✕</button>
+                            </div>
+                        </div>
+                    </div>
                     <details v-for="b in BUCKETS" :key="b[0]" class="rounded-xl border border-slate-200" :open="b[0] === 'action' || b[0] === 'supplement' || b[0] === 'objectif'" :data-tri-bucket="b[0]">
                         <summary class="cursor-pointer px-3 py-2 font-black text-sm bg-slate-50 rounded-xl">{{ b[1] }} <span class="font-bold text-slate-400">· {{ triPar(b[0]).length }}</span></summary>
                         <div class="px-2 pb-2">
@@ -433,6 +448,7 @@
                                 </template>
                                 <input v-model="e.texte" class="order-first w-full sm:order-none sm:w-auto sm:flex-1 sm:min-w-[12rem] border rounded px-2 py-1 text-sm" data-tri-texte aria-label="Texte">
                                 <span v-if="e.appris" class="text-[10px] font-black text-purple-700" title="Rangé d’après une correction passée">🧠 appris</span>
+                                <span v-if="e.ia" class="text-[10px] font-black text-purple-700" title="Correction proposée par l’IA et acceptée">✨ IA</span>
                                 <button type="button" @click="e.voir = !e.voir" class="px-1 text-xs font-bold text-teal-700" aria-label="Plus de détails">{{ e.voir ? '▴' : '▸' }}</button>
                                 <button type="button" @click="supprimerTri(e)" data-tri-supprimer class="px-1 text-slate-400 hover:text-rose-600 font-black" aria-label="Supprimer cette ligne">✕</button>
                                 <div v-if="e.voir" class="w-full pl-1 space-y-1 text-xs">
@@ -681,7 +697,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.8';
+        const VERSION = '1.9';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1183,7 +1199,7 @@ createApp({
         const tri = reactive({ ouvert: false, nom: '', titre: '', texte: '', message: '', elements: [], supprimes: [], options: { supplements: true, regles: true, objectifs: true }, resultat: '' });
         const texteInitial = (e) => String(e.texte || '').trim();
         const preparerTri = (r, nom) => {
-            tri.titre = r.titre || ''; tri.nom = nom; tri.supprimes = []; tri.resultat = '';
+            tri.titre = r.titre || ''; tri.nom = nom; tri.supprimes = []; tri.resultat = ''; verif.propositions = []; verif.message = '';
             tri.elements = r.elements.map(e => Object.assign(e, { freq: e.frequence || (e.jours && e.jours.length ? 'jours' : 'jour'), jours: e.jours || [], heure: e.heure || '', detail: e.detail || '', voir: false,
                                                                   _init: { bucket: e.bucket, moment: e.moment || null, texte: texteInitial(e) } }));
             const n = (b) => tri.elements.filter(e => e.bucket === b).length, appris = tri.elements.filter(e => e.appris).length;
@@ -1249,6 +1265,74 @@ createApp({
                 + (tri.options.objectifs && objs.length ? ', ' + objs.length + ' objectifs' : '') + '. ' + n + ' correction(s)' + (av !== null && av !== undefined ? ' (import précédent : ' + av + ')' : '') + (nL ? ' · ' + nL + ' leçon(s) retenue(s) pour la prochaine fois.' : '.');
             tri.ouvert = false; tri.elements = []; tri.supprimes = [];
         };
+        //  ── v1.9 : la vérification par l'IA (Médecin-Chef IA, n8n) : elle PROPOSE des corrections, vous les acceptez une à une ;
+        //  une correction acceptée est une correction comme les autres → une leçon à l'enregistrement
+        const verif = reactive({ enCours: false, message: '', propositions: [] });
+        const BUCKETS_IDS = BUCKETS.map(b => b[0]), MOMENTS_IDS = MOMENTS_P.map(m => m[0]);
+        const libBucket = (b) => (BUCKETS.find(x => x[0] === b) || [0, b])[1];
+        const verifierAvecIA = async () => {
+            if (!tri.elements.length || verif.enCours) return;
+            verif.enCours = true; verif.propositions = []; verif.message = '⏳ L’IA relit le rangement (jusqu’à une minute)…';
+            const ids = tri.elements.map(e => e.id);
+            const lignes = tri.elements.map((e, i) => {
+                const o = { i, cat: e.bucket, texte: String(e.texte || '').slice(0, 220) };
+                if (e.bucket === 'action') { o.moment = e.moment; if (e.heure) o.heure = e.heure; o.rythme = e.freq; if (e.freq === 'jours') o.jours = e.jours; if (e.detail) o.detail = String(e.detail).slice(0, 240); }
+                if (e.section) o.rubrique = e.section;
+                if (e.ligne && e.ligne !== e.texte) o.origine = String(e.ligne).slice(0, 240);
+                return o;
+            });
+            try {
+                const r = await fetch(cmoUrl.value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'verifier_protocole', titre: tri.titre, elements: lignes }) });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok || !Array.isArray(j.corrections)) throw new Error(j.erreur || j.output || ('réponse ' + r.status));
+                let rejetees = 0, n = 0;
+                j.corrections.forEach(c => {
+                    const p = { id: 'ia' + (++n), raison: String(c.raison || '').slice(0, 200), changes: {} };
+                    if (c.ajout && typeof c.ajout === 'object' && String(c.ajout.texte || '').trim()) {
+                        p.ajout = { texte: String(c.ajout.texte).trim().slice(0, 200), moment: MOMENTS_IDS.includes(c.ajout.moment) ? c.ajout.moment : 'journee' };
+                        p.titre = 'Ajouter une case'; p.resume = '« ' + p.ajout.texte + ' » · ' + LIB_MOMENT[p.ajout.moment]; verif.propositions.push(p); return;
+                    }
+                    const id = ids[Number(c.i)], e = tri.elements.find(x => x.id === id);
+                    if (!Number.isInteger(Number(c.i)) || !e) { rejetees++; return; }
+                    p.cible = id; p.titre = '« ' + String(e.texte || '').slice(0, 70) + ' »';
+                    const resume = [];
+                    if (BUCKETS_IDS.includes(c.categorie) && c.categorie !== e.bucket) { p.changes.bucket = c.categorie; resume.push(libBucket(c.categorie)); }
+                    if (MOMENTS_IDS.includes(c.moment) && c.moment !== e.moment) { p.changes.moment = c.moment; resume.push(LIB_MOMENT[c.moment]); }
+                    if (typeof c.texte === 'string' && c.texte.trim() && c.texte.trim() !== e.texte) { p.changes.texte = c.texte.trim().slice(0, 200); resume.push('« ' + p.changes.texte + ' »'); }
+                    if (['jour', 'jours', 'semaine', 'mois'].includes(c.rythme)) {
+                        const jrs = Array.isArray(c.jours) ? JOURS7.filter(x => c.jours.includes(x)) : [];
+                        if (c.rythme !== 'jours' || jrs.length) { p.changes.freq = c.rythme; p.changes.jours = jrs; resume.push(c.rythme === 'jours' ? jrs.join(' + ') : c.rythme === 'jour' ? 'chaque jour' : '1×/' + c.rythme); }
+                    }
+                    if (c.fusionner_avec !== undefined) { const avec = tri.elements.find(x => x.id === ids[Number(c.fusionner_avec)]); if (avec && avec.id !== id) { p.fusion = avec.id; resume.push('fusionner dans « ' + String(avec.texte).slice(0, 50) + ' »'); } }
+                    if (!resume.length) { rejetees++; return; }
+                    p.resume = resume.join(' · ');
+                    verif.propositions.push(p);
+                });
+                verif.message = verif.propositions.length ? '✨ ' + verif.propositions.length + ' correction(s) proposée(s) : acceptez ou refusez.' + (rejetees ? ' (' + rejetees + ' proposition(s) inapplicable(s) écartée(s).)' : '')
+                    : '✓ L’IA ne propose aucune correction.' + (rejetees ? ' (' + rejetees + ' proposition(s) inapplicable(s) écartée(s).)' : '');
+            } catch (err) { verif.message = '❌ Vérification impossible : ' + (err.message || err); }
+            finally { verif.enCours = false; }
+        };
+        const accepterIA = (p) => {
+            verif.propositions = verif.propositions.filter(x => x.id !== p.id);
+            if (p.ajout) {
+                const t = p.ajout.texte;
+                tri.elements.push({ id: 'ia' + Math.random().toString(36).slice(2, 8), bucket: 'action', texte: t, moment: p.ajout.moment, heure: '', freq: 'jour', jours: [], detail: '', voir: false, ia: true,
+                                    cle: SanteProtocole.cle(t), ligne: '', raison: 'ajout proposé par l’IA', _init: { bucket: 'ignorer', moment: null, texte: '' } });
+                return;
+            }
+            const e = tri.elements.find(x => x.id === p.cible); if (!e) return;
+            if (p.fusion) { const avec = tri.elements.find(x => x.id === p.fusion); if (avec) { avec.detail = (avec.detail ? avec.detail + '\n' : '') + e.texte + (e.detail ? ' — ' + e.detail : ''); avec.ia = true; supprimerTri(e); } return; }
+            const c = p.changes;
+            if (c.bucket) e.bucket = c.bucket;
+            if (c.moment) e.moment = c.moment;
+            if (c.texte) { if (!e.detail && e.bucket === 'action' && e.texte.length > c.texte.length) e.detail = e.texte; e.texte = c.texte; }
+            if (c.freq) { e.freq = c.freq; e.jours = c.jours || []; }
+            if (e.bucket === 'action' && !e.moment) e.moment = 'journee';
+            e.ia = true;
+        };
+        const refuserIA = (p) => { verif.propositions = verif.propositions.filter(x => x.id !== p.id); };
+        const toutAccepterIA = () => { verif.propositions.slice().forEach(accepterIA); };
         const oublierLecon = (cle) => { etat.lecons_plan = (etat.lecons_plan || []).filter(l => l.cle !== cle); };
         const reglesParSection = computed(() => { const o = {}; (etat.regles || []).forEach(r => { (o[r.section || 'Règles'] = o[r.section || 'Règles'] || []).push(r); }); return Object.entries(o); });
         const supprimerProtocole = () => { delete etat.plans.protocole; };
@@ -1289,7 +1373,7 @@ createApp({
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
                  TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
-                 triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
+                 triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, C: Cref };
     }

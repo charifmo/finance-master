@@ -757,6 +757,123 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ ($json.body || {}).mode }}",
+                    "rightValue": "verifier_protocole",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "m1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Vérifier un protocole"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Question"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -240,
+        -560
+      ],
+      "id": "__ID_Mode_de_la_demande__",
+      "name": "Mode de la demande"
+    },
+    {
+      "parameters": {
+        "jsCode": "// MÉDECIN-CHEF IA v1 — VÉRIFICATION D'UN PROTOCOLE RANGÉ (écran de tri de Santé Master) : le rangement des règles,\n// ligne par ligne, envoyé à un modèle SANS outils ni mémoire, avec des consignes strictes (sante/verif_protocole_prompt.md).\nconst b = $input.first().json.body || {};\nconst consignes = __PROMPT_VERIF__;\nconst els = Array.isArray(b.elements) ? b.elements.slice(0, 400) : [];\nconst lignes = els.map(e => JSON.stringify(e)).join('\\n').slice(0, 120000);\nreturn [{ json: { prompt: consignes + '\\n\\nTITRE DU DOCUMENT : ' + String(b.titre || '').slice(0, 200) + '\\n\\nLIGNES RANGÉES (une par ligne, au format JSON) :\\n' + lignes, n: els.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -760
+      ],
+      "id": "__ID_Préparer_la_vérification__",
+      "name": "Préparer la vérification"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        220,
+        -760
+      ],
+      "id": "__ID_Vérificateur__",
+      "name": "Vérificateur",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": "__PARAMS_GEMINI__",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        220,
+        -600
+      ],
+      "id": "__ID_Modèle_du_vérificateur__",
+      "name": "Modèle du vérificateur",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "__CRED_GEMINI__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// MÉDECIN-CHEF IA v1 — LES CORRECTIONS PROPOSÉES : le JSON est extrait de la réponse et contrôlé ; sinon une erreur claire.\nconst brut = String($input.first().json.text || $input.first().json.output || '');\nlet o = null;\nconst debut = brut.indexOf('{'), fin = brut.lastIndexOf('}');\nif (debut >= 0 && fin > debut) { try { o = JSON.parse(brut.slice(debut, fin + 1)); } catch (e) { o = null; } }\nconst ok = o && Array.isArray(o.corrections);\nconst corrections = ok ? o.corrections.filter(c => c && typeof c === 'object').slice(0, 60) : null;\nreturn [{ json: ok ? { corrections } : { erreur: 'réponse de l’IA illisible', extrait: brut.slice(0, 300) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        -760
+      ],
+      "id": "__ID_Lire_les_corrections__",
+      "name": "Lire les corrections"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        -760
+      ],
+      "id": "__ID_Réponse_vérification__",
+      "name": "Réponse vérification"
     }
   ],
   "connections": {
@@ -844,7 +961,7 @@
       "main": [
         [
           {
-            "node": "Normalize Input",
+            "node": "Mode de la demande",
             "type": "main",
             "index": 0
           }
@@ -1071,6 +1188,68 @@
         [
           {
             "node": "memoire_sante",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mode de la demande": {
+      "main": [
+        [
+          {
+            "node": "Préparer la vérification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer la vérification": {
+      "main": [
+        [
+          {
+            "node": "Vérificateur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vérificateur": {
+      "main": [
+        [
+          {
+            "node": "Lire les corrections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire les corrections": {
+      "main": [
+        [
+          {
+            "node": "Réponse vérification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modèle du vérificateur": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Vérificateur",
             "type": "ai_languageModel",
             "index": 0
           }
