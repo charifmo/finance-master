@@ -345,6 +345,10 @@ z.close()`, src, zip]);
         const rep = await fetch(url.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8', ...entetes }, body: JSON.stringify(envoi) });
         const corps = await rep.json(), f = lireFichier();
         v('  → un envoi HC Webhook accepté (200) et écrit : pas 6 543, sommeil 420 min, FC 72 ; « dernière synchro » notée', rep.status === 200 && corps.source === 'hc_webhook' && f.journal[dj].samsung.pas === 6543 && f.journal[dj].samsung.sommeil_min === 420 && f.journal[dj].samsung.fc_moy === 72 && /HC Webhook/.test(f.sync_auto.source), [rep.status, corps, f.journal[dj] && f.journal[dj].samsung]);
+        //  v1.12 — l'appli n'a qu'un champ d'en-tête : jeton dans l'adresse, mot de passe du site dans l'en-tête unique
+        const urlJ = await p7.inputValue('[data-url-jeton]'), valAuth = await p7.inputValue('[data-valeur-auth]');
+        const repJ = await fetch(urlJ.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: valAuth }, body: JSON.stringify({ timestamp: auj.toISOString(), app_version: '1.9.32', timezone: 'UTC' }) });
+        v('  → formulaire à un seul en-tête : URL avec ?token=, Header Value « Basic … » ; un envoi ainsi réglé est accepté (200)', /sync_samsung\.php\?token=/.test(urlJ) && valAuth === basic && repJ.status === 200, [urlJ.slice(-30), repJ.status]);
         const mauvais = await fetch(U + 'sync_samsung.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sante-Token': 'faux-jeton-faux-jeton' }, body: JSON.stringify(envoi) });
         v('  → avec un mauvais jeton : 403', mauvais.status === 403);
         await p7.evaluate((ST) => eval(ST).rechargerEtat(), ST);          // revenir sur la page (visibilitychange)

@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.11"></script>
-    <script src="sante_import.js?v=1.11"></script>
-    <script src="sante_samsung.js?v=1.11"></script>
-    <script src="sante_protocole.js?v=1.11"></script>
+    <script src="sante_calculs.js?v=1.12"></script>
+    <script src="sante_import.js?v=1.12"></script>
+    <script src="sante_samsung.js?v=1.12"></script>
+    <script src="sante_protocole.js?v=1.12"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -623,20 +623,30 @@
                                 Ici : <button type="button" data-preparer-synchro @click="preparerSynchro()" class="px-2 py-1 rounded-lg bg-emerald-600 text-white font-black">🔑 Préparer ma synchro automatique</button>
                                 <span v-if="configAuto.message" class="ml-1 font-bold" :class="/^❌/.test(configAuto.message) ? 'text-rose-700' : 'text-slate-500'" data-message-synchro>{{ configAuto.message }}</span>
                                 <div v-if="configAuto.jeton" class="mt-2 space-y-2 rounded-lg bg-white border border-emerald-200 p-2" data-config-synchro>
-                                    <div><span class="font-bold">Adresse du webhook</span>
-                                        <div class="flex gap-1 mt-0.5"><input readonly :value="urlWebhook" data-url-webhook class="flex-1 min-w-0 border rounded px-2 py-1 font-mono text-[11px] bg-slate-50"><button type="button" @click="copier(urlWebhook, 'url')" class="px-2 rounded border font-bold">{{ configAuto.copie === 'url' ? '✓ copiée' : 'Copier' }}</button></div></div>
                                     <div class="grid sm:grid-cols-2 gap-2">
                                         <label class="font-bold">Identifiant du site <input v-model="configAuto.utilisateur" autocomplete="username" class="mt-0.5 w-full border rounded px-2 py-1 font-normal" placeholder="celui de la fenêtre de connexion"></label>
-                                        <label class="font-bold">Mot de passe du site <input v-model="configAuto.motDePasse" type="password" autocomplete="current-password" data-mdp-synchro class="mt-0.5 w-full border rounded px-2 py-1 font-normal" placeholder="reste sur cet appareil"></label>
+                                        <label class="font-bold">① Mot de passe du site <input v-model="configAuto.motDePasse" type="password" autocomplete="current-password" data-mdp-synchro class="mt-0.5 w-full border rounded px-2 py-1 font-normal" placeholder="reste sur cet appareil"></label>
                                     </div>
-                                    <p class="text-[11px] text-slate-500">Le mot de passe ne quitte pas cette page : il sert seulement à fabriquer l’en-tête que l’appli enverra (le site est protégé par mot de passe).</p>
-                                    <div><span class="font-bold">En-têtes (JSON)</span>
-                                        <div class="flex gap-1 mt-0.5"><textarea readonly rows="2" :value="enTetesAuto" data-entetes-synchro class="flex-1 min-w-0 border rounded px-2 py-1 font-mono text-[11px] bg-slate-50"></textarea><button type="button" @click="copier(enTetesAuto, 'json')" :disabled="!configAuto.motDePasse" class="px-2 rounded border font-bold disabled:opacity-40">{{ configAuto.copie === 'json' ? '✓ copiés' : 'Copier' }}</button></div>
-                                        <p v-if="!configAuto.motDePasse" class="text-[11px] font-bold text-amber-700">Saisissez le mot de passe du site pour compléter les en-têtes.</p></div>
+                                    <p class="text-[11px] text-slate-500">Il ne quitte pas cette page : il sert seulement à fabriquer la valeur ④.</p>
+                                    <p class="font-bold text-emerald-900">Puis, dans HC Webhook → crayon ✏️ du webhook, remplissez :</p>
+                                    <div><span class="font-bold">② URL</span>
+                                        <div class="flex gap-1 mt-0.5"><input readonly :value="urlAvecJeton" data-url-jeton class="flex-1 min-w-0 border rounded px-2 py-1 font-mono text-[11px] bg-slate-50"><button type="button" @click="copier(urlAvecJeton, 'urlj')" class="px-2 rounded border font-bold">{{ configAuto.copie === 'urlj' ? '✓ copiée' : 'Copier' }}</button></div>
+                                        <p class="text-[11px] text-slate-500">Remplace l’adresse déjà saisie (elle contient votre jeton secret).</p></div>
+                                    <div><span class="font-bold">③ Header Name</span>
+                                        <div class="flex gap-1 mt-0.5"><input readonly value="Authorization" class="flex-1 min-w-0 border rounded px-2 py-1 font-mono text-[11px] bg-slate-50"><button type="button" @click="copier('Authorization', 'nom')" class="px-2 rounded border font-bold">{{ configAuto.copie === 'nom' ? '✓ copié' : 'Copier' }}</button></div></div>
+                                    <div><span class="font-bold">④ Header Value</span>
+                                        <div class="flex gap-1 mt-0.5"><input readonly :value="valeurAuth" data-valeur-auth class="flex-1 min-w-0 border rounded px-2 py-1 font-mono text-[11px] bg-slate-50" :placeholder="configAuto.motDePasse ? '' : 'saisissez d’abord le mot de passe ①'"><button type="button" @click="copier(valeurAuth, 'auth')" :disabled="!valeurAuth" class="px-2 rounded border font-bold disabled:opacity-40">{{ configAuto.copie === 'auth' ? '✓ copiée' : 'Copier' }}</button></div></div>
+                                    <p class="text-[11px] text-slate-500">Laissez « Bearer Token » vide, puis <b>Save</b>, puis <b>Test Ping</b> : il doit répondre <b>200</b>.</p>
                                     <p v-if="configAuto.copie === 'manuel'" class="text-[11px] font-bold text-amber-700">Copie automatique impossible ici : sélectionnez le texte et copiez-le.</p>
+                                    <details class="text-[11px] text-slate-500"><summary class="cursor-pointer">Autre version de l’appli (onglet JSON des en-têtes)</summary>
+                                        <div class="mt-1"><span class="font-bold">Adresse sans jeton</span>
+                                            <div class="flex gap-1 mt-0.5"><input readonly :value="urlWebhook" data-url-webhook class="flex-1 min-w-0 border rounded px-2 py-1 font-mono bg-slate-50"><button type="button" @click="copier(urlWebhook, 'url')" class="px-2 rounded border font-bold">{{ configAuto.copie === 'url' ? '✓' : 'Copier' }}</button></div></div>
+                                        <div class="mt-1"><span class="font-bold">En-têtes (JSON)</span>
+                                            <div class="flex gap-1 mt-0.5"><textarea readonly rows="2" :value="enTetesAuto" data-entetes-synchro class="flex-1 min-w-0 border rounded px-2 py-1 font-mono bg-slate-50"></textarea><button type="button" @click="copier(enTetesAuto, 'json')" :disabled="!configAuto.motDePasse" class="px-2 rounded border font-bold disabled:opacity-40">{{ configAuto.copie === 'json' ? '✓' : 'Copier' }}</button></div></div>
+                                    </details>
                                 </div>
                             </li>
-                            <li>Dans HC Webhook → <b>Webhooks</b> : ajoutez l’adresse → <b>Modifier les en-têtes</b> → onglet <b>JSON</b> → collez → <b>Appliquer JSON</b>.</li>
+                            <li>Dans HC Webhook → <b>Webhooks</b> → <b>Add</b> (ou le crayon ✏️) : remplissez <b>URL</b>, <b>Header Name</b> et <b>Header Value</b> avec les valeurs ②③④ ci-dessus → <b>Save</b> → <b>Test Ping</b> = 200.</li>
                             <li><b>Quand synchroniser</b> → <b>Intervalle</b> 60 min (ou <b>Programmé</b>, par ex. 8 h et 21 h) → enregistrez. Laissez les pas et calories en <b>Quotidien</b> (réglage par défaut).</li>
                             <li><b>Votre bouton</b> : appui long sur l’écran d’accueil du téléphone → <b>Widgets</b> → HC Webhook → <b>« Synchroniser »</b>. Un appui = vos données arrivent ici ; revenez sur cette page, elle se met à jour.</li>
                         </ol>
@@ -781,7 +791,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.11';
+        const VERSION = '1.12';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1197,6 +1207,10 @@ createApp({
             } catch (e) { configAuto.message = '❌ ' + (e.message || e); }
         };
         //  le mot de passe du site ne sert qu'ici, dans le navigateur, à fabriquer l'en-tête Authorization : jamais gardé ni envoyé
+        //  v1.12 — l'appli n'a qu'UN champ d'en-tête : le jeton passe dans l'adresse (?token=, accepté par sync_samsung.php),
+        //  l'en-tête unique porte le mot de passe du site (Authorization: Basic …)
+        const urlAvecJeton = computed(() => urlWebhook.value + '?token=' + encodeURIComponent(configAuto.jeton || ''));
+        const valeurAuth = computed(() => configAuto.utilisateur && configAuto.motDePasse ? 'Basic ' + btoa(unescape(encodeURIComponent(configAuto.utilisateur + ':' + configAuto.motDePasse))) : '');
         const enTetesAuto = computed(() => { const o = {}; if (configAuto.utilisateur && configAuto.motDePasse) o.Authorization = 'Basic ' + btoa(unescape(encodeURIComponent(configAuto.utilisateur + ':' + configAuto.motDePasse))); o['X-Sante-Token'] = configAuto.jeton; return JSON.stringify(o); });
         const copier = async (texte, quoi) => { try { await navigator.clipboard.writeText(texte); configAuto.copie = quoi; } catch (e) { configAuto.copie = 'manuel'; } setTimeout(() => { if (configAuto.copie === quoi || configAuto.copie === 'manuel') configAuto.copie = ''; }, 3000); };
         const depuisQuand = (iso) => { const t = Date.parse(iso); if (!t) return ''; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'à l’instant' : m < 60 ? 'il y a ' + m + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'le ' + dateCourte(new Date(t).toISOString().slice(0, 10)); };
@@ -1516,7 +1530,7 @@ createApp({
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
                  TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
-                 repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
+                 repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, urlAvecJeton, valeurAuth, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,
                  cmoPhrase, cmoChrono, grandirChampCmo, toucheCmo, dicteeDispo, cmoDictee, dicterCmo, C: Cref };
     }
