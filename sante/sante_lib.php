@@ -13,6 +13,15 @@
  *   Ces calculs sont des aides au suivi, pas un diagnostic.
  */
 
+//  v1.16 — les mesures d'un jour reçues de Samsung Health / Health Connect, et leurs bornes de vraisemblance
+const SANTE_BORNES_SAMSUNG = ['pas' => [0, 100000], 'kcal_actives' => [0, 10000], 'fc_moy' => [25, 230], 'fc_repos' => [25, 150], 'sommeil_min' => [0, 1440], 'poids' => [20, 400],
+    'fc_min' => [25, 230], 'fc_max' => [25, 250], 'distance_km' => [0, 300], 'kcal_totales' => [0, 20000], 'exercice_min' => [0, 1440], 'spo2' => [50, 100],
+    'tension_sys' => [60, 260], 'tension_dia' => [30, 160], 'hydratation_ml' => [0, 15000], 'graisse_pct' => [2, 80], 'vfc_ms' => [1, 300],
+    //  v1.17
+    'vo2max' => [10, 90], 'freq_resp' => [4, 60], 'temperature' => [30, 45], 'glycemie' => [20, 600], 'masse_maigre' => [20, 200], 'tour_taille' => [40, 250], 'kcal_repos' => [500, 5000], 'fc_repos_est' => [25, 150]];
+const SANTE_CHAMPS_SAMSUNG = ['pas', 'kcal_actives', 'fc_moy', 'fc_repos', 'sommeil_min', 'poids', 'fc_min', 'fc_max', 'distance_km', 'kcal_totales', 'exercice_min', 'spo2',
+    'tension_sys', 'tension_dia', 'hydratation_ml', 'graisse_pct', 'vfc_ms', 'vo2max', 'freq_resp', 'temperature', 'glycemie', 'masse_maigre', 'tour_taille', 'kcal_repos', 'fc_repos_est'];
+
 const SANTE_KCAL_PAR_KG = 7700;   // énergie d'un kilo de masse grasse (approximation usuelle)
 
 function sante_catalogue(): array {
@@ -56,9 +65,14 @@ function sante_bornes(array $bilan, string $cle): array {
     return [$min, $max];
 }
 /** bas | haut | normal | inconnu */
+/** v1.21 — « à vérifier » : dix fois sous le bas de la norme ou dix fois au-dessus du haut (pourcentage ou autre unité lus à la place du nombre). */
+function sante_suspect(float $v, ?float $min, ?float $max): bool {
+    return $v > 0 && (($min !== null && $min > 0 && $v < $min / 10) || ($max !== null && $max > 0 && $v > $max * 10));
+}
 function sante_statut(array $bilan, string $cle): string {
     $v = sante_val($bilan, $cle); if ($v === null) return 'inconnu';
     [$min, $max] = sante_bornes($bilan, $cle);
+    if (sante_suspect($v, $min, $max)) return 'suspect';
     if ($min !== null && $v < $min) return 'bas';
     if ($max !== null && $v > $max) return 'haut';
     return 'normal';
@@ -109,6 +123,7 @@ function sante_score2(?int $age, string $sexe, bool $fumeur, ?float $pas, ?float
  */
 function sante_gilbert(array $bilan): array {
     $bt = sante_statut($bilan, 'bili_t'); $bl = sante_val($bilan, 'bili_l');
+    if ($bt === 'suspect') return ['statut' => 'incomplet', 'message' => 'Bilirubine totale à vérifier : valeur très éloignée de la norme (unité ou lecture ?).'];
     $hausse = $bt === 'haut' || ($bt === 'inconnu' && $bl !== null && $bl > 10);
     if (!$hausse) return ['statut' => $bt === 'inconnu' ? 'incomplet' : 'normal'];
     $hep = ['asat' => sante_statut($bilan, 'asat'), 'alat' => sante_statut($bilan, 'alat'), 'ggt' => sante_statut($bilan, 'ggt')];
@@ -219,4 +234,32 @@ function sante_indicateurs(array $bilan, array $profil = []): array {
         'score2'       => sante_score2($age, (string)($profil['sexe'] ?? 'H'), !empty($profil['fumeur']), sante_num($bilan['pas_systolique'] ?? ($profil['pas_systolique'] ?? null)), $v('ct'), $v('hdl'), (string)($profil['region_score2'] ?? 'moderate')),
         'gilbert'      => sante_gilbert($bilan),
     ];
+}
+
+/** v1.4 — PLAN PRÉVU / RÉALISÉ (parité exacte avec suiviPlan de sante_calculs.js). */
+const SANTE_JOURS_SEM = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+function sante_jour_semaine(string $d): string { return SANTE_JOURS_SEM[(int)gmdate('N', strtotime($d . ' 12:00:00 UTC')) - 1]; }
+function sante_decaler(string $d, int $n): string { return gmdate('Y-m-d', strtotime($d . ' 12:00:00 UTC') + $n * 86400); }
+function sante_suivi_plan($plan, $journal, string $date): array {
+    $items = is_array($plan) && is_array($plan['items'] ?? null) ? $plan['items'] : [];
+    $journal = json_decode(json_encode($journal ?: []), true) ?: [];
+    //  v1.8 — jours précis (jours[]) ; périodiques (frequence semaine | mois) rendus à part, cochés une fois dans la période
+    $vise = fn($i, $d) => empty($i['frequence']) && (is_array($i['jours'] ?? null) && $i['jours'] ? in_array(sante_jour_semaine($d), $i['jours'], true) : (($i['jour'] ?? '') === 'tous' || ($i['jour'] ?? '') === sante_jour_semaine($d)));
+    $duJour = fn($d) => array_values(array_filter($items, fn($i) => $vise($i, $d)));
+    $fait = fn($d, $id) => !empty((($journal[$d] ?? [])['plan_fait'] ?? [])[$id]);
+    $faitPeriode = function ($i) use ($date, $fait) {
+        if (($i['frequence'] ?? '') === 'semaine') { $k0 = (int)gmdate('N', strtotime($date . ' 12:00:00 UTC')) - 1; for ($k = 0; $k < 7; $k++) if ($fait(sante_decaler($date, $k - $k0), $i['id'] ?? '')) return true; return false; }
+        $fin = (int)gmdate('t', strtotime($date . ' 12:00:00 UTC'));
+        for ($j = 1; $j <= $fin; $j++) if ($fait(substr($date, 0, 8) . sprintf('%02d', $j), $i['id'] ?? '')) return true;
+        return false;
+    };
+    $idx = array_search(sante_jour_semaine($date), SANTE_JOURS_SEM, true);
+    $prevus = 0; $faits = 0; $minP = 0; $minF = 0;
+    for ($k = 0; $k <= $idx; $k++) {
+        $d = sante_decaler($date, $k - $idx);
+        foreach ($duJour($d) as $i) { $prevus++; $minP += (float)($i['duree_min'] ?? 0); if ($fait($d, $i['id'] ?? '')) { $faits++; $minF += (float)($i['duree_min'] ?? 0); } }
+    }
+    return ['jour' => sante_jour_semaine($date), 'du_jour' => array_map(fn($i) => array_merge($i, ['fait' => $fait($date, $i['id'] ?? '')]), $duJour($date)),
+            'periodiques' => array_values(array_map(fn($i) => array_merge($i, ['fait' => $faitPeriode($i)]), array_filter($items, fn($i) => in_array($i['frequence'] ?? '', ['semaine', 'mois'], true)))),
+            'semaine' => ['du' => sante_decaler($date, -$idx), 'prevus' => $prevus, 'faits' => $faits, 'taux' => $prevus ? (int)round(100 * $faits / $prevus) : null, 'minutes_prevues' => $minP, 'minutes_faites' => $minF]];
 }

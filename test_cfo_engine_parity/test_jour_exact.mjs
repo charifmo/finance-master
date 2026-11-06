@@ -131,6 +131,17 @@ try {
         v('  → virement le 27 (jour de paie) : cycle de décembre', E.vir[0] === 27 && E.v12.includes(601) && !E.v11.includes(601), JSON.stringify(E));
         const F = await page.evaluate((ST) => { const st = eval(ST); return [st.joursDuMoisCal(2, 2028), st.joursDuMoisCal(2, 2027), st.joursDuMoisCal(12, 2026), st.cycleSuivantNom(12)]; }, ST);
         v('  → bornes : février 2028 = 29, février 2027 = 28 ; décembre → cycle de Janvier', JSON.stringify(F) === '[29,28,31,"Janvier"]', JSON.stringify(F));
+        //  v37.103 — la cause d'un échec intermittent : un rendu de la page (fin d'une sauvegarde automatique…) ENTRE la frappe et la
+        //  validation remettait l'ancien jour dans la case. On le provoque exprès, sans attente : le jour tapé doit rester et s'enregistrer.
+        const c2 = page.locator('input[data-jour-exact]:visible').nth(2);
+        await c2.fill('12');
+        await page.evaluate(async (ST) => { const st = eval(ST); st.calculationTick++; st.serverSyncStatus = 'saving'; await Vue.nextTick(); st.serverSyncStatus = 'modified'; await Vue.nextTick(); }, ST);
+        const tape = await c2.inputValue();
+        await c2.dispatchEvent('change');
+        await page.waitForFunction((ST) => eval(ST).donneesAnnuelles[2026].virementsInternes[0].jourPrevu === 12, ST, { timeout: 5000 }).catch(() => {});
+        E = await etat();
+        v('  → un rendu de la page pendant la frappe ne vide pas la case : « 12 » reste et s\'enregistre', tape === '12' && E.vir[0] === 12, JSON.stringify([tape, E.vir]));
+        await saisir(2, 27);
     });
 
     await section('C', async () => {

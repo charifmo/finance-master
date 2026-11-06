@@ -38,9 +38,14 @@
             const max = x && typeof x === 'object' && x.max !== undefined && x.max !== null ? num(x.max) : num(m.max);
             return [min, max];
         };
+        //  v1.21 — « à vérifier » : une valeur DIX FOIS plus petite que le bas de la norme, ou dix fois plus grande que le haut,
+        //  n'est presque jamais un résultat : c'est un pourcentage lu à la place d'un nombre (53,7 % pour une norme de 1 500 /mm³),
+        //  une autre unité (196 G/L pour 150 000 /mm³) ou une ligne mal lue. On ne l'affiche pas comme une alerte médicale.
+        const suspect = (v, min, max) => v > 0 && ((min !== null && min > 0 && v < min / 10) || (max !== null && max > 0 && v > max * 10));
         const statut = (bilan, cle) => {
             const v = val(bilan, cle); if (v === null) return 'inconnu';
             const [min, max] = bornes(bilan, cle);
+            if (suspect(v, min, max)) return 'suspect';
             if (min !== null && v < min) return 'bas';
             if (max !== null && v > max) return 'haut';
             return 'normal';
@@ -70,6 +75,7 @@
         };
         const gilbert = (bilan) => {
             const bt = statut(bilan, 'bili_t'), bl = val(bilan, 'bili_l');
+            if (bt === 'suspect') return { statut: 'incomplet', message: 'Bilirubine totale à vérifier : valeur très éloignée de la norme (unité ou lecture ?).' };
             const hausse = bt === 'haut' || (bt === 'inconnu' && bl !== null && bl > 10);
             if (!hausse) return { statut: bt === 'inconnu' ? 'incomplet' : 'normal' };
             const hep = { asat: statut(bilan, 'asat'), alat: statut(bilan, 'alat'), ggt: statut(bilan, 'ggt') };
@@ -149,7 +155,35 @@
                 gilbert: gilbert(bilan),
             };
         };
-        return { num, norm, age, val, bornes, statut, ratioTgHdl, nonHdl, homaIr, tyg, score2, gilbert, bmr, bilanEnergie, projectionPoids, aliment, item, scoreSequencage, totauxRepas, indicateurs, KCAL_PAR_KG };
+        //  v1.4 — PLAN PRÉVU / RÉALISÉ : les éléments du plan pour une date (« tous les jours » + ceux de son jour de semaine),
+        //  cochés ou non dans journal[date].plan_fait, et la semaine en cours (lundi → date) : prévus, faits, taux, minutes.
+        const JOURS_SEM = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+        const jourSemaine = (d) => JOURS_SEM[(new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7];
+        const decaler = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+        //  v1.8 — un élément peut viser des jours précis (jours: ['lundi', 'jeudi']) ou une période (frequence: 'semaine' | 'mois',
+        //  coché une fois dans la semaine / le mois) : ces derniers sont rendus à part (« periodiques »), hors du décompte du jour.
+        function suiviPlan(plan, journal, date) {
+            const items = plan && Array.isArray(plan.items) ? plan.items : [];
+            const vise = (i, d) => !i.frequence && (Array.isArray(i.jours) && i.jours.length ? i.jours.includes(jourSemaine(d)) : (i.jour === 'tous' || i.jour === jourSemaine(d)));
+            const duJour = (d) => items.filter(i => vise(i, d));
+            const fait = (d, id) => !!((((journal || {})[d] || {}).plan_fait || {})[id]);
+            const faitPeriode = (i) => {
+                if (i.frequence === 'semaine') { const k0 = (new Date(date + 'T12:00:00Z').getUTCDay() + 6) % 7; for (let k = 0; k < 7; k++) if (fait(decaler(date, k - k0), i.id)) return true; return false; }
+                const a = Number(date.slice(0, 4)), m = Number(date.slice(5, 7)), fin = new Date(Date.UTC(a, m, 0)).getUTCDate();
+                for (let j = 1; j <= fin; j++) if (fait(date.slice(0, 8) + String(j).padStart(2, '0'), i.id)) return true;
+                return false;
+            };
+            const idx = JOURS_SEM.indexOf(jourSemaine(date));
+            let prevus = 0, faits = 0, minP = 0, minF = 0;
+            for (let k = 0; k <= idx; k++) {
+                const d = decaler(date, k - idx);
+                duJour(d).forEach(i => { prevus++; minP += Number(i.duree_min || 0); if (fait(d, i.id)) { faits++; minF += Number(i.duree_min || 0); } });
+            }
+            return { jour: jourSemaine(date), du_jour: duJour(date).map(i => Object.assign({}, i, { fait: fait(date, i.id) })),
+                     periodiques: items.filter(i => i.frequence === 'semaine' || i.frequence === 'mois').map(i => Object.assign({}, i, { fait: faitPeriode(i) })),
+                     semaine: { du: decaler(date, -idx), prevus, faits, taux: prevus ? Math.round(100 * faits / prevus) : null, minutes_prevues: minP, minutes_faites: minF } };
+        }
+        return { num, norm, age, val, bornes, statut, suspect, ratioTgHdl, nonHdl, homaIr, tyg, score2, gilbert, bmr, bilanEnergie, projectionPoids, aliment, item, scoreSequencage, totauxRepas, indicateurs, suiviPlan, jourSemaine, decaler, JOURS_SEM, KCAL_PAR_KG };
     }
     return { creer };
 });

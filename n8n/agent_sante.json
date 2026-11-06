@@ -1,0 +1,1277 @@
+{
+  "name": "[SANTÉ] - Médecin-Chef IA",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "download": true
+        }
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -900,
+        -200
+      ],
+      "id": "__ID_Telegram_Trigger__",
+      "name": "Telegram Trigger",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "__CRED_TELEGRAM__"
+        }
+      },
+      "webhookId": "__WEBHOOK_TELEGRAM__"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "id": "t1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Texte"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.voice }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "object",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "id": "t2"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Vocal"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Autre"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -680,
+        -200
+      ],
+      "id": "__ID_Type_de_message__",
+      "name": "Type de message"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.voice.file_id }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -460,
+        -100
+      ],
+      "id": "__ID_Get_a_file__",
+      "name": "Get a file",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "__CRED_TELEGRAM__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {
+          "language": "fr"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -240,
+        -100
+      ],
+      "id": "__ID_Transcribe_a_recording__",
+      "name": "Transcribe a recording",
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "__CRED_OPENAI__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "Envoyez-moi un texte ou un message vocal. Pour un bilan, une photo ou un PDF : onglet Analyses de Santé Master (import).",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -460,
+        60
+      ],
+      "id": "__ID_Message_non_pris_en_charge__",
+      "name": "Message non pris en charge",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "__CRED_TELEGRAM__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sante-cmo",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        -460
+      ],
+      "id": "__ID_Webhook_page_web__",
+      "name": "Webhook page web",
+      "webhookId": "__WEBHOOK_WEB__"
+    },
+    {
+      "parameters": {
+        "jsCode": "// MÉDECIN-CHEF IA v1 — la page Santé passe par sante_cmo.php, qui transmet l'authentification du site : on la compare\n// à FINANCE_USER / FINANCE_PASS. Sans elle, refus (sinon n'importe qui pourrait écrire dans le dossier par ce webhook).\nconst j = $input.first().json, h = j.headers || {};\nlet attendu = '';\ntry { const u = $env.FINANCE_USER, p = $env.FINANCE_PASS; if (u && p) attendu = 'Basic ' + Buffer.from(u + ':' + p).toString('base64'); } catch (e) { /* $env indisponible */ }\nconst recu = String(h.authorization || h.Authorization || '');\nreturn [{ json: Object.assign({}, j, { autorise: !!attendu && recu === attendu }) }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -680,
+        -460
+      ],
+      "id": "__ID_Contrôle_accès_web__",
+      "name": "Contrôle accès web"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.autorise }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "id": "a1"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -460,
+        -460
+      ],
+      "id": "__ID_Accès_autorisé___",
+      "name": "Accès autorisé ?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ output: 'Accès refusé : passez par la page Santé (mot de passe du site), et vérifiez FINANCE_USER / FINANCE_PASS dans n8n.' }) }}",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        -360
+      ],
+      "id": "__ID_Refus_page_web__",
+      "name": "Refus page web"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "query"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -900,
+        -620
+      ],
+      "id": "__ID_When_Executed_by_Another_Workflow__",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// MÉDECIN-CHEF IA v1 — LA QUESTION, quel que soit le canal : Telegram (texte ou vocal transcrit), page web, autre workflow\nconst j = $input.first().json;\nconst fait = (n) => { try { return $(n).isExecuted; } catch (e) { return false; } };\nlet question = '', canal = 'telegram', voix = false, chatId = null;\nif (fait('Webhook page web')) { canal = 'web'; question = (j.body && j.body.question) || j.question || ''; }\nelse if (fait('When Executed by Another Workflow')) { canal = 'workflow'; question = j.query || ''; }\nelse {\n  const m = $('Telegram Trigger').first().json.message || {};\n  chatId = m.chat ? m.chat.id : null; voix = !!m.voice;\n  question = voix ? (j.text || '') : (m.text || m.caption || '');\n}\n//  mêmes sessions de mémoire qu'avant : le chat Telegram, et « charif_master_session » pour l'agent maître\nconst session = canal === 'web' ? 'sante-web' : canal === 'workflow' ? 'charif_master_session' : String(chatId);\nreturn [{ json: { question: String(question).slice(0, 6000), canal, voix, chat_id: chatId, session_id: session,\n  entree: (voix ? '[VOCAL] ' : '') + (canal === 'web' ? '[PAGE SANTÉ] ' : '') + String(question).slice(0, 6000) } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -300
+      ],
+      "id": "__ID_Normalize_Input__",
+      "name": "Normalize Input"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.entree }}",
+        "options": {
+          "systemMessage": "__PROMPT__",
+          "maxIterations": 15
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        260,
+        -300
+      ],
+      "id": "__ID_AI_Agent__",
+      "name": "AI Agent",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": "__PARAMS_GEMINI__",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        120,
+        -60
+      ],
+      "id": "__ID_Modèle_principal__",
+      "name": "Modèle principal",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "__CRED_GEMINI__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normalize Input').first().json.session_id }}",
+        "tableName": "__MEMOIRE_TABLE__",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        260,
+        -60
+      ],
+      "id": "__ID_Postgres_Chat_Memory__",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "__CRED_PG_MEMOIRE__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "sante_lire",
+        "description": "Lit le dossier santé tel que le moteur le calcule : profil, dernier bilan (valeurs, statuts, indicateurs TG/HDL, HOMA-IR, TyG, SCORE2, Gilbert), journée (checklist, repas, activité, Samsung, bilan énergétique), poids et projection, plans en cours (prévu / réalisé de la semaine), suppléments, catalogue des fonctions. À appeler AVANT toute réponse sur les chiffres. Paramètre facultatif : date (AAAA-MM-JJ).",
+        "language": "javaScript",
+        "jsCode": "// MÉDECIN-CHEF IA v1 — OUTIL sante_lire : le dossier tel que le moteur le calcule (GET sante_api.php?lecture=1)\n// ── authentification Caddy (basic_auth sur /finance/) : identifiants dans les variables d'environnement de n8n\n//    (FINANCE_USER, FINANCE_PASS, N8N_BLOCK_ENV_ACCESS_IN_NODE=false — voir N8N_AUTH_CADDY.md), JAMAIS dans le code.\nlet authHeader = '';\ntry { const u = $env.FINANCE_USER, p = $env.FINANCE_PASS; if (u && p) authHeader = 'Basic ' + Buffer.from(u + ':' + p).toString('base64'); } catch (e) { /* $env indisponible */ }\nconst authHeaders = authHeader ? { Authorization: authHeader } : {};\nconst BASE = '__FINANCE_BASE__/finance/sante/sante_api.php';\nconst echec = (e, quoi) => {\n  const statut = (e && (e.statusCode || e.status || (e.response && e.response.statusCode))) || null;\n  let corps = (e && e.response && e.response.body) || null;\n  if (typeof corps === 'string') { try { corps = JSON.parse(corps); } catch (_) { /* brut */ } }\n  return JSON.stringify({ erreur: quoi + ' impossible', statut, reponse_serveur: corps, detail: String((e && e.message) || e).slice(0, 300),\n    conseil: statut === 401 ? 'FINANCE_USER / FINANCE_PASS absents ou faux dans n8n (N8N_AUTH_CADDY.md)' : undefined });\n};\n\nlet input = {};\ntry { input = typeof query === 'string' ? (query.trim().startsWith('{') ? JSON.parse(query) : { date: query.trim() }) : (query || {}); } catch (e) { input = {}; }\nconst date = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(input.date || '')) ? String(input.date) : '';\ntry {\n  const r = await this.helpers.httpRequest({ method: 'GET', url: BASE + '?lecture=1' + (date ? '&date=' + date : ''), headers: { ...authHeaders }, json: true, timeout: 20000 });\n  return JSON.stringify(r);\n} catch (e) { return echec(e, 'lecture du dossier'); }\n",
+        "specifyInputSchema": true,
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"date\": {\n      \"type\": \"string\",\n      \"description\": \"Jour à lire, AAAA-MM-JJ. Vide = aujourd'hui.\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        -60
+      ],
+      "id": "__ID_sante_lire__",
+      "name": "sante_lire"
+    },
+    {
+      "parameters": {
+        "name": "sante_simuler",
+        "description": "__DESC_SIMULER__",
+        "language": "javaScript",
+        "jsCode": "// MÉDECIN-CHEF IA v1 — OUTIL sante_simulate : les fonctions du catalogue envoyées au moteur (POST sante_api.php, mode simulate)\n// ── authentification Caddy (basic_auth sur /finance/) : identifiants dans les variables d'environnement de n8n\n//    (FINANCE_USER, FINANCE_PASS, N8N_BLOCK_ENV_ACCESS_IN_NODE=false — voir N8N_AUTH_CADDY.md), JAMAIS dans le code.\nlet authHeader = '';\ntry { const u = $env.FINANCE_USER, p = $env.FINANCE_PASS; if (u && p) authHeader = 'Basic ' + Buffer.from(u + ':' + p).toString('base64'); } catch (e) { /* $env indisponible */ }\nconst authHeaders = authHeader ? { Authorization: authHeader } : {};\nconst BASE = '__FINANCE_BASE__/finance/sante/sante_api.php';\nconst echec = (e, quoi) => {\n  const statut = (e && (e.statusCode || e.status || (e.response && e.response.statusCode))) || null;\n  let corps = (e && e.response && e.response.body) || null;\n  if (typeof corps === 'string') { try { corps = JSON.parse(corps); } catch (_) { /* brut */ } }\n  return JSON.stringify({ erreur: quoi + ' impossible', statut, reponse_serveur: corps, detail: String((e && e.message) || e).slice(0, 300),\n    conseil: statut === 401 ? 'FINANCE_USER / FINANCE_PASS absents ou faux dans n8n (N8N_AUTH_CADDY.md)' : undefined });\n};\n\nlet input = {};\ntry { input = typeof query === 'string' ? JSON.parse(query) : (query || {}); } catch (e) { input = {}; }\nconst calls = Array.isArray(input.calls) ? input.calls : (Array.isArray(input) ? input : null);\nif (!calls || !calls.length) return JSON.stringify({ erreur: 'Paramètre « calls » manquant ou vide.', format_attendu: { calls: [{ function: '<fonction du catalogue>', args: {} }] } });\ntry {\n  const r = await this.helpers.httpRequest({ method: 'POST', url: BASE, body: { calls, mode: 'simulate' }, headers: { ...authHeaders }, json: true, timeout: 25000 });\n  return JSON.stringify(r);\n} catch (e) { return echec(e, 'simulation'); }\n",
+        "specifyInputSchema": true,
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"calls\"\n  ],\n  \"properties\": {\n    \"calls\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"description\": \"Les opérations, dans l'ordre. Chaque élément : { function: une fonction du catalogue, args: ses arguments }.\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"function\",\n          \"args\"\n        ],\n        \"properties\": {\n          \"function\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"__CATALOGUE__\"\n            ]\n          },\n          \"args\": {\n            \"type\": \"object\",\n            \"description\": \"Arguments de la fonction (voir la description de l'outil).\"\n          }\n        }\n      }\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        540,
+        -60
+      ],
+      "id": "__ID_sante_simuler__",
+      "name": "sante_simuler"
+    },
+    {
+      "parameters": {
+        "name": "sante_enregistrer",
+        "description": "ENREGISTRE pour de bon les mêmes calls que la simulation acceptée. À n'appeler QU'APRÈS un « oui » explicite de l'utilisateur à la simulation présentée, avec exactement les mêmes calls. Tout ou rien : si une opération est refusée, rien n'est écrit.",
+        "language": "javaScript",
+        "jsCode": "// MÉDECIN-CHEF IA v1 — OUTIL sante_commit : les fonctions du catalogue envoyées au moteur (POST sante_api.php, mode commit)\n// ── authentification Caddy (basic_auth sur /finance/) : identifiants dans les variables d'environnement de n8n\n//    (FINANCE_USER, FINANCE_PASS, N8N_BLOCK_ENV_ACCESS_IN_NODE=false — voir N8N_AUTH_CADDY.md), JAMAIS dans le code.\nlet authHeader = '';\ntry { const u = $env.FINANCE_USER, p = $env.FINANCE_PASS; if (u && p) authHeader = 'Basic ' + Buffer.from(u + ':' + p).toString('base64'); } catch (e) { /* $env indisponible */ }\nconst authHeaders = authHeader ? { Authorization: authHeader } : {};\nconst BASE = '__FINANCE_BASE__/finance/sante/sante_api.php';\nconst echec = (e, quoi) => {\n  const statut = (e && (e.statusCode || e.status || (e.response && e.response.statusCode))) || null;\n  let corps = (e && e.response && e.response.body) || null;\n  if (typeof corps === 'string') { try { corps = JSON.parse(corps); } catch (_) { /* brut */ } }\n  return JSON.stringify({ erreur: quoi + ' impossible', statut, reponse_serveur: corps, detail: String((e && e.message) || e).slice(0, 300),\n    conseil: statut === 401 ? 'FINANCE_USER / FINANCE_PASS absents ou faux dans n8n (N8N_AUTH_CADDY.md)' : undefined });\n};\n\nlet input = {};\ntry { input = typeof query === 'string' ? JSON.parse(query) : (query || {}); } catch (e) { input = {}; }\nconst calls = Array.isArray(input.calls) ? input.calls : (Array.isArray(input) ? input : null);\nif (!calls || !calls.length) return JSON.stringify({ erreur: 'Paramètre « calls » manquant ou vide.', format_attendu: { calls: [{ function: '<fonction du catalogue>', args: {} }] } });\ntry {\n  const r = await this.helpers.httpRequest({ method: 'POST', url: BASE, body: { calls, mode: 'commit' }, headers: { ...authHeaders }, json: true, timeout: 25000 });\n  return JSON.stringify(r);\n} catch (e) { return echec(e, 'enregistrement'); }\n",
+        "specifyInputSchema": true,
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"calls\"\n  ],\n  \"properties\": {\n    \"calls\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"description\": \"Les opérations, dans l'ordre. Chaque élément : { function: une fonction du catalogue, args: ses arguments }.\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"function\",\n          \"args\"\n        ],\n        \"properties\": {\n          \"function\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"__CATALOGUE__\"\n            ]\n          },\n          \"args\": {\n            \"type\": \"object\",\n            \"description\": \"Arguments de la fonction (voir la description de l'outil).\"\n          }\n        }\n      }\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        -60
+      ],
+      "id": "__ID_sante_enregistrer__",
+      "name": "sante_enregistrer"
+    },
+    {
+      "parameters": {
+        "name": "memoire_sante",
+        "description": "Mémoire longue du dossier santé : historique des protocoles, compléments essayés et réactions, décisions, documents indexés. Formule une requête précise (nom de complément, symptôme, marqueur) avant de proposer un ajustement.",
+        "topK": 8
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        -60
+      ],
+      "id": "__ID_memoire_sante__",
+      "name": "memoire_sante"
+    },
+    {
+      "parameters": {
+        "tableName": "__VECTEURS_TABLE__",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        760,
+        140
+      ],
+      "id": "__ID_Postgres_PGVector_Store__",
+      "name": "Postgres PGVector Store",
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "__CRED_PG_VECTEURS__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        760,
+        300
+      ],
+      "id": "__ID_Embeddings_Google_Gemini__",
+      "name": "Embeddings Google Gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "__CRED_GEMINI__"
+        }
+      }
+    },
+    {
+      "parameters": "__PARAMS_DEEPSEEK__",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        140
+      ],
+      "id": "__ID_Modèle_de_la_mémoire__",
+      "name": "Modèle de la mémoire",
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "__CRED_DEEPSEEK__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Input').first().json.canal }}",
+                    "rightValue": "web",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Page web"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Input').first().json.canal }}",
+                    "rightValue": "workflow",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c2"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Agent maître"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Input').first().json.canal }}",
+                    "rightValue": "telegram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c3"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Telegram"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        620,
+        -300
+      ],
+      "id": "__ID_Canal_de_réponse__",
+      "name": "Canal de réponse"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ output: $('AI Agent').first().json.output || ('⚠️ ' + (($('AI Agent').first().json.error || {}).message || 'aucune réponse')) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        -520
+      ],
+      "id": "__ID_Réponse_page_web__",
+      "name": "Réponse page web"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "response",
+              "value": "={{ $('AI Agent').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        -400
+      ],
+      "id": "__ID_Réponse_à_l_agent_maître__",
+      "name": "Réponse à l'agent maître"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════\n// MÉDECIN-CHEF IA v1 — FORMAT FOR TELEGRAM (repris du CFO v37.95) (v37.58 + blocs de code nus, texte brut de secours)\n//   Telegram (parse_mode HTML) REFUSE tout le message — 400, aucune réponse —\n//   si le texte contient un « < » ou un « & » nu, une balise non fermée, ou\n//   s'il dépasse 4 096 caractères. Ici :\n//     • seules <b> <i> <u> <s> <code> <pre> <a href> survivent, équilibrées ;\n//     • tout le reste du texte est ré-échappé (&lt; &gt; &amp;) ;\n//     • tableaux : « cellule · cellule », une ligne par rangée ;\n//     • une réponse longue part en plusieurs messages (≤ 3 900 car.).\n// ════════════════════════════════════════════════════════\nconst LIMITE = 3900;\nconst entree = $('Normalize Input').first().json;\nconst chatId = entree.chat_id;\nconst echapper = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst decoder = (s) => String(s)\n  .replace(/&nbsp;/g, ' ').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\")\n  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\\d+);/g, (m, n) => String.fromCharCode(Number(n)))\n  .replace(/&amp;/g, '&');\n\nlet html = '';\nlet isError = false;\nlet errorDetail = '';\ntry {\n  const agentOut = $('AI Agent').first().json;\n  if (agentOut.error) {\n    isError = true;\n    errorDetail = typeof agentOut.error === 'string' ? agentOut.error : (agentOut.error.message || JSON.stringify(agentOut.error));\n  } else {\n    html = agentOut.output || agentOut.text || agentOut.response || '';\n    if (entree.voix && entree.question) html = '<i>🗣️ « ' + echapper(entree.question.slice(0, 600)) + ' »</i>\\n\\n' + html;\n    if (!html) { isError = true; errorDetail = 'Aucune réponse générée (output vide après continueOnFail).'; }\n  }\n} catch (e) {\n  isError = true;\n  errorDetail = e.message || 'Exception lors de la lecture de la sortie agent.';\n}\nif (isError) {\n  return [{ json: { chat_id: chatId, telegram_text: '⚠️ <b>Alerte Système (Médecin-Chef IA)</b>\\n'\n    + 'Une exception a empêché l\\'exécution correcte de la commande.\\n'\n    + '<b>Détail technique :</b> <code>' + echapper(String(errorDetail).slice(0, 1500)) + '</code>',\n    telegram_plain: '⚠️ Alerte Système (Médecin-Chef IA)\\nUne exception a empêché l\\'exécution correcte de la commande.\\nDétail technique : ' + String(errorDetail).slice(0, 1500) } }];\n}\n\n// 1. Mise en page : blocs → sauts de ligne, tableaux → « a · b », listes → puces\nconst plat = String(html)\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/(?:td|th)>\\s*(?=<(?:td|th)\\b)/gi, ' · ')\n  .replace(/<\\/tr>/gi, '\\n')\n  .replace(/<\\/p>\\s*<p[^>]*>/gi, '\\n\\n')\n  .replace(/<\\/li>/gi, '\\n')\n  .replace(/<li[^>]*>/gi, '• ')\n  .replace(/<hr\\s*\\/?>/gi, '\\n———\\n')\n  .replace(/<\\/?(?:p|div|ul|ol|table|thead|tbody|h[1-6])\\b[^>]*>/gi, '\\n')\n  .replace(/<(\\/?)strong\\b[^>]*>/gi, '<$1b>').replace(/<(\\/?)em\\b[^>]*>/gi, '<$1i>');\n\n// 2. Jetons : balise permise, ou texte (toute autre balise disparaît)\nconst jetons = [];\nconst re = /<(\\/?)([a-z][a-z0-9]*)\\b([^>]*)>/gi;\nlet i = 0, m, brut = 0;   // v37.95 : dans <code>/<pre>, Telegram refuse toute autre balise\nconst texte = (s) => { if (s) jetons.push({ t: echapper(decoder(s)) }); };\nwhile ((m = re.exec(plat))) {\n  texte(plat.slice(i, m.index)); i = re.lastIndex;\n  const nom = m[2].toLowerCase(), ferme = m[1] === '/';\n  if (!['b', 'i', 'u', 's', 'code', 'pre', 'a'].includes(nom)) continue;\n  if (brut > 0 && !(ferme && (nom === 'code' || nom === 'pre'))) continue;\n  if (nom === 'code' || nom === 'pre') brut = Math.max(0, brut + (ferme ? -1 : 1));\n  if (nom === 'a' && !ferme) {\n    const h = /href\\s*=\\s*[\"']([^\"']+)[\"']/i.exec(m[3]);\n    if (!h || !/^https?:\\/\\//i.test(decoder(h[1]))) { jetons.push({ ouvre: 'a', vide: true }); continue; }\n    jetons.push({ ouvre: 'a', balise: '<a href=\"' + echapper(decoder(h[1])).replace(/\"/g, '&quot;') + '\">' });\n  } else if (ferme) jetons.push({ ferme: nom });\n  else jetons.push({ ouvre: nom, balise: '<' + nom + '>' });\n}\ntexte(plat.slice(i));\n\n// 3. Morceaux ≤ LIMITE, balises équilibrées dans chacun\nconst morceaux = [];\nlet cour = '', pile = [];\nconst fermer = () => pile.slice().reverse().map(p => p.vide ? '' : '</' + p.ouvre + '>').join('');\nconst rouvrir = () => pile.map(p => p.vide ? '' : p.balise).join('');\nconst couper = () => { const s = (cour + fermer()).replace(/\\n{3,}/g, '\\n\\n').trim(); if (s.replace(/<[^>]+>/g, '').trim()) morceaux.push(s); cour = rouvrir(); };\nfor (const j of jetons) {\n  if (j.ouvre) { pile.push(j); cour += j.vide ? '' : j.balise; continue; }\n  if (j.ferme) {\n    const k = pile.map(p => p.ouvre).lastIndexOf(j.ferme);\n    if (k < 0) continue;                                   // fermeture orpheline : ignorée\n    const dessus = pile.splice(k);\n    cour += dessus.slice().reverse().map(p => p.vide ? '' : '</' + p.ouvre + '>').join('');\n    cour += dessus.slice(1).map(p => p.vide ? '' : p.balise).join('');\n    pile.push(...dessus.slice(1));\n    continue;\n  }\n  let reste = j.t;\n  while (cour.length + reste.length + fermer().length > LIMITE) {\n    const place = Math.max(0, LIMITE - cour.length - fermer().length);\n    let cut = Math.max(reste.lastIndexOf('\\n', place), reste.lastIndexOf(' ', place));\n    if (cut <= 0) cut = place;\n    while (cut > 0 && /&[a-z#0-9]*$/i.test(reste.slice(0, cut))) cut--;   // ne pas couper une entité\n    if (cut <= 0 && cour.replace(/<[^>]+>/g, '').trim()) { couper(); continue; }\n    if (cut <= 0) cut = Math.min(reste.length, LIMITE);\n    cour += reste.slice(0, cut); reste = reste.slice(cut).replace(/^[ \\n]+/, '');\n    couper();\n  }\n  cour += reste;\n}\ncouper();\nif (!morceaux.length) morceaux.push('(réponse vide)');\n//  v37.95 : la même réponse en texte brut — envoyée par « Send Telegram (texte brut) » si Telegram refuse le HTML\nconst brutDe = (t) => decoder(String(t).replace(/<[^>]+>/g, '')).slice(0, 4000);\nreturn morceaux.map((t, n) => { const tt = morceaux.length > 1 ? t + '\\n<i>(' + (n + 1) + '/' + morceaux.length + ')</i>' : t;\n  return { json: { chat_id: chatId, telegram_text: tt, telegram_plain: brutDe(tt) } }; });\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -260
+      ],
+      "id": "__ID_Format_for_Telegram__",
+      "name": "Format for Telegram"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        -260
+      ],
+      "id": "__ID_Send_Telegram__",
+      "name": "Send Telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "__CRED_TELEGRAM__"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.telegram_plain || $json.telegram_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        -180
+      ],
+      "id": "__ID_Send_Telegram_texte_brut___",
+      "name": "Send Telegram (texte brut)",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "__CRED_TELEGRAM__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Normalize Input').first().json.voix }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "id": "v1"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        -100
+      ],
+      "id": "__ID_Réponse_vocale___",
+      "name": "Réponse vocale ?"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "model": "tts-1-hd",
+        "input": "={{ String($('AI Agent').first().json.output || '').replace(/<[^>]+>/g, '').slice(0, 4000) }}",
+        "voice": "onyx",
+        "options": {
+          "response_format": "mp3"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1100,
+        -100
+      ],
+      "id": "__ID_Generate_audio__",
+      "name": "Generate audio",
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "__CRED_OPENAI__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "={{ $('Normalize Input').first().json.chat_id }}",
+        "binaryData": true,
+        "additionalFields": {
+          "fileName": "Medecin-Chef.mp3"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        -100
+      ],
+      "id": "__ID_Send_an_audio_file__",
+      "name": "Send an audio file",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "__CRED_TELEGRAM__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "__TRACE_CHAT_ID__",
+        "text": "=<b>📡 Médecin-Chef IA ➡️ agent maître</b>\n{{ String($json.response || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').slice(0, 3500) }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        -400
+      ],
+      "id": "__ID_Trace_vers_Telegram__",
+      "name": "Trace vers Telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "__CRED_TELEGRAM__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ ($json.body || {}).mode }}",
+                    "rightValue": "verifier_protocole",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "m1"
+                  },
+                  {
+                    "leftValue": "={{ ($json.body || {}).mode }}",
+                    "rightValue": "verifier_bilan",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "m2"
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "Vérifier un document (protocole ou bilan)"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Question"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -240,
+        -560
+      ],
+      "id": "__ID_Mode_de_la_demande__",
+      "name": "Mode de la demande"
+    },
+    {
+      "parameters": {
+        "jsCode": "// MÉDECIN-CHEF IA v1 — VÉRIFICATION D'UN DOCUMENT (écrans de tri et d'import de Santé Master) : envoyée à un modèle SANS outils ni\n// mémoire, avec des consignes strictes. mode « verifier_protocole » : le rangement des règles, ligne par ligne\n// (sante/verif_protocole_prompt.md) ; mode « verifier_bilan » : la lecture d'un compte rendu d'analyses (sante/verif_bilan_prompt.md).\nconst b = $input.first().json.body || {};\nif (b.mode === 'verifier_bilan') {\n  const consignesBilan = __PROMPT_VERIF_BILAN__;\n  const texte = String(b.texte || '').slice(0, 60000);\n  const vals = (Array.isArray(b.valeurs) ? b.valeurs : []).slice(0, 120).map(e => JSON.stringify(e)).join('\\n');\n  const cat = (Array.isArray(b.catalogue) ? b.catalogue : []).slice(0, 120).map(e => JSON.stringify(e)).join('\\n');\n  const n = Array.isArray(b.valeurs) ? Math.min(b.valeurs.length, 120) : 0;\n  return [{ json: { prompt: consignesBilan + '\\n\\nDOCUMENT : ' + String(b.titre || '').slice(0, 200) + '\\n\\nTEXTE DU DOCUMENT :\\n' + texte + '\\n\\nVALEURS LUES (une par ligne, au format JSON) :\\n' + vals + '\\n\\nCATALOGUE :\\n' + cat, n } }];\n}\nconst consignes = __PROMPT_VERIF__;\nconst els = Array.isArray(b.elements) ? b.elements.slice(0, 400) : [];\nconst lignes = els.map(e => JSON.stringify(e)).join('\\n').slice(0, 120000);\nreturn [{ json: { prompt: consignes + '\\n\\nTITRE DU DOCUMENT : ' + String(b.titre || '').slice(0, 200) + '\\n\\nLIGNES RANGÉES (une par ligne, au format JSON) :\\n' + lignes, n: els.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -760
+      ],
+      "id": "__ID_Préparer_la_vérification__",
+      "name": "Préparer la vérification"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        220,
+        -760
+      ],
+      "id": "__ID_Vérificateur__",
+      "name": "Vérificateur",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": "__PARAMS_GEMINI__",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        220,
+        -600
+      ],
+      "id": "__ID_Modèle_du_vérificateur__",
+      "name": "Modèle du vérificateur",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "__CRED_GEMINI__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// MÉDECIN-CHEF IA v1 — LES CORRECTIONS PROPOSÉES : le JSON est extrait de la réponse et contrôlé ; sinon une erreur claire.\nconst brut = String($input.first().json.text || $input.first().json.output || '');\nlet o = null;\nconst debut = brut.indexOf('{'), fin = brut.lastIndexOf('}');\nif (debut >= 0 && fin > debut) { try { o = JSON.parse(brut.slice(debut, fin + 1)); } catch (e) { o = null; } }\nconst ok = o && Array.isArray(o.corrections);\nconst corrections = ok ? o.corrections.filter(c => c && typeof c === 'object').slice(0, 120) : null;\nreturn [{ json: ok ? { corrections } : { erreur: 'réponse de l’IA illisible', extrait: brut.slice(0, 300) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        -760
+      ],
+      "id": "__ID_Lire_les_corrections__",
+      "name": "Lire les corrections"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        -760
+      ],
+      "id": "__ID_Réponse_vérification__",
+      "name": "Réponse vérification"
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Type de message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Type de message": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get a file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message non pris en charge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Transcribe a recording",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe a recording": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook page web": {
+      "main": [
+        [
+          {
+            "node": "Contrôle accès web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contrôle accès web": {
+      "main": [
+        [
+          {
+            "node": "Accès autorisé ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accès autorisé ?": {
+      "main": [
+        [
+          {
+            "node": "Mode de la demande",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refus page web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Canal de réponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canal de réponse": {
+      "main": [
+        [
+          {
+            "node": "Réponse page web",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Réponse à l'agent maître",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format for Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Réponse vocale ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réponse à l'agent maître": {
+      "main": [
+        [
+          {
+            "node": "Trace vers Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Telegram": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send Telegram (texte brut)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réponse vocale ?": {
+      "main": [
+        [
+          {
+            "node": "Generate audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Generate audio": {
+      "main": [
+        [
+          {
+            "node": "Send an audio file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modèle principal": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sante_lire": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sante_simuler": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sante_enregistrer": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memoire_sante": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres PGVector Store": {
+      "ai_vectorStore": [
+        [
+          {
+            "node": "memoire_sante",
+            "type": "ai_vectorStore",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Postgres PGVector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modèle de la mémoire": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "memoire_sante",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mode de la demande": {
+      "main": [
+        [
+          {
+            "node": "Préparer la vérification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer la vérification": {
+      "main": [
+        [
+          {
+            "node": "Vérificateur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vérificateur": {
+      "main": [
+        [
+          {
+            "node": "Lire les corrections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire les corrections": {
+      "main": [
+        [
+          {
+            "node": "Réponse vérification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modèle du vérificateur": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Vérificateur",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": true,
+  "meta": {
+    "note": "Modèle du dépôt : n8n/maj_workflow_sante.php remplit identifiants, adresse et consignes, puis install.sh sante l'importe et le publie."
+  }
+}

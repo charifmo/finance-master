@@ -5,11 +5,16 @@
  */
 require_once __DIR__ . '/sante_store.php';
 require_once __DIR__ . '/sante_integrity.php';
+require_once __DIR__ . '/sante_reparation.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Access-Control-Expose-Headers: X-Sante-Version, X-Sante-Mode');
+header('Access-Control-Expose-Headers: X-Sante-Version, X-Sante-Mode, X-Sante-Reparation');
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    //  v1.22 — une ancienne version a effacé les données de la v1.20 ? on les rétablit depuis la dernière copie (une fois)
+    $rep = null;
+    try { $rep = sante_reparer_retour_ancienne_version(); } catch (Throwable $e) { error_log('[sante_reparation] ' . $e->getMessage()); }
+    if ($rep && $rep['ok']) header('X-Sante-Reparation: ' . $rep['copie']);
     [$t, $mode] = sante_lire();
     header('X-Sante-Version: ' . sante_version($t));
     header('X-Sante-Mode: ' . $mode);

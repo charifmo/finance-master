@@ -19,8 +19,8 @@ function sante_catalogue_fonctions(): array {
             'requis' => ['moment', 'items'], 'optionnels' => ['date', 'marche_post']],
         'log_workout_activity' => ['desc' => "Note l'activité du jour : pas, zone2_min (marche Zone 2 à jeun), machines (séance bas du corps, true/false), marches_post (nombre de marches de 15 min après repas), soleus_min.",
             'requis' => [], 'au_moins_un' => ['pas', 'zone2_min', 'machines', 'marches_post', 'soleus_min'], 'optionnels' => ['date', 'pas', 'zone2_min', 'machines', 'marches_post', 'soleus_min']],
-        'sync_samsung_health' => ['desc' => "Données Samsung Health / Health Connect d'un jour : pas, kcal_actives, fc_moy, fc_repos, sommeil_min, poids (kg).",
-            'requis' => [], 'au_moins_un' => ['pas', 'kcal_actives', 'fc_moy', 'fc_repos', 'sommeil_min', 'poids'], 'optionnels' => ['date', 'pas', 'kcal_actives', 'fc_moy', 'fc_repos', 'sommeil_min', 'poids']],
+        'sync_samsung_health' => ['desc' => "Données Samsung Health / Health Connect d'un jour : pas, kcal_actives, fc_moy, fc_repos, sommeil_min, poids (kg) ; et aussi fc_min, fc_max, distance_km, kcal_totales, exercice_min, spo2 (%), tension_sys, tension_dia, hydratation_ml, graisse_pct, vfc_ms, vo2max, freq_resp, temperature (°C), glycemie (mg/dL), masse_maigre (kg), tour_taille (cm), kcal_repos ; taille_cm met à jour le profil.",
+            'requis' => [], 'au_moins_un' => array_merge(SANTE_CHAMPS_SAMSUNG, ['taille_cm']), 'optionnels' => array_merge(['date', 'taille_cm'], SANTE_CHAMPS_SAMSUNG)],
         'update_supplement_protocol' => ['desc' => "Protocole de suppléments : action add | update | remove, nom, dose?, moment?, actif?",
             'requis' => ['action', 'nom'], 'optionnels' => ['dose', 'moment', 'actif']],
         'update_health_goal' => ['desc' => "Objectifs : poids_kg, tg_gl, apob_gl, vitd_ngml, pas_objectif, seances_machines_semaine.",
@@ -132,7 +132,11 @@ function sante_appliquer_sur(array &$etat, string $fn, array $a): array {
     }
     case 'sync_samsung_health': {
         $j = &sante_jour($etat, $date); $ch = [];
-        $bornes = ['pas' => [0, 100000], 'kcal_actives' => [0, 10000], 'fc_moy' => [25, 230], 'fc_repos' => [25, 150], 'sommeil_min' => [0, 1440], 'poids' => [20, 400]];
+        $bornes = SANTE_BORNES_SAMSUNG;
+        if (array_key_exists('taille_cm', $a) && $a['taille_cm'] !== null && $a['taille_cm'] !== '') {
+            $t = sante_num($a['taille_cm']); if ($t === null || $t < 100 || $t > 250) return [false, ['erreur' => 'taille_cm hors bornes (100-250) : ' . json_encode($a['taille_cm'])]];
+            $ch['taille_cm'] = ['avant' => $etat['profil']['taille_cm'] ?? null, 'apres' => $t]; $etat['profil']['taille_cm'] = $t;
+        }
         foreach ($bornes as $k => [$lo, $hi]) if (array_key_exists($k, $a) && $a[$k] !== null && $a[$k] !== '') {
             $v = sante_num($a[$k]); if ($v === null || $v < $lo || $v > $hi) return [false, ['erreur' => "$k hors bornes ($lo-$hi) : " . json_encode($a[$k])]];
             $ch[$k] = ['avant' => $j['samsung'][$k] ?? null, 'apres' => $v]; $j['samsung'][$k] = $v;
@@ -214,6 +218,12 @@ function sante_lecture(array $etat, ?string $date = null): array {
         'aujourdhui' => ['checklist' => $j['checklist'] ?? null, 'activite' => $j['activite'] ?? null, 'samsung' => $j['samsung'] ?? null,
                          'calories_ingerees' => (int)$ingere, 'bmr' => $bmr, 'bilan_energie' => sante_bilan_energie($ingere ?: null, $bmr, $j['samsung']['kcal_actives'] ?? null)],
         'poids' => ['dernier' => $kg, 'projection' => sante_projection_poids($etat['poids'], $etat['objectifs']['poids_kg'], null, $date)],
-        'supplements' => $etat['supplements'], 'catalogue' => array_map(fn($d) => $d['desc'], sante_catalogue_fonctions()),
+        'supplements' => $etat['supplements'],
+        //  v1.4 — les plans (nutrition, exercice) : ce qui est prévu aujourd'hui, ce qui est coché fait, la semaine en cours
+        'plans' => array_map(fn($p) => ['titre' => $p['titre'], 'suivi' => sante_suivi_plan($p, $etat['journal'], $date)], (array)$etat['plans']),
+        //  v1.8 — le reste du protocole importé : règles à respecter, objectifs (cibles des biomarqueurs)
+        'regles' => array_slice(array_map(fn($r) => ($r['section'] ? $r['section'] . ' : ' : '') . $r['texte'], $etat['regles'] ?? []), 0, 120),
+        'objectifs_suivi' => $etat['objectifs_suivi'] ?? [], 'cibles' => $etat['cibles'] ?? new stdClass(),
+        'catalogue' => array_map(fn($d) => $d['desc'], sante_catalogue_fonctions()),
     ];
 }
