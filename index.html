@@ -10947,6 +10947,22 @@
                         try { addLog('Année ' + A + ' créée (copie de ' + src + ') pour une opération datée de ' + A + '.', 'info'); } catch (e) {}
                         return c;
                     };
+                    //  Correctif — UN IDENTIFIANT DE TRANSACTION N'EST JAMAIS PRIS DEUX FOIS. Les ids étaient « Date.now() + hasard(1000) »
+                    //  (« + hasard(100 000) » à l'import bancaire) : deux opérations créées dans la même milliseconde — un import de
+                    //  cent lignes, ou une horloge figée — se retrouvaient avec le MÊME id dans 3 à 5 % des cas, et _txParId(id) rendait
+                    //  alors toujours la première : la catégorie posée par l'IA, un rangement, une correction tombaient sur la mauvaise ligne.
+                    //  Désormais : l'heure, jamais en arrière, jamais un id déjà porté par une opération de n'importe quelle année.
+                    let _dernierIdTx = 0;
+                    const _nouvelIdTx = () => {
+                        const pris = new Set();
+                        for (const d of Object.values(donneesAnnuelles.value || {})) {
+                            if (d && Array.isArray(d.transactionsReelles)) d.transactionsReelles.forEach(t => { if (t) pris.add(t.id); });
+                        }
+                        let id = Math.max(Date.now(), _dernierIdTx + 1);
+                        while (pris.has(id)) id++;
+                        _dernierIdTx = id;
+                        return id;
+                    };
                     const ajouterTransactionReelle = (data) => {
                         const today = new Date();
                         const dateOnly = data.date || (data.datetime ? data.datetime.slice(0, 10) : today.toISOString().slice(0, 10));
@@ -10955,7 +10971,7 @@
                         if (!seau) return null;
                         if (!Array.isArray(seau.transactionsReelles)) seau.transactionsReelles = [];
                         const tx = {
-                            id: Date.now() + Math.floor(Math.random() * 1000),
+                            id: _nouvelIdTx(),
                             datetime: data.datetime || null,
                             date: dateOnly,
                             mois: data.mois || (data.datetime ? Number(data.datetime.slice(5, 7)) : (today.getMonth() + 1)),
@@ -11721,7 +11737,7 @@
                         const n = new Date(), an = String(n.getFullYear());
                         if (!donneesAnnuelles.value[an] || !Array.isArray(donneesAnnuelles.value[an].transactionsReelles)) return null;
                         const dt = _ymd(n) + 'T' + String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0');
-                        const copie = { id: Date.now(), datetime: dt, date: dt.slice(0, 10), mois: n.getMonth() + 1, libelle: t.libelle, montant: t.montant,
+                        const copie = { id: _nouvelIdTx(), datetime: dt, date: dt.slice(0, 10), mois: n.getMonth() + 1, libelle: t.libelle, montant: t.montant,
                                         categorieId: t.categorieId, compteId: t.compteId == null ? null : t.compteId, source: 'manuel', ...(t.categorieSource ? { categorieSource: t.categorieSource } : {}) };
                         donneesAnnuelles.value[an].transactionsReelles.push(copie);
                         journal.ouvert = null; journal.brouillon = null;
@@ -25954,7 +25970,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         const d = _seauDe(date);
                         if (!d) return null;
                         if (!Array.isArray(d.transactionsReelles)) d.transactionsReelles = [];
-                        const tx = { id: Date.now() + Math.floor(Math.random() * 100000), datetime: null, date, mois: Number(String(date).slice(5, 7)),
+                        const tx = { id: _nouvelIdTx(), datetime: null, date, mois: Number(String(date).slice(5, 7)),
                                      libelle, montant: Math.round(Math.abs(montant) * 100) / 100, compteId, source: 'banque', ...extra };
                         d.transactionsReelles.push(tx);
                         return tx;

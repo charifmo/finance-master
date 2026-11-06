@@ -139,13 +139,19 @@ const cat = (libs) => page.evaluate(({ ST, libs }) => { const st = eval(ST); con
 const txs = () => page.evaluate((ST) => JSON.parse(JSON.stringify(eval(ST).donneesAnnuelles[2026].transactionsReelles)), ST);
 const tx = async (libelle) => (await txs()).filter(t => t.libelle === libelle).pop() || null;
 const idDe = (label) => page.evaluate(({ ST, label }) => { const c = (eval(ST).soldesInitiaux.categories || []).find(x => String(x.label).trim() === label && !x.archive); return c ? c.id : null; }, { ST, label });
-const saisir = async (texte) => { const i = page.locator('input[placeholder="Ex: 200 courses"]'); await i.fill(texte); await page.waitForTimeout(150); };
-const valider = async () => { await page.locator('input[placeholder="Ex: 200 courses"]').press('Enter'); await page.waitForTimeout(200); };
+//  Plus de durées fixes : on attend l'ÉTAT de l'appli. saisir → le texte est dans le modèle ET lu (montant) ; valider → la saisie a été
+//  acceptée (le champ est remis à zéro, la transaction existe, l'IA est lancée). Une saisie refusée fait échouer ici, avec son nom, pas plus loin.
+const saisir = async (texte) => { const i = page.locator('input[placeholder="Ex: 200 courses"]'); await i.fill(texte);
+    await page.waitForFunction(({ ST, texte }) => { const st = eval(ST); return st.saisieRapide === texte && st.saisieForm.montant > 0; }, { ST, texte }, { timeout: 10000 }); };
+const valider = async () => { await page.locator('input[placeholder="Ex: 200 courses"]').press('Enter');
+    await page.waitForFunction((ST) => eval(ST).saisieRapide === '', ST, { timeout: 10000 }); };
+//  « une demande à la fois » : on attend que la file de l'IA soit vide, puis que Vue ait fini de redessiner (le DOM lu ensuite est à jour)
+const rendu = () => page.evaluate(() => Vue.nextTick());
 const badge = () => page.evaluate(() => { const b = document.querySelector('[data-saisie-cat]'); const i = document.querySelector('[data-saisie-cat-inconnue]');
     return { statut: b ? b.dataset.statut : null, texte: (b || i || {}).textContent ? (b || i).textContent.replace(/\s+/g, ' ').trim() : null,
              puces: [...document.querySelectorAll('[data-saisie-suggestion]')].map(x => x.textContent.trim()) }; });
 const ligne = (txId) => page.evaluate((id) => { const l = document.querySelector(`[data-a-categoriser-ligne][data-tx="${id}"]`); return l ? l.textContent.replace(/\s+/g, ' ').trim() : null; }, txId);
-const attendreIA = async () => { await page.waitForFunction((ST) => Object.keys(eval(ST).iaCategorisation.enCours).length === 0, ST, { timeout: 10000 }); await page.waitForTimeout(150); };
+const attendreIA = async () => { await page.waitForFunction((ST) => Object.keys(eval(ST).iaCategorisation.enCours).length === 0, ST, { timeout: 15000 }); await rendu(); };
 
 try {
     /* ── B. Le moteur, libellé par libellé ───────────────────────────── */
@@ -258,6 +264,19 @@ try {
           o.categorieId === alim && o.categorieSource === 'défaut' && o.aVerifier === true && /ne voit aucune de vos catégories.*rangée par défaut dans « Alimentation \(Tqdya\) »/.test(msg[o.id] || '')
           && p.categorieId === alim && p.categorieSource === 'défaut' && p.aVerifier === true && /IA injoignable.*rangée par défaut/.test(msg[p.id] || '')
           && /✓ Alimentation \(Tqdya\) · par défaut/.test(await ligne(p.id) || ''), JSON.stringify([o, p, msg]));
+        //  La cause réelle du clignotement d'avant : les ids étaient « Date.now() + hasard(1000) » ; l'horloge de ce test est FIGÉE,
+        //  donc deux saisies sur ~25 se retrouvaient avec le même id et l'IA (ou un rangement) tombait sur la mauvaise ligne.
+        //  Ici, sans attente ni hasard : 400 opérations créées d'affilée (même milliseconde) — par la saisie, l'import bancaire et « ressaisir » — ne partagent aucun id.
+        const ids = await page.evaluate((ST) => {
+            const st = eval(ST), arr = st.donneesAnnuelles[2026].transactionsReelles, avant = arr.length, sondes = [];
+            const base = { categorieId: 'cat_cv_alimentation', categorieSource: 'vous', libelle: 'zz sonde', montant: 1, date: '2026-10-13', datetime: '2026-10-13T12:00', mois: 10 };
+            for (let i = 0; i < 400; i++) sondes.push(st.ajouterTransactionReelle({ ...base }));
+            const tous = arr.map(t => t.id), uniques = new Set(tous).size;
+            for (let i = arr.length - 1; i >= 0; i--) if (arr[i].libelle === 'zz sonde') arr.splice(i, 1);   // l'état du test est rendu tel quel
+            return { total: tous.length, uniques, restant: arr.length - avant};
+        }, ST);
+        v('  → 400 opérations créées d\u2019affilée sous horloge figée : aucun identifiant en double (une ligne ne peut pas en recouvrir une autre)',
+          ids.total === ids.uniques && ids.restant === 0, JSON.stringify(ids));
         //  Saisies, doutes et anciennes transactions partent seuls à l'IA… une à la fois
         v('  → toutes les demandes de la session, une à la fois (jamais deux en vol), sans aucun bouton', ia.requetes.length >= 5 && ia.maxEnVol === 1 && !(await page.$('[data-ia-tout]')), JSON.stringify([ia.requetes.length, ia.maxEnVol]));
     });

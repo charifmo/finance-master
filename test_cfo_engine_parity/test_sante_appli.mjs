@@ -42,13 +42,17 @@ const ouvrir = async () => {
 };
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 const lireFichier = () => JSON.parse(fs.readFileSync(DATA, 'utf8'));
+//  Correctif — « enregistré » est aussi l'état d'AVANT la modification : attendre seulement ce mot rend la main trop tôt si l'action est
+//  asynchrone (chargement de la démo, lecture d'un fichier par FileReader…) et le test lisait alors le fichier avant l'écriture.
+//  On attend donc d'abord l'EFFET dans l'appli (`condition`, évaluée dans la page), PUIS l'enregistrement qui en découle.
 const attendreEnregistre = (page) => page.waitForFunction(() => /enregistré/.test(document.querySelector('[data-statut-sauvegarde]').textContent), null, { timeout: 10000 });
+const attendreEffetPuisEnregistre = async (page, condition, arg) => { await page.waitForFunction(condition, arg, { timeout: 10000 }); await attendreEnregistre(page); };   // l'effet visible ⇒ le watcher a déjà passé le bandeau à « modifié »
 
 try {
     const page = await ouvrir();
     await section('A', async () => {
         v('A. premier lancement : accueil « Importer mon dossier » / « Charger la démo », avertissement médical', await page.isVisible('[data-accueil]') && await page.isVisible('[data-avertissement]'));
-        await page.click('[data-charger-demo]'); await page.waitForTimeout(300); await attendreEnregistre(page);
+        await page.click('[data-charger-demo]'); await attendreEffetPuisEnregistre(page, (ST) => eval(ST).etat.bilans.length === 2, ST);
         const f = lireFichier();
         v('  → démo chargée et ENREGISTRÉE par save_sante.php (fichier), profil fictif', f.bilans.length === 2 && /TESTEUR/.test(f.profil.nom) && !(await page.isVisible('[data-accueil]')), f.profil);
         const onglets = await page.$$eval('[data-onglet]', l => l.map(x => x.textContent.trim()));
@@ -70,7 +74,7 @@ try {
         await page.fill('[data-import-texte]', 'Bilan du 01/10/2026\nTriglycérides 1.62 g/L < 1.50\nHDL 0.44 g/L > 0.40\nVitamine D 33 ng/mL > 30\nGlycémie 0.95 g/L 0.70 - 1.10');
         await page.click('[data-analyser-bilan]'); await page.waitForTimeout(200);
         v('C. import d\'un bilan collé : date lue (01/10/2026), 4 biomarqueurs reconnus', (await page.inputValue('[data-apercu-date]')) === '2026-10-01' && /4 biomarqueur/.test(await page.textContent('[data-apercu-compte]')));
-        await page.click('[data-ajouter-bilan]'); await page.waitForTimeout(300); await attendreEnregistre(page);
+        await page.click('[data-ajouter-bilan]'); await attendreEffetPuisEnregistre(page, (ST) => eval(ST).etat.bilans.length === 3, ST);
         const f = lireFichier();
         v('  → ajouté et enregistré ; il devient le dernier bilan (TG/HDL recalculé : 3,68)', f.bilans.length === 3 && f.bilans[2].date === '2026-10-01' && (await page.textContent('[data-ind-tg-hdl]')).trim() === '3.68');
     });
@@ -85,18 +89,32 @@ try {
         v('  → « mie de pain → biscuits → poulet », sans marche : 10/100 (malus raffiné, glucides en premier)', /10\/100/.test(await page.textContent('[data-repas-score]')));
         await page.click('[data-onglet="pilotage"]'); await page.waitForTimeout(200);
         v('  → la checklist coche « déjeuner séquencé » et « marche après le déjeuner »', await page.isChecked('[data-check="dej_seq"] input') && await page.isChecked('[data-check="dej_marche"] input'));
-        await page.fill('[data-saisie-zone2]', '42'); await page.press('[data-saisie-zone2]', 'Tab'); await page.check('[data-saisie-machines]'); await page.waitForTimeout(200);
-        await page.waitForFunction(() => document.querySelector('[data-check="zone2"] input').checked, null, { timeout: 3000 }).catch(() => {});
+        await page.fill('[data-saisie-zone2]', '42'); await page.press('[data-saisie-zone2]', 'Tab'); await page.check('[data-saisie-machines]');
+        //  attente sur l'ÉTAT de l'appli (pas sur une durée) : la saisie est validée au « change », puis Vue redessine la case et le compteur.
+        //  Pas de .catch : si l'état n'arrive jamais, c'est le contrôle qui le dit (avec les valeurs), pas une attente muette.
+        const zoneEtat = () => page.evaluate((ST) => { const j = eval(ST).jour; return { min: j.activite.zone2_min, case: j.checklist.zone2, machines: j.activite.machines, domCase: document.querySelector('[data-check="zone2"] input').checked, domSemaine: document.querySelector('[data-machines-semaine]').textContent }; }, ST);
+        await page.waitForFunction((ST) => { const j = eval(ST).jour; return j.activite.zone2_min === 42 && j.checklist.zone2 === true && j.activite.machines === true
+            && document.querySelector('[data-check="zone2"] input').checked && /1\/2 séances/.test(document.querySelector('[data-machines-semaine]').textContent); }, ST, { timeout: 5000 })
+            .catch(async () => { v('  → (diagnostic) la saisie Zone 2 n\u2019est jamais arrivée dans l\u2019état', false, await zoneEtat()); });
         const z = [await page.isChecked('[data-check="zone2"] input'), await page.textContent('[data-machines-semaine]')];
         v('  → Zone 2 à 42 min coche la case ; 1 séance machines cette semaine', z[0] && /1\/2 séances/.test(z[1]), z);
         v('  → bilan énergétique : 359 kcal ingérées, métabolisme de base calculé (taille + pesée)', /359 kcal/.test(await page.textContent('[data-kcal-ingerees]')) && !/—/.test(await page.textContent('[data-bilan-net]')));
+        //  La cause réelle du clignotement d'avant : un rendu de la page (ici : le bandeau d'enregistrement qui change, comme à la fin d'une
+        //  sauvegarde automatique) PENDANT qu'on tape ne doit jamais vider le champ. On le provoque, de façon déterministe, entre la frappe et la sortie du champ.
+        await attendreEnregistre(page);
+        await page.fill('[data-saisie-pas]', '1234');
+        await page.evaluate(async (ST) => { const st = eval(ST); st.statut = 'modifié'; await Vue.nextTick(); st.statut = 'enregistré'; await Vue.nextTick(); }, ST);
+        const pendantFrappe = await page.inputValue('[data-saisie-pas]');
+        await page.press('[data-saisie-pas]', 'Tab');
+        await page.waitForFunction((ST) => eval(ST).jour.activite.pas === 1234, ST, { timeout: 5000 }).catch(() => {});
+        v('  → un rendu de la page pendant la frappe ne vide pas le champ (le « 1234 » tapé arrive dans l\u2019état)', pendantFrappe === '1234' && await page.evaluate((ST) => eval(ST).jour.activite.pas, ST) === 1234, [pendantFrappe]);
     });
     await section('E', async () => {
         await page.click('[data-onglet="poids"]'); await page.fill('[data-pesee]', '97.2'); await page.click('[data-ajouter-pesee]'); await page.waitForTimeout(300);
         v('E. pesée 97,2 kg ajoutée ; projection vers 85 kg avec une date', (await page.textContent('[data-poids-actuel]')).includes('97.2') && /\d{4}/.test(await page.textContent('[data-projection]')));
         v('  → la courbe de poids est dessinée', await page.evaluate(() => !!Chart.getChart(document.getElementById('graphPoids'))));
         const csv = path.join(tmp, 'samsung.csv'); fs.writeFileSync(csv, 'date,step_count,active_calorie,weight\n2026-11-01,10450,612,97.4\n2026-11-02,8200,480,\n');
-        await page.setInputFiles('[data-import-csv]', csv); await page.waitForTimeout(400); await attendreEnregistre(page);
+        await page.setInputFiles('[data-import-csv]', csv); await attendreEffetPuisEnregistre(page, () => /2 jour/.test((document.querySelector('[data-message-csv]') || {}).textContent || ''));
         const f = lireFichier();
         v('  → CSV Samsung Health : 2 jours importés (pas, kcal actives), la pesée du 01/11 rejoint la courbe', /2 jour/.test(await page.textContent('[data-message-csv]')) && f.journal['2026-11-01'].samsung.pas === 10450 && f.poids.some(p => p.date === '2026-11-01' && p.source === 'samsung'));
     });
@@ -135,7 +153,7 @@ try {
         const p2 = await ouvrir();
         const dossier = path.join(tmp, 'dossier_fictif.json');
         fs.writeFileSync(dossier, JSON.stringify({ profil: { nom: 'PERSONNE FICTIVE', sexe: 'H', naissance: '1975-02-02' }, objectifs: { poids_kg: 80 }, bilans: [{ date: '2026-01-10', valeurs: { tg: { v: 1.2 } } }], poids: [], journal: {}, supplements: [], protocole: [] }));
-        await p2.setInputFiles('[data-import-dossier]', dossier); await p2.waitForTimeout(300); await attendreEnregistre(p2);
+        await p2.setInputFiles('[data-import-dossier]', dossier); await attendreEffetPuisEnregistre(p2, () => /1 bilan/.test((document.querySelector('[data-message-import]') || {}).textContent || ''));
         v('I. « Importer mon dossier » (.json) : profil et bilans chargés et enregistrés', /1 bilan/.test(await p2.textContent('[data-message-import]')) && lireFichier().profil.nom === 'PERSONNE FICTIVE');
         await p2.close();
     });
