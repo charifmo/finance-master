@@ -221,5 +221,7 @@ v('M. garde-fou exporté : coût, cure, mise en garde, palier, conseil, question
   && !['10 000 pas/jour au total', 'Soleus push-ups au bureau, plusieurs fois par jour', '2 gélules + 2 grands verres d’eau (30 min avant le repas)', 'Se peser 1×/semaine'].some(P.pasUneAction));
 const leconsFausses = P.analyser(PG, { lecons: [{ cle: pr.find(r => /Coût/.test(r.texte)).cle, bucket: 'action' }] });
 v('  → une leçon (ou une correction de l’IA) qui mettait le coût en case ne s’applique pas', !leconsFausses.elements.some(e => e.bucket === 'action' && /Coût/.test(e.texte)));
+const lecPrise = P.analyser(PG, { lecons: [{ cle: P.cle('Curcumine 500 mg   — à la première bouchée'), bucket: 'supplement' }, { cle: P.cle('2 œufs'), bucket: 'ignorer' }] }).elements.filter(e => e.bucket === 'action');
+v('  → une ancienne leçon posée sur la 1re ligne d’une prise ou d’un repas ne fait plus disparaître la case « Prendre » ni le repas', lecPrise.some(e => /^Prendre : Curcumine/.test(e.texte)) && lecPrise.some(e => e.texte === 'Petit-déjeuner'), lecPrise.map(e => e.texte));
 console.log(ko === 0 ? `\n  ✅ TOUT PASSE — ${n} contrôles` : `\n  ❌ ${ko} contrôle(s) en échec sur ${n}`);
 process.exit(ko === 0 ? 0 : 1);

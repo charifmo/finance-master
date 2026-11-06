@@ -586,6 +586,7 @@ z.close()`, src, zip]);
         for (let k = 13; k >= 0; k--) journal[ici(-k)] = { checklist: {}, repas: [], activite: {}, samsung: { pas: 6000 + 100 * (13 - k), sommeil_min: 400 + k, fc_repos: 60 + (k % 3), kcal_actives: 300 + k } };
         Object.assign(journal[ici(0)].samsung, { distance_km: 5.2, kcal_totales: 2650, tension_sys: 128, tension_dia: 82, spo2: 97, fc_moy: 74, fc_min: 55, fc_max: 131, vo2max: 38.5, glycemie: 99 });
         const items = Array.from({ length: 40 }, (_, i) => ({ id: 'p' + i, jour: 'tous', texte: 'Étape ' + i + ' du protocole', moment: ['reveil', 'matin', 'dejeuner', 'apres_midi', 'diner', 'coucher'][i % 6], heure: String(6 + Math.floor(i / 3)).padStart(2, '0') + ':00' }));
+        items[0].detail = '2 œufs\n50 g de pain d’orge'; items[0].repas = true;
         fs.writeFileSync(DATA, JSON.stringify({ profil: { nom: 'TESTEUR', sexe: 'H', naissance: '1980-01-01', pas_objectif: 10000 }, objectifs: { poids_kg: 95 },
             poids: [{ date: ici(-45), kg: 113.2, source: 'saisie' }, { date: ici(-12), kg: 110.7, source: 'samsung' }], journal, plans: { protocole: { titre: 'Protocole long', items } },
             sync_auto: { derniere: '2020-01-01T00:00:00Z', source: 'HC Webhook', jours: 1, detail_pas: { date: ici(0), retenu: 7300, sources: { montre: 6100, 'téléphone': 4200 } } } }));
@@ -594,6 +595,11 @@ z.close()`, src, zip]);
         const pos = await pr.evaluate(() => ({ kpi: document.querySelector('[data-kpis]').getBoundingClientRect().top, courbes: document.querySelector('[data-courbes]').getBoundingClientRect().top, plan: document.querySelector('[data-ma-journee]').getBoundingClientRect().top,
             liste: document.querySelector('[data-liste-journee]').getBoundingClientRect().height, items: document.querySelectorAll('[data-pilotage-item]').length }));
         v('R. Pilotage : indicateurs clés, puis courbes, puis le plan (40 étapes, liste bornée en hauteur et défilante)', pos.kpi < pos.courbes && pos.courbes < pos.plan && pos.items === 40 && pos.liste <= 460, pos);
+        const det = await pr.$$eval('[data-pilotage-detail]', l => l.map(e => e.textContent));
+        await pr.click('[data-basculer-details]'); await pr.waitForTimeout(100);
+        const detMasque = (await pr.$$('[data-pilotage-detail]')).length;
+        await pr.click('[data-basculer-details]'); await pr.waitForTimeout(100);
+        v('  → Pilotage : le détail sous la case (menu du repas) affiché d’office ; « Masquer les détails » le replie', det.length === 1 && /2 œufs/.test(det[0]) && /pain d’orge/.test(det[0]) && detMasque === 0 && (await pr.$$('[data-pilotage-detail]')).length === 1, [det, detMasque]);
         const ids = await pr.$$eval('[data-kpi]', l => l.map(e => e.dataset.kpi));
         v('  → indicateurs : pas, calories, bilan net, poids, sommeil, FC repos, protocole, exercice ; + SpO2 et tension reçues', ['pas', 'kcal', 'energie', 'poids', 'sommeil', 'coeur', 'protocole', 'exercice', 'spo2', 'tension'].every(i => ids.includes(i)), ids);
         const t = async (id) => (await pr.textContent(`[data-kpi="${id}"]`)).replace(/\s+/g, ' ');

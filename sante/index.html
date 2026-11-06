@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.18"></script>
-    <script src="sante_import.js?v=1.18"></script>
-    <script src="sante_samsung.js?v=1.18"></script>
-    <script src="sante_protocole.js?v=1.18"></script>
+    <script src="sante_calculs.js?v=1.19"></script>
+    <script src="sante_import.js?v=1.19"></script>
+    <script src="sante_samsung.js?v=1.19"></script>
+    <script src="sante_protocole.js?v=1.19"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -159,13 +159,14 @@
 
             <!-- la journée : le plan (borné en hauteur), la saisie, le bilan, les mesures -->
             <div class="grid lg:grid-cols-5 gap-5">
-                <div class="carte p-4 space-y-2 lg:col-span-3" data-ma-journee>
+                <div class="carte p-4 space-y-2 lg:col-span-3 min-w-0" data-ma-journee>
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <h2 class="font-black text-emerald-900">✅ Ma journée</h2>
-                        <span v-if="protocole" class="text-xs font-black text-emerald-700" data-score-protocole>{{ suiviProto.du_jour.filter(i => i.fait).length }}/{{ suiviProto.du_jour.length }} faits · « {{ protocole.titre }} » <button type="button" class="underline font-bold" @click="onglet = 'plans'">détails</button></span>
+                        <span v-if="protocole" class="text-xs font-black text-emerald-700 min-w-0 break-words" data-score-protocole>{{ suiviProto.du_jour.filter(i => i.fait).length }}/{{ suiviProto.du_jour.length }} faits · « {{ protocole.titre }} » <button type="button" class="underline font-bold" @click="onglet = 'plans'">détails</button></span>
                         <span v-else class="text-xs font-black text-emerald-700" data-checklist-score>{{ checklistFaits }}/{{ CHECKLIST.length }} faits</span>
                     </div>
                     <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" :style="{ width: tauxJournee + '%' }"></div></div>
+                    <button v-if="protocole && protocole.items.some(i => i.detail)" type="button" data-basculer-details @click="afficherDetails = !afficherDetails" class="text-xs font-bold text-teal-700 underline">{{ afficherDetails ? '▴ Masquer les détails (menus, prises, consignes)' : '▸ Afficher les détails (menus, prises, consignes)' }}</button>
                     <div v-if="prochainesEtapes.length" class="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs" data-prochaines>
                         <p class="font-black text-emerald-900 mb-0.5">⏭️ À faire ensuite</p>
                         <p v-for="e in prochainesEtapes" :key="e.id" class="truncate"><span v-if="e.heure" class="font-black tabnum" :class="e.retard ? 'text-rose-700' : 'text-emerald-700'">{{ e.heure }}{{ e.retard ? ' (en retard)' : '' }} · </span>{{ e.texte }}</p>
@@ -176,7 +177,10 @@
                                 <p class="text-[11px] font-black uppercase tracking-wide text-slate-500 mt-1 sticky top-0 bg-white">{{ g.lib }}</p>
                                 <label v-for="i in g.items" :key="i.id" class="flex items-start gap-3 py-1 cursor-pointer" :data-pilotage-item="i.id">
                                     <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
-                                    <span class="text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'"><span v-if="i.heure" class="text-xs font-black text-emerald-700 tabnum">{{ i.heure }} · </span>{{ i.texte }}</span>
+                                    <span class="flex-1 min-w-0 text-sm">
+                                        <span :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'"><span v-if="i.heure" class="text-xs font-black text-emerald-700 tabnum">{{ i.heure }} · </span>{{ i.texte }}</span>
+                                        <span v-if="i.detail && afficherDetails" class="block mt-0.5 text-xs text-slate-600 whitespace-pre-line leading-snug" data-pilotage-detail>{{ i.detail }}</span>
+                                    </span>
                                 </label>
                             </div>
                         </template>
@@ -189,7 +193,7 @@
                     </div>
                     <button v-if="TYPES_PLAN.some(t => suivis[t.id].du_jour.length)" type="button" data-plans-du-jour @click="onglet = 'plans'" class="w-full text-left mt-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100">📋 Plans du jour : <span v-for="(t, n) in TYPES_PLAN.filter(t => suivis[t.id].du_jour.length)" :key="t.id">{{ n ? ' · ' : '' }}{{ t.icone }} {{ suivis[t.id].du_jour.filter(i => i.fait).length }}/{{ suivis[t.id].du_jour.length }}</span> → cocher</button>
                 </div>
-                <div class="space-y-5 lg:col-span-2">
+                <div class="space-y-5 lg:col-span-2 min-w-0">
                     <div class="carte p-4" data-mesures-jour>
                         <h2 class="font-black text-emerald-900 mb-1">📲 Mesures du jour <span class="text-[11px] font-bold text-slate-500">(Samsung Health)</span></h2>
                         <table v-if="mesuresJour.length" class="w-full text-sm tabnum"><tbody>
@@ -467,9 +471,9 @@
                             <label class="flex items-start gap-3 cursor-pointer">
                                 <input type="checkbox" class="mt-0.5 w-5 h-5 accent-emerald-600 shrink-0" :checked="i.fait" @change="cocherPlan(i.id, $event.target.checked)">
                                 <span class="flex-1 text-sm" :class="i.fait ? 'line-through text-slate-400' : 'font-semibold'"><span v-if="i.heure" class="text-xs font-black text-emerald-700 tabnum">{{ i.heure }} · </span>{{ i.texte }}<span v-if="i.jours" class="text-[10px] text-slate-400"> · {{ i.jours.join(', ') }}</span></span>
-                                <button v-if="i.detail" type="button" @click.prevent="detailsOuverts[i.id] = !detailsOuverts[i.id]" class="text-xs font-bold text-teal-700 px-1" :aria-label="'Détail : ' + i.texte">{{ detailsOuverts[i.id] ? '▴' : '▸' }}</button>
+                                <button v-if="i.detail" type="button" @click.prevent="detailsOuverts[i.id] = !detailOuvert(i)" class="text-xs font-bold text-teal-700 px-1" :aria-label="'Détail : ' + i.texte">{{ detailOuvert(i) ? '▴' : '▸' }}</button>
                             </label>
-                            <p v-if="detailsOuverts[i.id]" class="ml-8 mt-1 text-xs text-slate-600 whitespace-pre-line" data-detail-protocole>{{ i.detail }}</p>
+                            <p v-if="i.detail && detailOuvert(i)" class="ml-8 mt-1 text-xs text-slate-600 whitespace-pre-line" data-detail-protocole>{{ i.detail }}</p>
                         </div>
                     </div>
                     <p v-if="!suiviProto.du_jour.length" class="text-sm text-slate-400">Rien de prévu ce jour-là.</p>
@@ -554,6 +558,7 @@
                 </template>
                 <details v-if="(etat.lecons_plan || []).length" class="text-xs" data-lecons>
                     <summary class="cursor-pointer font-bold text-purple-800">🧠 Leçons apprises ({{ etat.lecons_plan.length }})</summary>
+                    <button type="button" data-oublier-lecons @click="confirmer('lecons', () => { etat.lecons_plan = []; })" class="mt-1 px-2 py-1 rounded-lg text-xs font-black" :class="aConfirmer === 'lecons' ? 'bg-rose-600 text-white' : 'border border-rose-200 text-rose-700'">{{ aConfirmer === 'lecons' ? 'Confirmer : tout oublier' : '🗑 Tout oublier (repartir des règles seules)' }}</button>
                     <ul class="mt-1 space-y-0.5">
                         <li v-for="l in etat.lecons_plan.slice().reverse().slice(0, 80)" :key="l.cle" class="flex items-start gap-2"><span class="flex-1 text-slate-600">« {{ l.cle.slice(0, 80) }} » → <b>{{ (BUCKETS.find(b => b[0] === l.bucket) || [0, ''])[1] }}</b><span v-if="l.moment"> · {{ LIB_MOMENT[l.moment] }}</span><span v-if="l.texte"> · « {{ l.texte }} »</span></span><button type="button" @click="oublierLecon(l.cle)" class="text-slate-400 hover:text-rose-600" aria-label="Oublier cette leçon">✕</button></li>
                     </ul>
@@ -861,7 +866,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.18';
+        const VERSION = '1.19';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1534,6 +1539,10 @@ createApp({
         };
         watch([onglet, seriesPilotage, () => etat.objectifs.poids_kg, () => etat.profil.pas_objectif], dessinerPilotage);
         const detailsOuverts = reactive({});
+        //  v1.19 — les détails (menu d'un repas, prises, consignes) sont affichés d'office ; un bouton les masque (retenu)
+        const afficherDetails = ref((() => { try { return localStorage.getItem('sante_details') !== 'non'; } catch (_) { return true; } })());
+        watch(afficherDetails, (v) => { try { localStorage.setItem('sante_details', v ? 'oui' : 'non'); } catch (_) { /* stockage bloqué */ } });
+        const detailOuvert = (i) => detailsOuverts[i.id] !== undefined ? detailsOuverts[i.id] : afficherDetails.value;
         const tauxJourProto = computed(() => { const l = suiviProto.value.du_jour; return l.length ? Math.round(100 * l.filter(i => i.fait).length / l.length) : null; });
         const tri = reactive({ ouvert: false, nom: '', titre: '', texte: '', message: '', elements: [], supprimes: [], options: { supplements: true, regles: true, objectifs: true }, resultat: '' });
         const texteInitial = (e) => String(e.texte || '').trim();
@@ -1802,7 +1811,7 @@ createApp({
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
-                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
+                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, afficherDetails, detailOuvert, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, urlAvecJeton, valeurAuth, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, LIB_HC, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,

@@ -221,7 +221,7 @@
             if (mode === 'prendre') {
                 if (!RE_QTE.test(lib0) || /^(?:puis|seulement|semaine|jamais|si|repas|sauf|au moins)\b/i.test(lib0)) { const c = suppBloc || derniere; if (c) ajouterDetail(c, txt); else ignorer(txt, 'explication'); return true; }
                 const items = lib0.split(/\s+·\s+/).map(propre).filter(Boolean);
-                if (!suppBloc) { suppBloc = action('Prendre : ' + items.join(' · '), p.s, { heure, raison: 'prise de suppléments' }); if (suppBloc) suppBloc.texte = 'Prendre : ' + items.join(' · '); }
+                if (!suppBloc) { suppBloc = action('Prendre : ' + items.join(' · '), p.s, { heure, raison: 'prise de suppléments', cle: cle('prendre ' + moment + ' ' + (heure || '') + ' ' + lib0) }); if (suppBloc) suppBloc.texte = 'Prendre : ' + items.join(' · '); }
                 else suppBloc.texte += ' · ' + items.join(' · ');
                 if (suppBloc && det0) ajouterDetail(suppBloc, items[items.length - 1] + ' — ' + det0);
                 return true;
@@ -237,7 +237,7 @@
                 return true;
             }
             if (!repas) {
-                repas = action(REPAS.includes(moment) ? LIB[moment] + (nomMoment ? ' « ' + majuscule(nomMoment.toLowerCase()) + ' »' : '') : 'Collation' + (nomMoment ? ' « ' + majuscule(nomMoment.toLowerCase()) + ' »' : ''), p.s, { repas: true, heure, raison: 'repas', detail: info || '' });
+                repas = action(REPAS.includes(moment) ? LIB[moment] + (nomMoment ? ' « ' + majuscule(nomMoment.toLowerCase()) + ' »' : '') : 'Collation' + (nomMoment ? ' « ' + majuscule(nomMoment.toLowerCase()) + ' »' : ''), p.s, { repas: true, heure, raison: 'repas', detail: info || '', cle: cle('repas ' + moment + ' ' + (heure || '') + ' ' + nomMoment) });
             }
             if (repas) ajouterDetail(repas, txt);
             return true;
