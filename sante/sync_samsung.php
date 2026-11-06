@@ -50,7 +50,7 @@ if (sante_hc_est_payload($p)) {
         $refus[] = ($call['args']['date'] ?? '?') . ' : ' . implode(', ', $raisons) . ' ' . json_encode($call['args'], JSON_UNESCAPED_UNICODE);
     }
     if ($refus) error_log('[sante_sync] jours refusés : ' . implode(' | ', $refus));
-    $courant['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => $appliques, 'recu' => $r['recu']];
+    $courant['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => $appliques, 'recu' => $r['recu'], 'sources' => $r['sources']] + ($r['detail_pas'] ? ['detail_pas' => $r['detail_pas']] : []);
     if ($refus) $courant['sync_auto']['erreur'] = mb_substr(implode(' ; ', $refus), 0, 400);
     $w = sante_ecrire($courant);
     $tout_refuse = $r['calls'] && !$appliques;

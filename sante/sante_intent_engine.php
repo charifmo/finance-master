@@ -19,7 +19,7 @@ function sante_catalogue_fonctions(): array {
             'requis' => ['moment', 'items'], 'optionnels' => ['date', 'marche_post']],
         'log_workout_activity' => ['desc' => "Note l'activité du jour : pas, zone2_min (marche Zone 2 à jeun), machines (séance bas du corps, true/false), marches_post (nombre de marches de 15 min après repas), soleus_min.",
             'requis' => [], 'au_moins_un' => ['pas', 'zone2_min', 'machines', 'marches_post', 'soleus_min'], 'optionnels' => ['date', 'pas', 'zone2_min', 'machines', 'marches_post', 'soleus_min']],
-        'sync_samsung_health' => ['desc' => "Données Samsung Health / Health Connect d'un jour : pas, kcal_actives, fc_moy, fc_repos, sommeil_min, poids (kg) ; et aussi fc_min, fc_max, distance_km, kcal_totales, exercice_min, spo2 (%), tension_sys, tension_dia, hydratation_ml, graisse_pct, vfc_ms ; taille_cm met à jour le profil.",
+        'sync_samsung_health' => ['desc' => "Données Samsung Health / Health Connect d'un jour : pas, kcal_actives, fc_moy, fc_repos, sommeil_min, poids (kg) ; et aussi fc_min, fc_max, distance_km, kcal_totales, exercice_min, spo2 (%), tension_sys, tension_dia, hydratation_ml, graisse_pct, vfc_ms, vo2max, freq_resp, temperature (°C), glycemie (mg/dL), masse_maigre (kg), tour_taille (cm), kcal_repos ; taille_cm met à jour le profil.",
             'requis' => [], 'au_moins_un' => array_merge(SANTE_CHAMPS_SAMSUNG, ['taille_cm']), 'optionnels' => array_merge(['date', 'taille_cm'], SANTE_CHAMPS_SAMSUNG)],
         'update_supplement_protocol' => ['desc' => "Protocole de suppléments : action add | update | remove, nom, dose?, moment?, actif?",
             'requis' => ['action', 'nom'], 'optionnels' => ['dose', 'moment', 'actif']],

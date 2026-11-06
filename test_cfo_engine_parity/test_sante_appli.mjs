@@ -574,10 +574,11 @@ z.close()`, src, zip]);
         const ici = (k) => { const d = new Date(Date.now() + k * 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
         const journal = {};
         for (let k = 13; k >= 0; k--) journal[ici(-k)] = { checklist: {}, repas: [], activite: {}, samsung: { pas: 6000 + 100 * (13 - k), sommeil_min: 400 + k, fc_repos: 60 + (k % 3), kcal_actives: 300 + k } };
-        Object.assign(journal[ici(0)].samsung, { distance_km: 5.2, kcal_totales: 2650, tension_sys: 128, tension_dia: 82, spo2: 97, fc_moy: 74, fc_min: 55, fc_max: 131 });
+        Object.assign(journal[ici(0)].samsung, { distance_km: 5.2, kcal_totales: 2650, tension_sys: 128, tension_dia: 82, spo2: 97, fc_moy: 74, fc_min: 55, fc_max: 131, vo2max: 38.5, glycemie: 99 });
         const items = Array.from({ length: 40 }, (_, i) => ({ id: 'p' + i, jour: 'tous', texte: 'Étape ' + i + ' du protocole', moment: ['reveil', 'matin', 'dejeuner', 'apres_midi', 'diner', 'coucher'][i % 6], heure: String(6 + Math.floor(i / 3)).padStart(2, '0') + ':00' }));
         fs.writeFileSync(DATA, JSON.stringify({ profil: { nom: 'TESTEUR', sexe: 'H', naissance: '1980-01-01', pas_objectif: 10000 }, objectifs: { poids_kg: 95 },
-            poids: [{ date: ici(-45), kg: 113.2, source: 'saisie' }, { date: ici(-12), kg: 110.7, source: 'samsung' }], journal, plans: { protocole: { titre: 'Protocole long', items } } }));
+            poids: [{ date: ici(-45), kg: 113.2, source: 'saisie' }, { date: ici(-12), kg: 110.7, source: 'samsung' }], journal, plans: { protocole: { titre: 'Protocole long', items } },
+            sync_auto: { derniere: '2020-01-01T00:00:00Z', source: 'HC Webhook', jours: 1, detail_pas: { date: ici(0), retenu: 7300, sources: { montre: 6100, 'téléphone': 4200 } } } }));
         const pr = await ouvrir();
         await pr.click('[data-onglet="pilotage"]'); await pr.waitForTimeout(400);
         const pos = await pr.evaluate(() => ({ kpi: document.querySelector('[data-kpis]').getBoundingClientRect().top, courbes: document.querySelector('[data-courbes]').getBoundingClientRect().top, plan: document.querySelector('[data-ma-journee]').getBoundingClientRect().top,
@@ -595,12 +596,13 @@ z.close()`, src, zip]);
         v('  → période 7 / 30 / 90 jours (30 par défaut)', n30 === 30 && n7 === 7 && n90 === 90, [n30, n7, n90]);
         const mes = await pr.$$eval('[data-mesure]', l => l.map(e => e.dataset.mesure));
         v('  → « Mesures du jour » : tout le détail reçu (distance, calories totales, FC 55–131, SpO2, tension…)', ['pas', 'distance', 'kcal_totales', 'fc_moy', 'fc_repos', 'spo2', 'tension', 'sommeil'].every(i => mes.includes(i)) && /55–131/.test(await pr.textContent('[data-mesure="fc_moy"]')), mes);
+        v('  → VO2 max et glycémie reçues : tuiles et lignes ; pas par source (montre, téléphone → retenus)', ids.includes('vo2max') && ids.includes('glycemie') && mes.includes('vo2max') && /montre 6\s100.*téléphone 4\s200.*7\s300 retenus/.test(await pr.textContent('[data-pas-sources]')));
         v('  → ce qui manque est signalé : la taille (métabolisme de base), la pesée de plus de 7 jours', await pr.isVisible('[data-manque="taille"]') && /12 jours/.test(await pr.textContent('[data-manque="pesee"]')));
         await pr.click('[data-manque="taille"] button'); await pr.waitForTimeout(500);
         v('  → « Renseigner ma taille » amène au champ Taille du profil', await pr.evaluate(() => !!document.activeElement && document.activeElement.hasAttribute('data-profil-taille')));
         await pr.fill('[data-profil-taille]', '177'); await pr.press('[data-profil-taille]', 'Tab'); await pr.waitForTimeout(200);
         v('  → taille saisie : l’alerte disparaît, le bilan net n’attend plus que les repas', !(await pr.$('[data-manque="taille"]')) && !/il manque la taille/.test(await t('energie')));
-        v('  → la synchro du téléphone : état visible en tête (pas encore réglée ici)', /pas encore réglée/.test(await pr.textContent('[data-statut-synchro]')));
+        v('  → la synchro du téléphone : état visible en tête (ancienne → signalée)', /Synchro/.test(await pr.textContent('[data-statut-synchro]')) && /rose/.test(await pr.getAttribute('[data-statut-synchro]', 'class')));
         await pr.close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');

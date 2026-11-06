@@ -141,7 +141,11 @@ function sante_normaliser($e): array {
         $o['sync_auto'] = ['derniere' => substr($e['sync_auto']['derniere'], 0, 30), 'source' => mb_substr((string)($e['sync_auto']['source'] ?? ''), 0, 60), 'jours' => (int)($e['sync_auto']['jours'] ?? 0)]
         + (!empty($e['sync_auto']['erreur']) ? ['erreur' => mb_substr((string)$e['sync_auto']['erreur'], 0, 400)] : [])
         //  v1.16 — ce que le téléphone a envoyé la dernière fois ({ type: nombre de mesures })
-        + (is_array($e['sync_auto']['recu'] ?? null) ? ['recu' => (object)array_slice(array_filter(array_map(fn($n) => is_numeric($n) ? (int)$n : null, $e['sync_auto']['recu']), fn($n, $k) => $n !== null && is_string($k) && preg_match('/^[a-z_]{1,40}$/', $k), ARRAY_FILTER_USE_BOTH), 0, 20, true)] : []);
+        //  v1.17 — nom lisible de chaque source, et les pas du dernier jour source par source
+        + (is_array($e['sync_auto']['sources'] ?? null) ? ['sources' => (object)array_slice(array_map(fn($n) => mb_substr((string)$n, 0, 30), array_filter($e['sync_auto']['sources'], fn($n, $k) => is_string($k) && preg_match('/^s[0-9a-f]{6}$/', $k), ARRAY_FILTER_USE_BOTH)), -12, 12, true)] : [])
+        + (is_array($e['sync_auto']['detail_pas'] ?? null) && sante_date_ok($e['sync_auto']['detail_pas']['date'] ?? null) ? ['detail_pas' => ['date' => $e['sync_auto']['detail_pas']['date'], 'retenu' => (int)($e['sync_auto']['detail_pas']['retenu'] ?? 0),
+            'sources' => (object)array_slice(array_map('intval', array_filter((array)($e['sync_auto']['detail_pas']['sources'] ?? []), 'is_numeric')), 0, 12, true)]] : [])
+        + (is_array($e['sync_auto']['recu'] ?? null) ? ['recu' => (object)array_slice(array_filter(array_map(fn($n) => is_numeric($n) ? (int)$n : null, $e['sync_auto']['recu']), fn($n, $k) => $n !== null && is_string($k) && preg_match('/^[a-z0-9_]{1,40}$/', $k), ARRAY_FILTER_USE_BOTH), 0, 30, true)] : []);
     $pl = is_array($e['plans'] ?? null) ? $e['plans'] : [];
     $o['plans'] = new stdClass();
     foreach (['nutrition', 'exercice', 'protocole'] as $t) if (($n = sante_norm_plan($pl[$t] ?? null, $t)) !== null) { $o['plans'] = (array)$o['plans']; $o['plans'][$t] = $n; }

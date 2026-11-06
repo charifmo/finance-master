@@ -16,9 +16,11 @@
 //  v1.16 — les mesures d'un jour reçues de Samsung Health / Health Connect, et leurs bornes de vraisemblance
 const SANTE_BORNES_SAMSUNG = ['pas' => [0, 100000], 'kcal_actives' => [0, 10000], 'fc_moy' => [25, 230], 'fc_repos' => [25, 150], 'sommeil_min' => [0, 1440], 'poids' => [20, 400],
     'fc_min' => [25, 230], 'fc_max' => [25, 250], 'distance_km' => [0, 300], 'kcal_totales' => [0, 20000], 'exercice_min' => [0, 1440], 'spo2' => [50, 100],
-    'tension_sys' => [60, 260], 'tension_dia' => [30, 160], 'hydratation_ml' => [0, 15000], 'graisse_pct' => [2, 80], 'vfc_ms' => [1, 300]];
+    'tension_sys' => [60, 260], 'tension_dia' => [30, 160], 'hydratation_ml' => [0, 15000], 'graisse_pct' => [2, 80], 'vfc_ms' => [1, 300],
+    //  v1.17
+    'vo2max' => [10, 90], 'freq_resp' => [4, 60], 'temperature' => [30, 45], 'glycemie' => [20, 600], 'masse_maigre' => [20, 200], 'tour_taille' => [40, 250], 'kcal_repos' => [500, 5000]];
 const SANTE_CHAMPS_SAMSUNG = ['pas', 'kcal_actives', 'fc_moy', 'fc_repos', 'sommeil_min', 'poids', 'fc_min', 'fc_max', 'distance_km', 'kcal_totales', 'exercice_min', 'spo2',
-    'tension_sys', 'tension_dia', 'hydratation_ml', 'graisse_pct', 'vfc_ms'];
+    'tension_sys', 'tension_dia', 'hydratation_ml', 'graisse_pct', 'vfc_ms', 'vo2max', 'freq_resp', 'temperature', 'glycemie', 'masse_maigre', 'tour_taille', 'kcal_repos'];
 
 const SANTE_KCAL_PAR_KG = 7700;   // énergie d'un kilo de masse grasse (approximation usuelle)
 

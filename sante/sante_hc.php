@@ -39,7 +39,14 @@ function sante_hc_convertir_b(array $p): array {
     $out = ['timestamp' => (string)($m['sync_timestamp'] ?? gmdate('c')), 'app_version' => (string)($m['app_version'] ?? ''), 'timezone' => $zone];
     if (!empty($p['test']) || !empty($m['test'])) $out['test'] = true;
     $norm = fn($k) => preg_replace('/[^a-z]/', '', strtolower((string)$k));
-    $cle = function ($r) { $deb = (string)($r['start_time'] ?? ($r['time'] ?? '')); return 's' . substr(md5((string)($r['source'] ?? '')), 0, 6) . '|' . preg_replace('/[^0-9TZ]/', '', substr($deb, 0, 23)); };
+    //  v1.17 — la clé porte aussi la FIN de la mesure : les pas de plusieurs sources se comparent minute par minute
+    $chiffres = fn($t) => preg_replace('/[^0-9TZ]/', '', substr((string)$t, 0, 23));
+    $cle = function ($r) use ($chiffres, &$out) {
+        $src = (string)($r['source'] ?? ''); $h = 's' . substr(md5($src), 0, 6);
+        if (!isset($out['_sources'][$h]) && count($out['_sources'] ?? []) < 12) $out['_sources'][$h] = sante_hc_nom_source($src);
+        $deb = $r['start_time'] ?? ($r['time'] ?? ''); $fin = $r['end_time'] ?? null;
+        return $h . '|' . $chiffres($deb) . ($fin !== null && $fin !== $deb ? '|' . $chiffres($fin) : '');
+    };
     $kcal = function ($r) { $v = (float)$r['value']; $u = strtolower((string)($r['unit'] ?? 'kcal')); return $u === 'cal' ? $v / 1000 : ($u === 'kj' ? $v / 4.184 : ($u === 'j' ? $v / 4184 : $v)); };
     $kg = function ($r) { $v = (float)$r['value']; $u = strtolower((string)($r['unit'] ?? 'kg')); return in_array($u, ['g', 'gram', 'grams'], true) ? $v / 1000 : (in_array($u, ['lb', 'lbs', 'pound', 'pounds'], true) ? $v * 0.45359237 : $v); };
     //  v1.16 — longueurs et volumes : ramenés en mètres et en millilitres (unité absente : devinée d'après l'ordre de grandeur)
@@ -50,6 +57,7 @@ function sante_hc_convertir_b(array $p): array {
     foreach ($p['data'] as $type => $liste) {
         if (!is_array($liste) || !array_is_list($liste)) continue;
         $t = $norm($type);
+        $out['_recu'][substr(preg_replace('/[^a-z0-9_]/', '', strtolower((string)$type)), 0, 40) ?: 'x'] = count($liste);
         foreach ($liste as $r) {
             if (!is_array($r)) continue;
             $meta = ['id' => $cle($r)]; $deb = $r['start_time'] ?? ($r['time'] ?? null); $fin = $r['end_time'] ?? $deb;
@@ -71,6 +79,8 @@ function sante_hc_convertir_b(array $p): array {
             elseif (in_array($t, ['bodyfat', 'bodyfatpercentage'], true) && is_numeric($r['value'] ?? null)) $out['body_fat'][] = ['percentage' => (float)$r['value'], 'time' => $deb, 'metadata' => $meta];
             elseif (in_array($t, ['height', 'bodyheight'], true) && is_numeric($r['value'] ?? null)) { $h = $m($r, (float)$r['value'] > 3 ? 'cm' : 'm'); $out['height'][] = ['meters' => $h, 'time' => $deb, 'metadata' => $meta]; }
             elseif (in_array($t, ['heartratevariability', 'heartratevariabilityrmssd', 'hrv', 'hrvrmssd'], true) && is_numeric($r['value'] ?? null)) $out['heart_rate_variability'][] = ['ms' => (float)$r['value'], 'time' => $deb, 'metadata' => $meta];
+            //  v1.17 — les autres mesures « une valeur à un instant » : la dernière du jour est gardée
+            elseif (is_numeric($r['value'] ?? null) && ($g = sante_hc_mesure_simple($t, $r, $kg, $kcal)) !== null) $out['mesures'][] = ['champ' => $g[0], 'valeur' => $g[1], 'time' => $deb, 'metadata' => $meta];
             elseif (in_array($t, ['sleep', 'sleepsession', 'sleepsessions', 'sleepstage', 'sleepstages'], true)) {
                 if (preg_match('/awake|out_?of_?bed/i', (string)($r['stage'] ?? ($r['type'] ?? '')))) continue;      // l'éveil ne compte pas comme sommeil
                 $a = sante_hc_local($deb, [], 'x', $zone); $b = sante_hc_local($fin, [], 'x', $zone);
@@ -116,6 +126,7 @@ function sante_hc_integrer(array $p, array &$etat): array {
         if (!is_array($j)) $j = [];
         if (!isset($j['hc']) || !is_array($j['hc'])) $j['hc'] = [];
         if (!isset($j['hc'][$type]) || !is_array($j['hc'][$type])) $j['hc'][$type] = [];
+        if (preg_match('/^(id:s[0-9a-f]{6}\|[0-9TZ]+)\|/', $cle, $mm)) unset($j['hc'][$type][$mm[1]]);
         $j['hc'][$type][$cle] = $v;
         $touches[$date][$type] = true;
     };
@@ -165,7 +176,13 @@ function sante_hc_integrer(array $p, array &$etat): array {
         $morceau($a[0], 'vfc', $cle($r, 't:' . $a[1]), round((float)$r['ms'], 1));
     }
     //  poids, FC au repos, SpO2, tension, masse grasse : la dernière mesure du jour ; la taille : la plus récente de l'envoi
-    $spo2 = []; $tension = []; $graisse = []; $taille = null;
+    $spo2 = []; $tension = []; $graisse = []; $taille = null; $simples = [];
+    foreach ((array)($p['mesures'] ?? []) as $r) {
+        $a = is_array($r) ? sante_hc_local($r['time'] ?? null, $r['metadata'] ?? [], 'zone_offset_seconds', $zone) : null;
+        $b = is_array($r) ? (SANTE_BORNES_SAMSUNG[$r['champ'] ?? ''] ?? null) : null;
+        if (!$a || !$b || !is_numeric($r['valeur'] ?? null) || $r['valeur'] < $b[0] || $r['valeur'] > $b[1]) { $ignores++; continue; }
+        if (!isset($simples[$a[0]][$r['champ']]) || $a[2] >= $simples[$a[0]][$r['champ']][0]) $simples[$a[0]][$r['champ']] = [$a[2], round((float)$r['valeur'], 1)];
+    }
     foreach ((array)($p['height'] ?? []) as $r) {
         $a = is_array($r) ? sante_hc_local($r['time'] ?? null, $r['metadata'] ?? [], 'zone_offset_seconds', $zone) : null;
         if (!is_array($r) || !is_numeric($r['meters'] ?? null)) { $ignores++; continue; }
@@ -187,7 +204,7 @@ function sante_hc_integrer(array $p, array &$etat): array {
     unset($cible);
     //  les totaux des jours touchés
     $calls = [];
-    $dates = array_unique(array_merge(array_keys($touches), array_keys($poids), array_keys($repos), array_keys($spo2), array_keys($tension), array_keys($graisse)));
+    $dates = array_unique(array_merge(array_keys($touches), array_keys($poids), array_keys($repos), array_keys($spo2), array_keys($tension), array_keys($graisse), array_keys($simples)));
     sort($dates);
     foreach ($dates as $d) {
         $hc = $etat['journal'][$d]['hc'] ?? [];
@@ -200,6 +217,7 @@ function sante_hc_integrer(array $p, array &$etat): array {
         if (!empty($touches[$d]['eau'])) $args['hydratation_ml'] = (int)round(sante_hc_somme_sources($hc['eau'] ?? []));
         if (!empty($touches[$d]['exo'])) $args['exercice_min'] = (int)round(array_sum($hc['exo'] ?? []));
         if (!empty($touches[$d]['vfc']) && !empty($hc['vfc'])) $args['vfc_ms'] = (int)round(array_sum($hc['vfc']) / count($hc['vfc']));
+        foreach ($simples[$d] ?? [] as $k => [, $v]) $args[$k] = $v;
         if (isset($spo2[$d]) && $spo2[$d][1] >= 50 && $spo2[$d][1] <= 100) $args['spo2'] = round($spo2[$d][1], 1);
         if (isset($graisse[$d]) && $graisse[$d][1] >= 2 && $graisse[$d][1] <= 80) $args['graisse_pct'] = round($graisse[$d][1], 1);
         if (isset($tension[$d]) && $tension[$d][1] >= 60 && $tension[$d][1] <= 260 && $tension[$d][2] >= 30 && $tension[$d][2] <= 160) { $args['tension_sys'] = (int)round($tension[$d][1]); $args['tension_dia'] = (int)round($tension[$d][2]); }
@@ -213,8 +231,22 @@ function sante_hc_integrer(array $p, array &$etat): array {
     //  v1.16 — ce que le téléphone a envoyé, type par type (affiché dans l'appli : on voit ce qui manque)
     $recu = [];
     foreach (SANTE_HC_TYPES as $t) if (!empty($p[$t]) && is_array($p[$t])) $recu[$t] = count($p[$t]);
+    if (!empty($p['_recu']) && is_array($p['_recu'])) $recu = $p['_recu'];
+    //  v1.17 — les pas du dernier jour touché, source par source (pour voir d'où vient un écart avec Samsung Health)
+    $noms = array_merge((array)($etat['sync_auto']['sources'] ?? []), (array)($p['_sources'] ?? []));
+    $detail = null;
+    $joursPas = array_keys(array_filter($touches, fn($t) => !empty($t['pas'])));
+    if ($joursPas) {
+        $d = max($joursPas); $par = [];
+        foreach ((array)($etat['journal'][$d]['hc']['pas'] ?? []) as $k => $v) {
+            $h = preg_match('/^(?:id:)?(s[0-9a-f]{6})\|/', (string)$k, $m) ? $m[1] : '_';
+            $nom = $h === '_' ? 'total du jour' : ($noms[$h] ?? 'source ' . substr($h, 1, 4));
+            $par[$nom] = ($par[$nom] ?? 0) + (float)$v;
+        }
+        $detail = ['date' => $d, 'sources' => array_map(fn($x) => (int)round($x), $par), 'retenu' => (int)round(sante_hc_somme_sources($etat['journal'][$d]['hc']['pas'] ?? []))];
+    }
     $taille_cm = $taille && $taille[1] >= 100 && $taille[1] <= 250 ? round($taille[1]) : null;
-    return ['calls' => $calls, 'dates' => array_map(fn($c) => $c['args']['date'], $calls), 'ignores' => $ignores, 'recu' => $recu, 'taille_cm' => $taille_cm];
+    return ['calls' => $calls, 'dates' => array_map(fn($c) => $c['args']['date'], $calls), 'ignores' => $ignores, 'recu' => $recu, 'taille_cm' => $taille_cm, 'sources' => array_slice($noms, -12, 12, true), 'detail_pas' => $detail];
 }
 
 /** Le jeton du webhook : db_config.php (sante_samsung_token), la variable d'environnement, ou celui créé depuis l'appli. */
@@ -261,22 +293,58 @@ function sante_hc_est_demo($p): bool {
 }
 
 /**
- * Somme d'un jour de pas / kcal / distance : les morceaux d'une même source (clé « …sXXXXXX|début ») s'additionnent ;
- * si plusieurs sources ont écrit (téléphone ET montre comptent les mêmes pas), on compare HEURE PAR HEURE et on garde,
- * pour chaque heure, la source la plus complète — puis on additionne les heures. v1.16 : avant, on gardait la source la
- * plus complète sur toute la journée, ce qui perdait les heures où seule l'autre source comptait (le téléphone le matin,
- * la montre l'après-midi).
+ * Somme d'un jour de pas / kcal / distance. Plusieurs sources (téléphone ET montre) comptent souvent les MÊMES pas :
+ * chaque mesure (clé « sXXXXXX|début|fin ») est répartie sur ses minutes, puis, pour chaque minute, on garde la source
+ * qui en compte le plus, et on additionne les minutes — comme Samsung Health qui fusionne téléphone et montre.
+ * v1.17 : la comparaison se faisait par heure (v1.16) ou sur la journée entière (v1.15), ce qui perdait les moments où
+ * une seule source comptait dans une heure partagée. Clés sans heure exploitable (total « jour », anciens formats) :
+ * regroupées comme avant.
  */
 function sante_hc_somme_sources(array $morceaux): float {
-    $par = [];                                           // [heure][source] => somme
+    $min = []; $autres = [];                            // [minute][source] => pas ; [groupe][source] => pas
+    $ts = function (string $c): ?int { if (!preg_match('/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/', $c, $m)) return null; return gmmktime((int)$m[4], (int)$m[5], (int)$m[6], (int)$m[2], (int)$m[3], (int)$m[1]); };
     foreach ($morceaux as $k => $v) {
-        $k = (string)$k;
-        if (preg_match('/^(?:id:)?(s[0-9a-f]{6})\|(\d{8}T?\d{2})?/', $k, $m)) { $src = $m[1]; $h = $m[2] ?? '' ?: 'x'; }
-        elseif (preg_match('/^t:(\d{2})/', $k, $m)) { $src = '_'; $h = 'local' . $m[1]; }
-        else { $src = '_'; $h = 'x'; }
-        $par[$h][$src] = ($par[$h][$src] ?? 0) + (float)$v;
+        $k = (string)$k; $v = (float)$v;
+        if (preg_match('/^(?:id:)?(s[0-9a-f]{6})\|([0-9TZ]+)(?:\|([0-9TZ]+))?$/', $k, $m) && ($a = $ts($m[2])) !== null) {
+            $src = $m[1]; $b = isset($m[3]) ? $ts($m[3]) : null;
+            if ($b === null || $b <= $a || $b - $a > 86400) { $q = intdiv($a, 60); $min[$q][$src] = ($min[$q][$src] ?? 0) + $v; continue; }
+            for ($q = intdiv($a, 60), $fin = intdiv($b - 1, 60); $q <= $fin; $q++) {
+                $part = (min($b, ($q + 1) * 60) - max($a, $q * 60)) / ($b - $a);
+                if ($part > 0) $min[$q][$src] = ($min[$q][$src] ?? 0) + $v * $part;
+            }
+        } else {
+            $src = preg_match('/^(?:id:)?(s[0-9a-f]{6})\|/', $k, $m) ? $m[1] : '_';
+            $g = preg_match('/^t:(\d{2})/', $k, $m) ? 'local' . $m[1] : 'x';
+            $autres[$g][$src] = ($autres[$g][$src] ?? 0) + $v;
+        }
     }
     $total = 0.0;
-    foreach ($par as $sources) $total += max($sources);
+    foreach ($min as $s) $total += max($s);
+    foreach ($autres as $s) $total += max($s);
     return $total;
+}
+
+/** v1.17 — nom lisible d'une source Health Connect (paquet Android) */
+function sante_hc_nom_source(string $s): string {
+    $l = strtolower($s);
+    if ($l === '') return 'source inconnue';
+    if (str_contains($l, 'wear') || str_contains($l, 'watch')) return 'montre';
+    if (str_contains($l, 'shealth') || str_contains($l, 'samsung')) return 'Samsung Health';
+    if (str_contains($l, 'healthconnect.phone') || str_contains($l, 'phone')) return 'téléphone';
+    if (str_contains($l, 'fitness') || str_contains($l, 'fit')) return 'Google Fit';
+    $p = explode('.', $s);
+    return mb_substr(implode('.', array_slice($p, -2)), 0, 30);
+}
+
+/** v1.17 — les mesures « une valeur à un instant » de Health Connect → [champ, valeur dans l'unité de Santé Master] */
+function sante_hc_mesure_simple(string $t, array $r, callable $kg, callable $kcal): ?array {
+    $v = (float)$r['value']; $u = strtolower((string)($r['unit'] ?? ''));
+    if (in_array($t, ['vomax', 'vomaxmlkgmin', 'vo'], true)) return ['vo2max', $v];
+    if (in_array($t, ['respiratoryrate', 'respiratoryratebpm'], true)) return ['freq_resp', $v];
+    if (in_array($t, ['bodytemperature', 'temperature', 'skintemperature'], true)) return ['temperature', str_contains($u, 'f') && !str_contains($u, 'c') ? ($v - 32) * 5 / 9 : $v];
+    if (in_array($t, ['bloodglucose', 'glucose'], true)) return ['glycemie', str_contains($u, 'mmol') || ($u === '' && $v < 35) ? $v * 18.0182 : $v];
+    if (in_array($t, ['leanbodymass', 'leanmass'], true)) return ['masse_maigre', $kg($r)];
+    if (in_array($t, ['waistcircumference', 'waist'], true)) return ['tour_taille', in_array($u, ['m', 'meter', 'meters'], true) || ($u === '' && $v < 3) ? $v * 100 : (in_array($u, ['in', 'inch', 'inches'], true) ? $v * 2.54 : $v)];
+    if (in_array($t, ['basalmetabolicrate', 'restingenergy', 'restingcalories', 'restingenergyburned', 'bmr', 'basalenergy'], true)) return ['kcal_repos', $kcal($r)];
+    return null;
 }

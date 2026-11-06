@@ -90,6 +90,27 @@ v('  → distance 3,5 km, kcal totales 2 400, eau 1 250 ml, séance 45 min, SpO2
 v('  → la taille (1,77 m) est lue : 177 cm pour le profil ; le détail reçu est compté par type', $rD['taille_cm'] == 177 && ($rD['recu']['distance'] ?? 0) === 2 && ($rD['recu']['height'] ?? 0) === 1, $rD);
 $eT = sante_compiler([['function' => 'sync_samsung_health', 'args' => ['date' => $d1, 'taille_cm' => 177]]], json_decode(json_encode(sante_normaliser([])), true));
 v('  → le moteur range la taille dans le profil (le métabolisme de base peut se calculer)', $eT['status'] === 'ok' && (float)$eT['etat']['profil']['taille_cm'] === 177.0, $eT['status']);
+//  v1.17 — minute par minute : dans la MÊME heure, la montre compte 10:00-10:30 et le téléphone 10:30-11:00 → on additionne
+$tr = fn($src, $h1, $h2, $v) => ['start_time' => "{$d1}T{$h1}:00.000Z", 'end_time' => "{$d1}T{$h2}:00.000Z", 'unit' => 'steps', 'source' => $src, 'value' => (float)$v];
+$E = ['metadata' => $B['metadata'], 'data' => ['steps' => [$tr($srcMontre, '10:00', '10:30', 1500), $tr($srcTel, '10:30', '11:00', 1800),
+      $tr($srcMontre, '12:00', '12:10', 700), $tr($srcTel, '12:00', '12:10', 650)]]];   // à midi les deux comptent les mêmes pas
+$tmp = json_decode(json_encode(sante_normaliser([])), true); $rE = sante_hc_integrer(sante_hc_convertir_b($E), $tmp);
+[$eE] = $appliquer(sante_hc_convertir_b($E), []);
+v('I. même heure, moitiés différentes : 1 500 + 1 800 ; même moment compté deux fois : le plus grand (700) → 4 000', ($eE['journal'][$d1]['samsung']['pas'] ?? 0) == 4000, $eE['journal'][$d1]['samsung'] ?? []);
+v('  → détail par source du dernier jour : montre 2 200, téléphone 2 450, retenu 4 000', ($rE['detail_pas']['sources']['montre'] ?? 0) === 2200 && ($rE['detail_pas']['sources']['téléphone'] ?? 0) === 2450 && $rE['detail_pas']['retenu'] === 4000, $rE['detail_pas']);
+[$eE2] = $appliquer(sante_hc_convertir_b($E), $eE);
+v('  → renvoyé tel quel : toujours 4 000', ($eE2['journal'][$d1]['samsung']['pas'] ?? 0) == 4000);
+v('  → une clé d\'avant (sans fin) est remplacée par la même mesure renvoyée avec sa fin (pas de double compte)', (function () use ($d1, $B) {
+    $P = ['metadata' => $B['metadata'], 'data' => ['steps' => [['start_time' => "{$d1}T10:00:00.000Z", 'end_time' => "{$d1}T10:05:00.000Z", 'unit' => 'steps', 'source' => 'x', 'value' => 520.0]]]];
+    $c = sante_hc_convertir_b($P); $id = $c['steps'][0]['metadata']['id']; $h = substr($id, 0, 7);
+    $e = json_decode(json_encode(sante_normaliser(['journal' => [$d1 => ['hc' => ['pas' => ['id:' . $h . '|' . explode('|', $id)[1] => 500.0]]]]])), true);
+    sante_hc_integrer($c, $e); return count($e['journal'][$d1]['hc']['pas']) === 1 && (int)sante_hc_somme_sources($e['journal'][$d1]['hc']['pas']) === 520;
+})());
+$F = ['metadata' => $B['metadata'], 'data' => ['vo2_max' => [$m1('09:00:00', 'ml/kg/min', 38.5)], 'blood_glucose' => [$m1('08:00:00', 'mmol/L', 5.5)], 'respiratory_rate' => [$m1('03:00:00', 'brpm', 14.0)],
+      'body_temperature' => [$m1('07:00:00', 'celsius', 36.7)], 'lean_body_mass' => [$m1('07:00:00', 'kg', 70.2)], 'waist_circumference' => [$m1('07:00:00', 'cm', 118.0)], 'basal_metabolic_rate' => [$m1('07:00:00', 'kcal/day', 2050.0)]]];
+[$eF] = $appliquer(sante_hc_convertir_b($F), []);
+$sF = $eF['journal'][$d1]['samsung'] ?? [];
+v('J. VO2 max 38,5 ; glycémie 5,5 mmol/L = 99,1 mg/dL ; resp. 14 ; 36,7 °C ; masse maigre 70,2 ; tour de taille 118 ; repos 2 050 kcal', ($sF['vo2max'] ?? 0) == 38.5 && ($sF['glycemie'] ?? 0) == 99.1 && ($sF['freq_resp'] ?? 0) == 14 && ($sF['temperature'] ?? 0) == 36.7 && ($sF['masse_maigre'] ?? 0) == 70.2 && ($sF['tour_taille'] ?? 0) == 118 && ($sF['kcal_repos'] ?? 0) == 2050, $sF);
 @unlink(getenv('SANTE_DATA_FILE'));
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

@@ -82,6 +82,7 @@ libre ; sur le Play Store `com.hcwebhook.app` en paiement unique d'environ 52 MA
   Pas / kcal « Quotidien » (défaut de l'appli) : le total du jour remplace. Siestes écartées. Dates locales (décalage
   de la mesure, sinon Africa/Casablanca).
 - `sync_auto` (dernière synchro reçue) s'affiche dans l'onglet ; revenir sur la page relit l'état.
+- v1.17 : les pas de plusieurs sources se comparent **minute par minute** (chaque mesure répartie sur ses minutes, la source la plus haute par minute) ; détail par source affiché sous « Mesures du jour » ; VO2 max, glycémie, fréquence respiratoire, température, masse maigre, tour de taille, énergie au repos lus.
 - v1.16 : une synchro sans nouveauté (`"data": {}`) répond 200 (plus de 422). Plusieurs sources (téléphone, montre) :
   comparées **heure par heure** (la plus complète de chaque heure, puis somme des heures). Mesures en plus :
   distance, calories totales, séances d'exercice, SpO2, tension, hydratation, masse grasse, VFC, FC min/max ; la

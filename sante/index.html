@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.16"></script>
-    <script src="sante_import.js?v=1.16"></script>
-    <script src="sante_samsung.js?v=1.16"></script>
-    <script src="sante_protocole.js?v=1.16"></script>
+    <script src="sante_calculs.js?v=1.17"></script>
+    <script src="sante_import.js?v=1.17"></script>
+    <script src="sante_samsung.js?v=1.17"></script>
+    <script src="sante_protocole.js?v=1.17"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -196,6 +196,7 @@
                             <tr v-for="m in mesuresJour" :key="m.id" :data-mesure="m.id" class="border-b border-slate-100 last:border-0"><td class="py-1">{{ m.icone }} {{ m.label }}</td><td class="py-1 text-right font-bold">{{ m.valeur }}</td></tr>
                         </tbody></table>
                         <p v-else class="text-xs text-slate-500">Rien de reçu du téléphone pour ce jour.</p>
+                        <p v-if="etat.sync_auto && etat.sync_auto.detail_pas && etat.sync_auto.detail_pas.date === dateJour" class="mt-2 text-[11px] text-slate-600" data-pas-sources>🔎 Pas par source : <span v-for="(n, nom, i) in etat.sync_auto.detail_pas.sources" :key="nom">{{ i ? ' · ' : '' }}{{ nom }} {{ fmt(n) }}</span> → <b>{{ fmt(etat.sync_auto.detail_pas.retenu) }} retenus</b> (les pas comptés à la fois par la montre et le téléphone ne comptent qu’une fois, minute par minute)</p>
                     </div>
                     <div class="carte p-4">
                         <h2 class="font-black text-emerald-900 mb-2">✍️ Saisie du jour</h2>
@@ -851,7 +852,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.16';
+        const VERSION = '1.17';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1274,7 +1275,9 @@ createApp({
         const enTetesAuto = computed(() => { const o = {}; if (configAuto.utilisateur && configAuto.motDePasse) o.Authorization = 'Basic ' + btoa(unescape(encodeURIComponent(configAuto.utilisateur + ':' + configAuto.motDePasse))); o['X-Sante-Token'] = configAuto.jeton; return JSON.stringify(o); });
         const copier = async (texte, quoi) => { try { await navigator.clipboard.writeText(texte); configAuto.copie = quoi; } catch (e) { configAuto.copie = 'manuel'; } setTimeout(() => { if (configAuto.copie === quoi || configAuto.copie === 'manuel') configAuto.copie = ''; }, 3000); };
         const LIB_HC = { steps: 'pas', active_calories: 'calories actives', weight: 'poids', sleep: 'sommeil', heart_rate: 'FC', resting_heart_rate: 'FC repos', distance: 'distance', total_calories: 'calories totales',
-            exercise: 'séances', oxygen_saturation: 'SpO2', blood_pressure: 'tension', hydration: 'eau', body_fat: 'masse grasse', height: 'taille', heart_rate_variability: 'VFC' };
+            exercise: 'séances', oxygen_saturation: 'SpO2', blood_pressure: 'tension', hydration: 'eau', body_fat: 'masse grasse', height: 'taille', heart_rate_variability: 'VFC',
+            exercise_sessions: 'séances', vo2_max: 'VO2 max', vo2max: 'VO2 max', blood_glucose: 'glycémie', respiratory_rate: 'resp.', body_temperature: 'température', lean_body_mass: 'masse maigre',
+            waist_circumference: 'tour de taille', basal_metabolic_rate: 'énergie au repos', resting_energy: 'énergie au repos', total_calories_burned: 'calories totales', active_calories_burned: 'calories actives' };
         const depuisQuand = (iso) => { const t = Date.parse(iso); if (!t) return ''; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'à l’instant' : m < 60 ? 'il y a ' + m + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'le ' + dateCourte(new Date(t).toISOString().slice(0, 10)); };
         //  revenir sur la page (après un appui sur le widget du téléphone) : l'état est relu, sauf modification en cours
         const rechargerEtat = async () => {
@@ -1377,6 +1380,7 @@ createApp({
             return { jours, pas: jours.map(d => pasDuJour(etat.journal[d])), poids: jours.map(d => poidsPar[d] ?? null), net: jours.map(netDuJour), taux: jours.map(tauxDuJour),
                      kcal: S('kcal_actives'), sommeil: S('sommeil_min'), fc_repos: S('fc_repos'), fc_moy: S('fc_moy'), distance: S('distance_km'), exercice: S('exercice_min'),
                      spo2: S('spo2'), tension_sys: S('tension_sys'), tension_dia: S('tension_dia'), eau: S('hydratation_ml'), vfc: S('vfc_ms'), graisse: S('graisse_pct'),
+                     vo2max: S('vo2max'), glycemie: S('glycemie'), tour_taille: S('tour_taille'),
                      zone2: jours.map(d => valeur(((etat.journal[d] || {}).activite || {}).zone2_min)) };
         });
         //  la moyenne des 7 jours AVANT le jour affiché (pour les tendances)
@@ -1439,6 +1443,9 @@ createApp({
             extra('eau', '💧', 'Eau', s.eau, v => fmt1(v / 1000), 'L');
             extra('vfc', '📈', 'VFC', s.vfc, v => fmt(v), 'ms');
             extra('graisse', '🧈', 'Masse grasse', s.graisse, v => fmt1(v), '%');
+            extra('vo2max', '🫀', 'VO2 max', s.vo2max, v => fmt1(v), 'ml/kg/min');
+            extra('glycemie', '🩸', 'Glycémie', s.glycemie, v => fmt(v), 'mg/dL');
+            extra('tour_taille', '📐', 'Tour de taille', s.tour_taille, v => fmt(v), 'cm');
             return l;
         });
         //  les mesures reçues du téléphone pour le jour affiché (tout le détail)
@@ -1458,6 +1465,13 @@ createApp({
             a('eau', '💧', 'Eau', V('hydratation_ml') === null ? null : fmt1(V('hydratation_ml') / 1000) + ' L');
             a('poids', '⚖️', 'Poids', V('poids') === null ? null : fmt1(V('poids')) + ' kg');
             a('graisse', '🧈', 'Masse grasse', V('graisse_pct') === null ? null : fmt1(V('graisse_pct')) + ' %');
+            a('masse_maigre', '💪', 'Masse maigre', V('masse_maigre') === null ? null : fmt1(V('masse_maigre')) + ' kg');
+            a('tour_taille', '📐', 'Tour de taille', V('tour_taille') === null ? null : fmt(V('tour_taille')) + ' cm');
+            a('vo2max', '🫀', 'VO2 max', V('vo2max') === null ? null : fmt1(V('vo2max')) + ' ml/kg/min');
+            a('glycemie', '🩸', 'Glycémie', V('glycemie') === null ? null : fmt(V('glycemie')) + ' mg/dL (' + fmt1(V('glycemie') / 100).replace(/,?0$/, '') + ' g/L)');
+            a('freq_resp', '🌬️', 'Fréquence respiratoire', V('freq_resp') === null ? null : fmt(V('freq_resp')) + ' /min');
+            a('temperature', '🌡️', 'Température', V('temperature') === null ? null : fmt1(V('temperature')) + ' °C');
+            a('kcal_repos', '🔋', 'Énergie au repos (téléphone)', V('kcal_repos') === null ? null : fmt(V('kcal_repos')) + ' kcal');
             return l;
         });
         const prochainesEtapes = computed(() => {
