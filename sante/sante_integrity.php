@@ -86,6 +86,53 @@ function sante_norm_plan($p, string $type): ?array {
     foreach (['corrections', 'corrections_avant'] as $k) if (sante_num($p[$k] ?? null) !== null) $o[$k] = (int)sante_num($p[$k]);
     return $o;
 }
+/**
+ * v1.23 — LES MORCEAUX REÇUS DU TÉLÉPHONE, SANS LIMITE QUI JETTE. Une journée de montre + téléphone dépasse vite 1 200 mesures
+ * par type. Au-delà, les plus anciennes sont regroupées en une valeur par minute sous la source « s000000 » (fusion) :
+ *   · pas, kcal, distance, kcal totales, eau : pour chaque minute, la source qui en compte le plus — la règle même du total
+ *     (sante_hc_somme_sources), donc le total ne change pas ; un renvoi d'une mesure déjà regroupée ne compte pas double
+ *     (même minute : on garde le plus grand) ; une source arrivée en retard pour ces minutes est comparée, minute par minute ;
+ *   · fréquence cardiaque : la moyenne de la minute ;
+ *   · les 300 plus récentes restent telles quelles (un renvoi immédiat les remplace) ; plafond 2 000 : les plus ANCIENNES partent.
+ */
+const SANTE_HC_SEUIL = 1200, SANTE_HC_RECENTES = 300, SANTE_HC_PLAFOND = 2000, SANTE_HC_FUSION = 's000000';
+function sante_hc_temps(string $c): ?int {
+    if (!preg_match('/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/', $c, $m)) return null;
+    return gmmktime((int)$m[4], (int)$m[5], (int)$m[6], (int)$m[2], (int)$m[3], (int)$m[1]);
+}
+function sante_hc_compacter(array $m, string $type): array {
+    if (count($m) <= SANTE_HC_SEUIL) return $m;
+    $additif = in_array($type, ['pas', 'kcal', 'dist', 'kcalt', 'eau'], true);
+    if (!$additif && $type !== 'fc') return array_slice($m, -SANTE_HC_PLAFOND, null, true);
+    $dates = [];
+    foreach ($m as $k => $v) if (preg_match('/^(?:id:)?(s[0-9a-f]{6})\|([0-9TZ]+)(?:\|([0-9TZ]+))?$/', (string)$k, $x) && ($a = sante_hc_temps($x[2])) !== null) $dates[$k] = [$x[1], $a, isset($x[3]) ? sante_hc_temps($x[3]) : null];
+    if (count($dates) <= SANTE_HC_RECENTES) return array_slice($m, -SANTE_HC_PLAFOND, null, true);
+    $ordre = $dates; uasort($ordre, fn($p, $q) => $p[1] <=> $q[1]);
+    $recentes = array_slice(array_keys($ordre), -SANTE_HC_RECENTES);
+    $garder = array_flip($recentes);
+    $min = [];                                                          // [minute][source] => valeur (additif) ou [somme, n] (FC)
+    foreach ($ordre as $k => [$src, $a, $b]) {
+        if (isset($garder[$k])) continue;
+        $v = $m[$k];
+        if ($additif && $b !== null && $b > $a && $b - $a <= 86400) {
+            for ($q = intdiv($a, 60), $fin = intdiv($b - 1, 60); $q <= $fin; $q++) {
+                $part = (min($b, ($q + 1) * 60) - max($a, $q * 60)) / ($b - $a);
+                if ($part > 0) $min[$q][$src] = ($min[$q][$src] ?? 0) + $v * $part;
+            }
+        } elseif ($additif) { $q = intdiv($a, 60); $min[$q][$src] = ($min[$q][$src] ?? 0) + $v; }
+        else { $q = intdiv($a, 60); $min[$q]['fc'] = [($min[$q]['fc'][0] ?? 0) + $v, ($min[$q]['fc'][1] ?? 0) + 1]; }
+    }
+    $out = [];
+    foreach ($m as $k => $v) if (!isset($dates[$k])) $out[$k] = $v;      // clés sans heure (« jour », « t:HH:MM ») : telles quelles
+    ksort($min);
+    foreach ($min as $q => $s) {
+        $val = $additif ? max($s) : $s['fc'][0] / $s['fc'][1];
+        $out[SANTE_HC_FUSION . '|' . gmdate('Ymd\THis', $q * 60) . 'Z|' . gmdate('Ymd\THis', ($q + 1) * 60) . 'Z'] = round($val, 3);
+    }
+    foreach ($recentes as $k) $out[$k] = $m[$k];
+    return array_slice($out, -SANTE_HC_PLAFOND, null, true);
+}
+
 function sante_normaliser($e): array {
     $d = sante_etat_defaut();
     $e = is_array($e) ? $e : [];
@@ -124,7 +171,10 @@ function sante_normaliser($e): array {
             $hc = [];
             foreach (['pas', 'kcal', 'fc', 'sommeil', 'dist', 'kcalt', 'eau', 'exo', 'vfc'] as $t) if (is_array($jour['hc'][$t] ?? null)) {
                 $m = [];
-                foreach ($jour['hc'][$t] as $k => $v) { if (count($m) >= 1500) break; if (is_string($k) && strlen($k) <= 70 && is_numeric($v)) $m[$k] = (float)$v; }
+                foreach ($jour['hc'][$t] as $k => $v) if (is_string($k) && strlen($k) <= 70 && is_numeric($v)) $m[$k] = (float)$v;
+                //  v1.23 — plus aucune mesure du jour jetée : au-delà de 1 200, les plus anciennes sont regroupées minute par minute
+                //  (avant : seules les 1 500 PREMIÈRES étaient gardées — montre + téléphone y arrivent vers 9 h, le reste était perdu)
+                $m = sante_hc_compacter($m, $t);
                 if ($m) $hc[$t] = $m;
             }
             if ($hc) $jo['hc'] = $hc;

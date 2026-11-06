@@ -41,6 +41,15 @@ initial (profil, bilans, protocole) se charge par **« 📂 Importer mon dossier
 - **🧹 Tout effacer** : les analyses seules, ou toute l'appli ; confirmé en tapant `EFFACER`. Le serveur garde ses
   30 sauvegardes tournantes.
 
+## Une vraie journée de mesures (v1.23)
+Montre + téléphone écrivent des pas presque à chaque minute : une journée dépasse vite 1 500 mesures par type. Jusqu'à la v1.22,
+seules les 1 500 **premières** étaient gardées et le reste de la journée était jeté à chaque synchro (les pas s'arrêtaient vers 9 h).
+Désormais (`sante_hc_compacter`, dans `sante_integrity.php`), au-delà de 1 200 mesures, les plus anciennes sont regroupées en une
+valeur par minute (source `s000000`) : pour les pas, kcal, distance, eau, la source qui compte le plus dans la minute — la règle même
+du total, qui ne change donc pas, et un renvoi ne compte pas double ; pour la FC, la moyenne de la minute. Les 300 plus récentes
+restent telles quelles ; plafond 2 000 (les plus anciennes partent). La courbe « heure par heure » compte aussi minute par minute.
+Les mesures déjà jetées avant la mise à jour ne reviennent que si le téléphone les renvoie.
+
 ## Lecture des comptes rendus, « à vérifier », validation par l'IA (v1.21)
 - **Le lecteur** (`sante_import.js`) a été mis au point sur de vrais PDF de trois laboratoires (aucune donnée réelle n'est dans le dépôt : les tests
   utilisent des textes fictifs de même mise en page). Il lit : les **bornes entre parenthèses** sans coller la valeur d'un résultat antérieur ; la
