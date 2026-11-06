@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.17"></script>
-    <script src="sante_import.js?v=1.17"></script>
-    <script src="sante_samsung.js?v=1.17"></script>
-    <script src="sante_protocole.js?v=1.17"></script>
+    <script src="sante_calculs.js?v=1.18"></script>
+    <script src="sante_import.js?v=1.18"></script>
+    <script src="sante_samsung.js?v=1.18"></script>
+    <script src="sante_protocole.js?v=1.18"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -442,13 +442,22 @@
             </div>
         </section>
 
-        <!-- ═════ 3 bis. PLANS : NUTRITION ET EXERCICE, PRÉVU / RÉALISÉ ═════ -->
+        <!-- ═════ 3 bis. MON PLAN SANTÉ (v1.18 : un seul plan, nutrition + exercice + suppléments + règles) ═════ -->
         <section v-show="onglet === 'plans'" data-section="plans" class="space-y-5">
             <!-- v1.8 — MA JOURNÉE : le protocole importé, rangé par moment -->
             <div class="carte p-4 space-y-3" data-protocole-jour>
                 <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="flex-1 min-w-0 font-black text-emerald-900">📋 Ma journée — {{ protocole ? protocole.titre || 'mon protocole' : 'mon protocole' }}</h2>
+                    <h2 class="flex-1 min-w-0 font-black text-emerald-900">📋 Mon plan santé<span v-if="protocole && protocole.titre" class="font-bold text-slate-500"> — {{ protocole.titre }}</span></h2>
                     <span v-if="protocole && tauxJourProto !== null" class="text-xs font-black px-2 py-1 rounded-full" :class="tauxJourProto >= 80 ? 'bg-emerald-100 text-emerald-800' : tauxJourProto >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'" data-taux-protocole>aujourd’hui {{ suiviProto.du_jour.filter(i => i.fait).length }}/{{ suiviProto.du_jour.length }} · semaine {{ suiviProto.semaine.taux ?? '—' }} %</span>
+                </div>
+                <div v-if="horsActions.length" class="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs space-y-1" data-hors-actions>
+                    <p class="font-black text-amber-900">🧹 {{ horsActions.length }} ligne(s) de votre plan ne sont pas des actions à cocher (coût, cure, mise en garde, palier de progression, conseil) :</p>
+                    <ul class="list-disc pl-5 text-amber-900"><li v-for="i in horsActions.slice(0, 8)" :key="i.id">{{ i.texte }}</li><li v-if="horsActions.length > 8">…</li></ul>
+                    <button type="button" data-ranger-hors-actions @click="rangerHorsActions" class="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-black">Les ranger dans les règles à relire</button>
+                </div>
+                <div v-if="plansSepares.length" class="rounded-lg border border-teal-300 bg-teal-50 p-2 text-xs space-y-1" data-plans-separes>
+                    <p class="font-black text-teal-900">🔗 Vous avez encore {{ plansSepares.length === 2 ? 'deux plans séparés' : 'un plan séparé' }} ({{ plansSepares.map(t => t.nom).join(', ') }}). Un seul plan santé suffit désormais.</p>
+                    <button type="button" data-fusionner-plans @click="fusionnerPlans" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white font-black">Les réunir dans mon plan santé</button>
                 </div>
                 <template v-if="protocole">
                     <p class="text-xs text-slate-500">{{ protocole.source }}<span v-if="protocole.importe_le"> · depuis le {{ dateCourte(protocole.importe_le) }}</span> · {{ protocole.items.length }} cases<span v-if="protocole.corrections !== undefined"> · {{ protocole.corrections }} correction(s) à l’import<span v-if="protocole.corrections_avant !== null && protocole.corrections_avant !== undefined"> (précédent : {{ protocole.corrections_avant }})</span></span></p>
@@ -474,7 +483,7 @@
                 </template>
                 <p v-else class="text-sm text-slate-500">Importez le protocole de votre médecin, nutritionniste ou coach (PDF, Word, photo, texte) : l’appli le range en cases à cocher par moment de la journée, suppléments, règles et objectifs — vous vérifiez avant d’enregistrer.</p>
                 <div class="flex flex-wrap gap-2">
-                    <button type="button" data-importer-protocole @click="ouvrirTri" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-black">{{ protocole ? '📥 Remplacer par un nouveau protocole' : '📥 Importer mon protocole' }}</button>
+                    <button type="button" data-importer-protocole @click="ouvrirTri" class="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-black">{{ protocole ? '📥 Remplacer par un nouveau plan' : '📥 Importer mon plan santé' }}</button>
                     <button v-if="protocole" type="button" data-supprimer-protocole @click="confirmer('protocole', supprimerProtocole)" class="px-3 py-1.5 rounded-lg text-xs font-black" :class="aConfirmer === 'protocole' ? 'bg-rose-600 text-white' : 'border border-rose-200 text-rose-700 bg-white'">{{ aConfirmer === 'protocole' ? 'Confirmer : supprimer le protocole ?' : '🗑 Supprimer' }}</button>
                 </div>
                 <p v-if="tri.resultat" class="text-xs font-bold text-emerald-800" data-resultat-protocole>{{ tri.resultat }}</p>
@@ -482,7 +491,7 @@
 
             <!-- v1.8 — L'ÉCRAN DE TRI : ce que les règles ont rangé, à vérifier avant d'enregistrer -->
             <div v-if="tri.ouvert" class="carte p-4 space-y-3" data-tri-protocole>
-                <div class="flex items-center gap-2"><h3 class="flex-1 font-black text-teal-900">📥 Importer un protocole — vérifier le rangement</h3><button type="button" @click="tri.ouvert = false" class="text-slate-400 hover:text-slate-700 font-black" aria-label="Fermer">✕</button></div>
+                <div class="flex items-center gap-2"><h3 class="flex-1 font-black text-teal-900">📥 Importer mon plan santé — vérifier le rangement</h3><button type="button" @click="tri.ouvert = false" class="text-slate-400 hover:text-slate-700 font-black" aria-label="Fermer">✕</button></div>
                 <p class="text-xs text-slate-500">PDF, Word (.docx), photo ou texte. L’appli range chaque ligne : <b>cases du jour</b> (par moment), <b>suppléments</b>, <b>règles</b> à relire, <b>objectifs</b>, ou <b>ignoré</b> (titres, explications). Changez la catégorie d’une ligne avec son menu, corrigez son texte, supprimez-la avec ✕ : chaque correction est <b>retenue</b> pour les prochains imports.</p>
                 <input type="file" accept=".pdf,application/pdf,.docx,image/*,.txt,text/plain" data-import-protocole @change="importerProtocole($event.target.files[0]); $event.target.value = ''" class="text-sm max-w-full">
                 <details class="text-xs"><summary class="cursor-pointer font-bold text-slate-500">…ou coller le texte</summary>
@@ -577,8 +586,8 @@
                 </div>
             </div>
 
-            <div class="grid lg:grid-cols-2 gap-5">
-                <div v-for="t in TYPES_PLAN" :key="t.id" class="carte p-4 space-y-3" :data-plan="t.id">
+            <div v-if="plansSepares.length" class="grid lg:grid-cols-2 gap-5">
+                <div v-for="t in plansSepares" :key="t.id" class="carte p-4 space-y-3" :data-plan="t.id">
                     <div class="flex flex-wrap items-center gap-2">
                         <h2 class="flex-1 min-w-0 font-black text-emerald-900">{{ t.icone }} {{ t.nom }}</h2>
                         <span v-if="suivis[t.id].semaine.taux !== null" :data-taux-plan="t.id" class="text-xs font-black px-2 py-1 rounded-full"
@@ -852,7 +861,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.17';
+        const VERSION = '1.18';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1560,6 +1569,7 @@ createApp({
                 if (e.freq === 'semaine' || e.freq === 'mois') o.frequence = e.freq;
                 else if (e.freq === 'jours' && e.jours.length && e.jours.length < 7) o.jours = e.jours.slice();
                 if (e.repas) o.repas = true;
+                if (Number(e.duree_min) > 0 && Number(e.duree_min) <= 600) o.duree_min = Number(e.duree_min);   // v1.18 : la durée (minutes de la semaine)
                 return o;
             });
             const n = triCorrections.value;
@@ -1616,9 +1626,10 @@ createApp({
                 const j = await r.json().catch(() => ({}));
                 if (r.ok && !Array.isArray(j.corrections) && (j.output || j.text)) throw new Error('l’agent n’est pas à jour (il répond comme un chat). Sur le serveur : sudo bash install.sh sante');
                 if (!r.ok || !Array.isArray(j.corrections)) throw new Error(String(j.erreur || j.output || ('réponse ' + r.status)).replace(/<[^>]+>/g, ' ').slice(0, 300));
-                let rejetees = 0, n = 0;
+                let rejetees = 0, n = 0, gardeFou = 0;
                 j.corrections.forEach(c => {
                     const p = { id: 'ia' + (++n), raison: String(c.raison || '').slice(0, 200), changes: {} };
+                    if (c.ajout && typeof c.ajout === 'object' && String(c.ajout.texte || '').trim() && SanteProtocole.pasUneAction(c.ajout.texte)) { gardeFou++; return; }
                     if (c.ajout && typeof c.ajout === 'object' && String(c.ajout.texte || '').trim()) {
                         p.ajout = { texte: String(c.ajout.texte).trim().slice(0, 200), moment: MOMENTS_IDS.includes(c.ajout.moment) ? c.ajout.moment : 'journee' };
                         p.titre = 'Ajouter une case'; p.resume = '« ' + p.ajout.texte + ' » · ' + LIB_MOMENT[p.ajout.moment]; verif.propositions.push(p); return;
@@ -1627,6 +1638,8 @@ createApp({
                     if (!Number.isInteger(Number(c.i)) || !e) { rejetees++; return; }
                     p.cible = id; p.titre = '« ' + String(e.texte || '').slice(0, 70) + ' »';
                     const resume = [];
+                    //  v1.18 — garde-fou : l'IA ne peut pas transformer en case un coût, une cure, une mise en garde, un palier, un conseil
+                    if (c.categorie === 'action' && e.bucket !== 'action' && SanteProtocole.pasUneAction(c.texte || e.texte)) { gardeFou++; return; }
                     if (BUCKETS_IDS.includes(c.categorie) && c.categorie !== e.bucket) { p.changes.bucket = c.categorie; resume.push(libBucket(c.categorie)); }
                     if (MOMENTS_IDS.includes(c.moment) && c.moment !== e.moment) { p.changes.moment = c.moment; resume.push(LIB_MOMENT[c.moment]); }
                     if (typeof c.texte === 'string' && c.texte.trim() && c.texte.trim() !== e.texte) { p.changes.texte = c.texte.trim().slice(0, 200); resume.push('« ' + p.changes.texte + ' »'); }
@@ -1639,8 +1652,8 @@ createApp({
                     p.resume = resume.join(' · ');
                     verif.propositions.push(p);
                 });
-                verif.message = verif.propositions.length ? '✨ ' + verif.propositions.length + ' correction(s) proposée(s) : acceptez ou refusez.' + (rejetees ? ' (' + rejetees + ' proposition(s) inapplicable(s) écartée(s).)' : '')
-                    : '✓ L’IA ne propose aucune correction.' + (rejetees ? ' (' + rejetees + ' proposition(s) inapplicable(s) écartée(s).)' : '');
+                const ecartees = (rejetees ? ' (' + rejetees + ' proposition(s) inapplicable(s) écartée(s).)' : '') + (gardeFou ? ' 🛡️ ' + gardeFou + ' proposition(s) refusée(s) d’office : un coût, une cure, une mise en garde ou un conseil ne devient pas une case.' : '');
+                verif.message = verif.propositions.length ? '✨ ' + verif.propositions.length + ' correction(s) proposée(s) : acceptez ou refusez.' + ecartees : '✓ L’IA ne propose aucune correction.' + ecartees;
             } catch (err) { verif.message = '❌ Vérification impossible : ' + (err.message || err); }
             finally { verif.enCours = false; }
         };
@@ -1667,6 +1680,34 @@ createApp({
         const oublierLecon = (cle) => { etat.lecons_plan = (etat.lecons_plan || []).filter(l => l.cle !== cle); };
         const reglesParSection = computed(() => { const o = {}; (etat.regles || []).forEach(r => { (o[r.section || 'Règles'] = o[r.section || 'Règles'] || []).push(r); }); return Object.entries(o); });
         const supprimerProtocole = () => { delete etat.plans.protocole; };
+        //  v1.18 — les lignes du plan enregistré qui ne sont pas des actions (coût, cure, mise en garde, palier, conseil) :
+        //  rangées d'un clic dans les règles, et les leçons qui les avaient mises en case sont corrigées
+        const horsActions = computed(() => ((protocole.value && protocole.value.items) || []).filter(i => SanteProtocole.pasUneAction(i.texte)));
+        const rangerHorsActions = () => {
+            const l = horsActions.value; if (!l.length) return;
+            const ids = new Set(l.map(i => i.id)), cles = new Set(l.map(i => SanteProtocole.cle(i.texte)));
+            etat.plans.protocole.items = etat.plans.protocole.items.filter(i => !ids.has(i.id));
+            etat.regles = (etat.regles || []).concat(l.map(i => ({ id: i.id, section: 'Rangé hors des cases', texte: i.texte + (i.detail ? ' — ' + i.detail : '') })));
+            etat.lecons_plan = (etat.lecons_plan || []).map(x => cles.has(x.cle) && x.bucket === 'action' ? Object.assign({}, x, { bucket: 'regle' }) : x);
+            tri.resultat = '✓ ' + l.length + ' ligne(s) rangée(s) dans les règles à relire.';
+        };
+        //  v1.18 — UN SEUL PLAN SANTÉ : les anciens plans séparés (nutrition, exercice) se fondent dans le plan santé ;
+        //  les identifiants sont gardés, donc l'historique du réalisé aussi
+        const plansSepares = computed(() => TYPES_PLAN.filter(t => etat.plans && etat.plans[t.id] && (etat.plans[t.id].items || []).length));
+        const fusionnerPlans = () => {
+            const base = etat.plans.protocole || { titre: 'Mon plan santé', source: 'plans fusionnés', importe_le: aujourdhui(), items: [] };
+            const deja = new Set(base.items.map(i => SanteProtocole.cle(i.texte)));
+            plansSepares.value.forEach(t => (etat.plans[t.id].items || []).forEach(i => {
+                if (deja.has(SanteProtocole.cle(i.texte))) return;
+                const o = { id: i.id, jour: i.jour || 'tous', moment: t.id === 'nutrition' ? (i.moment || 'dejeuner') : 'journee', texte: i.texte };
+                if (i.duree_min) o.duree_min = i.duree_min;
+                if (t.id === 'nutrition') o.repas = true;
+                base.items.push(o);
+            }));
+            etat.plans.protocole = base;
+            plansSepares.value.slice().forEach(t => { delete etat.plans[t.id]; });
+            tri.resultat = '✓ Plans réunis dans votre plan santé.';
+        };
 
         // ── Médecin-Chef IA ──
         //  v1.6 — par défaut, le relais sante_cmo.php (même site : le mot de passe du site suit) ; une ancienne adresse
@@ -1761,7 +1802,7 @@ createApp({
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
-                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
+                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, urlAvecJeton, valeurAuth, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, LIB_HC, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,

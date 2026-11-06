@@ -41,7 +41,11 @@ initial (profil, bilans, protocole) se charge par **« 📂 Importer mon dossier
 - **🧹 Tout effacer** : les analyses seules, ou toute l'appli ; confirmé en tapant `EFFACER`. Le serveur garde ses
   30 sauvegardes tournantes.
 
-## Plans nutrition et exercice (v1.4)
+## Plans nutrition et exercice (v1.4 — remplacés en v1.18 par un seul « Mon plan santé »)
+
+v1.18 : on ne crée plus de plan nutrition ou exercice séparé. Un plan séparé d'avant reste affiché et se fond d'un clic
+(« Les réunir dans mon plan santé ») dans le plan santé, en gardant ses identifiants, donc l'historique du réalisé.
+
 
 Onglet **Plans** : le plan de la nutritionniste ou du coach s'importe d'un PDF, d'un Word `.docx`, d'une photo ou d'un
 texte. Les jours (« Lundi », « Tous les jours ») et, pour la nutrition, les repas (« Petit-déjeuner »…) servent de titres ;
@@ -100,7 +104,19 @@ mesures du jour, la saisie et le bilan énergétique viennent après.
 - L'ancien format « un jour » (`{"date", "steps", …}`) reste accepté ; jeton aussi possible dans `db_config.php`
   (`sante_samsung_token`).
 
-## Importer un protocole (v1.8)
+## Importer un protocole (v1.8) — « Mon plan santé »
+
+v1.18 :
+- documents **sans sections numérotées** : les rubriques se reconnaissent à leur nom (« Compléments — vue d'ensemble »,
+  « Activité physique », « Vigilance », « KPI — bilan à 3 mois », « Médecins »…) ; avant la première, les **blocs
+  horaires** (« ~9h00   PETIT-DÉJEUNER », « RÉVEIL   Marche à jeun ») fixent le moment ; « À MANGER » = une case repas
+  (menu en détail), « À PRENDRE » = une case « Prendre : … » ; « puis » et « · » séparent deux gestes ; un jour seul
+  sur sa ligne (« Mercredi ») fixe les jours des lignes suivantes ;
+- **garde-fou** `pasUneAction` : un coût, une durée de cure, une mise en garde, un palier de progression, un conseil,
+  une question ne deviennent jamais une case — ni par les règles, ni par une leçon, ni par une proposition de l'IA
+  (refusée d'office) ; un plan enregistré avant propose « Les ranger dans les règles à relire » (les leçons fautives
+  sont corrigées) ; le prompt de vérification liste ces cas.
+
 
 Onglet **Plans → 📥 Importer mon protocole** : PDF, Word, photo ou texte, de n'importe quelle forme. `sante_protocole.js`
 range chaque ligne **par règles** (pas d'IA) :

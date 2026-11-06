@@ -214,19 +214,27 @@ try {
         f = lireFichier();
         v('  → « Tout effacer » : bloqué tant que EFFACER n\'est pas tapé ; puis toutes les analyses partent, le reste (profil) demeure', bloque && libre && f.bilans.length === 0 && /TESTEUR/.test(f.profil.nom), [bloque, libre, f.bilans.length]);
 
-        //  les plans
+        //  v1.18 — UN SEUL PLAN SANTÉ : plus de bouton pour créer un plan nutrition / exercice séparé ; un plan séparé d'avant
+        //  reste lisible (prévu / réalisé), puis se fond dans le plan santé en gardant l'historique
         await p4.evaluate((ST) => { eval(ST).dateJour = '2026-11-02'; }, ST);      // un lundi
-        await p4.click('[data-onglet="plans"]'); await p4.click('[data-ouvrir-plan="nutrition"]');
-        await p4.fill('[data-texte-plan]', 'Plan nutritionnel — novembre\nTous les jours\nPetit-déjeuner : café noir + MCT\nLundi\nDéjeuner\n- salade, poulet 150 g, pain d\'orge\nDîner : soupe de légumes\nMardi\nDéjeuner : poisson 150 g');
-        await p4.click('[data-lire-plan]');
-        v('  → plan nutritionnel lu : 4 éléments rangés par jour et par repas, titre repris', (await p4.$$('[data-element-editeur]')).length === 4 && await p4.inputValue('[data-titre-plan]') === 'Plan nutritionnel - novembre');
-        await p4.click('[data-enregistrer-plan]'); await p4.waitForTimeout(100);
+        await p4.click('[data-onglet="plans"]');
+        v('  → onglet Plans : un seul « Mon plan santé », plus de plans nutrition / exercice séparés à créer', /Mon plan santé/.test(await p4.textContent('[data-protocole-jour]')) && !(await p4.$('[data-ouvrir-plan]')) && !(await p4.$('[data-plan]')));
+        await p4.evaluate((ST) => { const st = eval(ST); const r = SanteImport.lirePlan('Plan nutritionnel — novembre\nTous les jours\nPetit-déjeuner : café noir + MCT\nLundi\nDéjeuner\n- salade, poulet 150 g, pain d\'orge\nDîner : soupe de légumes\nMardi\nDéjeuner : poisson 150 g', 'nutrition');
+            st.etat.plans.nutrition = { titre: r.titre, source: 'ancien plan', importe_le: '2026-11-01', items: r.items.map((x, k) => Object.assign({ id: 'n' + k }, x)) }; }, ST);
+        await p4.waitForTimeout(100)
         const prevus = await p4.$$eval('[data-plan="nutrition"] [data-element-plan]', l => l.map(x => x.textContent.trim()));
-        v('  → lundi : 3 éléments prévus (petit-déjeuner de tous les jours + déjeuner + dîner du lundi), pas celui du mardi', prevus.length === 3 && !prevus.some(t => /poisson/.test(t)), prevus);
+        v('  → un plan nutritionnel séparé d’avant : toujours affiché ; lundi, 3 éléments prévus (pas celui du mardi)', prevus.length === 3 && !prevus.some(t => /poisson/.test(t)) && await p4.isVisible('[data-plans-separes]'), prevus);
         await p4.check('[data-plan="nutrition"] [data-element-plan] input'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
         f = lireFichier();
         const idPdj = f.plans.nutrition.items.find(i => /café/.test(i.texte)).id;
         v('  → cocher = RÉALISÉ, enregistré dans la journée ; semaine 1/3 · 33 %', f.journal['2026-11-02'].plan_fait[idPdj] === true && /1\/3/.test(await p4.textContent('[data-taux-plan="nutrition"]')) && /33 %/.test(await p4.textContent('[data-taux-plan="nutrition"]')), f.journal['2026-11-02']);
+        const lecture = await (await fetch(U + 'sante_api.php?lecture=1&date=2026-11-02')).json();
+        v('  → le Médecin-Chef IA lit le plan du jour et le réalisé de la semaine', lecture.plans && lecture.plans.nutrition.suivi.semaine.faits === 1 && lecture.plans.nutrition.suivi.du_jour.length === 3, lecture.plans);
+        await p4.click('[data-fusionner-plans]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
+        f = lireFichier();
+        const fus = (f.plans.protocole || {}).items || [];
+        v('  → « Les réunir dans mon plan santé » : un seul plan, mêmes identifiants (le réalisé du lundi est gardé)', !f.plans.nutrition && fus.length === 4 && fus.some(i => i.id === idPdj && i.repas) && !(await p4.$('[data-plans-separes]'))
+          && /1\//.test(await p4.textContent('[data-protocole-jour]')) && await p4.isChecked(`[data-item-protocole="${idPdj}"] input`), fus);
         const mammoth = essai(() => require.resolve('mammoth/mammoth.browser.min.js'));
         if (!mammoth) console.log('  ⏭️  plan Word (.docx) ignoré : mammoth absent (npm install --no-save mammoth@1.8.0)');
         else {
@@ -239,16 +247,14 @@ z.writestr('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8"?><Types x
 z.writestr('_rels/.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
 z.writestr('word/document.xml','<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+sys.argv[2]+'</w:body></w:document>')
 z.close()`, docx, para]);
-            await p4.click('[data-ouvrir-plan="exercice"]');
-            await p4.setInputFiles('[data-import-plan]', docx);
-            await p4.waitForFunction(() => document.querySelectorAll('[data-element-editeur]').length === 3, null, { timeout: 8000 }).catch(() => {});
-            await p4.click('[data-enregistrer-plan]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
-            const ex = lireFichier().plans.exercice;
-            v('  → plan d\'exercice importé d\'un fichier Word (.docx) : 3 séances, durées lues (45 / 60 / 10 min)', ex && ex.source === 'programme.docx' && ex.items.map(i => i.duree_min).join() === '45,60,10' && ex.items[0].jour === 'lundi', ex);
-            v('  → lundi : la marche Zone 2 est prévue, minutes de la semaine affichées', /Zone 2/.test(await p4.textContent('[data-plan="exercice"]')) && /0 réalisées sur 45 prévues/.test(await p4.textContent('[data-minutes-plan]')));
+            await p4.click('[data-importer-protocole]');
+            await p4.setInputFiles('[data-import-protocole]', docx);
+            await p4.waitForFunction(() => document.querySelectorAll('[data-tri-bucket="action"] [data-tri-element]').length >= 3, null, { timeout: 8000 }).catch(() => {});
+            await p4.click('[data-enregistrer-protocole]'); await p4.waitForTimeout(150); await attendreEnregistre(p4);
+            const ex = lireFichier().plans.protocole;
+            const zone2 = ex.items.find(i => /Zone 2/.test(i.texte)), machines = ex.items.find(i => /Machines/.test(i.texte));
+            v('  → un programme d’exercice Word (.docx) importé dans le plan santé : jours lus (lundi ; mercredi), durées 45 / 60 min', ex.source === 'programme.docx' && zone2 && zone2.jours.join() === 'lundi' && zone2.duree_min === 45 && machines && machines.jours.join() === 'mercredi' && machines.duree_min === 60, ex.items);
         }
-        const lecture = await (await fetch(U + 'sante_api.php?lecture=1&date=2026-11-02')).json();
-        v('  → le Médecin-Chef IA lit le plan du jour et le réalisé de la semaine', lecture.plans && lecture.plans.nutrition.suivi.semaine.faits === 1 && lecture.plans.nutrition.suivi.du_jour.length === 3, lecture.plans);
         //  CSV au format réel de Samsung Health : une ligne de description avant l'en-tête, day_time en millisecondes,
         //  téléphone + montre le même jour (on garde le maximum) ; et un second fichier, les pesées (start_time)
         const c1 = path.join(tmp, 'com.samsung.shealth.tracker.pedometer_day_summary.20261104.csv'), c2 = path.join(tmp, 'com.samsung.health.weight.20261104.csv');
@@ -442,8 +448,9 @@ z.close()`, src, zip]);
         const PROTO = ['PROTOCOLE ESSAI — V1', '1. La journée heure par heure', '🌅  RÉVEIL', ' •   1 grand verre d’eau', ' •   30 minutes de marche à jeun, en Zone 2.   Le levier principal.',
             '🍳  PETIT-DÉJEUNER — ~400 kcal | 25 g protéines', ' •   2 œufs entiers', ' •   40 g de pain d’orge',
             '🛏️  22h00 — COUCHER', ' •   1 comprimé de magnésium glycinate le soir.   Le soir uniquement.',
-            '2. Activité physique', ' Règles de sécurité', ' •   Échauffement 5 min obligatoire avant chaque séance.'].join('\n');
+            '2. Activité physique', ' Règles de sécurité', ' •   Échauffement 5 min obligatoire avant chaque séance.', ' •   Coût : 300 DH par mois.'].join('\n');
         const els = SP.analyser(PROTO).elements, idx = (re) => els.findIndex(e => re.test(e.texte));
+        const iCout = idx(/Coût/);
         const iEchauf = idx(/Échauffement/), iMagn = idx(/magnésium/), iVerre = idx(/grand verre/), iMarche = idx(/marche à jeun/), iPdj = idx(/^Petit-déjeuner$/);
         fs.writeFileSync(DATA, '{}');
         const p9 = await ouvrir();
@@ -456,7 +463,9 @@ z.close()`, src, zip]);
                 { i: 999, categorie: 'regle', raison: 'numéro inventé' },
                 { i: iPdj, raison: 'ne change rien' },
                 { i: iVerre, fusionner_avec: iMarche, raison: 'même moment, même geste' },
-                { ajout: { texte: 'Kegel : 3 séries', moment: 'journee' }, raison: 'geste oublié' }] }) });
+                { ajout: { texte: 'Kegel : 3 séries', moment: 'journee' }, raison: 'geste oublié' },
+                { i: iCout, categorie: 'action', moment: 'journee', raison: 'à faire chaque mois' },                      // v1.18 : refusé d'office
+                { ajout: { texte: 'Cycle : 8 semaines puis pause de 2 semaines', moment: 'journee' }, raison: 'à suivre' }] }) });
         });
         await p9.click('[data-charger-demo]'); await p9.waitForTimeout(300); await attendreEnregistre(p9);
         await p9.click('[data-onglet="plans"]'); await p9.click('[data-importer-protocole]');
@@ -466,6 +475,7 @@ z.close()`, src, zip]);
         const msgV = await p9.textContent('[data-message-verif]');
         v('P. « Vérifier avec l’IA » : les lignes rangées partent à l’agent (mode verifier_protocole), rien d’autre du dossier', demande && demande.mode === 'verifier_protocole' && demande.elements.length === els.length && demande.elements[iEchauf].cat === 'regle' && !('bilans' in demande) && !('journal' in demande), demande && Object.keys(demande));
         v('  → 4 corrections proposées ; numéro inventé et proposition sans effet écartés (2)', /4 correction\(s\) proposée\(s\)/.test(msgV) && /2 proposition\(s\) inapplicable\(s\)/.test(msgV) && (await p9.$$('[data-proposition-ia]')).length === 4, msgV);
+        v('  → 🛡️ garde-fou : « le coût en case » et « un cycle de cure en case » refusés d’office (2), même proposés par l’IA', /🛡️ 2 proposition\(s\) refusée\(s\) d’office/.test(msgV) && iCout >= 0 && els[iCout].bucket === 'regle', msgV);
         await p9.click('[data-proposition-ia] [data-accepter-ia]');            // l'échauffement devient une case du matin
         await p9.click('[data-proposition-ia] [data-refuser-ia]');             // le libellé du magnésium : refusé
         await p9.click('[data-tout-accepter]');                                // fusion + ajout
@@ -602,6 +612,16 @@ z.close()`, src, zip]);
         v('  → « Renseigner ma taille » amène au champ Taille du profil', await pr.evaluate(() => !!document.activeElement && document.activeElement.hasAttribute('data-profil-taille')));
         await pr.fill('[data-profil-taille]', '177'); await pr.press('[data-profil-taille]', 'Tab'); await pr.waitForTimeout(200);
         v('  → taille saisie : l’alerte disparaît, le bilan net n’attend plus que les repas', !(await pr.$('[data-manque="taille"]')) && !/il manque la taille/.test(await t('energie')));
+        //  v1.18 — un plan enregistré avant le garde-fou, avec des lignes qui ne sont pas des actions : rangées d'un clic
+        await pr.evaluate((ST) => { const st = eval(ST); st.etat.plans.protocole.items.push({ id: 'zc', jour: 'tous', moment: 'journee', texte: 'Coût : 350 DH les 60 gélules' }, { id: 'zs', jour: 'tous', moment: 'journee', texte: 'Semaines 1-2 : viser 35 % en Zone 2' });
+            st.etat.lecons_plan = [{ cle: SanteProtocole.cle('Coût : 350 DH les 60 gélules'), bucket: 'action' }]; st.onglet = 'plans'; }, ST);
+        await pr.waitForTimeout(150);
+        const avantRangement = (await pr.textContent('[data-hors-actions]')).replace(/\s+/g, ' ');
+        await pr.click('[data-ranger-hors-actions]'); await pr.waitForTimeout(150); await attendreEnregistre(pr);
+        const fr = lireFichier();
+        v('  → Plans : « 2 lignes ne sont pas des actions » → rangées dans les règles, la leçon fautive corrigée', /2 ligne\(s\)/.test(avantRangement) && !fr.plans.protocole.items.some(i => /Coût|Semaines/.test(i.texte)) && fr.plans.protocole.items.length === 40
+          && fr.regles.some(r => /Coût/.test(r.texte) && r.section === 'Rangé hors des cases') && fr.lecons_plan[0].bucket === 'regle' && !(await pr.$('[data-hors-actions]')), [avantRangement, fr.lecons_plan]);
+        await pr.evaluate((ST) => { eval(ST).onglet = 'pilotage'; }, ST); await pr.waitForTimeout(100);
         v('  → la synchro du téléphone : état visible en tête (ancienne → signalée)', /Synchro/.test(await pr.textContent('[data-statut-synchro]')) && /rose/.test(await pr.getAttribute('[data-statut-synchro]', 'class')));
         await pr.close();
     });

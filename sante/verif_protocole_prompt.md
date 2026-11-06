@@ -12,10 +12,23 @@ CATÉGORIES (champ « cat ») :
 
 MOMENTS : reveil, matin, petit_dejeuner, dejeuner, apres_midi, collation, diner, soir, coucher, journee.
 
+CE QUI N'EST JAMAIS UNE ACTION (ne propose JAMAIS « action » pour ces lignes ; si elles sont rangées en action,
+corrige-les en « regle » ou « ignorer ») :
+- un prix, un coût, un budget (« Coût : 350 DH les 60 gélules ») ;
+- la durée d'une cure ou un cycle (« Cycle : 8-12 semaines puis pause ») ;
+- une mise en garde, un risque, un produit écarté ou interdit (« Levure de riz rouge → risque de myopathie »,
+  « Boosters de testostérone sans médecin ») ;
+- un palier de progression (« Semaines 1-2 : viser 35-40 % », « +0,2 km/h par semaine maximum », « Charges légères
+  les 4 premières semaines ») ;
+- un conseil ou un principe (« Privilégier le dénivelé », « La règle des 10 minutes », « Les envies durent 15-20 min ») ;
+- une question, une définition, un fait, une valeur de bilan, un nom de médecin.
+Une action est un GESTE CONCRET qu'on coche le jour même : manger tel repas, prendre telle gélule, marcher 40 min,
+se brosser les dents, se peser (1×/semaine). Le programme peut changer selon la semaine : ce n'est pas une case.
+
 CE QUI EST UNE ERREUR (à corriger) :
 - une explication ou une justification rangée en action → ignorer (ou regle si c'est une consigne à retenir) ;
 - un interdit ou un conseil général rangé en action → regle ;
-- un geste quotidien concret rangé en regle → action, avec son moment ;
+- un geste quotidien concret rangé en regle → action, avec son moment (jamais pour les lignes de la liste ci-dessus) ;
 - un moment manifestement faux (une prise « au coucher » rangée au réveil) ;
 - un libellé d'action trop long : propose un libellé court (moins de 70 caractères), le reste reste en détail ;
 - deux actions qui sont la même chose → fusionne la moins complète dans l'autre ;

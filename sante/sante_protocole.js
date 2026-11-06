@@ -34,11 +34,21 @@
     const RE_HEURE = /(?:^|\s|—)(\d{1,2})\s*h\s*(\d{2})?(?![a-z])/i;
     const momentDeLHeure = (h) => h < 5 ? 'coucher' : h < 10 ? 'matin' : h < 12 ? 'matin' : h < 15 ? 'dejeuner' : h < 19 ? 'collation' : h < 21 ? 'diner' : h < 22 ? 'soir' : 'coucher';
     const RE_QTE = /\d+(?:[.,]\d+)?\s*(?:g|mg|µg|ug|ml|cl|l|kcal|min|minutes?|h|s|cp|caps?|capsules?|g[eé]lules?|comprim[eé]s?|ampoules?|c\.|cuill|verres?|pas|s[eé]ries?|x|×|%)\b|\d+\s*(?:x|×)\s*\d+/i;
-    const RE_GESTE = /\b(?:march|promen|brossage|dents|g[eé]lules?|comprim|capsules?|suppl[eé]ment|repos|douche|kegel|s[eé]ances?|[eé]tirement|respir|m[eé]dit|pes[eé]e|peser|mesurer|boire|prendre|faire|v[eé]lo|nage|course|squat|pompes|soleus)\w*/i;
+    const RE_GESTE = /\b(?:march|promen|brossage|dents|g[eé]lules?|comprim|capsules?|suppl[eé]ment|repos|douche|kegel|s[eé]ances?|[eé]tirement|respir|m[eé]dit|pes[eé]e|peser|mesurer|boire|prendre|faire|v[eé]lo|nage|course|squat|pompes|soleus|tour de taille)\w*/i;
     const RE_REGLE = /^(?:z[eé]ro|jamais|ne jamais|ne pas|ne rien|pas de|pas d[’']|aucune?|[eé]viter|[eé]vitez|interdit|surtout pas|proscrire|limiter|stop)(?![a-z])/i;
     const RE_INFO = /^(?:le|la|les|l[’']|ce|cet|cette|ces|c[’']est|il|elle|ils|elles|je|j[’']|on|cela|ceci|en effet|bonus|note|nb|remarque|à savoir|a savoir|rep[eè]re|car|parce|pourquoi|explication)\b/i;
-    const RE_FREQ = /\b(\d+|une?)\s*(?:fois|x)\s*(?:par|\/)\s*(semaine|mois)\b/i;
+    const RE_FREQ = /\b(\d+|une?)\s*(?:(?:fois|x|×)\s*(?:par|\/)|\/)\s*(semaine|mois)\b/i;
     const RE_LIMITE = /\b(?:maximum|max\b|au plus|pas plus|au maximum|au-del[aà])/i;
+    //  v1.18 — ce qui n'est JAMAIS une case à cocher, même si une règle (ou l'IA) le propose : un coût, une durée de cure,
+    //  une mise en garde, un palier de progression, un conseil, un fait, une question
+    const RE_NON_ACTION = [
+        /\bcout\b|\bprix\b|\btarif\b|\d\s*(?:dh|mad|eur|euros?)\b/,
+        /^cycles?\b|\bpause de \d|\bsemaines? puis\b|\bcure de \d/,
+        /\brisques?\b|toxicit|\bmyopathie|\bdanger|contre-?indiqu|sans (?:medecin|avis|ordonnance)|\ba eviter\b|\binterdit|\bjamais\b|\bne (?:pas|jamais)\b/,
+        /^semaines? \d|^ensuite\b|\bpar semaine maximum\b|\bmaximum\s*$/,
+        /^(?:privilegier|preferer|eviter|limiter|attention|astuce|conseil|note|remarque|pourquoi|la regle des?|la loi des?|les envies|validation medicale|charges? legeres?|objectif\b)/,
+    ];
+    const pasUneAction = (t) => { const brut = String(t || '').replace(/^\s*→\s*/, ''); const n = norm(brut); return /→/.test(brut) || /\?\s*$/.test(brut) || RE_NON_ACTION.some(r => r.test(n)); };
     const premierePhrase = (s) => { const m = /^(.{12,140}?[.!?])(\s+|$)(.*)$/.exec(s); return m ? [m[1].replace(/[.!]$/, ''), m[3].trim()] : [s, '']; };
     const propre = (s) => String(s || '').replace(/\s+/g, ' ').replace(/\s*[:;,]\s*$/, '').replace(/^(?:[—–:,\s]|-(?!\d))+/, '').trim();
     const majuscule = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -61,9 +71,12 @@
     const aChapeau = (p) => p.segs.length >= 2 || /^[^:]{2,45}\s:\s/.test(p.s);
     const estSection = (p) => !p.puce && !p.emoji && /^(\d{1,2})[.)]\s+(\S[^:]{1,78})$/.test(p.s) && !RE_QTE.test(p.s.replace(/^\d{1,2}[.)]\s+/, ''));
     const majusculesEnTete = (s) => { const m = /^[A-ZÀ-ÖØ-Þ0-9'’\-\/ ]+(?=\s|$|\()/.exec(s); return !!m && m[0].replace(/[^A-ZÀ-ÖØ-Þ]/g, '').length >= 4; };
-    const RE_QTE_TITRE = /\d+(?:[.,]\d+)?\s*(?:g|mg|ml|kcal|min|minutes|cp|caps|capsules|g[eé]lules?|comprim[eé]s?|ampoules?|pas|%)\b/i;
+    const RE_QTE_TITRE = /\d+(?:[.,]\d+)?\s*(?:g|mg|ml|kcal|min|minutes|cp|caps|capsules|g[eé]lules?|comprim[eé]s?|ampoules?|pas|%|h)\b/i;
     const estTitre = (p) => !p.puce && !p.avert && p.s.length <= 90 && p.segs.length < 2 && !/[.;,!?]$/.test(p.s)
         && (!RE_QTE_TITRE.test(p.s) || majusculesEnTete(p.s) || !!p.emoji || RE_HEURE.test(p.s.slice(0, 12)));
+    const RE_RUBRIQUE = /^(?:compl[eé]ments?\b|suppl[eé]ments?\b|activit[eé] physique|alimentation\b|nutrition\b|vigilance\b|m[eé]decins?\b|r[eé]f[eé]rence\b|kpi\b|objectifs?\b|le m[eé]canisme|leviers?\b|[eé]cart[eé]s\b|progression\b|renforcement\b|marche\s+—|le reste de la journ|[aà] privil[eé]gier|[aà] [eé]viter|point de vigilance|r[eè]gles?\b|conseils?\b|s[eé]curit[eé]\b|pr[eé]cautions?\b)|\s—\s(?:mode d.emploi|pourquoi|vue d.ensemble|donn[eé]es|par paliers)/i;
+    const estRubrique = (p) => !p.puce && !p.avert && !p.section && p.s.length <= 75 && p.segs.length < 2 && !/[.;:!?,]$/.test(p.s) && /^[A-ZÀ-Þ]/.test(p.s)
+        && !/^~?\s*\d/.test(p.s) && RE_RUBRIQUE.test(p.s);
     const RE_PIED = /^(?:page\s+)?\d+\s*(?:\/\s*\d+)?$|^document personnel|ne remplace pas (?:le|l[’'])|^bilan complet [aà] refaire/i;
     function lignesLogiques(texte) {
         const out = [];
@@ -74,10 +87,10 @@
             if (RE_PIED.test(p.s)) { p.pied = true; out.push(p); return; }
             const prev = out[out.length - 1];
             const suite = prev && !apresVide && !prev.pied && !p.puce && !p.emoji && !p.avert && !estSection(p) && !prev.section && (
-                /^[a-zà-öø-ÿœ(—–«"]/.test(p.s)
-                || (!/[.!?:;»)]$/.test(prev.s) && !estTitre(prev) && !estTitre(p) && prev.segs.length < 3 && !aChapeau(p))
+                /^[a-zà-öø-ÿœ(—–«"]/.test(p.s) || /[A-ZÀ-Þ]-$/.test(prev.s)
+                || (!/[.!?:;»)]$/.test(prev.s) && !estTitre(prev) && !estTitre(p) && prev.segs.length < 3 && !aChapeau(p) && !(RE_QTE.test(prev.s) && RE_QTE.test(p.s) && /^[A-ZÀ-Þ0-9]/.test(p.s)))
                 || ((prev.puce || prev.avert) && !aChapeau(p) && !estTitre(p) && p.segs.length < 3));
-            if (suite) { const sep = /[a-zà-ÿ]-$/.test(prev.s) && /^[a-zà-ÿ]/.test(p.s) ? '' : ' '; prev.s += sep + p.s; prev.segs[prev.segs.length - 1] += sep + p.s; prev.brut += sep + p.brut; return; }
+            if (suite) { const sep = (/[a-zà-ÿ]-$/.test(prev.s) && /^[a-zà-ÿ]/.test(p.s)) || /[A-ZÀ-Þ]-$/.test(prev.s) ? '' : ' '; prev.s += sep + p.s; prev.segs[prev.segs.length - 1] += sep + p.s; prev.brut += sep + p.brut; return; }
             p.section = estSection(p);
             out.push(p);
         });
@@ -99,14 +112,25 @@
         const info = parties.filter(x => /kcal|prot[eé]ines/i.test(x)).join(' · ').replace(/\s*\|\s*/g, ' · ');
         return { moment, heure, nom, info };
     }
+    function blocHoraire(p) {
+        if (p.puce || p.s.length > 70 || p.segs.length > 3) return null;
+        const t = p.segs.join(' — ').replace(/^~\s*/, '');
+        const heureEnTete = /^(\d{1,2})\s*h\s*(\d{2})?\b/i.exec(t), motEnTete = MOTS_MOMENT.some(([re]) => re.test(t));
+        if (!heureEnTete && !(motEnTete && p.segs.length >= 2 && majusculesEnTete(p.segs[0]))) return null;
+        const m = momentDuTitre(t); if (!m) return null;
+        if (heureEnTete && !MOTS_MOMENT.some(([re]) => t.split(/\s+—\s+/).some(x => re.test(x.replace(/^\d{1,2}\s*h\s*\d{0,2}\s*/i, ''))))) {
+            const h = Number(heureEnTete[1]); m.moment = h < 9 ? 'reveil' : h < 12 ? 'matin' : h < 14 ? 'dejeuner' : h < 17 ? 'apres_midi' : h < 19 ? 'collation' : h < 20 ? 'diner' : h < 22 ? 'soir' : 'coucher';
+        }
+        return m;
+    }
     const catSection = (t) => {
         const n = norm(t);
-        if (/sommaire|table des matieres/.test(n)) return 'ignorer';
+        if (/sommaire|table des matieres|^reference\b|mecanisme|^medecins?\b|^contacts?\b/.test(n)) return 'ignorer';
         if (/complement|supplement|micronutri/.test(n)) return 'supplements';
         if (/\bkpi\b|indicateurs? de suivi|bilan a \d|objectifs? biolog|resultats? attendus|\bcibles?\b/.test(n)) return 'objectifs';
         if (/parametre|contexte|profil|introduction/.test(n)) return 'regles';
         if (/journee|heure par heure|planning|programme|routine|emploi du temps|semaine type|activite|exercice|sport|entrainement|musculation|renforcement|menus?\b/.test(n)) return 'actions';
-        if (/aliment|nutrition|regle|grignotage|levier|conseil|astuce|psycholog|environnement|vigilance|securite|precaution|attention|a eviter|interdit/.test(n)) return 'regles';
+        if (/aliment|nutrition|regle|grignotage|levier|conseil|astuce|psycholog|environnement|vigilance|securite|precaution|attention|a eviter|interdit|privilegier|ecartes?|mode d emploi|pourquoi|progression|paliers?/.test(n)) return 'regles';
         return 'auto';
     };
     const catSousTitre = (t) => {
@@ -136,9 +160,13 @@
         const o = options || {};
         const lignes = lignesLogiques(texte);
         const elements = [];
-        let titre = '', aSections = lignes.some(p => p.section), enTete = aSections;
+        //  v1.18 — sans sections numérotées, les rubriques se reconnaissent à leur nom (« Compléments — vue d'ensemble »,
+        //  « Vigilance », « KPI — bilan à 3 mois »…) ; avant la première, la zone des blocs horaires (« ~9h00 PETIT-DÉJEUNER »)
+        const aSections = lignes.some(p => p.section);
+        if (!aSections) lignes.forEach(p => { if (estRubrique(p)) { p.section = true; p.infere = true; } });
+        let titre = '', enTete = aSections, zoneBlocs = !aSections && lignes.some(p => !p.section && blocHoraire(p)), mode = null, suppBloc = null;
         let section = { titre: '', cat: aSections ? 'ignorer' : 'auto' }, sous = null;
-        let moment = null, heure = null, info = '', nomMoment = '', repas = null, derniere = null, supp = null, enTeteTable = null;
+        let moment = null, heure = null, info = '', nomMoment = '', repas = null, derniere = null, supp = null, enTeteTable = null, joursCourants = null;
         let n = 0;
         const id = () => 'p' + (++n).toString(36) + Math.random().toString(36).slice(2, 6);
         const lieu = () => [section.titre, sous && sous.titre].filter(Boolean).join(' — ');
@@ -148,9 +176,10 @@
         const ajouterDetail = (cible, txt) => { cible.detail = (cible.detail ? cible.detail + '\n' : '') + propre(txt); };
         const action = (texte, ligne, extra) => {
             let t = propre(texte).replace(/\.$/, ''); if (!t) return null;
+            if (!(extra && extra.repas) && pasUneAction(t)) { regle(t, ligne || t, 'pas une action (garde-fou)'); return null; }
             if (/^\d+\s*s[eé]ances?\b/i.test(t) && sous && sous.titre && !(extra && extra.repas)) t = propre(sous.titre.split(/\s+—\s+/)[0]) + ' : ' + t;
             const e = Object.assign({ bucket: 'action', texte: t, detail: '', moment: moment || momentDuTexte(ligne, 'journee'), heure: heure || null, ligne, raison: 'action', deduit: !moment }, extra || {});
-            if (!e.jours) { const j = joursDe(ligne); if (j) e.jours = j; }
+            if (!e.jours) { const j = joursDe(ligne); if (j) e.jours = j; else if (joursCourants && !e.frequence) e.jours = joursCourants.slice(); }
             if (!e.frequence) { const f = RE_FREQ.exec(norm(ligne)); if (f && !e.jours && !RE_LIMITE.test(ligne)) e.frequence = f[2] === 'mois' ? 'mois' : 'semaine'; }
             if (e.duree_min === undefined) { const d = dureeDe(t); if (d) e.duree_min = d; }
             //  doublon (la même marche citée dans « la journée » et dans « activité ») : on complète l'existant
@@ -172,6 +201,47 @@
             return { lib: propre(lib), det: propre(det), heure: h };
         };
         const cellules = (p) => p.s.split(/\s{3,}/).map(x => x.trim()).filter(Boolean);
+        //  v1.18 — une ligne de la zone des blocs horaires ; true si elle est rangée
+        const traiterBloc = (p0) => {
+            let p = p0;
+            const bh = blocHoraire(p);
+            if (bh) { moment = bh.moment; heure = bh.heure; nomMoment = bh.nom; info = bh.info; mode = null; repas = null; suppBloc = null; derniere = null; return true; }
+            const lab = /^[ÀA]\s+(MANGER|PRENDRE|FAIRE|BOIRE)\b\s*(.*)$/.exec(p.s);
+            if (lab) { mode = lab[1] === 'PRENDRE' ? 'prendre' : 'manger'; if (!lab[2].trim()) return true; p = Object.assign({}, p, { s: lab[2].trim() }); }
+            const txt = p.s.replace(/\s{3,}/g, ' ').replace(/\s*~\s*\d[\d\s.,]*\s*kcal\b.*$/i, '').trim();
+            if (!txt) { ignorer(p.s, 'repère calorique'); return true; }
+            if (/^z[eé]ro grignotage/i.test(txt)) { action('Zéro grignotage respecté', p.s, { moment: 'journee', heure: null, raison: 'règle quotidienne' }); regle(txt, p.s, 'règle'); return true; }
+            if (/^en sos\b|\bsi crise\b|\bau besoin\b|\bsi besoin\b/i.test(txt)) { regle(txt, p.s, 'prise au besoin'); return true; }
+            if (!moment) { if (titre) { ignorer(p.s, 'en-tête du document'); return true; } return false; }
+            const [lib0, ...reste] = txt.replace(/^→\s*(?:puis\s+)?/i, '').split(/\s+—\s+/);
+            const det0 = reste.join(' — ');
+            if (p.avert || RE_REGLE.test(lib0) || /^pas d[’']/i.test(lib0) || pasUneAction(lib0)) { regle(txt, p.s, 'règle'); return true; }
+            const f = RE_FREQ.exec(norm(lib0));
+            if (f) { action(lib0, p.s, { moment: 'journee', heure: null, detail: det0, frequence: f[2] === 'mois' ? 'mois' : 'semaine', raison: 'geste périodique' }); return true; }
+            if (mode === 'prendre') {
+                if (!RE_QTE.test(lib0) || /^(?:puis|seulement|semaine|jamais|si|repas|sauf|au moins)\b/i.test(lib0)) { const c = suppBloc || derniere; if (c) ajouterDetail(c, txt); else ignorer(txt, 'explication'); return true; }
+                const items = lib0.split(/\s+·\s+/).map(propre).filter(Boolean);
+                if (!suppBloc) { suppBloc = action('Prendre : ' + items.join(' · '), p.s, { heure, raison: 'prise de suppléments' }); if (suppBloc) suppBloc.texte = 'Prendre : ' + items.join(' · '); }
+                else suppBloc.texte += ' · ' + items.join(' · ');
+                if (suppBloc && det0) ajouterDetail(suppBloc, items[items.length - 1] + ' — ' + det0);
+                return true;
+            }
+            if (RE_INFO.test(lib0) && !RE_GESTE.test(lib0.slice(0, 40))) { if (derniere) ajouterDetail(derniere, txt); else ignorer(txt, 'explication'); return true; }
+            const activite = !!nomMoment && RE_GESTE.test(nomMoment) && !REPAS.includes(moment) && !/caf[eé]|repas/i.test(nomMoment);
+            if (RE_GESTE.test(lib0) || /^→/.test(txt) || activite || (!REPAS.includes(moment) && mode !== 'manger')) {
+                lib0.split(/,\s*puis\s+|\s+·\s+/).map(x => x.replace(/^puis\s+/i, '').trim()).filter(Boolean).forEach((part, k, l) => {
+                    let [t, ...d] = part.split(/\s+=\s+/);
+                    if (activite && !RE_GESTE.test(t) && /\bmin\b|minutes?|allure|\bkm\b/i.test(t)) t = majuscule(nomMoment.toLowerCase()) + ' : ' + t;
+                    action(majuscule(t), p.s, { heure, detail: [d.join(' = '), k === l.length - 1 ? det0 : ''].filter(Boolean).join(' — ') });
+                });
+                return true;
+            }
+            if (!repas) {
+                repas = action(REPAS.includes(moment) ? LIB[moment] + (nomMoment ? ' « ' + majuscule(nomMoment.toLowerCase()) + ' »' : '') : 'Collation' + (nomMoment ? ' « ' + majuscule(nomMoment.toLowerCase()) + ' »' : ''), p.s, { repas: true, heure, raison: 'repas', detail: info || '' });
+            }
+            if (repas) ajouterDetail(repas, txt);
+            return true;
+        };
         const estEnTeteTable = (c) => c.length >= 2 && c.every(x => x.length <= 28 && !/\d/.test(x));
 
         for (const p of lignes) {
@@ -179,17 +249,26 @@
             if (p.section) {
                 const t = p.s.replace(/^\d{1,2}[.)]\s+/, '');
                 section = { titre: t, cat: catSection(t) }; sous = null; moment = null; heure = null; repas = null; derniere = null; supp = null; enTeteTable = null; enTete = false;
+                zoneBlocs = false; mode = null; suppBloc = null; joursCourants = null;
+                if (p.infere) {
+                    if (section.cat === 'supplements' && /vue d.ensemble|synth[eè]se|r[eé]cap|tableau/i.test(t)) sous = { titre: t, cat: 'synthese' };
+                    const f = RE_FREQ.exec(t);
+                    if (section.cat === 'actions' && f) action(propre(t.split(/\s+—\s+/)[0]) + ' : ' + f[0].replace(/\s+/g, ''), t, { moment: 'journee', heure: null, frequence: f[2] === 'mois' ? 'mois' : 'semaine', raison: 'séances de la rubrique' });
+                }
                 if (/r[eè]gle d[ue]s? (.{3,60})$/i.test(t) && section.cat === 'regles') { const m = /r[eè]gle d[ue]s? (.{3,60})$/i.exec(t); action(majuscule(m[1]) + ' respecté', t, { moment: 'journee', raison: 'règle quotidienne' }); }
                 continue;
             }
             if (enTete) { if (!titre) titre = p.s; else ignorer(p.s, 'en-tête du document'); continue; }
-            if (!titre && !aSections && estTitre(p) && !momentDuTitre(p.s)) { titre = p.s; continue; }
+            if (!titre && !aSections && estTitre(p) && !momentDuTitre(p.s) && !blocHoraire(p)) { titre = p.s; continue; }
             if (p.pied) { ignorer(p.s, 'pied de page'); continue; }
             const cat = section.cat;
             if (cat === 'ignorer') { ignorer(p.s, 'sommaire'); continue; }
+            if (zoneBlocs && traiterBloc(p)) continue;
+            if (!p.puce && /^(?:(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*(?:,|et|\+|&)\s*)?)+\s*:?$/i.test(p.s)) { const j = joursDe(p.s); joursCourants = j; continue; }
+            if (!p.puce && /^(?:tous les jours|chaque jour|du lundi au dimanche)\s*:?$/i.test(p.s)) { joursCourants = null; continue; }
 
             //  titres (emoji, majuscules, courts) : moment, sous-partie, produit
-            if ((p.emoji || estTitre(p)) && !p.avert) {
+            if ((p.emoji || estTitre(p)) && !p.avert && !(!aSections && cat === 'supplements' && sous && sous.cat === 'synthese')) {
                 const m = (cat === 'actions' || cat === 'auto') ? momentDuTitre(p.s) : null;
                 if (m) { moment = m.moment; heure = m.heure; nomMoment = m.nom; info = m.info; repas = null; derniere = null; sous = null; continue; }
                 if (cat === 'supplements' && majusculesEnTete(p.s) && !/^(?:POURQUOI|COMBIEN|QUAND)\b/.test(p.s) && !(sous && sous.cat === 'synthese')) {
@@ -205,6 +284,7 @@
 
             //  ── objectifs : un tableau Marqueur / Départ / Cible
             if (cat === 'objectifs' && sc !== 'regles') {
+                if (/\s=\s|^[aà] demander|^cible\b/i.test(p.s)) { regle(p.s, p.s, 'note d’objectifs'); continue; }
                 const c = cellules(p);
                 if (c.length >= 2) {
                     if (c.every(x => x.length <= 28) && c.filter(x => /^(?:marqueur|indicateur|param[eè]tre|d[eé]part|actuel|cible|objectif|r[eé]sultat|valeur)/i.test(x)).length >= 2) { ignorer(p.s, 'en-tête de tableau'); continue; }
@@ -227,7 +307,8 @@
                     const momentTxt = propre([quand, avec].filter(Boolean).join(' · '));
                     if (!s0) s0 = ajouter({ bucket: 'supplement', nom: propre(produit), dose: propre(dose), quand: momentTxt, pourquoi: '', notes: '', ligne: p.s, raison: 'tableau de synthèse' });
                     else { if (!s0.dose) s0.dose = propre(dose); s0.prises = (s0.prises ? s0.prises + ' + ' : '') + momentTxt; }
-                    if (/par mois|\/\s*mois|mensuel|x\s*\/\s*mois|1x\/mois/i.test(quand)) action(propre(produit) + ' : ' + propre(dose) + (avec ? ' (' + propre(avec) + ')' : ''), p.s, { moment: 'journee', heure: null, frequence: 'mois', raison: 'prise mensuelle' });
+                    const dejaMensuel = elements.some(x => x.bucket === 'action' && x.frequence === 'mois' && cle(x.texte).includes(k));
+                    if (!dejaMensuel && /par mois|\/\s*mois|mensuel|[x×]\s*(?:par|\/)\s*mois|1x\/mois/i.test(quand)) action(propre(produit) + ' : ' + propre(dose) + (avec ? ' (' + propre(avec) + ')' : ''), p.s, { moment: 'journee', heure: null, frequence: 'mois', raison: 'prise mensuelle' });
                     continue;
                 }
                 if (sc === 'regles' && c.length >= 2) {
@@ -250,6 +331,11 @@
             //  ── règles : tout est à relire, sauf les gestes périodiques explicites (« se peser 1 fois par semaine »)
             if (cat === 'regles' || sc === 'regles' || sc === 'explication') {
                 if (sc === 'explication') { ignorer(p.s, 'explication'); continue; }
+                if (p.infere === undefined && !aSections && / · /.test(p.s) && p.s.split(/\s+·\s+/).some(x => RE_FREQ.test(norm(x)))) {
+                    let prem = null;
+                    p.s.split(/\s+·\s+/).forEach(x => { const f2 = RE_FREQ.exec(norm(x)); if (f2 && !RE_LIMITE.test(x)) { const lib = propre(x.split(/,/)[0]); action(/^tour de taille/i.test(lib) ? 'Mesurer le ' + lib : majuscule(lib), p.s, { moment: 'journee', heure: null, detail: propre(x.split(/,/).slice(1).join(',')), frequence: f2[2] === 'mois' ? 'mois' : 'semaine', raison: 'geste périodique' }); prem = true; } });
+                    if (prem) continue;
+                }
                 const f = RE_FREQ.exec(norm(p.s));
                 if (f && !RE_LIMITE.test(p.s) && RE_GESTE.test(p.s.slice(0, 40))) { const d = decouper(p); action(d.lib, p.s, { moment: 'journee', heure: null, detail: d.det, frequence: f[2] === 'mois' ? 'mois' : 'semaine', raison: 'geste périodique' }); continue; }
                 const c = cellules(p);
@@ -278,6 +364,7 @@
                 ajouterDetail(repas, p.s.replace(/\s{3,}/g, ' '));
                 continue;
             }
+            if (!aSections && / · /.test(d.lib) && d.lib.split(/\s+·\s+/).every(x => RE_QTE.test(x) || RE_GESTE.test(x))) { d.lib.split(/\s+·\s+/).forEach(x => action(x, p.s, { heure: d.heure || heure })); continue; }
             action(d.lib, p.s, { heure: d.heure || heure, detail: d.det });
         }
         //  repas séquencé : le libellé le dit
@@ -288,7 +375,7 @@
             const parCle = {}; lecons.forEach(l => { if (l && l.cle) parCle[l.cle] = l; });
             elements.forEach(e => {
                 const l = parCle[e.cle]; if (!l) return;
-                if (l.bucket) e.bucket = l.bucket;
+                if (l.bucket && !(l.bucket === 'action' && pasUneAction(e.texte))) e.bucket = l.bucket;
                 if (l.moment) e.moment = l.moment;
                 if (l.texte) { e.texte = l.texte; if (e.bucket === 'supplement') e.nom = l.texte; else if (e.bucket === 'objectif') e.libelle = l.texte; }
                 if (l.bucket === 'action' && !e.moment) e.moment = 'journee';
@@ -310,5 +397,5 @@
         const m = /([<>≤≥])\s*(\d+(?:[.,]\d+)?)/.exec(String(o.cible || ''));
         return { cle: k, op: m ? (m[1] === '≤' ? '<' : m[1] === '≥' ? '>' : m[1]) : null, v: m ? Number(m[2].replace(',', '.')) : null };
     }
-    return { analyser, lignesLogiques, momentDuTitre, resoudreObjectif, cle, norm, MOMENTS, LIB_MOMENTS: LIB, JOURS };
+    return { analyser, pasUneAction, lignesLogiques, momentDuTitre, resoudreObjectif, cle, norm, MOMENTS, LIB_MOMENTS: LIB, JOURS };
 });

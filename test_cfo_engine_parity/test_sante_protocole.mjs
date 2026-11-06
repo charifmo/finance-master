@@ -178,5 +178,48 @@ const r2 = P.analyser(V1, { lecons: [{ cle: cleSecu, bucket: 'action', moment: '
 const secu2 = r2.elements.find(e => e.cle === cleSecu), muscu2 = r2.elements.find(e => e.cle === cleMuscu);
 v('K. leçons apprises : la règle passée en case (au matin), le libellé corrigé, la ligne supprimée → ignorée', secu2.bucket === 'action' && secu2.moment === 'matin' && secu2.appris && muscu2.texte === 'Machines (30 min)' && r2.elements.find(e => /grand verre/.test(e.texte)).bucket === 'ignorer', [secu2, muscu2]);
 v('  → sans leçon, rien n’est marqué « appris »', !r.elements.some(e => e.appris));
+
+//  v1.18 — un PROGRAMME sans sections numérotées (blocs horaires « ~9h00   PETIT-DÉJEUNER », étiquettes À MANGER / À PRENDRE,
+//  rubriques nommées), tel qu'extrait d'un PDF (colonnes séparées par 3 espaces, cellules coupées). Contenu FICTIF.
+const PG = [
+    'PROGRAMME JOURNALIER', ' ~1900 kcal · ~110 g protéines · déficit ~500 kcal/jour',
+    ' RÉVEIL   Marche à jeun', ' À MANGER  ', '1 grand verre d’eau, puis   35 min de marche en Zone 2 (110 bpm)', ' Les premières minutes en allure lente comptent.', ' Puis 10 min de repos avant de manger.',
+    '~300 kcal · 18 g prot', ' ~8h30   PETIT-DÉJEUNER  ', ' À MANGER  ', '2 œufs', ' 40 g de pain complet', ' À PRENDRE  ', 'Curcumine 500 mg   — à la première bouchée', ' Oméga-3 × 2 · Vitamine C × 1',
+    ' ~13h00   DÉJEUNER  ', ' À MANGER  ', 'Poisson 150 g + légumes', ' À PRENDRE   Chitine 120 mg   — pendant le repas', ' Seulement si le repas est gras.',
+    ' ~20h00   MARCHE DU SOIR', ' À MANGER  ', '20 min d’allure douce, après le dîner.', ' Pas d’effort intense le soir — le sommeil en pâtit.',
+    ' 22h00   COUCHER', ' À MANGER  ', 'Brossage de dents = fin de la journée alimentaire.', ' À PRENDRE  ', 'Magnésium × 2 (200 mg)   — 1 h après le dîner',
+    ' 1 fois par mois :   Vitamine D3 1 ampoule —   au petit-déjeuner (jamais avec la chitine).', ' En SOS uniquement :   Antalgique X si douleur. Jamais à jeun.',
+    ' ZÉRO GRIGNOTAGE entre ces repas.   Autorisé : eau, café noir.',
+    'Compléments — vue d’ensemble', ' QUAND   PRODUIT   DOSE   POURQUOI', ' Petit-déjeuner   Curcumine   500 mg   Glycémie, foie', 'Triglycérides, sécrétion de', ' Petit-déjeuner   Oméga-3   2 caps   ', ' VLDL',
+    ' Déjeuner   Chitine   120 mg   Graisses du repas', ' 1× par mois   Vitamine D3   1 ampoule   Prescrite',
+    'Curcumine — pourquoi 1000 mg et pas 1500', ' •   Coût : 300 DH les 60 gélules. Un pot dure 30 jours.', ' •   Cycle :   8-12 semaines puis pause de 2-4 semaines.',
+    ' Écartés et pourquoi', ' Produit   Raison', ' Produit Z   DANGER avec la curcumine → risque de toxicité.',
+    'Activité physique', ' Progression — par paliers', ' •   Semaines 1-2 : viser 35 % du temps en Zone 2', ' •   Privilégier la côte plutôt que la vitesse', ' •   Sur le plat : +0,2 km/h par semaine maximum.',
+    ' Renforcement musculaire — machines, 2×/semaine', ' Machine   Séries × Reps   Repos', ' Presse à cuisses   2 × 12   90 s', ' Leg Curl   2 × 12   90 s',
+    ' •   Charges légères les 4 premières semaines : finir chaque série avec 4 répétitions en réserve.',
+    ' Le reste de la journée', ' •   10 000 pas/jour au total · Kegel : 10 contractions, 3 fois/jour', ' •   Ne jamais rester assis plus de 45 minutes.',
+    'Alimentation', '✅  À privilégier', ' •   Protéines :   poisson blanc, œufs, légumineuses.', ' Leviers pratiques', ' •   La règle des 10 minutes :   attendre avant de grignoter.', ' •   Faim ou envie ?   La vraie faim accepte tout.',
+    ' •   Se peser 1×/semaine, même jour · tour de taille 1×/mois.',
+    'KPI — bilan à 3 mois', ' Marqueur   Départ   Cible   Résultat', ' Triglycérides   2,10   <1,5   ____', ' Poids   ~100 kg   -4 à -6 kg   ____',
+    ' Médecins', ' •   Dr Fictif — endocrinologue, adresse fictive.'].join('\n');
+const pg = P.analyser(PG), pa = pg.elements.filter(e => e.bucket === 'action'), pr = pg.elements.filter(e => e.bucket === 'regle');
+const ca = (re) => pa.find(e => re.test(e.texte));
+v('L. programme sans sections numérotées : blocs horaires lus (réveil, petit-déjeuner 08:30, déjeuner 13:00, soir, coucher 22:00)', pg.titre === 'PROGRAMME JOURNALIER' && ca(/grand verre/).moment === 'reveil' && ca(/^Petit-déjeuner$/).heure === '08:30'
+  && ca(/^Déjeuner$/).heure === '13:00' && ca(/Marche du soir/).moment === 'soir' && ca(/Brossage/).moment === 'coucher', pa.map(e => [e.moment, e.heure, e.texte]));
+v('  → « À MANGER » = UNE case repas (menu en détail) ; « À PRENDRE » = une case de prises (Curcumine · Oméga-3 · Vitamine C)', /2 œufs/.test(ca(/^Petit-déjeuner$/).detail) && ca(/^Prendre : Curcumine 500 mg · Oméga-3 × 2 · Vitamine C × 1$/)
+  && /première bouchée/.test(ca(/Curcumine/).detail) && /Seulement si/.test(ca(/Chitine/).detail), pa.map(e => e.texte));
+v('  → « puis » sépare deux gestes ; la marche du soir garde son nom ; « = » met la définition en détail', !!ca(/^35 min de marche/) && ca(/^Marche du soir : 20 min/) && ca(/^Brossage de dents$/).detail.startsWith('fin de la journée'), pa.map(e => e.texte));
+v('  → mensuel : Vitamine D3 une seule fois (bloc + tableau) ; pesée 1×/semaine ; tour de taille 1×/mois ; renforcement 2×/semaine', pa.filter(e => /Vitamine D3/.test(e.texte)).length === 1 && ca(/Vitamine D3/).frequence === 'mois'
+  && ca(/^Se peser/).frequence === 'semaine' && ca(/^Mesurer le tour de taille/).frequence === 'mois' && ca(/^Renforcement musculaire/).frequence === 'semaine' && /Leg Curl/.test(ca(/^Renforcement/).detail), pa.map(e => [e.texte, e.frequence]));
+v('  → « Zéro grignotage respecté » ; 10 000 pas et Kegel = deux cases', !!ca(/Zéro grignotage respecté/) && !!ca(/^10 000 pas/) && !!ca(/^Kegel/));
+v('  → JAMAIS en case : coût, cycle, produit écarté, paliers, conseils, question, SOS, mise en garde', !pa.some(e => /Coût|Cycle|Produit Z|Semaines 1-2|Privilégier|km\/h|Charges légères|règle des|Faim ou envie|SOS|assis|Pas d’effort/.test(e.texte))
+  && ['Coût', 'Cycle', 'Semaines 1-2', 'Privilégier', 'Charges légères', 'Faim ou envie', 'En SOS'].every(x => pr.some(r => r.texte.includes(x))), pa.map(e => e.texte));
+const ps = pg.elements.filter(e => e.bucket === 'supplement'), po = pg.elements.filter(e => e.bucket === 'objectif');
+v('  → tableau des compléments lu malgré les cellules coupées (Curcumine, Oméga-3, Chitine, Vitamine D3) ; objectifs du KPI ; médecins ignorés', ['Curcumine', 'Oméga-3', 'Chitine', 'Vitamine D3'].every(x => ps.some(e => e.nom.startsWith(x)))
+  && po.some(o => o.libelle === 'Triglycérides' && o.cible === '<1,5') && !pg.elements.some(e => e.bucket !== 'ignorer' && /Dr Fictif/.test(e.texte)), [ps.map(e => e.nom), po]);
+v('M. garde-fou exporté : coût, cure, mise en garde, palier, conseil, question → pas une action ; un vrai geste → action', ['Coût : 350 DH les 60 gélules', 'Cycle : 8-12 semaines puis pause', 'Levure → risque de myopathie', 'Boosters sans médecin', 'Semaines 3-4 : 50 %', 'Privilégier le dénivelé', 'Faim ou envie ?', 'Validation médicale'].every(P.pasUneAction)
+  && !['10 000 pas/jour au total', 'Soleus push-ups au bureau, plusieurs fois par jour', '2 gélules + 2 grands verres d’eau (30 min avant le repas)', 'Se peser 1×/semaine'].some(P.pasUneAction));
+const leconsFausses = P.analyser(PG, { lecons: [{ cle: pr.find(r => /Coût/.test(r.texte)).cle, bucket: 'action' }] });
+v('  → une leçon (ou une correction de l’IA) qui mettait le coût en case ne s’applique pas', !leconsFausses.elements.some(e => e.bucket === 'action' && /Coût/.test(e.texte)));
 console.log(ko === 0 ? `\n  ✅ TOUT PASSE — ${n} contrôles` : `\n  ❌ ${ko} contrôle(s) en échec sur ${n}`);
 process.exit(ko === 0 ? 0 : 1);
