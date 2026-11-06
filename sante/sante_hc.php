@@ -243,7 +243,7 @@ function sante_hc_integrer(array $p, array &$etat): array {
         $d = max($joursPas); $par = [];
         foreach ((array)($etat['journal'][$d]['hc']['pas'] ?? []) as $k => $v) {
             $h = preg_match('/^(?:id:)?(s[0-9a-f]{6})\|/', (string)$k, $m) ? $m[1] : '_';
-            $nom = $h === '_' ? 'total du jour' : ($noms[$h] ?? 'source ' . substr($h, 1, 4));
+            $nom = $h === '_' ? 'total du jour' : ('s000000' === $h ? 'plus tôt (montre + téléphone fusionnés)' : ($noms[$h] ?? 'source ' . substr($h, 1, 4)));
             $par[$nom] = ($par[$nom] ?? 0) + (float)$v;
         }
         $detail = ['date' => $d, 'sources' => array_map(fn($x) => (int)round($x), $par), 'retenu' => (int)round(sante_hc_somme_sources($etat['journal'][$d]['hc']['pas'] ?? []))];

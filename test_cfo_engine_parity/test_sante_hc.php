@@ -115,6 +115,32 @@ v('J. VO2 max 38,5 ; glycémie 5,5 mmol/L = 99,1 mg/dL ; resp. 14 ; 36,7 °C ; m
 $fcs = []; for ($k = 0; $k < 60; $k++) $fcs[] = ['start_time' => sprintf('%sT%02d:%02d:00.000Z', $d1, 8 + intdiv($k, 6), ($k % 6) * 10), 'end_time' => sprintf('%sT%02d:%02d:00.000Z', $d1, 8 + intdiv($k, 6), ($k % 6) * 10), 'unit' => 'bpm', 'source' => $srcTel, 'value' => (float)($k < 6 ? 52 : 80 + $k % 20)];
 [$eR] = $appliquer(sante_hc_convertir_b(['metadata' => $B['metadata'], 'data' => ['heart_rate' => $fcs]]), []);
 v('K. FC au repos estimée d’après la journée (6 mesures à 52 sur 60 → 52), la FC au repos mesurée reste vide', ($eR['journal'][$d1]['samsung']['fc_repos_est'] ?? 0) == 52 && !isset($eR['journal'][$d1]['samsung']['fc_repos']), $eR['journal'][$d1]['samsung'] ?? []);
+//  v1.23 — UNE VRAIE JOURNÉE : plus de 1 500 mesures. Avant, seules les 1 500 PREMIÈRES étaient gardées (montre + téléphone y
+//  arrivent vers 9 h) : tout le reste de la journée était jeté, envoi après envoi (« 4 077 pas, dernière mesure 09:22 »).
+//  Une mesure toutes les 30 s : montre 06:00–18:00 (6 pas), téléphone 07:00–21:00 (5 pas) : 1 440 + 1 680 = 3 120 mesures, envoyées heure par heure.
+//  Minute par minute, la plus haute : 06–07 h 12×60 + 07–18 h 12×660 + 18–21 h 10×180 = 10 440.
+$minute = fn($src, $h, $mn, $sec, $v) => ['start_time' => sprintf('%sT%02d:%02d:%02d.000Z', $d1, $h, $mn, $sec), 'end_time' => $sec ? sprintf('%sT%02d:%02d:00.000Z', $d1, $h + intdiv($mn + 1, 60), ($mn + 1) % 60) : sprintf('%sT%02d:%02d:30.000Z', $d1, $h, $mn), 'unit' => 'steps', 'source' => $src, 'value' => (float)$v];
+$tout = []; $eJ = [];
+for ($h = 6; $h < 21; $h++) {
+    $lot = [];
+    for ($mn = 0; $mn < 60; $mn++) foreach ([0, 30] as $sec) { if ($h < 18) $lot[] = $minute($srcMontre, $h, $mn, $sec, 6); if ($h >= 7) $lot[] = $minute($srcTel, $h, $mn, $sec, 5); }
+    $tout = array_merge($tout, $lot);
+    [$eJ] = $appliquer(sante_hc_convertir_b(['metadata' => $B['metadata'], 'data' => ['steps' => $lot]]), $eJ);
+}
+$stocke = $eJ['journal'][$d1]['hc']['pas'] ?? [];
+$derniere = max(array_map(fn($k) => preg_match('/\|\d{8}T(\d{6})/', $k, $x) ? $x[1] : '000000', array_keys($stocke)));
+v('L. une vraie journée (3 120 mesures, envoyées heure par heure) : 10 440 pas — plus rien de jeté après les 1 500 premières',
+  ($eJ['journal'][$d1]['samsung']['pas'] ?? 0) == 10440 && (int)round(sante_hc_somme_sources($stocke)) === 10440, [$eJ['journal'][$d1]['samsung']['pas'] ?? null, count($stocke)]);
+v('  → la dernière mesure gardée est celle de 20:59:30 (pas 09:22) ; au plus 2 000 entrées stockées', $derniere === '205930' && count($stocke) <= 2000, [$derniere, count($stocke)]);
+[$eJ2] = $appliquer(sante_hc_convertir_b(['metadata' => $B['metadata'], 'data' => ['steps' => $tout]]), $eJ);
+v('  → toute la journée renvoyée d\'un coup (y compris ce qui a été regroupé) : toujours 10 440, pas de double compte', ($eJ2['journal'][$d1]['samsung']['pas'] ?? 0) == 10440, $eJ2['journal'][$d1]['samsung']['pas'] ?? null);
+$regroupe = sante_normaliser($eJ2); $regroupe = json_decode(json_encode($regroupe), true);
+v('  → relu et réécrit (normalisé) encore : le total ne bouge pas (le regroupement est stable)', (int)round(sante_hc_somme_sources($regroupe['journal'][$d1]['hc']['pas'] ?? [])) === 10440);
+//  FC : plus de 1 200 mesures → moyennes par minute, les nuits (valeurs basses) gardées pour la FC au repos estimée
+$fcj = []; for ($k = 0; $k < 1500; $k++) { $t = $k * 50; $fcj[] = ['start_time' => sprintf('%sT%02d:%02d:%02d.000Z', $d1, intdiv($t, 3600), intdiv($t % 3600, 60), $t % 60), 'end_time' => sprintf('%sT%02d:%02d:%02d.000Z', $d1, intdiv($t, 3600), intdiv($t % 3600, 60), $t % 60), 'unit' => 'bpm', 'source' => $srcMontre, 'value' => $t < 6 * 3600 ? 52.0 : 80.0]; }
+[$eF2] = $appliquer(sante_hc_convertir_b(['metadata' => $B['metadata'], 'data' => ['heart_rate' => $fcj]]), []);
+v('  → FC : 1 500 mesures (nuit à 52, journée à 80) — la nuit n\'est plus jetée : FC au repos estimée 52, entrées ≤ 2 000',
+  ($eF2['journal'][$d1]['samsung']['fc_repos_est'] ?? 0) == 52 && count($eF2['journal'][$d1]['hc']['fc'] ?? []) <= 2000 && min($eF2['journal'][$d1]['hc']['fc'] ?? [0]) == 52, [$eF2['journal'][$d1]['samsung']['fc_repos_est'] ?? null, count($eF2['journal'][$d1]['hc']['fc'] ?? [])]);
 @unlink(getenv('SANTE_DATA_FILE'));
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

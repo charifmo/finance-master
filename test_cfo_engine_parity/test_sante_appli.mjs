@@ -620,7 +620,7 @@ z.close()`, src, zip]);
         v('  → Pilotage : le détail sous la case (menu du repas) affiché d’office ; « Masquer les détails » le replie', det.length === 1 && /2 œufs/.test(det[0]) && /pain d’orge/.test(det[0]) && detMasque === 0 && (await pr.$$('[data-pilotage-detail]')).length === 1, [det, detMasque]);
         const ids = await pr.$$eval('[data-kpi]', l => l.map(e => e.dataset.kpi));
         const gj = await pr.evaluate(() => { const c = Chart.getChart(document.getElementById('graphJournee')); return c ? { pas: c.data.datasets[0].data, fc: c.data.datasets[1].data } : null; });
-        v('  → « heure par heure » : pas par heure (8 h : 1 600 = source la plus haute ; 14 h : 2 000), FC min–max par heure, dernière mesure 23:40', gj && gj.pas[8] === 1600 && gj.pas[14] === 2000 && JSON.stringify(gj.fc[8]) === '[105,118]' && gj.pas[3] === null
+        v('  → « heure par heure » : pas par heure (8 h : 1 900 = minute par minute, la plus haute à 8:00 (1 200) + 8:30 (700), comme le total du serveur ; 14 h : 2 000), FC min–max par heure, dernière mesure 23:40', gj && gj.pas[8] === 1900 && gj.pas[14] === 2000 && JSON.stringify(gj.fc[8]) === '[105,118]' && gj.pas[3] === null
           && /23:40/.test(await pr.textContent('[data-derniere-mesure]')), gj);
         const tCoeur = (await pr.textContent('[data-kpi="coeur"]')).replace(/\s+/g, ' '), tPasH = (await pr.textContent('[data-kpi="pas"]')).replace(/\s+/g, ' ');
         v('  → FC au repos estimée affichée (57, « estimée ») ; la tuile des pas rappelle hier et l’heure de la dernière mesure', /57/.test(tCoeur) && /estimée/.test(tCoeur) && /hier 7\s200/.test(tPasH) && /dernière mesure 23:40/.test(tPasH), [tCoeur, tPasH]);
