@@ -74,5 +74,39 @@ v('B. lecture d\'un compte rendu : date, 12 biomarqueurs, bornes (intervalle, «
 v('  → « 4 420 » lu 4 420 ; la formule « 49.9 % 2206 » garde la valeur absolue ; « 14,70 » lu 14,7', r.valeurs.leuco.v === 4420 && r.valeurs.neutro.v === 2206 && r.valeurs.hb.v === 14.7);
 v('  → bilirubine conjuguée et libre ne sont pas confondues avec la totale', r.valeurs.bili_c.v === 3.4 && r.valeurs.bili_l.v === 12.3 && r.valeurs.bili_t.v === 15.7);
 v('  → une ligne inconnue est rendue pour vérification, jamais devinée', r.nonReconnues.includes('Commentaire 12'));
+
+//  v1.4 — la date du bilan, les tirets des PDF, les nombres collés aux lettres
+const D = (t, auj) => I.lireBilan(t, cat, { aujourdhui: auj }).date;
+v('C. date : PRÉLÈVEMENT avant ouverture / édition ; tirets « − » (U+2212) et « – » lus', D('Dossier ouvert le : 14−05−2026\nPrélevé le : 15−05−2026\nEdité le : 21–05–2026\nTG 1') === '2026-05-15');
+v('  → jamais la naissance, ni une antériorité, ni une date future, ni avant 1990', D('Né(e) le 02/02/1980\nAntériorités du 20/02/2025\nTG 1') === null && D('Date de naissance : 03/03/1981\nPrélevé le 01/12/2026\nTG 1', '2026-11-04') === null && D('Le 01/01/1985\nTG 1') === null);
+v('  → « Bilan du 1er octobre 2026 », « 03/11/26 », ISO « 2026-05-15 » ; une norme « 5.06-6.00 » n\'est pas une date', D('Bilan du 1er octobre 2026\nTG 1') === '2026-10-01' && D('Résultats 03/11/26\nTG 1') === '2026-11-03' && D('Prélèvement 2026-05-15\nTG 1') === '2026-05-15' && D('Hématies 5.06-6.00\nTG 0.27-4.20') === null);
+const r2 = I.lireBilan('Hémoglobine glyquée HbA1c 5.8 % 4.0 – 5.6\nVitamine D (D2+D3) 27.5 ng/mL > 30\nCortisol 8 h 312 nmol/L 166−507\nPlaquettes 211 000 /mm3 150 000 - 400 000', cat);
+v('  → « HbA1c 5.8 » lu 5,8 ; « (D2+D3) 27.5 » lu 27,5 ; « Cortisol 8 h 312 » lu 312 ; bornes « 150 000 - 400 000 »', r2.valeurs.hba1c.v === 5.8 && r2.valeurs.hba1c.max === 5.6 && r2.valeurs.vitd.v === 27.5 && r2.valeurs.cortisol.v === 312 && r2.valeurs.cortisol.min === 166
+  && JSON.stringify(r2.valeurs.plaquettes) === '{"v":211000,"min":150000,"max":400000}', r2.valeurs);
+
+//  v1.4 — les plans : lecture d'un texte libre, puis prévu / réalisé identique en JS et en PHP
+const pn = I.lirePlan('Plan nutritionnel\nTous les jours\nPetit-déjeuner : café noir + MCT\n- 2 oeufs\nLundi\nDéjeuner\n• salade, poulet 150 g\nCollation : amandes 20 g\nDîner\n1. soupe de légumes\nMardi :\nDéjeuner : poisson 150 g', 'nutrition');
+v('D. plan nutritionnel : titre, jours et repas en titres, puces et numéros retirés (« - 2 oeufs » garde son 2)', pn.titre === 'Plan nutritionnel' && pn.items.length === 6 && pn.items[1].texte === '2 oeufs' && pn.items[1].jour === 'tous' && pn.items[1].moment === 'petit_dejeuner'
+  && pn.items[3].jour === 'lundi' && pn.items[3].moment === 'collation' && pn.items[4].texte === 'soupe de légumes' && pn.items[5].jour === 'mardi', pn.items);
+const pe = I.lirePlan('Programme exercice\nLundi : Marche Zone 2 à jeun 45 min\nMercredi\n- Machines bas du corps 1 h\n- Soleus pushups 10 min\nSamedi\nVélo 1h30', 'exercice');
+v('  → plan d\'exercice : durées « 45 min », « 1 h », « 1h30 » lues (45, 60, 90 min)', pe.items.map(i => i.jour + ':' + i.duree_min).join() === 'lundi:45,mercredi:60,mercredi:10,samedi:90', pe.items);
+const plan = { items: pe.items.map((x, i) => Object.assign({ id: 'e' + i }, x)).concat([{ id: 'q', jour: 'tous', texte: 'soleus', duree_min: 5 }]) };
+const journal = { '2026-11-02': { plan_fait: { e0: true, q: true } }, '2026-11-03': { plan_fait: { q: true } }, '2026-11-04': { plan_fait: { e1: true } } };
+//  v1.8 — protocole : jours précis (mardi + vendredi) et gestes périodiques (1×/semaine, 1×/mois), cochés une fois dans la période
+const proto = { items: [{ id: 'q1', jour: 'tous', texte: 'eau', moment: 'reveil' }, { id: 'm1', jour: 'tous', jours: ['mardi', 'vendredi'], texte: 'machines', duree_min: 30 },
+                        { id: 'h1', jour: 'tous', frequence: 'semaine', texte: 'pesée' }, { id: 'o1', jour: 'tous', frequence: 'mois', texte: 'tour de taille' }] };
+const jProto = { '2026-11-03': { plan_fait: { m1: true, h1: true } }, '2026-10-30': { plan_fait: { o1: true } }, '2026-11-20': { plan_fait: { o1: true } } };
+const casPlan = [[plan, journal, '2026-11-04'], [plan, journal, '2026-11-08'], [plan, journal, '2026-11-02'], [plan, {}, '2026-11-09'], [null, journal, '2026-11-04'],
+                 [proto, jProto, '2026-11-03'], [proto, jProto, '2026-11-05'], [proto, jProto, '2026-11-10'], [proto, jProto, '2026-10-31']];
+const fp = path.join(ICI, '.tmp_sante_plan.json'); fs.writeFileSync(fp, JSON.stringify(casPlan));
+const phpPlan = JSON.parse(execFileSync('php', ['-r', `require '${path.join(S, 'sante_lib.php')}'; $d = json_decode(file_get_contents('${fp}'), true); echo json_encode(array_map(fn($c) => sante_suivi_plan(...$c), $d), JSON_UNESCAPED_UNICODE);`], { encoding: 'utf8' }));
+fs.rmSync(fp, { force: true });
+const jsPlan = casPlan.map(c => C.suiviPlan(...c));
+v(`  → prévu / réalisé : ${casPlan.length} cas identiques en JS et en PHP`, egal(jsPlan, phpPlan), [jsPlan[0], phpPlan[0]]);
+v('  → mercredi 04/11 : prévus lun→mer 1+1+1 « tous les jours » + 1 + 2 = 6, faits 4, taux 67 %, minutes 45+5+5+60+10+5 / 45+5+5+60', JSON.stringify(jsPlan[0].semaine) === JSON.stringify({ du: '2026-11-02', prevus: 6, faits: 4, taux: 67, minutes_prevues: 130, minutes_faites: 115 }) && jsPlan[0].du_jour.length === 3 && jsPlan[0].du_jour[0].fait === true, jsPlan[0]);
+v('  → protocole : machines les mardis et vendredis seulement ; pesée cochée mardi = faite toute la semaine ; tour de taille : le mois', jsPlan[5].du_jour.map(i => i.id).join() === 'q1,m1' && jsPlan[6].du_jour.map(i => i.id).join() === 'q1'
+  && jsPlan[6].periodiques.find(i => i.id === 'h1').fait === true && jsPlan[7].periodiques.find(i => i.id === 'h1').fait === false && jsPlan[6].periodiques.find(i => i.id === 'o1').fait === true && jsPlan[8].periodiques.find(i => i.id === 'o1').fait === true
+  && jsPlan[5].semaine.prevus === 3, [jsPlan[5], jsPlan[6].periodiques]);
+v('  → dimanche : la semaine entière ; lundi suivant : nouvelle semaine ; sans plan : rien de prévu', jsPlan[1].semaine.du === '2026-11-02' && jsPlan[3].semaine.du === '2026-11-09' && jsPlan[3].semaine.faits === 0 && jsPlan[4].semaine.taux === null);
 console.log(ko === 0 ? `\n  ✅ TOUT PASSE — ${n} contrôles` : `\n  ❌ ${ko} contrôle(s) en échec sur ${n}`);
 process.exit(ko === 0 ? 0 : 1);

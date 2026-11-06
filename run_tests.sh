@@ -15,7 +15,8 @@ cd "$(dirname "$0")"
 # v37.8 — Les deux suites « navigateur » (un seul atterrissage, simulateur)
 #   ont besoin de dépendances locales NON versionnées. Sans elles, elles
 #   s'ignorent proprement au lieu d'échouer :
-#       npm install --no-save vue@3 playwright-core chart.js tailwindcss@3
+#       npm install --no-save vue@3 playwright-core chart.js tailwindcss@3 mammoth@1.8.0
+#   (mammoth : lecture des plans Word .docx de Santé ; sans lui, ce seul contrôle s’ignore)
 #   Chromium est fourni par l'environnement (/opt/pw-browsers/chromium) ;
 #   sinon, pointer CHROMIUM=/chemin/vers/chrome.
 
@@ -31,7 +32,7 @@ suite() {
 }
 
 echo "▸ Syntaxe PHP"
-for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php sante/sante_lib.php sante/sante_integrity.php sante/sante_intent_engine.php sante/sante_store.php sante/save_sante.php sante/sante_api.php sante/sync_samsung.php sauvegarde.php; do
+for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php sante/sante_lib.php sante/sante_integrity.php sante/sante_intent_engine.php sante/sante_store.php sante/save_sante.php sante/sante_api.php sante/sync_samsung.php sante/sante_hc.php sante/sante_jeton.php sante/sante_cmo.php n8n/maj_workflow_sante.php sauvegarde.php; do
     [ -f "$f" ] && php -l "$f" > /dev/null && echo "  ✅ $f"
 done
 
@@ -69,6 +70,7 @@ suite "Semaine écoulée sans saisie = son prévu"               node test_cfo_e
 suite "L'interface se souvient · le découvert d'abord"          node test_cfo_engine_parity/test_memoire_alerte.mjs
 suite "La Météo montre où finit chaque compte"                 node test_cfo_engine_parity/test_atterrissage_comptes.mjs
 suite "Un flux pointé n'est plus projeté · tiroirs"         node test_cfo_engine_parity/test_pointage_tiroirs.mjs
+suite "Une ligne de détail est prélevée sur le compte de sa dépense (plus sur Courant)"  node test_cfo_engine_parity/test_compte_detail.mjs
 suite "Les virements internes bougent les soldes"             node test_cfo_engine_parity/test_virements_internes.mjs
 suite "L'épargne du mois, même déjà versée"                  node test_cfo_engine_parity/test_epargne_du_mois.mjs
 suite "Le virement vers le compte des charges sort du surplus" node test_cfo_engine_parity/test_surplus_virements.mjs
@@ -135,6 +137,10 @@ suite "Connexion au CFO : « Failed to fetch » diagnostiqué, nouvel essai, éc
 suite "Santé Master : calculs, règle de Gilbert, intégrité, moteur d'intentions"  php test_cfo_engine_parity/test_sante_calculs.php
 suite "Santé Master : le fichier de secours (sante/ ou pending/), l’erreur dite"  php test_cfo_engine_parity/test_sante_stockage.php
 suite "Santé Master : parité JS ↔ PHP, lecture des comptes rendus"  node test_cfo_engine_parity/test_sante_parite.mjs
+suite "Santé Master : ranger un protocole par règles (cases, suppléments, règles, objectifs, leçons)"  node test_cfo_engine_parity/test_sante_protocole.mjs
+suite "Santé Master : l'export Samsung Health tel quel (.zip, dossier)"  node test_cfo_engine_parity/test_sante_samsung.mjs
+suite "Santé Master : synchro automatique HC Webhook (Health Connect)"  php test_cfo_engine_parity/test_sante_hc.php
+suite "Santé Master : l'agent Telegram (Médecin-Chef IA) réécrit et publié"  php test_cfo_engine_parity/test_sante_agent.php
 suite "Santé Master : l'appli, le stockage, l'API du CMO, le webhook Samsung"  node test_cfo_engine_parity/test_sante_appli.mjs
 suite "Sauvegarde hors du VPS (Telegram) et surveillance"  php test_cfo_engine_parity/test_sauvegarde.php
 

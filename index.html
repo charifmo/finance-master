@@ -5516,7 +5516,7 @@
                                                           class="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 whitespace-nowrap shrink-0">⚡ échue</span>
                                                 </label>
                                                 <div class="flex flex-wrap items-center justify-end gap-2 ml-auto">
-                                                    <chip-compte :m="mecaniqueCompte(t.compte)" :regle="regleDeRoutage(t.sens === 'credit' ? (t.nature === 'revenu' ? 'revenu' : 'injection') : t.nature, t.ref)" :cle="'route:' + t.cle" :ouverte="bulleOuverte === 'route:' + t.cle" :format-mad="formatMAD" sombre :sens="t.sens === 'credit' ? 'credit' : 'debit'"
+                                                    <chip-compte :m="mecaniqueCompte(t.compte)" :regle="regleDeRoutage(t.sens === 'credit' ? (t.nature === 'revenu' ? 'revenu' : 'injection') : t.nature, t.refCompte || t.ref)" :cle="'route:' + t.cle" :ouverte="bulleOuverte === 'route:' + t.cle" :format-mad="formatMAD" sombre :sens="t.sens === 'credit' ? 'credit' : 'debit'"
                                                                  @survol="survolBulle('route:' + t.cle, $event)" @quitter="quitterBulle('route:' + t.cle, $event)" @basculer="basculerBulle('route:' + t.cle)"></chip-compte>
                                                     <span v-if="t.jourPrevu"
                                                           :class="['text-[10px] font-black px-1.5 py-0.5 rounded-full border shrink-0',
@@ -20954,13 +20954,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const moisBud = isCyclePasse.value ? pilotageViewedMois.value : moisBudgetaire.value.mois;
                         const cyc = cyclePilotage.value;
                         const out = [];
-                        const pousser = (ref, libelle, due, groupe, icone, teinte, jourPrevu, nature) => {
+                        //  v37.103 — LE COMPTE D'UNE LIGNE DE DÉTAIL, c'est celui de sa dépense : « elect marrakech villa »
+                        //  est une ligne de détail de la dépense variable « Factures » (Compte Principal ASSAFA). Les lignes de
+                        //  détail n'ont pas de compte à elles : la liste de Réalisé tombait donc sur le compte par défaut
+                        //  (Courant), alors que le Budget Structurel, le radar et le Relevé prélèvent sur Assafa. `parent` =
+                        //  la dépense qui porte le détail ; sa règle de routage sert aussi à la bulle (refCompte).
+                        const pousser = (ref, libelle, due, groupe, icone, teinte, jourPrevu, nature, parent) => {
                             const d = Number(due) || 0;
                             if (d <= 0) return;              // suspendu ce mois → hors checklist
+                            const refCompte = (ref && ref.compte) ? ref : (parent || ref);
                             out.push({
                                 cle: groupe + ':' + (ref.id != null ? ref.id : libelle),
                                 //  v37.18 : le compte que le Relevé débitera pour cette ligne
-                                compte: compteDeFlux(nature, ref),
+                                compte: compteDeFlux(nature, refCompte), refCompte,
                                 ref, libelle: libelle || '(sans nom)', due: d, groupe, icone, teinte,
                                 //  v37.16 : la nature décide du badge [🏢 Fixe] [🛒 Variable]…
                                 nature, badge: (NATURES_TACHE[nature] || NATURES_TACHE.exceptionnel).badge,
@@ -20986,7 +20992,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         chargesVarMensuellePilotage.value.forEach(cat => {
                             if (valeurEffective(cat, cat.valeur, moisBud) <= 0) return;
                             (cat.details || []).forEach(d =>
-                                pousser(d, d.nom, dueDetailDuCycle(d, cat, moisBud, an), cat.label, '🛒', 'blue', d.jourPrevu || cat.jourPrevu, 'variable'));
+                                pousser(d, d.nom, dueDetailDuCycle(d, cat, moisBud, an), cat.label, '🛒', 'blue', d.jourPrevu || cat.jourPrevu, 'variable', cat));
                         });
                         epargneBudgetairePilotage.value.forEach(ep =>
                             pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, an, moisBud), 'Épargne', '💎', 'purple', ep.jourPrevu, 'epargne'));
