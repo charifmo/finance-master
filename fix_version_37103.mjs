@@ -1,4 +1,4 @@
-/* v37.103 Exceptionnelles rangées — bump de version (Finance 37.103, Santé 1.4) + entrée de changelog. */
+/* v37.103 Exceptionnelles rangées — bump de version (Finance 37.103, Santé 1.21) + entrée de changelog. */
 import { readFileSync, writeFileSync } from 'node:fs';
 const remplacer = (F, label, anchor, replacement) => {
     const src = readFileSync(F, 'utf8'), n = src.split(anchor).length - 1;
@@ -15,8 +15,11 @@ remplacer('index.html', 'CHANGELOG',
             "🧹 LE MÉNAGE TOUT SEUL — au chargement, les opérations déjà saisies qui nomment une de ces lignes y sont rangées (et enregistrées) : celles de « Dépense exceptionnelle » ou non catégorisées, et celles « à vérifier » proposées ailleurs par l'IA dont le libellé est exactement le nom de la ligne. Vos rangements à la main ailleurs ne bougent pas. Une ligne renommée : ses opérations la suivent ; supprimée : elles reviennent dans « Dépense exceptionnelle ».",
             "📊 Le Contrôle compare chaque ligne à son réel : « Four maman — 1 200 prévus, 1 400 dépensés ».",
             "🔢 Deux opérations créées dans la même milliseconde (import bancaire) pouvaient avoir le MÊME identifiant ; une correction ou un rangement tombait alors sur la mauvaise ligne. Chaque identifiant est désormais unique.",
-            "🩺 Santé 1.4 : un chiffre en cours de frappe (Zone 2, pas, taille…) n'est plus effacé quand l'enregistrement automatique se termine pendant qu'on tape.",
+            "🧾 Le compte d'une ligne de détail est celui de sa dépense : « elect marrakech villa » (détail de « Factures », Compte Principal ASSAFA) n'apparaît plus sur le Courant dans le Réalisé.",
+            "🩺 SANTÉ 1.21 — LA v1.20 REVIENT : une ancienne version de Santé (1.3) avait été remise en ligne par-dessus la v1.20 (cockpit, plans, synchro du téléphone…), et son enregistrement effaçait ce que la v1.20 avait ajouté. Au premier chargement, Santé rétablit tout seul ces données depuis la dernière copie de sauvegarde v1.20, avec ce que vous aviez saisi depuis (cases, pesées, pas, bilans), et le dit en haut de l'écran.",
+            "🩺 Santé : « ✓ enregistré » ne s'affiche plus quand une modification faite pendant l'envoi n'est pas encore partie (elle est renvoyée aussitôt).",
         ] },
         { version: "37.102 Santé enregistre", date: "2026-11-04", changes: [`);
-remplacer('sante/index.html', 'VERSION', `const VERSION = '1.3';`, `const VERSION = '1.4';`);
-console.log('✔ version 37.103 (Santé 1.4)');
+remplacer('sante/index.html', 'VERSION', `const VERSION = '1.20';`, `const VERSION = '1.21';`);
+{ const F = 'sante/index.html', t = readFileSync(F, 'utf8'); writeFileSync(F, t.split('?v=1.20"').join('?v=1.21"')); }   // les scripts locaux suivent la version (cache)
+console.log('✔ version 37.103 (Santé 1.21)');

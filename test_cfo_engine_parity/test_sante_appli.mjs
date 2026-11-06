@@ -649,6 +649,32 @@ z.close()`, src, zip]);
         v('  → la synchro du téléphone : état visible en tête (ancienne → signalée)', /Synchro/.test(await pr.textContent('[data-statut-synchro]')) && /rose/.test(await pr.getAttribute('[data-statut-synchro]', 'class')));
         await pr.close();
     });
+    await section('S', async () => {
+        //  v1.21 — une modification faite PENDANT un enregistrement : jamais « ✓ enregistré » tant qu'elle n'est pas partie,
+        //  jamais de 2ᵉ requête en même temps (elle partait avec l'ancienne version de base : 409 « modifié ailleurs »).
+        const ps = await ouvrir();
+        let posts = 0, enVolMax = 0, enVol = 0, lache = null;
+        const premier = new Promise(r => { lache = r; });
+        await ps.route('**/save_sante.php', async (route) => {
+            if (route.request().method() !== 'POST') return route.continue();
+            posts++; enVol++; enVolMax = Math.max(enVolMax, enVol);
+            if (posts === 1) await premier;                                   // le 1er envoi reste en vol tant que le test ne l'a pas lâché
+            await route.continue(); enVol--;
+        });
+        await ps.evaluate(() => { window.__statuts = []; const el = document.querySelector('[data-statut-sauvegarde]');
+            new MutationObserver(() => { const t = el.textContent.trim(); if (window.__statuts[window.__statuts.length - 1] !== t) window.__statuts.push(t); }).observe(el, { childList: true, subtree: true, characterData: true }); });
+        await ps.evaluate((ST) => { eval(ST).etat.profil.nom = 'PERSONNE PREMIER ENVOI'; }, ST);
+        for (let i = 0; i < 100 && posts < 1; i++) await ps.waitForTimeout(50);
+        await ps.evaluate((ST) => { eval(ST).etat.profil.nom = 'PERSONNE PENDANT ENVOI'; }, ST);
+        await ps.waitForTimeout(1200);                                         // le minuteur de 700 ms passe pendant que le 1er envoi vole
+        lache();
+        await ps.waitForFunction(() => /enregistré/.test(document.querySelector('[data-statut-sauvegarde]').textContent) && !/non enregistré/.test(document.querySelector('[data-statut-sauvegarde]').textContent), null, { timeout: 10000 }).catch(() => {});
+        const statuts = await ps.evaluate(() => window.__statuts);
+        v('S. modifié pendant un enregistrement : pas de faux « ✓ enregistré », pas de conflit, la dernière valeur est écrite',
+          lireFichier().profil.nom === 'PERSONNE PENDANT ENVOI' && posts === 2 && enVolMax === 1 && statuts.filter(t => /enregistré/.test(t)).length === 1 && /enregistré/.test(statuts[statuts.length - 1]) && !statuts.some(t => /ailleurs/.test(t)),
+          [lireFichier().profil.nom, posts, enVolMax, statuts]);
+        await ps.close();
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close(); php.kill();
