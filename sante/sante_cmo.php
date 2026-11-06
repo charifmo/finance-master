@@ -15,11 +15,16 @@ $brut = (string)file_get_contents('php://input');
 if (strlen($brut) > 400000) { http_response_code(413); echo json_encode(['output' => 'Demande trop volumineuse.', 'erreur' => 'demande trop volumineuse'], JSON_UNESCAPED_UNICODE); exit; }
 $corps = json_decode($brut, true);
 //  v1.9 — la vérification d'un protocole rangé (écran de tri) : le mode et les lignes partent tels quels
-$verif = is_array($corps) && ($corps['mode'] ?? '') === 'verifier_protocole' && is_array($corps['elements'] ?? null);
+$verifProto = is_array($corps) && ($corps['mode'] ?? '') === 'verifier_protocole' && is_array($corps['elements'] ?? null);
+//  v1.21 — la vérification de la lecture d'un compte rendu d'analyses : le texte du document, les valeurs lues (avec leur ligne source) et le catalogue
+$verifBilan = is_array($corps) && ($corps['mode'] ?? '') === 'verifier_bilan' && is_string($corps['texte'] ?? null) && is_array($corps['valeurs'] ?? null);
+$verif = $verifProto || $verifBilan;
 $q = is_array($corps) ? trim((string)($corps['question'] ?? '')) : '';
 if (!$verif && $q === '') { http_response_code(400); echo json_encode(['output' => 'Question vide.'], JSON_UNESCAPED_UNICODE); exit; }
-$envoi = $verif ? ['mode' => 'verifier_protocole', 'titre' => mb_substr((string)($corps['titre'] ?? ''), 0, 200), 'elements' => array_slice($corps['elements'], 0, 400)]
-                : ['question' => mb_substr($q, 0, 4000), 'source' => 'web', 'session_id' => 'sante-web'];
+$envoi = $verifBilan ? ['mode' => 'verifier_bilan', 'titre' => mb_substr((string)($corps['titre'] ?? ''), 0, 200), 'texte' => mb_substr($corps['texte'], 0, 60000),
+                        'valeurs' => array_slice($corps['valeurs'], 0, 120), 'catalogue' => array_slice(is_array($corps['catalogue'] ?? null) ? $corps['catalogue'] : [], 0, 120)]
+       : ($verifProto ? ['mode' => 'verifier_protocole', 'titre' => mb_substr((string)($corps['titre'] ?? ''), 0, 200), 'elements' => array_slice($corps['elements'], 0, 400)]
+                : ['question' => mb_substr($q, 0, 4000), 'source' => 'web', 'session_id' => 'sante-web']);
 $cfg = sante_db_config() ?? [];
 $url = (string)(getenv('SANTE_CMO_WEBHOOK') ?: ($cfg['sante_cmo_webhook'] ?? 'http://127.0.0.1:5678/webhook/sante-cmo'));
 $ctx = stream_context_create(['http' => ['method' => 'POST', 'timeout' => $verif ? 180 : 120, 'ignore_errors' => true,

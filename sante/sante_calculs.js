@@ -38,9 +38,14 @@
             const max = x && typeof x === 'object' && x.max !== undefined && x.max !== null ? num(x.max) : num(m.max);
             return [min, max];
         };
+        //  v1.21 — « à vérifier » : une valeur DIX FOIS plus petite que le bas de la norme, ou dix fois plus grande que le haut,
+        //  n'est presque jamais un résultat : c'est un pourcentage lu à la place d'un nombre (53,7 % pour une norme de 1 500 /mm³),
+        //  une autre unité (196 G/L pour 150 000 /mm³) ou une ligne mal lue. On ne l'affiche pas comme une alerte médicale.
+        const suspect = (v, min, max) => v > 0 && ((min !== null && min > 0 && v < min / 10) || (max !== null && max > 0 && v > max * 10));
         const statut = (bilan, cle) => {
             const v = val(bilan, cle); if (v === null) return 'inconnu';
             const [min, max] = bornes(bilan, cle);
+            if (suspect(v, min, max)) return 'suspect';
             if (min !== null && v < min) return 'bas';
             if (max !== null && v > max) return 'haut';
             return 'normal';
@@ -70,6 +75,7 @@
         };
         const gilbert = (bilan) => {
             const bt = statut(bilan, 'bili_t'), bl = val(bilan, 'bili_l');
+            if (bt === 'suspect') return { statut: 'incomplet', message: 'Bilirubine totale à vérifier : valeur très éloignée de la norme (unité ou lecture ?).' };
             const hausse = bt === 'haut' || (bt === 'inconnu' && bl !== null && bl > 10);
             if (!hausse) return { statut: bt === 'inconnu' ? 'incomplet' : 'normal' };
             const hep = { asat: statut(bilan, 'asat'), alat: statut(bilan, 'alat'), ggt: statut(bilan, 'ggt') };
@@ -177,7 +183,7 @@
                      periodiques: items.filter(i => i.frequence === 'semaine' || i.frequence === 'mois').map(i => Object.assign({}, i, { fait: faitPeriode(i) })),
                      semaine: { du: decaler(date, -idx), prevus, faits, taux: prevus ? Math.round(100 * faits / prevus) : null, minutes_prevues: minP, minutes_faites: minF } };
         }
-        return { num, norm, age, val, bornes, statut, ratioTgHdl, nonHdl, homaIr, tyg, score2, gilbert, bmr, bilanEnergie, projectionPoids, aliment, item, scoreSequencage, totauxRepas, indicateurs, suiviPlan, jourSemaine, decaler, JOURS_SEM, KCAL_PAR_KG };
+        return { num, norm, age, val, bornes, statut, suspect, ratioTgHdl, nonHdl, homaIr, tyg, score2, gilbert, bmr, bilanEnergie, projectionPoids, aliment, item, scoreSequencage, totauxRepas, indicateurs, suiviPlan, jourSemaine, decaler, JOURS_SEM, KCAL_PAR_KG };
     }
     return { creer };
 });
