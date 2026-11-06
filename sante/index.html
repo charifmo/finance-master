@@ -96,10 +96,10 @@
                         <div class="flex items-end justify-between"><span class="text-3xl font-black tabnum" data-pas>{{ fmt(pasJour) }}</span><span class="text-sm text-slate-500">objectif {{ fmt(etat.profil.pas_objectif || 10000) }}</span></div>
                         <div class="h-3 rounded-full bg-slate-100 mt-2 overflow-hidden"><div class="h-full bg-emerald-500" :style="{ width: Math.min(100, 100 * pasJour / (etat.profil.pas_objectif || 10000)) + '%' }"></div></div>
                         <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pas (saisie)</span><input type="number" min="0" data-saisie-pas :value="jour.activite.pas ?? ''" @change="majActivite('pas', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Zone 2 à jeun (min)</span><input type="number" min="0" data-saisie-zone2 :value="jour.activite.zone2_min ?? ''" @change="majActivite('zone2_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Marches de 15 min après repas</span><input type="number" min="0" :value="jour.activite.marches_post ?? ''" @change="majActivite('marches_post', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
-                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Soleus pushups (min)</span><input type="number" min="0" :value="jour.activite.soleus_min ?? ''" @change="majActivite('soleus_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Pas (saisie)</span><input type="number" min="0" data-saisie-pas :value="jour.activite.pas ?? ''" @input="majActivite('pas', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Zone 2 à jeun (min)</span><input type="number" min="0" data-saisie-zone2 :value="jour.activite.zone2_min ?? ''" @input="majActivite('zone2_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Marches de 15 min après repas</span><input type="number" min="0" :value="jour.activite.marches_post ?? ''" @input="majActivite('marches_post', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
+                            <label class="flex flex-col"><span class="text-[11px] font-bold text-slate-500">Soleus pushups (min)</span><input type="number" min="0" :value="jour.activite.soleus_min ?? ''" @input="majActivite('soleus_min', $event.target.value)" class="border rounded-lg px-2 py-1"></label>
                         </div>
                         <label class="flex items-center gap-2 mt-2 text-sm font-semibold"><input type="checkbox" data-saisie-machines class="w-4 h-4 accent-emerald-600" :checked="!!jour.activite.machines" @change="majActivite('machines', $event.target.checked)"> Séance machines bas du corps aujourd’hui</label>
                         <p class="text-xs font-black mt-2" data-machines-semaine :class="machinesSemaine >= (etat.profil.seances_machines_semaine || 2) ? 'text-emerald-700' : 'text-amber-700'">🏋️ {{ machinesSemaine }}/{{ etat.profil.seances_machines_semaine || 2 }} séances machines cette semaine</p>
@@ -338,16 +338,30 @@ createApp({
         };
         let minuteur = null;
         const erreurSauvegarde = ref('');
+        // Une seule requête d'enregistrement à la fois, et « enregistré » seulement si rien n'a bougé pendant qu'elle volait :
+        //  – sinon une 2ᵉ requête partie avec l'ancienne version de base se ferait refuser (409) par l'appli elle-même ;
+        //  – sinon l'écran affichait « ✓ enregistré » alors qu'une modification plus récente n'était pas encore partie
+        //    (et chaque ré-affichage de ce statut réinitialise une saisie en cours, cf. @input des champs d'activité).
+        let revision = 0, enVol = false, aRefaire = false;
         const sauver = async () => {
+            if (enVol) { aRefaire = true; return; }
+            enVol = true;
+            const rev = revision;
+            let ok = false;
             try {
                 const r = await fetch('save_sante.php', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(version.value ? { 'X-Sante-Base': version.value } : {}) }, body: JSON.stringify(etat) });
                 if (r.status === 409) { statut.value = 'conflit'; return; }
                 const j = await r.json().catch(() => ({}));
-                if (j.ok) { version.value = j.version || r.headers.get('X-Sante-Version'); statut.value = 'enregistré'; erreurSauvegarde.value = ''; }
+                if (j.ok) { ok = true; version.value = j.version || r.headers.get('X-Sante-Version'); statut.value = rev === revision ? 'enregistré' : 'modifié'; erreurSauvegarde.value = ''; }
                 else { statut.value = 'erreur'; erreurSauvegarde.value = j.erreur || ('le serveur a répondu ' + r.status); }
             } catch (e) { statut.value = 'erreur'; erreurSauvegarde.value = 'serveur injoignable (' + (e.message || e) + ')'; }
+            finally {
+                enVol = false;
+                // une modification est arrivée pendant la requête : le minuteur la reprendra, ou la reprise immédiate si le minuteur est déjà passé
+                if (aRefaire) { aRefaire = false; if (ok && rev !== revision) { clearTimeout(minuteur); minuteur = setTimeout(sauver, 0); } }
+            }
         };
-        watch(etat, () => { if (!charge.value) return; statut.value = 'modifié'; clearTimeout(minuteur); minuteur = setTimeout(sauver, 700); }, { deep: true });
+        watch(etat, () => { if (!charge.value) return; revision++; statut.value = 'modifié'; clearTimeout(minuteur); minuteur = setTimeout(sauver, 700); }, { deep: true });
         const libelleStatut = computed(() => ({ chargement: '⏳ chargement', 'modifié': '✎ modifié', 'enregistré': '✓ enregistré', conflit: '⚠️ modifié ailleurs — rechargez', erreur: '⚠️ non enregistré' })[statut.value] || statut.value);
         const vide = computed(() => charge.value && !etat.bilans.length && !etat.profil.naissance);
         const chargerDemo = async () => { const d = await fetch('seed_demo.json', { cache: 'no-store' }).then(r => r.json()); remplacer(d); messageImport.value = 'Démo chargée (profil fictif).'; };
