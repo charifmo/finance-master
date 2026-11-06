@@ -30,6 +30,8 @@ function sante_norm_valeur($x): ?array {
     //  v1.4 — la provenance : le document importé dont vient la valeur (son id), et « corrigée à la main »
     if (isset($x['doc']) && is_string($x['doc']) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $x['doc'])) $o['doc'] = $x['doc'];
     if (!empty($x['edite'])) $o['edite'] = true;
+    //  v1.21 — la ligne du document d'où vient la valeur (preuve, et matière de la validation par l'IA)
+    if (isset($x['ligne']) && is_string($x['ligne']) && trim($x['ligne']) !== '') $o['ligne'] = mb_substr(trim($x['ligne']), 0, 200);
     return $o;
 }
 function sante_norm_bilan($b): ?array {

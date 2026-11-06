@@ -1,9 +1,9 @@
 <?php
 /**
- * Santé Master v1.21 — APRÈS LE RETOUR D'UNE ANCIENNE VERSION, LES DONNÉES DE LA v1.20 RÉTABLIES TOUTES SEULES.
+ * Santé Master v1.22 — APRÈS LE RETOUR D'UNE ANCIENNE VERSION, LES DONNÉES DE LA v1.20 RÉTABLIES TOUTES SEULES.
  *   Une ancienne version (1.3) remise en ligne réécrivait les données avec une liste fixe de champs : plans,
  *   règles, cibles, synchro du téléphone, cases du plan réalisées, détails des compléments… disparaissaient.
- *   Au chargement, la v1.21 repart de la dernière copie de sauvegarde v1.20 et y reporte ce qui a été saisi
+ *   Au chargement, la v1.22 repart de la dernière copie de sauvegarde v1.20 et y reporte ce qui a été saisi
  *   depuis. Décor FICTIF ; aucune donnée personnelle.
  */
 $tmp = sys_get_temp_dir() . '/sante_rep_' . bin2hex(random_bytes(4));

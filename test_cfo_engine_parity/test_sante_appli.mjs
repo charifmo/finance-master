@@ -201,6 +201,11 @@ try {
         await p4.click('[data-systeme="cardio"]');
         v('  → le tableau dit d\'où vient chaque valeur (survol : « Source : bilan_a.txt »)', /bilan_a\.txt/.test(await p4.getAttribute('[data-cellule="tg|2026-05-15"]', 'title')));
         const doc = (nom) => `[data-bilan="2026-05-15"] [data-document="${nom}"]`;
+        //  v1.21 — la liste « Bilans et documents » se réduit : repliée par défaut (le résumé dit combien), on l'ouvre d'un toucher
+        v('  → v1.21 : la liste des documents est REPLIÉE par défaut (un résumé : bilans · documents · valeurs), elle se déplie d\'un toucher',
+          !(await p4.isVisible(doc('photo.jpg'))) && /4 bilan\(s\) · 3 document\(s\)/.test(await p4.textContent('[data-docs-resume]')) && await p4.isVisible('[data-docs-basculer]'), await p4.textContent('[data-docs-resume]'));
+        await p4.click('[data-docs-basculer]'); await p4.waitForTimeout(150);
+        v('  → dépliée : les documents sont là, et l\'état est retenu pour la prochaine visite', await p4.isVisible(doc('photo.jpg')) && await p4.evaluate(() => localStorage.getItem('sante_docs_ouverts')) === '1');
         await p4.click(doc('photo.jpg') + ' [data-supprimer-document]');
         v('  → supprimer un document demande une confirmation (second clic)', /Confirmer/.test(await p4.textContent(doc('photo.jpg') + ' [data-supprimer-document]')) && lireFichier().bilans.find(b => b.date === '2026-05-15').valeurs.vitd);
         await p4.click(doc('photo.jpg') + ' [data-supprimer-document]'); await p4.waitForTimeout(100); await attendreEnregistre(p4);
@@ -650,7 +655,7 @@ z.close()`, src, zip]);
         await pr.close();
     });
     await section('S', async () => {
-        //  v1.21 — une modification faite PENDANT un enregistrement : jamais « ✓ enregistré » tant qu'elle n'est pas partie,
+        //  v1.22 — une modification faite PENDANT un enregistrement : jamais « ✓ enregistré » tant qu'elle n'est pas partie,
         //  jamais de 2ᵉ requête en même temps (elle partait avec l'ancienne version de base : 409 « modifié ailleurs »).
         const ps = await ouvrir();
         let posts = 0, enVolMax = 0, enVol = 0, lache = null;
@@ -674,6 +679,54 @@ z.close()`, src, zip]);
           lireFichier().profil.nom === 'PERSONNE PENDANT ENVOI' && posts === 2 && enVolMax === 1 && statuts.filter(t => /enregistré/.test(t)).length === 1 && /enregistré/.test(statuts[statuts.length - 1]) && !statuts.some(t => /ailleurs/.test(t)),
           [lireFichier().profil.nom, posts, enVolMax, statuts]);
         await ps.close();
+    });
+    await section('T', async () => {
+        //  v1.21 — « ❓ à vérifier » (une valeur très éloignée de la norme n'est pas une alerte) et « 🧠 Faire valider par l'IA » (faux relais)
+        fs.rmSync(DATA, { force: true });
+        const pm = await ouvrir();
+        await pm.click('[data-charger-demo]'); await pm.waitForTimeout(300); await attendreEnregistre(pm);
+        await pm.evaluate((ST) => { eval(ST).etat.bilans.push({ id: 'zz1', date: '2026-09-01', labo: '', source: 'import', valeurs: { plaquettes: { v: 196 }, neutro: { v: 53.7 }, hb: { v: 14.2, min: 13, max: 18 } } }); }, ST);
+        await pm.click('[data-onglet="analyses"]'); await pm.click('[data-systeme="hemato"]'); await pm.waitForTimeout(250);
+        const enc = await pm.textContent('[data-suspects]'), cp = (await pm.textContent('[data-cellule="plaquettes|2026-09-01"]')).replace(/\s+/g, '');
+        v('T. une plaquette « 196 » et un neutrophile « 53,7 » (lus en pourcentage / autre unité) : un encadré « 2 valeur(s) à vérifier », jamais une alerte rouge',
+          /2 valeur\(s\) à vérifier/.test(enc) && /Plaquettes/.test(enc) && /Polynucléaires neutrophiles/.test(enc) && /pas une alerte médicale/.test(enc), enc);
+        v('  → dans le tableau : « 196 ❓ » (violet), ni ▲ ni ▼ ; une hémoglobine normale n’est pas touchée', /196❓/.test(cp) && !/[▲▼]/.test(cp) && await pm.isVisible('[data-valeur-suspecte]') && !/[❓▲▼]/.test((await pm.textContent('[data-cellule="hb|2026-09-01"]'))), cp);
+
+        let reponse = { corrections: [] }, corps = null, statutHttp = 200;
+        await pm.route('**/sante_cmo.php', async (r) => { corps = JSON.parse(r.request().postData() || '{}'); await r.fulfill({ status: statutHttp, contentType: 'application/json', body: JSON.stringify(reponse) }); });
+        const texte = "Prélevé le : 12/10/2026\nHémoglobine glyquée (HBA1C) 4,4 %\nTaux d'apolipoprotéine B sanguin : 1,42 g/l (<1,33)\nTriglycérides 2,10 g/L (<1,50)";
+        await pm.click('[data-ouvrir-import]'); await pm.fill('[data-import-texte]', texte); await pm.click('[data-analyser-bilan]'); await pm.waitForSelector('[data-apercu-bilan] [data-apercu-date]');
+        v('  → l’aperçu : HbA1c 4,4 et triglycérides 2,10 lus ; la ligne « Taux d’apolipoprotéine B… » reste non reconnue ; la ligne source se lit au survol',
+          await pm.isVisible('[data-apercu-valeur="hba1c"]') && await pm.isVisible('[data-apercu-valeur="tg"]') && !(await pm.$('[data-apercu-valeur="apob"]')) && /Triglycérides 2,10/.test(await pm.getAttribute('[data-apercu-valeur="tg"]', 'title')));
+        reponse = { corrections: [
+            { ajout: { cle: 'apob', valeur: 1.42, max: 1.33, ligne: "Taux d'apolipoprotéine B sanguin : 1,42 g/l (<1,33)" }, raison: 'résultat présent, non lu' },
+            { cle: 'tg', valeur: 9.99, ligne: 'Triglycérides 9,99 g/L', raison: 'ligne inventée' },
+            { cle: 'tg', valeur: 3.5, ligne: 'Triglycérides 2,10 g/L (<1,50)', raison: 'nombre absent de la ligne citée' },
+            { cle: 'zzz', valeur: 1, ligne: 'Triglycérides 2,10 g/L (<1,50)', raison: 'clé hors catalogue' },
+            { cle: 'hba1c', retirer: true, raison: 'ce n’est pas un résultat' }, null,
+        ] };
+        await pm.click('[data-valider-ia]'); await pm.waitForSelector('[data-ia-proposition]');
+        const props = await pm.$$eval('[data-ia-proposition]', l => l.map(x => x.getAttribute('data-ia-cle') + ' : ' + x.textContent.replace(/\s+/g, ' ').trim())), msg = await pm.textContent('[data-ia-message]');
+        v('  → l’IA relit : le texte, les valeurs lues (avec leur ligne) et le catalogue partent — jamais de « question » ; mode verifier_bilan',
+          corps && corps.mode === 'verifier_bilan' && /Taux d'apolipoprotéine/.test(corps.texte) && corps.valeurs.some(x => x.cle === 'tg' && /Triglycérides 2,10/.test(x.ligne)) && corps.catalogue.length === 53 && corps.question === undefined, corps && Object.keys(corps));
+        v('  → 2 propositions retenues (ajouter ApoB 1,42 ; retirer l’HbA1c) ; 🛡️ 4 écartées d’office : ligne inventée, nombre absent de la ligne, clé inconnue, forme invalide',
+          props.length === 2 && props.some(x => /^apob/.test(x) && /1\.42/.test(x) && /< 1\.33/.test(x)) && props.some(x => /^hba1c/.test(x) && /retirer/.test(x)) && /4 proposition\(s\) écartée\(s\) d’office/.test(msg), [props, msg]);
+        await pm.click('[data-ia-proposition][data-ia-cle="apob"] [data-ia-accepter]'); await pm.waitForTimeout(150);
+        await pm.click('[data-ia-proposition][data-ia-cle="hba1c"] [data-ia-refuser]'); await pm.waitForTimeout(150);
+        v('  → accepter ajoute ApoB 1,42 à l’aperçu ; refuser garde l’HbA1c ; plus aucune proposition en attente', await pm.inputValue('[data-apercu-valeur="apob"] input') === '1.42' && await pm.isVisible('[data-apercu-valeur="hba1c"]') && !(await pm.$('[data-ia-proposition]')));
+        await pm.click('[data-ajouter-bilan]'); await pm.waitForTimeout(250); await attendreEnregistre(pm);
+        const b = lireFichier().bilans.find(x => x.date === '2026-10-12');
+        v('  → ajouté et enregistré : ApoB 1,42 (norme < 1,33), chaque valeur garde sa ligne du document (preuve), celle de l’IA le dit',
+          b && b.valeurs.apob.v === 1.42 && b.valeurs.apob.max === 1.33 && /corrigé avec l’IA/.test(b.valeurs.apob.ligne) && /Triglycérides 2,10/.test(b.valeurs.tg.ligne) && b.valeurs.hba1c.v === 4.4, b && b.valeurs);
+        //  l'agent pas à jour / injoignable : un message clair, jamais un faux résultat
+        await pm.fill('[data-import-texte]', texte.replace('12/10/2026', '13/10/2026')); await pm.click('[data-analyser-bilan]'); await pm.waitForTimeout(250);
+        reponse = { output: 'Bonjour ! Comment puis-je vous aider ?' };
+        await pm.click('[data-valider-ia]'); await pm.waitForFunction(() => /Validation impossible/.test((document.querySelector('[data-ia-message]') || {}).textContent || ''), null, { timeout: 5000 });
+        v('  → agent pas encore à jour (il répond comme un chat) : « Validation impossible… sudo bash install.sh sante », aucune proposition', /install\.sh sante/.test(await pm.textContent('[data-ia-message]')) && !(await pm.$('[data-ia-proposition]')));
+        statutHttp = 502; reponse = { erreur: 'agent pas encore publié dans n8n (sudo bash install.sh sante)' };
+        await pm.click('[data-valider-ia]'); await pm.waitForFunction(() => /pas encore publié/.test((document.querySelector('[data-ia-message]') || {}).textContent || ''), null, { timeout: 5000 });
+        v('  → agent injoignable (502) : la raison du serveur est affichée', /Validation impossible/.test(await pm.textContent('[data-ia-message]')));
+        await pm.close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

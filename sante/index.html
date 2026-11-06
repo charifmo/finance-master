@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.21"></script>
-    <script src="sante_import.js?v=1.21"></script>
-    <script src="sante_samsung.js?v=1.21"></script>
-    <script src="sante_protocole.js?v=1.21"></script>
+    <script src="sante_calculs.js?v=1.22"></script>
+    <script src="sante_import.js?v=1.22"></script>
+    <script src="sante_samsung.js?v=1.22"></script>
+    <script src="sante_protocole.js?v=1.22"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -282,6 +282,11 @@
                     <button type="button" data-mode-edition @click="editionTable = !editionTable" class="px-3 py-1 rounded-full text-xs font-black border" :class="editionTable ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'">✏️ {{ editionTable ? 'Terminer les modifications' : 'Modifier les valeurs' }}</button>
                     <button type="button" data-ouvrir-import @click="importOuvert = !importOuvert" class="px-3 py-1 rounded-full text-xs font-black bg-teal-600 text-white">📥 Importer des bilans</button>
                 </div>
+                <div v-if="valeursSuspectes.length" data-suspects class="mb-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+                    <p class="font-black">❓ {{ valeursSuspectes.length }} valeur(s) à vérifier : très éloignée(s) de la norme, souvent une unité ou une ligne mal lue — pas une alerte médicale.</p>
+                    <ul class="mt-1 space-y-0.5"><li v-for="x in valeursSuspectes.slice(0, 8)" :key="x.date + x.cle" data-suspect :data-cle="x.cle"><b>{{ x.libelle }}</b> le {{ dateCourte(x.date) }} : {{ x.v }} {{ x.unite }} (norme {{ x.norme || '—' }})</li></ul>
+                    <p class="mt-1 text-[11px] text-violet-800">Corrigez-la (✎ Modifier), retirez-la, ou réimportez le document : le lecteur a été amélioré (v1.21) et « 🧠 Faire valider par l'IA » relit le document avant l'ajout.</p>
+                </div>
                 <p v-if="editionTable" class="mb-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Mode modification : changez une valeur puis sortez de la case. Videz-la ou touchez ✕ pour la supprimer ; remplissez une case vide pour l’ajouter.</p>
                 <div class="overflow-x-auto -mx-4 px-4">
                     <table class="w-full text-sm tabnum border-separate border-spacing-0" data-table-biomarqueurs>
@@ -301,7 +306,7 @@
                                 <td v-for="b in etat.bilans" :key="b.id + k" class="px-2 py-1 font-bold text-center whitespace-nowrap border-b border-slate-100" :data-cellule="k + '|' + b.date" :title="sourceValeur(b, k)"
                                     :class="[couleurStatut(C.statut(b, k)), docSurligne && b.valeurs[k] && b.valeurs[k].doc === docSurligne ? 'bg-amber-100 ring-1 ring-amber-300' : marqueurChoisi === k ? 'bg-emerald-50' : 'group-hover:bg-slate-50']">
                                     <span v-if="editionTable" class="inline-flex items-center gap-1" @click.stop><saisie-valeur :bilan="b" :cle="k"></saisie-valeur><button v-if="b.valeurs[k]" type="button" data-supprimer-valeur @click="supprimerValeur(b, k)" class="text-slate-400 hover:text-rose-600 font-black" title="Supprimer cette valeur">✕</button></span>
-                                    <template v-else-if="C.val(b, k) !== null">{{ C.val(b, k) }}<span v-if="C.statut(b, k) === 'haut'" class="text-[10px]"> ▲</span><span v-else-if="C.statut(b, k) === 'bas'" class="text-[10px]"> ▼</span><sup v-if="b.valeurs[k] && b.valeurs[k].edite" class="text-slate-400" title="corrigée à la main">✎</sup></template>
+                                    <template v-else-if="C.val(b, k) !== null">{{ C.val(b, k) }}<span v-if="C.statut(b, k) === 'haut'" class="text-[10px]"> ▲</span><span v-else-if="C.statut(b, k) === 'bas'" class="text-[10px]"> ▼</span><span v-else-if="C.statut(b, k) === 'suspect'" data-valeur-suspecte class="text-[10px] text-violet-700" title="Très éloignée de la norme : une unité ou une lecture à vérifier, pas une alerte"> ❓</span><sup v-if="b.valeurs[k] && b.valeurs[k].edite" class="text-slate-400" title="corrigée à la main">✎</sup></template>
                                     <span v-else class="text-slate-300 font-normal">—</span>
                                 </td>
                                 <td class="pl-2 text-[11px] font-bold text-emerald-700 border-b border-slate-100 whitespace-nowrap">{{ cible(k) }}</td>
@@ -310,7 +315,7 @@
                         </tbody>
                     </table>
                 </div>
-                <p class="mt-2 text-[11px] text-slate-500"><b class="text-rose-700">▲ au-dessus</b> · <b class="text-amber-600">▼ en dessous</b> · <b class="text-emerald-700">dans la norme</b> · ✎ corrigée à la main · survolez une valeur pour voir son document</p>
+                <p class="mt-2 text-[11px] text-slate-500"><b class="text-rose-700">▲ au-dessus</b> · <b class="text-amber-600">▼ en dessous</b> · <b class="text-emerald-700">dans la norme</b> · <b class="text-violet-700">❓ à vérifier</b> (très éloignée de la norme : unité ou lecture) · ✎ corrigée à la main · survolez une valeur pour voir son document</p>
                 <div v-if="marqueurChoisi" class="mt-4"><canvas id="graphMarqueur" height="90"></canvas></div>
                 <div v-if="explication" data-explication class="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm space-y-1">
                     <p class="font-black text-purple-900">🪄 {{ catalogue.marqueurs[marqueurChoisi].libelle }} <span v-if="valeurChoisie !== null">— {{ valeurChoisie }} {{ catalogue.marqueurs[marqueurChoisi].unite }} ({{ C.statut(dernierAvec(marqueurChoisi), marqueurChoisi) }})</span></p>
@@ -354,12 +359,24 @@
                         </div>
                         <p class="text-xs font-bold" data-apercu-compte>{{ Object.keys(a.valeurs).length }} biomarqueur(s) reconnu(s){{ a.message ? ' — ' + a.message : '' }}</p>
                         <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-1.5" data-apercu-valeurs>
-                            <div v-for="(o, k) in a.valeurs" :key="k" class="flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1 text-xs" :data-apercu-valeur="k">
+                            <div v-for="(o, k) in a.valeurs" :key="k" class="flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1 text-xs" :data-apercu-valeur="k" :title="a.sources && a.sources[k] ? 'Ligne du document : ' + a.sources[k] : ''">
                                 <span class="flex-1 min-w-0 truncate font-semibold text-slate-700" :title="catalogue.marqueurs[k].libelle">{{ catalogue.marqueurs[k].libelle }}</span>
                                 <input type="number" step="any" v-model.number="o.v" class="w-20 border rounded px-1 py-0.5 text-right font-bold" :class="couleurStatut(C.statut({ valeurs: a.valeurs }, k))">
                                 <span class="w-14 truncate text-[10px] text-slate-400">{{ catalogue.marqueurs[k].unite }}</span>
                                 <button type="button" @click="retirerValeurApercu(a, k)" class="text-slate-400 hover:text-rose-600 font-black" title="Ne pas importer cette valeur">✕</button>
                             </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" data-valider-ia @click="verifierBilanIA(a)" :disabled="a.ia && a.ia.enCours" class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-black disabled:opacity-50">{{ a.ia && a.ia.enCours ? '⏳ L’IA relit…' : '🧠 Faire valider par l’IA' }}</button>
+                            <span v-if="a.ia && a.ia.message" data-ia-message class="text-xs font-bold text-violet-900">{{ a.ia.message }}</span>
+                        </div>
+                        <div v-if="a.ia && a.ia.propositions.length" data-ia-propositions class="rounded-xl border border-violet-200 bg-violet-50/60 p-2 space-y-1.5">
+                            <div v-for="p in a.ia.propositions" :key="p.id" data-ia-proposition :data-ia-cle="p.cle" class="flex flex-wrap items-center gap-2 text-xs bg-white rounded-lg border border-violet-100 px-2 py-1.5">
+                                <span class="flex-1 min-w-[200px]"><b>{{ p.titre }}</b> — {{ p.resume }}<span class="block text-[11px] text-slate-500">{{ p.raison }}</span><span v-if="p.ligne" class="block text-[10px] font-mono text-slate-400 truncate" :title="p.ligne">« {{ p.ligne }} »</span></span>
+                                <button type="button" data-ia-accepter @click="accepterBilanIA(a, p)" class="px-2 py-1 rounded bg-emerald-600 text-white font-black">✓ Accepter</button>
+                                <button type="button" data-ia-refuser @click="refuserBilanIA(a, p)" class="px-2 py-1 rounded border font-bold text-slate-600">✕ Refuser</button>
+                            </div>
+                            <button v-if="a.ia.propositions.length > 1" type="button" data-ia-tout-accepter @click="toutAccepterBilanIA(a)" class="px-3 py-1 rounded-lg bg-emerald-700 text-white text-xs font-black">✓ Tout accepter ({{ a.ia.propositions.length }})</button>
                         </div>
                         <details v-if="a.nonReconnues.length" class="text-[11px] text-amber-800"><summary class="cursor-pointer font-bold">{{ a.nonReconnues.length }} ligne(s) non reconnue(s), à vérifier</summary><ul class="list-disc pl-5 mt-1 space-y-0.5"><li v-for="(l, i) in a.nonReconnues.slice(0, 60)" :key="i">{{ l }}</li></ul></details>
                         <details class="text-[11px]"><summary class="cursor-pointer font-bold text-slate-500">Voir / corriger le texte lu</summary>
@@ -375,9 +392,14 @@
 
             <div class="carte p-4 space-y-3" data-documents>
                 <div class="flex flex-wrap items-center gap-2">
-                    <h3 class="font-black text-emerald-900 flex-1">🗂️ Bilans et documents</h3>
-                    <button type="button" data-ouvrir-nettoyage @click="nettoyage.ouvert = !nettoyage.ouvert; nettoyage.mot = ''" class="px-3 py-1 rounded-full text-xs font-black border border-rose-200 text-rose-700 bg-white hover:bg-rose-50">🧹 Tout effacer…</button>
+                    <button type="button" data-docs-basculer @click="basculerDocs()" :aria-expanded="docsOuverts" class="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 text-left">
+                        <span class="text-emerald-700 font-black w-4">{{ docsOuverts ? '▾' : '▸' }}</span>
+                        <h3 class="font-black text-emerald-900">🗂️ Bilans et documents</h3>
+                        <span class="text-xs font-semibold text-slate-500" data-docs-resume>{{ etat.bilans.length }} bilan(s) · {{ nbDocuments }} document(s) · {{ nbValeursTotal }} valeur(s)</span>
+                    </button>
+                    <button type="button" data-ouvrir-nettoyage @click="docsOuverts = true; nettoyage.ouvert = !nettoyage.ouvert; nettoyage.mot = ''" class="px-3 py-1 rounded-full text-xs font-black border border-rose-200 text-rose-700 bg-white hover:bg-rose-50">🧹 Tout effacer…</button>
                 </div>
+                <div v-show="docsOuverts" data-documents-corps class="space-y-3">
                 <div v-if="nettoyage.ouvert" data-nettoyage class="rounded-xl border-2 border-rose-300 bg-rose-50 p-3 space-y-2 text-sm">
                     <p class="font-black text-rose-800">Effacer définitivement</p>
                     <label class="flex items-start gap-2 cursor-pointer"><input type="radio" value="analyses" v-model="nettoyage.portee" data-portee="analyses" class="mt-1"><span><b>Les analyses</b> : {{ etat.bilans.length }} bilan(s), {{ nbDocuments }} document(s) et toutes leurs valeurs.</span></label>
@@ -407,7 +429,7 @@
                         <div v-if="lignesOuvertes[g.id]" class="mt-2 overflow-x-auto">
                             <table class="w-full text-sm tabnum" data-lignes-document><tbody>
                                 <tr v-for="k in g.cles" :key="k" class="border-t border-slate-100" :data-ligne="k">
-                                    <td class="py-1 pr-2 font-semibold">{{ catalogue.marqueurs[k].libelle }}</td>
+                                    <td class="py-1 pr-2 font-semibold" :title="b.valeurs[k] && b.valeurs[k].ligne ? 'Ligne du document : ' + b.valeurs[k].ligne : ''">{{ catalogue.marqueurs[k].libelle }}</td>
                                     <td class="pr-2 whitespace-nowrap"><saisie-valeur :bilan="b" :cle="k"></saisie-valeur> <span class="text-[10px] text-slate-400">{{ catalogue.marqueurs[k].unite }}</span></td>
                                     <td class="pr-2 text-[11px] text-slate-500 whitespace-nowrap">{{ bornesTexte(b, k) }}</td>
                                     <td class="pr-2 text-xs font-bold whitespace-nowrap" :class="couleurStatut(C.statut(b, k))">{{ C.statut(b, k) }}<span v-if="b.valeurs[k] && b.valeurs[k].edite" class="text-slate-400"> ✎</span></td>
@@ -417,6 +439,7 @@
                             </tbody></table>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
         </section>
@@ -876,7 +899,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.21';
+        const VERSION = '1.22';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -910,7 +933,7 @@ createApp({
             const r = await fetch('save_sante.php', { cache: 'no-store' });
             version.value = r.headers.get('X-Sante-Version');
             remplacer(await r.json());
-            //  v1.21 — le serveur a rétabli les données effacées par une ancienne version : on le dit
+            //  v1.22 — le serveur a rétabli les données effacées par une ancienne version : on le dit
             const rep = r.headers.get('X-Sante-Reparation'), dr = /(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/.exec(rep || '');
             if (rep) messageImport.value = '🩹 Une ancienne version de Santé avait effacé vos plans, vos cases et la synchro du téléphone : tout est rétabli depuis la copie'
                 + (dr ? ' du ' + dr[3] + '/' + dr[2] + '/' + dr[1] + ' à ' + dr[4] + 'h' + dr[5] : '') + ', avec ce que vous aviez saisi depuis.';
@@ -918,7 +941,7 @@ createApp({
         };
         let minuteur = null;
         const erreurSauvegarde = ref('');
-        // v1.21 — Une seule requête d'enregistrement à la fois, et « enregistré » seulement si rien n'a bougé pendant qu'elle volait :
+        // v1.22 — Une seule requête d'enregistrement à la fois, et « enregistré » seulement si rien n'a bougé pendant qu'elle volait :
         //  – sinon une 2ᵉ requête partie avec l'ancienne version de base se ferait refuser (409) par l'appli elle-même ;
         //  – sinon l'écran affichait « ✓ enregistré » alors qu'une modification plus récente n'était pas encore partie.
         let revision = 0, enVol = false, aRefaire = false;
@@ -1003,12 +1026,17 @@ createApp({
         const dernierBilan = computed(() => etat.bilans.length ? etat.bilans[etat.bilans.length - 1] : null);
         const ind = computed(() => dernierBilan.value ? C.indicateurs(dernierBilan.value, etat.profil) : null);
         //  v1.4 — en mode édition, tous les biomarqueurs du système (pour remplir une case vide) ; sinon, ceux qui ont une valeur
+        const valeursSuspectes = computed(() => {
+            const M = catalogue.value.marqueurs || {}, out = [];
+            etat.bilans.forEach(b => Object.keys(b.valeurs || {}).forEach(k => { if (M[k] && C.statut(b, k) === 'suspect') out.push({ date: b.date, cle: k, libelle: M[k].libelle, unite: M[k].unite, v: C.val(b, k), norme: bornesTexte(b, k) }); }));
+            return out;
+        });
         const lignesSysteme = computed(() => Object.keys(catalogue.value.marqueurs || {}).filter(k => catalogue.value.marqueurs[k].systeme === systeme.value && (editionTable.value || etat.bilans.some(b => C.val(b, k) !== null))));
         const nbParSysteme = computed(() => { const o = {}; Object.entries(catalogue.value.marqueurs || {}).forEach(([k, m]) => { if (etat.bilans.some(b => C.val(b, k) !== null)) o[m.systeme] = (o[m.systeme] || 0) + 1; }); return o; });
         const dernierAvec = (k) => [...etat.bilans].reverse().find(b => C.val(b, k) !== null) || {};
         const normes = (k) => { const [mn, mx] = C.bornes(dernierAvec(k), k); return mn !== null && mx !== null ? mn + ' – ' + mx : mn !== null ? '> ' + mn : mx !== null ? '< ' + mx : ''; };
         const cible = (k) => { const p = etat.cibles && etat.cibles[k]; if (p && p.op && p.v !== undefined) return p.op + ' ' + p.v; const c = CIBLES[k]; const v = c ? etat.objectifs[c] : null; if (v === null || v === undefined) return ''; return (k === 'vitd' ? '> ' : '< ') + v; };
-        const couleurStatut = (s) => s === 'haut' ? 'text-rose-700' : s === 'bas' ? 'text-amber-600' : s === 'normal' ? 'text-emerald-700' : 'text-slate-400';
+        const couleurStatut = (s) => s === 'haut' ? 'text-rose-700' : s === 'bas' ? 'text-amber-600' : s === 'normal' ? 'text-emerald-700' : s === 'suspect' ? 'text-violet-700' : 'text-slate-400';
         const cliquerMarqueur = (k) => { marqueurChoisi.value = k; };
         const explication = computed(() => merlin.value && marqueurChoisi.value ? explications.value[marqueurChoisi.value] || { role: 'Pas encore d’explication pour ce biomarqueur.' } : null);
         const valeurChoisie = computed(() => marqueurChoisi.value ? C.val(dernierAvec(marqueurChoisi.value), marqueurChoisi.value) : null);
@@ -1086,9 +1114,9 @@ createApp({
         };
         const lireApercu = (a) => {
             const r = SanteImport.lireBilan(a.texte, catalogue.value, { aujourdhui: aujourdhui() });
-            Object.assign(a, { date: r.date || a.date || dateJour.value, dateLigne: r.dateLigne || '', valeurs: r.valeurs, nonReconnues: r.nonReconnues, etat: 'pret', message: '' });
+            Object.assign(a, { date: r.date || a.date || dateJour.value, dateLigne: r.dateLigne || '', valeurs: r.valeurs, sources: r.sources || {}, nonReconnues: r.nonReconnues, etat: 'pret', message: '', ia: null });
         };
-        const nouvelApercu = (nom, type) => ({ id: uid(), nom, type, texte: '', date: '', dateLigne: '', valeurs: {}, nonReconnues: [], etat: 'lecture', message: 'En attente…' });
+        const nouvelApercu = (nom, type) => ({ id: uid(), nom, type, texte: '', date: '', dateLigne: '', valeurs: {}, sources: {}, nonReconnues: [], etat: 'lecture', message: 'En attente…', ia: null });
         const lireFichiersBilan = async (liste) => {
             const fichiers = Array.from(liste || []); if (!fichiers.length) return;
             messageBilan.value = ''; importOuvert.value = true;
@@ -1107,6 +1135,70 @@ createApp({
             if (!a) { apercus.value.unshift(nouvelApercu('Texte collé', 'saisie')); a = apercus.value[0]; }
             a.texte = texteBilan.value; lireApercu(a); messageBilan.value = '';
         };
+
+        //  ── v1.21 — « 🧠 Faire valider par l'IA » : le Médecin-Chef IA relit la LECTURE d'un compte rendu (texte du document, valeurs lues,
+        //  ligne source de chacune). Il ne décide rien : ses propositions s'acceptent une à une, et un garde-fou écarte d'office toute
+        //  proposition dont la ligne citée n'existe pas dans le document ou ne contient pas le nombre proposé (jamais de chiffre inventé).
+        const nombresDeLigne = (ligne) => (SanteImport.unifier(ligne).match(/\d{1,3}(?:\s\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?/g) || []).map(t => SanteImport.nombre(t.trim())).filter(x => x !== null);
+        const citationValide = (a, ligne, valeur) => {
+            const l = SanteImport.norm(ligne); if (l.length < 4) return false;
+            return SanteImport.norm(a.texte).includes(l) && nombresDeLigne(ligne).some(x => Math.abs(x - valeur) < 1e-9);
+        };
+        const verifierBilanIA = async (a) => {
+            if (!a || (a.ia && a.ia.enCours) || a.etat !== 'pret') return;
+            const M = catalogue.value.marqueurs || {};
+            const lues = Object.entries(a.valeurs).map(([k, o]) => ({ cle: k, libelle: M[k].libelle, unite: M[k].unite, v: o.v, min: o.min ?? null, max: o.max ?? null, ligne: String((a.sources || {})[k] || '').slice(0, 200) }));
+            const cat = Object.entries(M).map(([k, m]) => ({ cle: k, libelle: m.libelle, unite: m.unite }));
+            a.ia = { enCours: true, message: '⏳ L’IA relit le document (jusqu’à une minute)…', propositions: [] };
+            try {
+                const r = await fetch(cmoUrl.value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'verifier_bilan', titre: a.nom, texte: String(a.texte || '').slice(0, 60000), valeurs: lues, catalogue: cat }) });
+                const j = await r.json().catch(() => ({}));
+                if (r.ok && !Array.isArray(j.corrections) && (j.output || j.text)) throw new Error('l’agent n’est pas à jour (il répond comme un chat). Sur le serveur : sudo bash install.sh sante');
+                if (!r.ok || !Array.isArray(j.corrections)) throw new Error(String(j.erreur || j.output || ('réponse ' + r.status)).replace(/<[^>]+>/g, ' ').slice(0, 300));
+                let refus = 0, inutiles = 0, n = 0;
+                const props = [], dejaVues = new Set();
+                const nb = (x) => (x === null || x === undefined || x === '') ? null : (Number.isFinite(Number(x)) ? Number(x) : NaN);
+                j.corrections.forEach(c => {
+                    if (!c || typeof c !== 'object') { refus++; return; }
+                    const src = c.ajout && typeof c.ajout === 'object' ? c.ajout : c, cle = String(src.cle || '');
+                    if (!M[cle]) { refus++; return; }
+                    const ex = a.valeurs[cle], raison = String(c.raison || '').slice(0, 200), lib = M[cle].libelle, u = M[cle].unite;
+                    const p = { id: 'ia' + (++n), cle, raison, titre: lib };
+                    if (c.retirer === true && !c.ajout) {
+                        if (!ex) { refus++; return; }
+                        Object.assign(p, { genre: 'retrait', resume: 'retirer la valeur lue (' + ex.v + ' ' + u + ')' });
+                    } else {
+                        const v = nb(src.valeur ?? src.v), mn = nb(src.min), mx = nb(src.max), ligne = String(src.ligne || '');
+                        if (v === null || Number.isNaN(v) || Number.isNaN(mn) || Number.isNaN(mx)) { refus++; return; }
+                        if (!citationValide(a, ligne, v)) { refus++; return; }               // 🛡️ la ligne citée doit exister, avec ce nombre
+                        const bornes = { min: mn !== null && nombresDeLigne(ligne).some(x => Math.abs(x - mn) < 1e-9) ? mn : null, max: mx !== null && nombresDeLigne(ligne).some(x => Math.abs(x - mx) < 1e-9) ? mx : null };
+                        if (ex && ex.v === v && (bornes.min === null || ex.min === bornes.min) && (bornes.max === null || ex.max === bornes.max)) { inutiles++; return; }
+                        const nm = bornes.min !== null || bornes.max !== null ? ' (norme ' + (bornes.min !== null ? bornes.min : '') + (bornes.min !== null && bornes.max !== null ? ' – ' : (bornes.max !== null ? '< ' : ' >')) + (bornes.max !== null ? bornes.max : '') + ')' : '';
+                        Object.assign(p, { genre: ex ? 'modif' : 'ajout', valeur: v, bornes, ligne, resume: (ex ? ex.v + ' → ' : 'ajouter ') + v + ' ' + u + nm });
+                    }
+                    if (dejaVues.has(p.genre + cle)) { refus++; return; }
+                    dejaVues.add(p.genre + cle); props.push(p);
+                });
+                a.ia.propositions = props.slice(0, 40);
+                const ecart = (refus ? ' 🛡️ ' + refus + ' proposition(s) écartée(s) d’office (clé inconnue, ou ligne citée absente du document / sans ce nombre).' : '') + (inutiles ? ' ' + inutiles + ' déjà conforme(s).' : '');
+                a.ia.message = props.length ? '✨ ' + props.length + ' correction(s) proposée(s) : acceptez ou refusez chacune.' + ecart : '✓ L’IA ne propose aucune correction : la lecture est confirmée.' + ecart;
+            } catch (err) { a.ia.message = '❌ Validation impossible : ' + (err.message || err); a.ia.propositions = []; }
+            finally { a.ia.enCours = false; }
+        };
+        const accepterBilanIA = (a, p) => {
+            if (!a.ia) return;
+            if (p.genre === 'retrait') { delete a.valeurs[p.cle]; if (a.sources) delete a.sources[p.cle]; }
+            else {
+                const o = { v: p.valeur }; if (p.bornes.min !== null) o.min = p.bornes.min; if (p.bornes.max !== null) o.max = p.bornes.max;
+                else if (a.valeurs[p.cle] && a.valeurs[p.cle].max !== undefined && p.bornes.min === null) o.max = a.valeurs[p.cle].max;
+                a.valeurs[p.cle] = o; if (!a.sources) a.sources = {};
+                a.sources[p.cle] = (p.ligne + ' ⏎ (corrigé avec l’IA)').slice(0, 200);
+            }
+            a.ia.propositions = a.ia.propositions.filter(x => x.id !== p.id);
+            if (!a.ia.propositions.length) a.ia.message = '✓ Corrections appliquées. Vérifiez les valeurs, puis ajoutez le bilan.';
+        };
+        const refuserBilanIA = (a, p) => { if (a.ia) a.ia.propositions = a.ia.propositions.filter(x => x.id !== p.id); };
+        const toutAccepterBilanIA = (a) => { if (a.ia) a.ia.propositions.slice().forEach(p => accepterBilanIA(a, p)); };
         const retirerApercu = (a) => { apercus.value = apercus.value.filter(x => x.id !== a.id); };
         const retirerValeurApercu = (a, k) => { delete a.valeurs[k]; };
         const apercusPrets = computed(() => apercus.value.filter(a => a.etat === 'pret' && a.date && Object.keys(a.valeurs).length));
@@ -1118,7 +1210,7 @@ createApp({
             if (!Array.isArray(b.documents)) b.documents = [];
             const doc = { id: uid(), nom: a.nom, type: a.type, importe_le: aujourdhui() };
             b.documents.push(doc);
-            cles.forEach(k => { const o = Object.assign({}, a.valeurs[k], { v: C.num(a.valeurs[k].v), doc: doc.id }); delete o.edite; b.valeurs[k] = o; });
+            cles.forEach(k => { const o = Object.assign({}, a.valeurs[k], { v: C.num(a.valeurs[k].v), doc: doc.id }); delete o.edite; if (a.sources && a.sources[k]) o.ligne = String(a.sources[k]).slice(0, 200); b.valeurs[k] = o; });
             retirerApercu(a); if (a.type === 'saisie') texteBilan.value = '';
             messageBilan.value = 'Bilan du ' + dateLisible(a.date) + (neuf ? ' ajouté' : ' complété') + ' : ' + cles.length + ' valeur(s) de « ' + a.nom + ' ».';
             return cles.length;
@@ -1139,6 +1231,10 @@ createApp({
         const bilansRecents = computed(() => [...etat.bilans].reverse());
         const nbDocuments = computed(() => etat.bilans.reduce((n, b) => n + (b.documents || []).length, 0));
         const lignesOuvertes = reactive({});
+        //  la liste des documents : repliée par défaut, l'état est retenu (sur cet appareil)
+        const docsOuverts = ref((() => { try { return localStorage.getItem('sante_docs_ouverts') === '1'; } catch (_) { return false; } })());
+        const basculerDocs = () => { docsOuverts.value = !docsOuverts.value; try { localStorage.setItem('sante_docs_ouverts', docsOuverts.value ? '1' : '0'); } catch (_) { /* stockage bloqué */ } };
+        const nbValeursTotal = computed(() => etat.bilans.reduce((n, b) => n + Object.keys(b.valeurs || {}).length, 0));
         const bornesTexte = (b, k) => { const [mn, mx] = C.bornes(b, k); return mn !== null && mx !== null ? mn + ' – ' + mx : mn !== null ? '> ' + mn : mx !== null ? '< ' + mx : ''; };
         //  une suppression se confirme d'un second clic (5 s)
         const aConfirmer = ref(null); let minuteurConfirmer = null;
@@ -1863,7 +1959,7 @@ createApp({
         return { VERSION, ONGLETS, menuOuvert, erreurSauvegarde, sauver, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
                  fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, saisie, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
-                 texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
+                 valeursSuspectes, docsOuverts, basculerDocs, nbValeursTotal, verifierBilanIA, accepterBilanIA, refuserBilanIA, toutAccepterBilanIA, texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
                  TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, journeeHeures, aujourdhui, afficherDetails, detailOuvert, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,

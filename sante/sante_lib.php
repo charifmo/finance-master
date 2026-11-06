@@ -65,9 +65,14 @@ function sante_bornes(array $bilan, string $cle): array {
     return [$min, $max];
 }
 /** bas | haut | normal | inconnu */
+/** v1.21 — « à vérifier » : dix fois sous le bas de la norme ou dix fois au-dessus du haut (pourcentage ou autre unité lus à la place du nombre). */
+function sante_suspect(float $v, ?float $min, ?float $max): bool {
+    return $v > 0 && (($min !== null && $min > 0 && $v < $min / 10) || ($max !== null && $max > 0 && $v > $max * 10));
+}
 function sante_statut(array $bilan, string $cle): string {
     $v = sante_val($bilan, $cle); if ($v === null) return 'inconnu';
     [$min, $max] = sante_bornes($bilan, $cle);
+    if (sante_suspect($v, $min, $max)) return 'suspect';
     if ($min !== null && $v < $min) return 'bas';
     if ($max !== null && $v > $max) return 'haut';
     return 'normal';
@@ -118,6 +123,7 @@ function sante_score2(?int $age, string $sexe, bool $fumeur, ?float $pas, ?float
  */
 function sante_gilbert(array $bilan): array {
     $bt = sante_statut($bilan, 'bili_t'); $bl = sante_val($bilan, 'bili_l');
+    if ($bt === 'suspect') return ['statut' => 'incomplet', 'message' => 'Bilirubine totale à vérifier : valeur très éloignée de la norme (unité ou lecture ?).'];
     $hausse = $bt === 'haut' || ($bt === 'inconnu' && $bl !== null && $bl > 10);
     if (!$hausse) return ['statut' => $bt === 'inconnu' ? 'incomplet' : 'normal'];
     $hep = ['asat' => sante_statut($bilan, 'asat'), 'alat' => sante_statut($bilan, 'alat'), 'ggt' => sante_statut($bilan, 'ggt')];

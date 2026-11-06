@@ -1,4 +1,4 @@
-/* v37.103 Exceptionnelles rangées — bump de version (Finance 37.103, Santé 1.21) + entrée de changelog. */
+/* v37.103 Exceptionnelles rangées — bump de version (Finance 37.103, Santé 1.22) + entrée de changelog. */
 import { readFileSync, writeFileSync } from 'node:fs';
 const remplacer = (F, label, anchor, replacement) => {
     const src = readFileSync(F, 'utf8'), n = src.split(anchor).length - 1;
@@ -16,10 +16,11 @@ remplacer('index.html', 'CHANGELOG',
             "📊 Le Contrôle compare chaque ligne à son réel : « Four maman — 1 200 prévus, 1 400 dépensés ».",
             "🔢 Deux opérations créées dans la même milliseconde (import bancaire) pouvaient avoir le MÊME identifiant ; une correction ou un rangement tombait alors sur la mauvaise ligne. Chaque identifiant est désormais unique.",
             "🧾 Le compte d'une ligne de détail est celui de sa dépense : « elect marrakech villa » (détail de « Factures », Compte Principal ASSAFA) n'apparaît plus sur le Courant dans le Réalisé.",
-            "🩺 SANTÉ 1.21 — LA v1.20 REVIENT : une ancienne version de Santé (1.3) avait été remise en ligne par-dessus la v1.20 (cockpit, plans, synchro du téléphone…), et son enregistrement effaçait ce que la v1.20 avait ajouté. Au premier chargement, Santé rétablit tout seul ces données depuis la dernière copie de sauvegarde v1.20, avec ce que vous aviez saisi depuis (cases, pesées, pas, bilans), et le dit en haut de l'écran.",
+            "🩺 SANTÉ 1.22 — LA v1.20 REVIENT, AVEC LA v1.21 : une ancienne version de Santé (1.3) avait été remise en ligne par-dessus la v1.20 (cockpit, plans, synchro du téléphone…), et son enregistrement effaçait ce que la v1.20 avait ajouté. Au premier chargement, Santé rétablit tout seul ces données depuis la dernière copie de sauvegarde v1.20, avec ce que vous aviez saisi depuis (cases, pesées, pas, bilans), et le dit en haut de l'écran.",
+            "🩺 Santé 1.21 (incluse) : les vrais comptes rendus de labo (PDF) lus de façon fiable, une valeur très éloignée de la norme marquée « ❓ à vérifier » (pas une alerte), « 🧠 Faire valider par l'IA » qui relit la lecture et ne peut rien inventer.",
             "🩺 Santé : « ✓ enregistré » ne s'affiche plus quand une modification faite pendant l'envoi n'est pas encore partie (elle est renvoyée aussitôt).",
         ] },
         { version: "37.102 Santé enregistre", date: "2026-11-04", changes: [`);
-remplacer('sante/index.html', 'VERSION', `const VERSION = '1.20';`, `const VERSION = '1.21';`);
-{ const F = 'sante/index.html', t = readFileSync(F, 'utf8'); writeFileSync(F, t.split('?v=1.20"').join('?v=1.21"')); }   // les scripts locaux suivent la version (cache)
-console.log('✔ version 37.103 (Santé 1.21)');
+remplacer('sante/index.html', 'VERSION', `const VERSION = '1.21';`, `const VERSION = '1.22';`);
+{ const F = 'sante/index.html', t = readFileSync(F, 'utf8'); writeFileSync(F, t.split('?v=1.21"').join('?v=1.22"')); }   // les scripts locaux suivent la version (cache)
+console.log('✔ version 37.103 (Santé 1.22)');

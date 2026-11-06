@@ -1,6 +1,6 @@
 <?php
 /**
- * Santé Master v1.21 — RÉPARATION APRÈS RETOUR D'UNE ANCIENNE VERSION.
+ * Santé Master v1.22 — RÉPARATION APRÈS RETOUR D'UNE ANCIENNE VERSION.
  *
  *   Le 6 nov. 2026, une ancienne version de Santé (1.3) a été remise en ligne par-dessus la v1.20. Son
  *   save_sante.php réécrit les données avec une liste FIXE de champs : chaque enregistrement fait par elle

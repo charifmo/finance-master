@@ -779,12 +779,21 @@
                       "operation": "equals"
                     },
                     "id": "m1"
+                  },
+                  {
+                    "leftValue": "={{ ($json.body || {}).mode }}",
+                    "rightValue": "verifier_bilan",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "m2"
                   }
                 ],
-                "combinator": "and"
+                "combinator": "or"
               },
               "renameOutput": true,
-              "outputKey": "Vérifier un protocole"
+              "outputKey": "Vérifier un document (protocole ou bilan)"
             }
           ]
         },
@@ -804,7 +813,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// MÉDECIN-CHEF IA v1 — VÉRIFICATION D'UN PROTOCOLE RANGÉ (écran de tri de Santé Master) : le rangement des règles,\n// ligne par ligne, envoyé à un modèle SANS outils ni mémoire, avec des consignes strictes (sante/verif_protocole_prompt.md).\nconst b = $input.first().json.body || {};\nconst consignes = __PROMPT_VERIF__;\nconst els = Array.isArray(b.elements) ? b.elements.slice(0, 400) : [];\nconst lignes = els.map(e => JSON.stringify(e)).join('\\n').slice(0, 120000);\nreturn [{ json: { prompt: consignes + '\\n\\nTITRE DU DOCUMENT : ' + String(b.titre || '').slice(0, 200) + '\\n\\nLIGNES RANGÉES (une par ligne, au format JSON) :\\n' + lignes, n: els.length } }];"
+        "jsCode": "// MÉDECIN-CHEF IA v1 — VÉRIFICATION D'UN DOCUMENT (écrans de tri et d'import de Santé Master) : envoyée à un modèle SANS outils ni\n// mémoire, avec des consignes strictes. mode « verifier_protocole » : le rangement des règles, ligne par ligne\n// (sante/verif_protocole_prompt.md) ; mode « verifier_bilan » : la lecture d'un compte rendu d'analyses (sante/verif_bilan_prompt.md).\nconst b = $input.first().json.body || {};\nif (b.mode === 'verifier_bilan') {\n  const consignesBilan = __PROMPT_VERIF_BILAN__;\n  const texte = String(b.texte || '').slice(0, 60000);\n  const vals = (Array.isArray(b.valeurs) ? b.valeurs : []).slice(0, 120).map(e => JSON.stringify(e)).join('\\n');\n  const cat = (Array.isArray(b.catalogue) ? b.catalogue : []).slice(0, 120).map(e => JSON.stringify(e)).join('\\n');\n  const n = Array.isArray(b.valeurs) ? Math.min(b.valeurs.length, 120) : 0;\n  return [{ json: { prompt: consignesBilan + '\\n\\nDOCUMENT : ' + String(b.titre || '').slice(0, 200) + '\\n\\nTEXTE DU DOCUMENT :\\n' + texte + '\\n\\nVALEURS LUES (une par ligne, au format JSON) :\\n' + vals + '\\n\\nCATALOGUE :\\n' + cat, n } }];\n}\nconst consignes = __PROMPT_VERIF__;\nconst els = Array.isArray(b.elements) ? b.elements.slice(0, 400) : [];\nconst lignes = els.map(e => JSON.stringify(e)).join('\\n').slice(0, 120000);\nreturn [{ json: { prompt: consignes + '\\n\\nTITRE DU DOCUMENT : ' + String(b.titre || '').slice(0, 200) + '\\n\\nLIGNES RANGÉES (une par ligne, au format JSON) :\\n' + lignes, n: els.length } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -849,7 +858,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// MÉDECIN-CHEF IA v1 — LES CORRECTIONS PROPOSÉES : le JSON est extrait de la réponse et contrôlé ; sinon une erreur claire.\nconst brut = String($input.first().json.text || $input.first().json.output || '');\nlet o = null;\nconst debut = brut.indexOf('{'), fin = brut.lastIndexOf('}');\nif (debut >= 0 && fin > debut) { try { o = JSON.parse(brut.slice(debut, fin + 1)); } catch (e) { o = null; } }\nconst ok = o && Array.isArray(o.corrections);\nconst corrections = ok ? o.corrections.filter(c => c && typeof c === 'object').slice(0, 60) : null;\nreturn [{ json: ok ? { corrections } : { erreur: 'réponse de l’IA illisible', extrait: brut.slice(0, 300) } }];"
+        "jsCode": "// MÉDECIN-CHEF IA v1 — LES CORRECTIONS PROPOSÉES : le JSON est extrait de la réponse et contrôlé ; sinon une erreur claire.\nconst brut = String($input.first().json.text || $input.first().json.output || '');\nlet o = null;\nconst debut = brut.indexOf('{'), fin = brut.lastIndexOf('}');\nif (debut >= 0 && fin > debut) { try { o = JSON.parse(brut.slice(debut, fin + 1)); } catch (e) { o = null; } }\nconst ok = o && Array.isArray(o.corrections);\nconst corrections = ok ? o.corrections.filter(c => c && typeof c === 'object').slice(0, 120) : null;\nreturn [{ json: ok ? { corrections } : { erreur: 'réponse de l’IA illisible', extrait: brut.slice(0, 300) } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

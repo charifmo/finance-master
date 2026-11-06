@@ -41,6 +41,25 @@ initial (profil, bilans, protocole) se charge par **« 📂 Importer mon dossier
 - **🧹 Tout effacer** : les analyses seules, ou toute l'appli ; confirmé en tapant `EFFACER`. Le serveur garde ses
   30 sauvegardes tournantes.
 
+## Lecture des comptes rendus, « à vérifier », validation par l'IA (v1.21)
+- **Le lecteur** (`sante_import.js`) a été mis au point sur de vrais PDF de trois laboratoires (aucune donnée réelle n'est dans le dépôt : les tests
+  utilisent des textes fictifs de même mise en page). Il lit : les **bornes entre parenthèses** sans coller la valeur d'un résultat antérieur ; la
+  **valeur absolue** de la ligne « Soit : 2 206 /mm3 » d'une formule leucocytaire (à défaut : leucocytes × %) ; le **nom sur une ligne et la valeur
+  quelques lignes plus bas** (Cerba : « 1,42 g/l   N : 0,66 à 1,33 », « Résultat : 0,46 ng/ml », y compris coupé en trois lignes) ; les noms à
+  tirets, parenthèses ou « / » (« Cholestérol − HDL », « ALAT(GPT) ») ; « à 8 heures » n'est pas une valeur ; une numération en G/L est ramenée à /mm³.
+  Chaque valeur garde sa **ligne source** (survol dans l'aperçu et dans la liste des documents).
+- **Le catalogue** passe à 53 biomarqueurs : CRP, urée, créatinine, DFG, acide urique, albumine, VS, ionogramme (sodium, potassium, chlore,
+  bicarbonates, protéines totales, calcium), CPK, LDH, PTH, SHBG, prolactine, estradiol ; nouveau système « Rein, ionogramme & inflammation ».
+- **« ❓ à vérifier »** : une valeur dix fois sous le bas de la norme ou dix fois au-dessus du haut (un pourcentage lu pour un nombre, une autre
+  unité) n'est plus affichée comme une alerte médicale ▲▼ : repère violet, encadré récapitulatif au-dessus du tableau. Même règle en JS
+  (`sante_calculs.js`) et en PHP (`sante_lib.php`) ; un vrai résultat très bas (hémoglobine 4,6) reste « bas ».
+- **« 🧠 Faire valider par l'IA »** (dans l'aperçu d'import) : le Médecin-Chef IA relit le texte du document et les valeurs lues et propose des
+  corrections (valeur, bornes, ajout d'un résultat oublié, retrait d'une fausse valeur). Mode `verifier_bilan` du relais `sante_cmo.php` → même
+  branche n8n que la vérification du protocole (modèle sans outils ni mémoire, consignes `verif_bilan_prompt.md`). **Garde-fou** : toute
+  proposition doit citer une ligne copiée du document qui contient le nombre proposé — sinon elle est écartée d'office. Chaque proposition
+  s'accepte ou se refuse ; rien ne s'applique seul. Après une mise à jour du dépôt : `sudo bash install.sh sante` republie l'agent.
+- La liste « Bilans et documents » se réduit (repliée par défaut, l'état est retenu sur l'appareil).
+
 ## Plans nutrition et exercice (v1.4 — remplacés en v1.18 par un seul « Mon plan santé »)
 
 v1.18 : on ne crée plus de plan nutrition ou exercice séparé. Un plan séparé d'avant reste affiché et se fond d'un clic
