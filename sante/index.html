@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.19"></script>
-    <script src="sante_import.js?v=1.19"></script>
-    <script src="sante_samsung.js?v=1.19"></script>
-    <script src="sante_protocole.js?v=1.19"></script>
+    <script src="sante_calculs.js?v=1.20"></script>
+    <script src="sante_import.js?v=1.20"></script>
+    <script src="sante_samsung.js?v=1.20"></script>
+    <script src="sante_protocole.js?v=1.20"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -147,6 +147,16 @@
                     <span class="text-[11px] text-slate-500 leading-snug">{{ k.sous }}</span>
                     <svg v-if="k.spark" viewBox="0 0 100 28" preserveAspectRatio="none" class="w-full h-7 mt-auto" aria-hidden="true"><polyline :points="k.spark" fill="none" stroke="#10b981" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>
                 </button>
+            </div>
+
+            <!-- v1.20 — la journée heure par heure (comme Samsung Health) : pas par heure et fréquence cardiaque min–max -->
+            <div class="carte p-4" data-journee-heures>
+                <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+                    <h3 class="font-black text-emerald-900 text-sm">⏱️ {{ dateJour === aujourdhui() ? 'Aujourd’hui' : dateLisible(dateJour) }}, heure par heure</h3>
+                    <span class="text-[11px] text-slate-500" data-derniere-mesure>{{ journeeHeures.derniere ? 'dernière mesure reçue : ' + journeeHeures.derniere : '' }}</span>
+                </div>
+                <div v-show="journeeHeures.aDonnees" class="relative" style="height: 13rem"><canvas id="graphJournee"></canvas></div>
+                <p v-if="!journeeHeures.aDonnees" class="text-xs text-slate-500">Pas encore de mesures détaillées pour ce jour<span v-if="dateJour === aujourdhui()"> : la journée commence, ou le téléphone ne les a pas encore envoyées</span>. Le détail heure par heure est gardé 8 jours.</p>
             </div>
 
             <!-- les courbes -->
@@ -866,7 +876,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.19';
+        const VERSION = '1.20';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1392,7 +1402,7 @@ createApp({
             pesees.value.forEach(p => { poidsPar[p.date] = p.kg; });
             const S = (k) => jours.map(d => mesure(d, k));
             return { jours, pas: jours.map(d => pasDuJour(etat.journal[d])), poids: jours.map(d => poidsPar[d] ?? null), net: jours.map(netDuJour), taux: jours.map(tauxDuJour),
-                     kcal: S('kcal_actives'), sommeil: S('sommeil_min'), fc_repos: S('fc_repos'), fc_moy: S('fc_moy'), distance: S('distance_km'), exercice: S('exercice_min'),
+                     kcal: S('kcal_actives'), sommeil: S('sommeil_min'), fc_repos: jours.map(d => mesure(d, 'fc_repos') ?? mesure(d, 'fc_repos_est')), fc_moy: S('fc_moy'), distance: S('distance_km'), exercice: S('exercice_min'),
                      spo2: S('spo2'), tension_sys: S('tension_sys'), tension_dia: S('tension_dia'), eau: S('hydratation_ml'), vfc: S('vfc_ms'), graisse: S('graisse_pct'),
                      vo2max: S('vo2max'), glycemie: S('glycemie'), tour_taille: S('tour_taille'),
                      zone2: jours.map(d => valeur(((etat.journal[d] || {}).activite || {}).zone2_min)) };
@@ -1400,7 +1410,26 @@ createApp({
         //  la moyenne des 7 jours AVANT le jour affiché (pour les tendances)
         const moyennes7 = computed(() => {
             const j7 = joursAvant(Cref.value.decaler(dateJour.value, -1), 7), M = (f) => moyenne(j7.map(f));
-            return { pas: M(d => pasDuJour(etat.journal[d])), kcal: M(d => mesure(d, 'kcal_actives')), sommeil: M(d => mesure(d, 'sommeil_min')), fc_repos: M(d => mesure(d, 'fc_repos')), taux: M(tauxDuJour), net: M(netDuJour) };
+            return { pas: M(d => pasDuJour(etat.journal[d])), kcal: M(d => mesure(d, 'kcal_actives')), sommeil: M(d => mesure(d, 'sommeil_min')), fc_repos: M(d => mesure(d, 'fc_repos') ?? mesure(d, 'fc_repos_est')), taux: M(tauxDuJour), net: M(netDuJour) };
+        });
+        //  v1.20 — hier (pour la nuit et le petit matin, quand la journée affichée vient de commencer)
+        const hier = computed(() => { const d = Cref.value.decaler(dateJour.value, -1); return { pas: pasDuJour(etat.journal[d]), kcal: mesure(d, 'kcal_actives') }; });
+        //  v1.20 — la journée heure par heure, d'après les morceaux reçus du téléphone (gardés 8 jours) : clé « sXXXXXX|AAAAMMJJTHHMMSS…Z »
+        //  (heure UTC → heure locale du navigateur) ou « t:HH:MM » (déjà locale). Pas : par heure, la source la plus haute ; FC : min–max.
+        const heureDeCle = (k) => {
+            let m = /\|(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/.exec(k);
+            if (m) { const t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])); return { h: t.getHours(), min: t.getHours() * 60 + t.getMinutes(), src: (/(s[0-9a-f]{6})\|/.exec(k) || [0, '_'])[1] }; }
+            m = /^t:(\d{2}):(\d{2})/.exec(k);
+            return m ? { h: +m[1], min: +m[1] * 60 + +m[2], src: '_' } : null;
+        };
+        const journeeHeures = computed(() => {
+            const hc = (etat.journal[dateJour.value] || {}).hc || {}, pas = Array(24).fill(null), fcMin = Array(24).fill(null), fcMax = Array(24).fill(null), parSrc = {};
+            let dern = -1;
+            Object.entries(hc.pas || {}).forEach(([k, v]) => { const t = heureDeCle(k); if (!t) return; (parSrc[t.h] = parSrc[t.h] || {})[t.src] = ((parSrc[t.h] || {})[t.src] || 0) + Number(v); if (t.min > dern) dern = t.min; });
+            Object.entries(parSrc).forEach(([h, sr]) => { pas[h] = Math.round(Math.max(...Object.values(sr))); });
+            Object.entries(hc.fc || {}).forEach(([k, v]) => { const t = heureDeCle(k); if (!t) return; v = Number(v); fcMin[t.h] = fcMin[t.h] === null ? v : Math.min(fcMin[t.h], v); fcMax[t.h] = fcMax[t.h] === null ? v : Math.max(fcMax[t.h], v); if (t.min > dern) dern = t.min; });
+            const aDonnees = pas.some(x => x !== null) || fcMin.some(x => x !== null);
+            return { aDonnees, pas, fc: fcMin.map((x, h) => x === null ? null : [x, Math.max(x + 1, fcMax[h])]), derniere: dern >= 0 ? String(Math.floor(dern / 60)).padStart(2, '0') + ':' + String(dern % 60).padStart(2, '0') : '' };
         });
         const sparkline = (l) => {
             const pts = l.map((x, i) => [i, x]).filter(p => p[1] !== null); if (pts.length < 2) return null;
@@ -1421,10 +1450,11 @@ createApp({
         const kpis = computed(() => {
             const s = seriesPilotage.value, m = moyennes7.value, J = jour.value.samsung || {}, obj = etat.profil.pas_objectif || 10000, l = [];
             l.push({ id: 'pas', icone: '🚶', label: 'Pas', valeur: fmt(pasJour.value), unite: 'pas', progres: 100 * pasJour.value / obj, etat: pasJour.value >= obj ? 'ok' : null,
-                     sous: 'objectif ' + fmt(obj) + ' · moy. 7 j ' + fmt(m.pas), tendance: tendance(pasJour.value || null, m.pas, true), spark: sparkline(s.pas) });
+                     sous: ['objectif ' + fmt(obj), hier.value.pas !== null ? 'hier ' + fmt(hier.value.pas) : null, 'moy. 7 j ' + fmt(m.pas), journeeHeures.value.derniere ? 'dernière mesure ' + journeeHeures.value.derniere : null].filter(Boolean).join(' · '),
+                     tendance: tendance(pasJour.value || null, m.pas, true), spark: sparkline(s.pas) });
             const kc = valeur(J.kcal_actives), dist = valeur(J.distance_km), tot = valeur(J.kcal_totales);
             l.push({ id: 'kcal', icone: '🔥', label: 'Calories actives', valeur: fmt(kc), unite: 'kcal', progres: null, etat: null,
-                     sous: [dist !== null ? fmt1(dist) + ' km' : null, tot !== null ? fmt(tot) + ' kcal au total' : null, 'moy. 7 j ' + fmt(m.kcal)].filter(Boolean).join(' · '), tendance: tendance(kc, m.kcal, true), spark: sparkline(s.kcal) });
+                     sous: [dist !== null ? fmt1(dist) + ' km' : null, tot !== null ? fmt(tot) + ' kcal au total' : null, hier.value.kcal !== null ? 'hier ' + fmt(hier.value.kcal) : null, 'moy. 7 j ' + fmt(m.kcal)].filter(Boolean).join(' · '), tendance: tendance(kc, m.kcal, true), spark: sparkline(s.kcal) });
             const n = energie.value.net;
             l.push({ id: 'energie', icone: '⚖️', label: 'Bilan net', valeur: n === null ? '—' : (n > 0 ? '+' : '') + fmt(n), unite: 'kcal', progres: null, etat: n === null ? null : n < 0 ? 'ok' : 'alerte',
                      sous: bmr.value === null ? 'métabolisme de base : il manque la taille ou une pesée' : (kcalJour.value ? 'ingéré ' + fmt(kcalJour.value) + ' − base ' + fmt(bmr.value) + ' − actif ' + fmt(kc || 0) : 'aucun repas noté ce jour'),
@@ -1439,9 +1469,9 @@ createApp({
             const so = valeur(J.sommeil_min);
             l.push({ id: 'sommeil', icone: '😴', label: 'Sommeil', valeur: duree(so), unite: '', progres: so === null ? null : 100 * so / 450, etat: so === null ? null : so >= 420 ? 'ok' : so < 360 ? 'alerte' : null,
                      sous: 'moy. 7 j ' + duree(m.sommeil === null ? null : Math.round(m.sommeil)), tendance: tendance(so, m.sommeil, true), spark: sparkline(s.sommeil) });
-            const fr = valeur(J.fc_repos), fm = valeur(J.fc_moy);
-            l.push({ id: 'coeur', icone: '❤️', label: 'FC au repos', valeur: fr === null ? '—' : fmt(fr), unite: 'bpm', progres: null, etat: null,
-                     sous: [fm !== null ? 'moyenne ' + fmt(fm) + (J.fc_min != null && J.fc_max != null ? ' (' + fmt(J.fc_min) + '–' + fmt(J.fc_max) + ')' : '') : null, 'moy. 7 j ' + fmt(m.fc_repos)].filter(Boolean).join(' · '),
+            const frMesure = valeur(J.fc_repos), frEst = valeur(J.fc_repos_est), fr = frMesure !== null ? frMesure : frEst, fm = valeur(J.fc_moy);
+            l.push({ id: 'coeur', icone: '❤️', label: 'FC au repos', valeur: fr === null ? '—' : fmt(fr), unite: frMesure === null && frEst !== null ? 'bpm (estimée)' : 'bpm', progres: null, etat: null,
+                     sous: [frMesure === null && frEst !== null ? 'les 10 % de mesures les plus basses du jour' : null, fm !== null ? 'moyenne ' + fmt(fm) + (J.fc_min != null && J.fc_max != null ? ' (' + fmt(J.fc_min) + '–' + fmt(J.fc_max) + ')' : '') : null, 'moy. 7 j ' + fmt(m.fc_repos)].filter(Boolean).join(' · '),
                      tendance: tendance(fr, m.fc_repos, false), spark: sparkline(s.fc_repos) });
             const faits = protocole.value ? suiviProto.value.du_jour.filter(i => i.fait).length : checklistFaits.value, total = protocole.value ? suiviProto.value.du_jour.length : CHECKLIST.length;
             l.push({ id: 'protocole', icone: '✅', label: protocole.value ? 'Protocole' : 'Checklist', valeur: faits + '/' + total, unite: 'faits', onglet: protocole.value ? 'plans' : null, progres: tauxJournee.value, etat: total && faits === total ? 'ok' : null,
@@ -1472,7 +1502,7 @@ createApp({
             a('exercice', '🏃', 'Séances (montre)', V('exercice_min') === null ? null : fmt(V('exercice_min')) + ' min');
             a('sommeil', '😴', 'Sommeil', V('sommeil_min') === null ? null : duree(V('sommeil_min')));
             a('fc_moy', '❤️', 'FC moyenne', V('fc_moy') === null ? null : fmt(V('fc_moy')) + ' bpm' + (V('fc_min') !== null && V('fc_max') !== null ? ' (' + fmt(V('fc_min')) + '–' + fmt(V('fc_max')) + ')' : ''));
-            a('fc_repos', '💤', 'FC au repos', V('fc_repos') === null ? null : fmt(V('fc_repos')) + ' bpm');
+            a('fc_repos', '💤', 'FC au repos', V('fc_repos') !== null ? fmt(V('fc_repos')) + ' bpm' : V('fc_repos_est') !== null ? fmt(V('fc_repos_est')) + ' bpm (estimée)' : null);
             a('vfc', '📈', 'VFC', V('vfc_ms') === null ? null : fmt(V('vfc_ms')) + ' ms');
             a('spo2', '🫁', 'SpO2', V('spo2') === null ? null : fmt(V('spo2')) + ' %');
             a('tension', '🩺', 'Tension', V('tension_sys') === null ? null : fmt(V('tension_sys')) + '/' + fmt(V('tension_dia')) + ' mmHg');
@@ -1520,6 +1550,13 @@ createApp({
                 if (graphsPilotage[id]) graphsPilotage[id].destroy();
                 graphsPilotage[id] = new Chart(cv, { type: 'bar', data: { labels, datasets: data }, options: { ...base, scales: { ...base.scales, ...scales } } });
             };
+            const J = journeeHeures.value, cvJ = document.getElementById('graphJournee');
+            if (graphsPilotage.graphJournee) { graphsPilotage.graphJournee.destroy(); delete graphsPilotage.graphJournee; }
+            if (cvJ && J.aDonnees) graphsPilotage.graphJournee = new Chart(cvJ, { type: 'bar', data: { labels: Array.from({ length: 24 }, (_, h) => h + 'h'), datasets: [
+                { label: 'Pas', data: J.pas, backgroundColor: '#22c55e', borderRadius: 2, yAxisID: 'y' },
+                { label: 'Fréquence cardiaque (min–max, bpm)', data: J.fc, backgroundColor: 'rgba(225, 29, 72, .55)', borderRadius: 3, yAxisID: 'y1', barPercentage: 0.4 }] },
+                options: { ...base, scales: { x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 9, font: { size: 10 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { font: { size: 10 } } },
+                           y1: { position: 'right', suggestedMin: 40, suggestedMax: 140, grid: { display: false }, ticks: { font: { size: 10 } } } } } });
             faire('graphActivite', [
                 { type: 'bar', label: 'Pas', data: s.pas, backgroundColor: s.pas.map(v => v !== null && v >= obj ? '#10b981' : '#6ee7b7'), borderRadius: 3, order: 2 },
                 { type: 'line', label: 'Objectif', data: s.jours.map(() => obj), borderColor: '#047857', borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5, order: 1 }],
@@ -1537,7 +1574,7 @@ createApp({
                 { type: 'line', label: (protocole.value ? 'Protocole' : 'Checklist') + ' suivi (%)', data: s.taux, borderColor: '#7c3aed', backgroundColor: '#7c3aed', spanGaps: true, tension: 0.25, pointRadius: 2, yAxisID: 'y1', order: 1 }],
                 { y: { ticks: { font: { size: 10 } } }, y1: { position: 'right', min: 0, max: 100, grid: { display: false }, ticks: { font: { size: 10 } } } });
         };
-        watch([onglet, seriesPilotage, () => etat.objectifs.poids_kg, () => etat.profil.pas_objectif], dessinerPilotage);
+        watch([onglet, seriesPilotage, journeeHeures, () => etat.objectifs.poids_kg, () => etat.profil.pas_objectif], dessinerPilotage);
         const detailsOuverts = reactive({});
         //  v1.19 — les détails (menu d'un repas, prises, consignes) sont affichés d'office ; un bouton les masque (retenu)
         const afficherDetails = ref((() => { try { return localStorage.getItem('sante_details') !== 'non'; } catch (_) { return true; } })());
@@ -1811,7 +1848,7 @@ createApp({
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
-                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, afficherDetails, detailOuvert, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
+                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, journeeHeures, aujourdhui, afficherDetails, detailOuvert, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, urlAvecJeton, valeurAuth, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, LIB_HC, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,

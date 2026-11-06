@@ -111,6 +111,10 @@ $F = ['metadata' => $B['metadata'], 'data' => ['vo2_max' => [$m1('09:00:00', 'ml
 [$eF] = $appliquer(sante_hc_convertir_b($F), []);
 $sF = $eF['journal'][$d1]['samsung'] ?? [];
 v('J. VO2 max 38,5 ; glycémie 5,5 mmol/L = 99,1 mg/dL ; resp. 14 ; 36,7 °C ; masse maigre 70,2 ; tour de taille 118 ; repos 2 050 kcal', ($sF['vo2max'] ?? 0) == 38.5 && ($sF['glycemie'] ?? 0) == 99.1 && ($sF['freq_resp'] ?? 0) == 14 && ($sF['temperature'] ?? 0) == 36.7 && ($sF['masse_maigre'] ?? 0) == 70.2 && ($sF['tour_taille'] ?? 0) == 118 && ($sF['kcal_repos'] ?? 0) == 2050, $sF);
+//  v1.20 — FC au repos estimée (Samsung Health ne l'écrit pas dans Health Connect) : moyenne des 10 % de mesures les plus basses
+$fcs = []; for ($k = 0; $k < 60; $k++) $fcs[] = ['start_time' => sprintf('%sT%02d:%02d:00.000Z', $d1, 8 + intdiv($k, 6), ($k % 6) * 10), 'end_time' => sprintf('%sT%02d:%02d:00.000Z', $d1, 8 + intdiv($k, 6), ($k % 6) * 10), 'unit' => 'bpm', 'source' => $srcTel, 'value' => (float)($k < 6 ? 52 : 80 + $k % 20)];
+[$eR] = $appliquer(sante_hc_convertir_b(['metadata' => $B['metadata'], 'data' => ['heart_rate' => $fcs]]), []);
+v('K. FC au repos estimée d’après la journée (6 mesures à 52 sur 60 → 52), la FC au repos mesurée reste vide', ($eR['journal'][$d1]['samsung']['fc_repos_est'] ?? 0) == 52 && !isset($eR['journal'][$d1]['samsung']['fc_repos']), $eR['journal'][$d1]['samsung'] ?? []);
 @unlink(getenv('SANTE_DATA_FILE'));
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

@@ -211,7 +211,10 @@ function sante_hc_integrer(array $p, array &$etat): array {
         $args = ['date' => $d];
         if (!empty($touches[$d]['pas'])) $args['pas'] = (int)round(sante_hc_somme_sources($hc['pas'] ?? []));
         if (!empty($touches[$d]['kcal'])) $args['kcal_actives'] = (int)round(sante_hc_somme_sources($hc['kcal'] ?? []));
-        if (!empty($touches[$d]['fc']) && !empty($hc['fc'])) { $args['fc_moy'] = (int)round(array_sum($hc['fc']) / count($hc['fc'])); $args['fc_min'] = (int)round(min($hc['fc'])); $args['fc_max'] = (int)round(max($hc['fc'])); }
+        if (!empty($touches[$d]['fc']) && !empty($hc['fc'])) { $args['fc_moy'] = (int)round(array_sum($hc['fc']) / count($hc['fc'])); $args['fc_min'] = (int)round(min($hc['fc'])); $args['fc_max'] = (int)round(max($hc['fc']));
+            //  v1.20 — Samsung Health n'écrit pas de « FC au repos » dans Health Connect : estimée d'après la fréquence cardiaque
+            //  du jour (la moyenne des 10 % de mesures les plus basses), dès 30 mesures
+            if (count($hc['fc']) >= 30) { $v = array_values($hc['fc']); sort($v); $bas = array_slice($v, 0, max(3, (int)floor(count($v) / 10))); $args['fc_repos_est'] = (int)round(array_sum($bas) / count($bas)); } }
         if (!empty($touches[$d]['dist'])) $args['distance_km'] = round(sante_hc_somme_sources($hc['dist'] ?? []) / 1000, 2);
         if (!empty($touches[$d]['kcalt'])) $args['kcal_totales'] = (int)round(sante_hc_somme_sources($hc['kcalt'] ?? []));
         if (!empty($touches[$d]['eau'])) $args['hydratation_ml'] = (int)round(sante_hc_somme_sources($hc['eau'] ?? []));

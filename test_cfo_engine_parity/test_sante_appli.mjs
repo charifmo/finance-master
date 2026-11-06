@@ -584,6 +584,10 @@ z.close()`, src, zip]);
         const ici = (k) => { const d = new Date(Date.now() + k * 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
         const journal = {};
         for (let k = 13; k >= 0; k--) journal[ici(-k)] = { checklist: {}, repas: [], activite: {}, samsung: { pas: 6000 + 100 * (13 - k), sommeil_min: 400 + k, fc_repos: 60 + (k % 3), kcal_actives: 300 + k } };
+        //  v1.20 — les morceaux du jour (heure par heure) : pas à 8 h et 14 h (deux sources à 8 h : la plus haute), FC ; pas de FC au repos mesurée
+        const cleT = (h, mn, src) => 'id:' + (src || 's111111') + '|' + ici(0).replace(/-/g, '') + 'T' + String(h).padStart(2, '0') + String(mn).padStart(2, '0') + '00000Z';
+        journal[ici(0)].hc = { pas: { [cleT(8, 0)]: 900, [cleT(8, 30)]: 700, [cleT(8, 0, 's222222')]: 1200, [cleT(14, 10)]: 2000 }, fc: { [cleT(8, 5)]: 105, [cleT(8, 20)]: 118, [cleT(14, 15)]: 92, [cleT(23, 40)]: 61 } };
+        delete journal[ici(0)].samsung.fc_repos; journal[ici(0)].samsung.fc_repos_est = 57;
         Object.assign(journal[ici(0)].samsung, { distance_km: 5.2, kcal_totales: 2650, tension_sys: 128, tension_dia: 82, spo2: 97, fc_moy: 74, fc_min: 55, fc_max: 131, vo2max: 38.5, glycemie: 99 });
         const items = Array.from({ length: 40 }, (_, i) => ({ id: 'p' + i, jour: 'tous', texte: 'Étape ' + i + ' du protocole', moment: ['reveil', 'matin', 'dejeuner', 'apres_midi', 'diner', 'coucher'][i % 6], heure: String(6 + Math.floor(i / 3)).padStart(2, '0') + ':00' }));
         items[0].detail = '2 œufs\n50 g de pain d’orge'; items[0].repas = true;
@@ -601,6 +605,11 @@ z.close()`, src, zip]);
         await pr.click('[data-basculer-details]'); await pr.waitForTimeout(100);
         v('  → Pilotage : le détail sous la case (menu du repas) affiché d’office ; « Masquer les détails » le replie', det.length === 1 && /2 œufs/.test(det[0]) && /pain d’orge/.test(det[0]) && detMasque === 0 && (await pr.$$('[data-pilotage-detail]')).length === 1, [det, detMasque]);
         const ids = await pr.$$eval('[data-kpi]', l => l.map(e => e.dataset.kpi));
+        const gj = await pr.evaluate(() => { const c = Chart.getChart(document.getElementById('graphJournee')); return c ? { pas: c.data.datasets[0].data, fc: c.data.datasets[1].data } : null; });
+        v('  → « heure par heure » : pas par heure (8 h : 1 600 = source la plus haute ; 14 h : 2 000), FC min–max par heure, dernière mesure 23:40', gj && gj.pas[8] === 1600 && gj.pas[14] === 2000 && JSON.stringify(gj.fc[8]) === '[105,118]' && gj.pas[3] === null
+          && /23:40/.test(await pr.textContent('[data-derniere-mesure]')), gj);
+        const tCoeur = (await pr.textContent('[data-kpi="coeur"]')).replace(/\s+/g, ' '), tPasH = (await pr.textContent('[data-kpi="pas"]')).replace(/\s+/g, ' ');
+        v('  → FC au repos estimée affichée (57, « estimée ») ; la tuile des pas rappelle hier et l’heure de la dernière mesure', /57/.test(tCoeur) && /estimée/.test(tCoeur) && /hier 7\s200/.test(tPasH) && /dernière mesure 23:40/.test(tPasH), [tCoeur, tPasH]);
         v('  → indicateurs : pas, calories, bilan net, poids, sommeil, FC repos, protocole, exercice ; + SpO2 et tension reçues', ['pas', 'kcal', 'energie', 'poids', 'sommeil', 'coeur', 'protocole', 'exercice', 'spo2', 'tension'].every(i => ids.includes(i)), ids);
         const t = async (id) => (await pr.textContent(`[data-kpi="${id}"]`)).replace(/\s+/g, ' ');
         const [tPas, tPoids, tTension, tKcal] = [await t('pas'), await t('poids'), await t('tension'), await t('kcal')];
