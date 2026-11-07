@@ -153,8 +153,15 @@ try {
         v('D. menu « ⚡ Exceptionnel » : Dépense exceptionnelle, · Four maman, · Nejar — ni « Nouveau », ni revenus, ni assurance',
           e.menu[0] === 'Dépense exceptionnelle' && e.menu.includes('· Four maman') && e.menu.includes('· Nejar') && e.menu.includes('· Frigo') && !e.menu.some(x => /Nouveau|CNOPS|Remboursement|Revenu/.test(x)), JSON.stringify(e.menu));
         await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'reel'; await Vue.nextTick(); st.activeTab = 'saisie'; await Vue.nextTick(); }, ST);
-        await page.waitForFunction(() => document.querySelector('optgroup[label="⚡ Exceptionnel"]'), null, { timeout: 10000 });
-        const opts = await page.evaluate(() => [...document.querySelector('optgroup[label="⚡ Exceptionnel"]').querySelectorAll('option')].map(o => o.textContent.trim()));
+        //  v37.104 — la catégorie se choisit dans un sélecteur avec recherche : on l'ouvre (saisie → « ⚙️ Ajuster ») et on lit le groupe « ⚡ Exceptionnel »
+        await page.fill('input[placeholder="Ex: 200 courses"]', '40 essai');
+        await page.click('[data-saisie-ajuster]');
+        await page.click('[data-saisie-details] [data-saisie-categorie] [data-cc-ouvrir]');
+        await page.waitForSelector('[data-cc-panneau] [data-cc-liste]', { timeout: 10000 });
+        const opts = await page.evaluate(() => { let g = '', out = [];
+            for (const el of document.querySelector('[data-cc-panneau] [data-cc-liste]').children) { if (el.tagName === 'P') g = el.textContent.trim(); else if (g === '⚡ Exceptionnel' && el.matches('[data-cc-option]')) out.push(el.querySelector('[data-cc-libelle]').textContent.trim()); }
+            return out; });
+        await page.keyboard.press('Escape'); await page.fill('input[placeholder="Ex: 200 courses"]', '');
         v('  → et dans la liste à l’écran (le même menu que sur le téléphone)', opts.includes('· Four maman') && opts.includes('· Nejar'), JSON.stringify(opts));
     });
     await section('E', async () => {

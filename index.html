@@ -5953,13 +5953,7 @@
                                 <input v-model.number="saisieForm.montant" @input="montantSaisieModifie()" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Montant"
                                        class="px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50 text-right tabular-nums" />
                             </div>
-                            <select v-model="saisieForm.categorieId" @change="choisirCategorieSaisie(saisieForm.categorieId)" data-saisie-categorie
-                                    class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50">
-                                <option value="">🤖 Automatique (les règles, puis l'IA)</option>
-                                <optgroup v-for="g in categoriesPourRanger" :key="g.label" :label="g.label">
-                                    <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
-                                </optgroup>
-                            </select>
+                            <choix-categorie data-saisie-categorie :model-value="saisieForm.categorieId" @update:model-value="v => { saisieForm.categorieId = v; choisirCategorieSaisie(v); }" :groupes="categoriesPourRanger" vide="🤖 Automatique (les règles, puis l'IA)" classe-bouton="w-full flex items-center justify-between gap-2 px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold text-left outline-none focus:border-emerald-500 bg-gray-50"></choix-categorie>
                             <select v-model="saisieForm.compteId" @change="compteSaisieModifie()" data-saisie-compte-choix
                                     class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50">
                                 <option :value="null">— Compte —</option>
@@ -5991,12 +5985,7 @@
                                             :class="['text-[10px] font-black px-2 py-1 rounded-full border transition-colors', cid === l.actuelle || cid === l.sure ? 'bg-white text-amber-900 border-amber-400 ring-1 ring-amber-300 hover:bg-emerald-50 hover:text-emerald-800' : 'bg-white/70 text-gray-700 border-amber-200 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300']">
                                         {{ cid === l.actuelle || cid === l.sure ? '✓ ' : '' }}{{ getCategorieLabel(cid) }}<span v-if="cid === l.actuelle && l.source === 'ia'" class="opacity-70"> · IA</span><span v-else-if="cid === l.actuelle && l.source === 'défaut'" class="opacity-70"> · par défaut</span><span v-else-if="cid === l.sure" class="opacity-70"> · sûr</span>
                                     </button>
-                                    <select data-ranger-autre @change="rangerTransaction(l.id, $event.target.value)" class="text-[10px] font-bold px-1.5 py-1 rounded-full border border-amber-200 bg-white/70 text-gray-700 outline-none">
-                                        <option value="">autre…</option>
-                                        <optgroup v-for="g in categoriesPourRanger" :key="g.label" :label="g.label">
-                                            <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
-                                        </optgroup>
-                                    </select>
+                                    <choix-categorie data-ranger-autre action placeholder="autre…" :groupes="categoriesPourRanger" @choisi="id => rangerTransaction(l.id, id)" classe-bouton="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-1 rounded-full border border-amber-200 bg-white/70 text-gray-700 outline-none"></choix-categorie>
                                     <button v-if="!l.sure && l.source !== 'ia' && !iaCategorisation.enCours[l.id]" type="button" data-ia-une @click="demanderCategorieIA(l.id)" class="text-[10px] font-bold text-violet-700 hover:underline">🤖 relancer l'IA</button>
                                     <span v-if="iaCategorisation.messages[l.id]" data-ia-message class="text-[10px] font-semibold text-amber-900 w-full">{{ iaCategorisation.messages[l.id] }}</span>
                                 </div>
@@ -6027,12 +6016,7 @@
                             <button v-if="isMobile" type="button" data-journal-filtres-bouton @click="journal.filtresOuverts = !journal.filtresOuverts"
                                     class="text-[11px] font-black text-gray-600 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white">⚙️ Filtres{{ (journal.cat ? 1 : 0) + (journal.compte ? 1 : 0) + (journal.source ? 1 : 0) + (journal.aVerifier ? 1 : 0) ? ' (' + ((journal.cat ? 1 : 0) + (journal.compte ? 1 : 0) + (journal.source ? 1 : 0) + (journal.aVerifier ? 1 : 0)) + ')' : '' }} {{ journal.filtresOuverts ? '▴' : '▾' }}</button>
                             <div v-if="!isMobile || journal.filtresOuverts" data-journal-filtres class="flex flex-wrap items-center gap-1.5">
-                                <select data-journal-filtre-cat v-model="journal.cat" class="max-w-[14rem] text-[11px] font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400">
-                                    <option value="">Toutes les catégories</option>
-                                    <optgroup v-for="g in categoriesPourRanger" :key="'jg_' + g.label" :label="g.label">
-                                        <option v-for="c in g.items" :key="'jc_' + c.id" :value="c.id">{{ c.label }}</option>
-                                    </optgroup>
-                                </select>
+                                <choix-categorie data-journal-filtre-cat v-model="journal.cat" :groupes="categoriesPourRanger" vide="Toutes les catégories" class="max-w-[14rem]" classe-bouton="w-full flex items-center justify-between gap-2 text-[11px] font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 text-left"></choix-categorie>
                                 <select data-journal-filtre-compte v-model="journal.compte" class="max-w-[11rem] text-[11px] font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400">
                                     <option value="">Tous les comptes</option>
                                     <option v-for="c in journalComptes" :key="'jco_' + c.id" :value="String(c.id)">{{ c.label }}</option>
@@ -6098,13 +6082,7 @@
                                             </div>
                                             <div class="px-2 md:px-3 pb-2 -mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-bold">
                                                 <!-- v37.49 : un clic sur la catégorie la change (et le choix devient une règle) -->
-                                                <select v-if="editionCategorieTx === x.t.id" data-journal-cat-select :value="x.t.categorieId"
-                                                        @change="rangerTransaction(x.t.id, $event.target.value); editionCategorieTx = null" @blur="editionCategorieTx = null"
-                                                        class="max-w-[12rem] text-[11px] font-bold px-1 py-0.5 border border-blue-300 rounded bg-white outline-none">
-                                                    <optgroup v-for="g in categoriesPourRanger" :key="g.label" :label="g.label">
-                                                        <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
-                                                    </optgroup>
-                                                </select>
+                                                <choix-categorie v-if="editionCategorieTx === x.t.id" data-journal-cat-select ouvert :model-value="x.t.categorieId" :groupes="categoriesPourRanger" :libelle-hors="getCategorieLabel" @choisi="id => { rangerTransaction(x.t.id, id); editionCategorieTx = null; }" @ferme="editionCategorieTx = null" class="max-w-[12rem]" classe-bouton="w-full flex items-center justify-between gap-1 text-[11px] font-bold px-1 py-0.5 border border-blue-300 rounded bg-white outline-none text-left"></choix-categorie>
                                                 <button v-else type="button" data-journal-cat :data-tx="x.t.id" @click="editionCategorieTx = x.t.id" title="Changer la catégorie"
                                                         :class="['text-left hover:underline decoration-dotted', estACategoriser(x.t) ? 'text-amber-900' : 'text-blue-700']">
                                                     <span v-if="estACategoriser(x.t)">⚠️ </span>{{ x.t.categorieId && x.t.categorieId !== 'cat_misc' ? (getCategorieLabel(x.t.categorieId) || '(Hors)') : 'À catégoriser' }}<span v-if="x.t.categorieSource === 'ia'" class="text-[9px] font-black text-violet-700"> · IA</span><span v-else-if="x.t.categorieSource === 'défaut'" class="text-[9px] font-black text-amber-700"> · par défaut</span>
@@ -6126,13 +6104,7 @@
                                                         <input type="datetime-local" data-journal-edit-date v-model="journal.brouillon.datetime" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400"/>
                                                     </label>
                                                     <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Catégorie
-                                                        <select data-journal-edit-cat v-model="journal.brouillon.categorieId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
-                                                            <option value="">À catégoriser</option>
-                                                            <option v-if="journal.brouillon.categorieId && !categoriesPourRanger.some(g => g.items.some(c => c.id === journal.brouillon.categorieId))" data-journal-edit-cat-actuelle :value="journal.brouillon.categorieId">{{ getCategorieLabel(journal.brouillon.categorieId) || journal.brouillon.categorieId }} (actuelle)</option>
-                                                            <optgroup v-for="g in categoriesPourRanger" :key="'je_' + g.label" :label="g.label">
-                                                                <option v-for="c in g.items" :key="'jec_' + c.id" :value="c.id">{{ c.label }}</option>
-                                                            </optgroup>
-                                                        </select>
+                                                        <choix-categorie data-journal-edit-cat v-model="journal.brouillon.categorieId" :groupes="categoriesPourRanger" vide="À catégoriser" :libelle-hors="getCategorieLabel" class="mt-0.5 normal-case tracking-normal" classe-bouton="w-full flex items-center justify-between gap-2 text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 text-left"></choix-categorie>
                                                     </label>
                                                     <label class="text-[10px] font-black uppercase tracking-wider text-gray-500 sm:col-span-2">Compte
                                                         <select data-journal-edit-compte v-model="journal.brouillon.compteId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
@@ -6956,12 +6928,7 @@
                             <input v-model="saisieForm.datetime" @input="dateSaisieModifiee()" type="datetime-local" data-saisie-date class="px-2 py-3 border-2 border-gray-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500 bg-gray-50" />
                             <input v-model.number="saisieForm.montant" @input="montantSaisieModifie()" type="number" inputmode="decimal" step="0.01" placeholder="Montant" class="px-3 py-3 border-2 border-gray-200 rounded-lg text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50 text-right tabular-nums" />
                         </div>
-                        <select v-model="saisieForm.categorieId" @change="choisirCategorieSaisie(saisieForm.categorieId)" data-saisie-categorie class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
-                            <option value="">🤖 Automatique (les règles, puis l'IA)</option>
-                            <optgroup v-for="g in categoriesPourRanger" :key="g.label" :label="g.label">
-                                <option v-for="c in g.items" :key="c.id" :value="c.id">{{ c.label }}</option>
-                            </optgroup>
-                        </select>
+                        <choix-categorie data-saisie-categorie :model-value="saisieForm.categorieId" @update:model-value="v => { saisieForm.categorieId = v; choisirCategorieSaisie(v); }" :groupes="categoriesPourRanger" vide="🤖 Automatique (les règles, puis l'IA)" classe-bouton="w-full flex items-center justify-between gap-2 px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold text-left outline-none focus:border-emerald-500 bg-gray-50"></choix-categorie>
                         <select v-model="saisieForm.compteId" @change="compteSaisieModifie()" data-saisie-compte-choix class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
                             <option :value="null">— Compte —</option>
                             <option v-for="c in comptes" :key="c.id" :value="c.id">{{ c.label }}</option>
@@ -7830,11 +7797,7 @@
                                 <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Date
                                     <input type="datetime-local" data-frise-edit-date v-model="journal.brouillon.datetime" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400"/></label>
                                 <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Catégorie
-                                    <select data-frise-edit-cat v-model="journal.brouillon.categorieId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
-                                        <option value="">À catégoriser</option>
-                                        <option v-if="journal.brouillon.categorieId && !categoriesPourRanger.some(g => g.items.some(c => c.id === journal.brouillon.categorieId))" :value="journal.brouillon.categorieId">{{ getCategorieLabel(journal.brouillon.categorieId) || journal.brouillon.categorieId }}</option>
-                                        <optgroup v-for="g in categoriesPourRanger" :key="'fae_' + g.label" :label="g.label"><option v-for="c in g.items" :key="'faec_' + c.id" :value="c.id">{{ c.label }}</option></optgroup>
-                                    </select></label>
+                                    <choix-categorie data-frise-edit-cat v-model="journal.brouillon.categorieId" :groupes="categoriesPourRanger" vide="À catégoriser" :libelle-hors="getCategorieLabel" class="mt-0.5 normal-case tracking-normal" classe-bouton="w-full flex items-center justify-between gap-2 text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 text-left"></choix-categorie></label>
                                 <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Compte
                                     <select data-frise-edit-compte v-model="journal.brouillon.compteId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
                                         <option value="">Sans compte</option>
@@ -8056,6 +8019,119 @@
                grand ? 'h-6 min-w-[1.5rem] px-1 text-[9px]' : 'h-4 min-w-[1rem] px-0.5 text-[7.5px]', c.couleur]">{{ c.initiales }}</span>`,
         };
 
+        //  v37.104 — CHOISIR UNE CATÉGORIE EN CHERCHANT. Une liste déroulante de cent catégories ne se parcourt pas au
+        //  téléphone : un bouton ouvre un panneau (en HAUT sur téléphone — le clavier, qui monte du bas, ne le cache pas —,
+        //  au centre sur ordinateur) avec un champ de recherche
+        //  déjà actif. On tape « dies » → « diesel skoda (Voiture) » ; « voiture » → la mère et toutes ses lignes. Accents,
+        //  majuscules et ponctuation ne comptent pas ; plusieurs mots : tous doivent se retrouver (« eau villa »). Sans
+        //  recherche : toute la liste, rangée comme avant. ↑ ↓ Entrée au clavier, Échap ou un clic à côté pour fermer.
+        //    v-model (ou :model-value) — l'id choisi ; groupes — categoriesPourRanger ; vide — libellé du choix « aucune »
+        //    (absent : pas de choix vide) ; action — le bouton garde son texte (« autre… »), seul l'événement « choisi » compte ;
+        //    ouvert — s'ouvre dès l'affichage ; libelleHors — le nom d'une catégorie actuelle absente de la liste.
+        const ChoixCategorie = {
+            props: { modelValue: { type: [String, Number], default: '' }, groupes: { type: Array, required: true }, vide: { type: String, default: '' },
+                     placeholder: { type: String, default: 'Choisir une catégorie' }, action: { type: Boolean, default: false },
+                     ouvert: { type: Boolean, default: false }, libelleHors: { type: Function, default: null }, classeBouton: { type: String, default: '' } },
+            emits: ['update:modelValue', 'choisi', 'ferme'],
+            data() { return { ouvre: false, q: '', idx: 0 }; },
+            mounted() { if (this.ouvert) this.ouvrir(); },
+            computed: {
+                plat() {
+                    const out = [];
+                    (this.groupes || []).forEach(g => {
+                        let mere = '';
+                        (g.items || []).forEach(c => {
+                            const enfant = /^·\s/.test(String(c.label));
+                            const label = String(c.label).replace(/^·\s*/, '').trim();
+                            if (!enfant) mere = label;
+                            out.push({ id: c.id, brut: c.label, label, parent: enfant ? mere : '', groupe: g.label, n: this.norm(label), np: this.norm((enfant ? mere : '') + ' ' + g.label) });
+                        });
+                    });
+                    return out;
+                },
+                resultats() {
+                    const q = this.norm(this.q);
+                    if (!q) return null;
+                    const mots = q.split(' ');
+                    return this.plat.map((c, i) => {
+                        const tout = c.n + ' ' + c.np;
+                        if (!mots.every(m => tout.includes(m))) return null;
+                        const score = c.n.startsWith(q) ? 0 : (' ' + c.n).includes(' ' + mots[0]) ? 1 : c.n.includes(mots[0]) ? 2 : 3;
+                        return { ...c, score, i };
+                    }).filter(Boolean).sort((a, b) => a.score - b.score || a.i - b.i);
+                },
+                visibles() { return this.resultats ? this.resultats.map(c => c.id) : [...(this.vide ? [''] : []), ...this.plat.map(c => c.id)]; },
+                texte() {
+                    if (this.action) return this.placeholder;
+                    const v = this.modelValue;
+                    if (v === '' || v === null || v === undefined) return this.vide || this.placeholder;
+                    const c = this.plat.find(x => String(x.id) === String(v));
+                    if (c) return c.parent ? c.label + ' · ' + c.parent : c.label;
+                    return ((this.libelleHors && String(this.libelleHors(v) || '').trim()) || String(v)) + ' (actuelle)';
+                },
+            },
+            watch: { q() { this.idx = 0; } },
+            methods: {
+                norm(s) { return String(s || '').toLowerCase().replace(/œ/g, 'oe').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9؀-ۿ]+/g, ' ').trim(); },
+                ouvrir() {
+                    this.ouvre = true; this.q = '';
+                    const i = this.visibles.findIndex(id => String(id) === String(this.modelValue));
+                    this.idx = i >= 0 ? i : 0;
+                    this.$nextTick(() => { const r = this.$refs.recherche; if (r) r.focus(); const el = document.querySelector('[data-cc-panneau] [data-cc-actif]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' }); });
+                },
+                fermer() { if (!this.ouvre) return; this.ouvre = false; this.q = ''; this.$emit('ferme'); },
+                choisir(id) { if (!this.action) this.$emit('update:modelValue', id); this.$emit('choisi', id); this.fermer(); },
+                touche(e) {
+                    if (e.key === 'Escape') { e.preventDefault(); this.fermer(); }
+                    else if (e.key === 'ArrowDown') { e.preventDefault(); this.idx = Math.min(this.visibles.length - 1, this.idx + 1); this.$nextTick(this.montrer); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); this.idx = Math.max(0, this.idx - 1); this.$nextTick(this.montrer); }
+                    else if (e.key === 'Enter') { e.preventDefault(); if (this.visibles.length) this.choisir(this.visibles[this.idx]); }
+                },
+                montrer() { const el = document.querySelector('[data-cc-panneau] [data-cc-actif]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); },
+                estActif(id) { return this.visibles[this.idx] === id; },
+                estChoisi(id) { return !this.action && String(id) === String(this.modelValue ?? ''); },
+                estEnfant(c) { return /^·\s/.test(String(c.label)); },
+            },
+            template: `
+<div data-cc :class="action ? 'inline-block' : 'block w-full'">
+    <button type="button" data-cc-ouvrir @click="ouvrir()" :title="action ? placeholder : 'Changer la catégorie'"
+            :class="classeBouton || 'w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-bold text-left outline-none focus:border-blue-400'">
+        <span class="truncate" data-cc-texte>{{ texte }}</span><span class="opacity-50 shrink-0">🔍</span>
+    </button>
+    <teleport to="body">
+        <div v-if="ouvre" data-cc-panneau class="fixed inset-0 z-[300] flex items-start md:items-center justify-center bg-black/40" @click.self="fermer()">
+            <div class="w-full md:max-w-md bg-white rounded-b-2xl md:rounded-2xl shadow-2xl flex flex-col max-h-[75vh] md:max-h-[70vh]" @keydown="touche($event)">
+                <div class="flex items-center gap-2 p-3 border-b border-gray-100">
+                    <input ref="recherche" v-model="q" data-cc-recherche type="search" enterkeyhint="done" autocomplete="off" placeholder="Rechercher une catégorie…"
+                           class="flex-1 px-3 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold outline-none focus:border-emerald-500 bg-gray-50">
+                    <button type="button" data-cc-fermer @click="fermer()" class="px-3 py-2 rounded-xl text-sm font-black text-gray-500 hover:bg-gray-100" title="Fermer">✕</button>
+                </div>
+                <div class="overflow-y-auto overscroll-contain py-1" data-cc-liste>
+                    <template v-if="resultats">
+                        <p v-if="!resultats.length" data-cc-aucune class="px-4 py-6 text-center text-sm font-semibold text-gray-500">Aucune catégorie ne contient « {{ q }} »</p>
+                        <button v-for="c in resultats" :key="'r_' + c.id" type="button" data-cc-option :data-id="c.id" :data-cc-actif="estActif(c.id) || null" @click="choisir(c.id)"
+                                :class="['w-full flex items-baseline justify-between gap-3 px-4 py-2.5 text-left text-sm', estActif(c.id) ? 'bg-emerald-50' : 'hover:bg-gray-50']">
+                            <span class="font-bold text-gray-900"><span data-cc-libelle>{{ c.label }}</span><span v-if="estChoisi(c.id)" class="text-emerald-600"> ✓</span></span>
+                            <span data-cc-parent class="text-[11px] font-semibold text-gray-400 truncate">{{ c.parent || c.groupe }}</span>
+                        </button>
+                    </template>
+                    <template v-else>
+                        <button v-if="vide" type="button" data-cc-option data-id="" :data-cc-actif="estActif('') || null" @click="choisir('')"
+                                :class="['w-full px-4 py-2.5 text-left text-sm font-bold text-gray-700', estActif('') ? 'bg-emerald-50' : 'hover:bg-gray-50']"><span data-cc-libelle>{{ vide }}</span><span v-if="estChoisi('')" class="text-emerald-600"> ✓</span></button>
+                        <template v-for="g in groupes" :key="'g_' + g.label">
+                            <p class="sticky top-0 bg-white/95 px-4 pt-3 pb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">{{ g.label }}</p>
+                            <button v-for="c in g.items" :key="'o_' + c.id" type="button" data-cc-option :data-id="c.id" :data-cc-actif="estActif(c.id) || null" @click="choisir(c.id)"
+                                    :class="['w-full px-4 py-2 text-left text-sm', estEnfant(c) ? 'pl-7 font-semibold text-gray-700' : 'font-black text-gray-900', estActif(c.id) ? 'bg-emerald-50' : 'hover:bg-gray-50']">
+                                <span data-cc-libelle>{{ c.label }}</span><span v-if="estChoisi(c.id)" class="text-emerald-600"> ✓</span>
+                            </button>
+                        </template>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </teleport>
+</div>`,
+        };
         const ChipCompte = {
             components: { 'mono-compte': MonoCompte },
             props: { m: { type: Object, required: true }, regle: { type: String, default: '' }, cle: { type: String, required: true },
@@ -8921,10 +8997,14 @@
 
         try {
             const app = createApp({
-                components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes },
+                components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie },
                 setup() {
-                    const CURRENT_VERSION = "37.103 Exceptionnelles rangées";
+                    const CURRENT_VERSION = "37.104 Catégorie par recherche";
                     const CHANGELOG = [
+        { version: "37.104 Catégorie par recherche", date: "2026-11-07", changes: [
+            "🔍 CHOISIR UNE CATÉGORIE EN CHERCHANT — la longue liste déroulante est remplacée partout (saisie, saisie rapide, « autre… » dans « À vérifier », journal : filtre, clic sur la catégorie, modifier ; frise) par un panneau avec une recherche déjà active : « dies » → diesel skoda (Voiture) ; « voiture » → la mère et toutes ses lignes ; accents et majuscules ne comptent pas ; plusieurs mots (« eau villa ») sont tous retrouvés.",
+            "📱 Au téléphone, le panneau s'ouvre en haut de l'écran : le clavier ne cache ni la recherche ni les résultats. Sans recherche, toute la liste, rangée comme avant ; ↑ ↓ Entrée au clavier, Échap ou un appui à côté pour fermer.",
+        ] },
         { version: "37.103 Exceptionnelles rangées", date: "2026-11-06", changes: [
             "⚡ CHAQUE DÉPENSE EXCEPTIONNELLE A SA CATÉGORIE — « Four maman », « Nejar »… (onglet Flux) n'apparaissaient pas dans la liste des catégories : elles tombaient toutes dans l'unique « Dépense exceptionnelle ». Chacune y est désormais, sous « Dépense exceptionnelle » (« · Four maman »), dans tous les menus ; les règles et l'IA les reconnaissent (« four maman » y est rangé d'office).",
             "🧹 LE MÉNAGE TOUT SEUL — au chargement, les opérations déjà saisies qui nomment une de ces lignes y sont rangées (et enregistrées) : celles de « Dépense exceptionnelle » ou non catégorisées, et celles « à vérifier » proposées ailleurs par l'IA dont le libellé est exactement le nom de la ligne. Vos rangements à la main ailleurs ne bougent pas. Une ligne renommée : ses opérations la suivent ; supprimée : elles reviennent dans « Dépense exceptionnelle ».",

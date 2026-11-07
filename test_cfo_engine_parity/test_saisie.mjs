@@ -114,6 +114,11 @@ await new Promise(r => srv.listen(0, '127.0.0.1', r));
 const port = srv.address().port;
 const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
+//  v37.104 — la catégorie se choisit dans un sélecteur avec recherche (plus une liste déroulante) : on l'ouvre et on clique, comme à la main
+const choisirCategorie = async (page, sel, id) => {
+    if (!(await page.$('[data-cc-panneau]'))) await page.click(`${sel} [data-cc-ouvrir]`);
+    await page.click(`[data-cc-panneau] [data-cc-option][data-id="${id}"]`);
+};
 const erreurs = [], externes = [];
 const ouvrirPage = async (opts) => {
     const ctx = await browser.newContext(opts);
@@ -170,7 +175,7 @@ try {
         await page.fill('[data-saisie-details] input[placeholder="Libellé"]', 'essence'); await attendre();
         const apres = await J('st.saisieForm.categorieId');
         v('D. « ⚙️ Ajuster » : le libellé changé en « essence » change la catégorie (café → essence)', /cafe/.test(avant) && /essence/.test(apres), JSON.stringify([avant, apres]));
-        await page.selectOption('[data-saisie-details] [data-saisie-categorie]', ''); await attendre();
+        await choisirCategorie(page, '[data-saisie-details] [data-saisie-categorie]', ''); await attendre();
         const auto = await J('[st.saisieCatSource, st.saisieForm.categorieId]');
         v('  → « 🤖 Automatique » rend la main aux règles (plus un choix « à la main » de « non catégorisé »)', auto[0] !== 'manuel' && /essence/.test(auto[1]), JSON.stringify(auto));
         await page.click('[data-saisie-ajuster]'); await remettre();
@@ -218,7 +223,7 @@ try {
         const et = await page.textContent('[data-saisie-rapide-etiquette]');
         v('  → l\'étiquette : 💵 45 DH, le compte, « Maintenant », « ⚙️ Ajuster »', /45\sDH/.test(et) && /Compte Courant/.test(et) && /Maintenant/.test(et) && /Ajuster/.test(et), et.replace(/\s+/g, ' '));
         await page.click('.fixed.inset-0.z-\\[80\\] [data-saisie-ajuster]'); await attendre();
-        v('  → « ⚙️ Ajuster » ouvre date, montant, catégorie, compte, libellé', (await page.$$('.fixed.inset-0.z-\\[80\\] [data-saisie-details] input, .fixed.inset-0.z-\\[80\\] [data-saisie-details] select')).length === 5);
+        v('  → « ⚙️ Ajuster » ouvre date, montant, catégorie, compte, libellé', (await page.$$('.fixed.inset-0.z-\\[80\\] [data-saisie-details] input, .fixed.inset-0.z-\\[80\\] [data-saisie-details] select, .fixed.inset-0.z-\\[80\\] [data-saisie-details] [data-saisie-categorie]')).length === 5);
         await page.evaluate((ST) => eval(ST).closeSaisieQuickModal(), ST); await remettre();
     });
     await section('H', async () => {
