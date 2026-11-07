@@ -5922,7 +5922,7 @@
                                 {{ saisieCatStatut === 'doute' && saisieCatSource !== 'manuel' ? '⚠️' : '🏷️' }} {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}<span v-if="saisieCatSource" class="font-bold opacity-70"> · {{ SOURCES_CATEGORIE[saisieCatSource] || saisieCatSource }}</span><span v-if="saisieCatStatut === 'doute' && saisieCatSource !== 'manuel'" class="font-bold"> · à vérifier</span>
                             </span>
                             <span v-else-if="saisieForm.libelle && saisieCatStatut === 'inconnu'" data-saisie-cat-inconnue class="text-[10px] font-black px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200" title="Aucune règle ne connaît ce libellé : l'IA est appelée à l'enregistrement ; si elle ne répond pas, une catégorie par défaut est posée, à vérifier">🤖 Inconnu des règles : l'IA proposera une catégorie</span>
-                            <span v-if="saisieForm.compteId" data-saisie-compte class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200">🏦 {{ (comptes.find(c => c.id === saisieForm.compteId) || {}).label || '—' }}<span v-if="saisieCompteAppris" class="font-bold opacity-70"> · appris</span></span>
+                            <span v-if="saisieForm.compteId" data-saisie-compte :title="saisieCompteCat || null" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200">{{ saisieCompteCat ? '🔗' : '🏦' }} {{ (comptes.find(c => c.id === saisieForm.compteId) || {}).label || '—' }}<span v-if="saisieCompteAppris" class="font-bold opacity-70"> · appris</span></span>
                             <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">📅 {{ saisieDateLabel }}</span>
                             <button @click="ouvrirAjusterSaisie()" data-saisie-ajuster class="ml-auto text-[10px] font-black text-gray-400 hover:text-emerald-600 transition-colors">
                                 {{ showSaisieDetails ? '× Fermer' : '⚙️ Ajuster' }}
@@ -6107,10 +6107,11 @@
                                                         <choix-categorie data-journal-edit-cat v-model="journal.brouillon.categorieId" :groupes="categoriesPourRanger" vide="À catégoriser" :libelle-hors="getCategorieLabel" class="mt-0.5 normal-case tracking-normal" classe-bouton="w-full flex items-center justify-between gap-2 text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 text-left"></choix-categorie>
                                                     </label>
                                                     <label class="text-[10px] font-black uppercase tracking-wider text-gray-500 sm:col-span-2">Compte
-                                                        <select data-journal-edit-compte v-model="journal.brouillon.compteId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
+                                                        <select data-journal-edit-compte v-model="journal.brouillon.compteId" @change="compteBrouillonModifie()" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
                                                             <option value="">Sans compte</option>
                                                             <option v-for="c in journalComptes" :key="'jeo_' + c.id" :value="String(c.id)">{{ c.label }}</option>
                                                         </select>
+                                                        <span v-if="journal.brouillon.compteAuto" data-journal-compte-auto class="block mt-0.5 normal-case tracking-normal text-[10px] font-semibold text-emerald-700">🔗 {{ journal.brouillon.compteAuto }}</span>
                                                     </label>
                                                 </div>
                                                 <div class="block text-[10px] font-black uppercase tracking-wider text-violet-700">
@@ -6278,6 +6279,16 @@
                                         <li v-for="x in apprentissageVue.noms" :key="'apn_' + x.k" data-apprentissage-nom class="py-1 flex items-start gap-2">
                                             <span class="flex-1">« {{ x.brut }} » → <b>{{ x.nom }}</b></span>
                                             <button type="button" @click="oublierNomAppris(x.k)" class="text-red-600 hover:underline shrink-0">🗑</button>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div data-apprentissage-comptes>
+                                    <p class="font-black text-gray-700 mb-1">💳 Comptes par catégorie · {{ apprentissageVue.comptes.length }}</p>
+                                    <p v-if="!apprentissageVue.comptes.length" class="text-gray-500 italic">Changer la catégorie d'une opération met le compte de sa ligne du budget. Prenez-en un autre : il sera retenu pour cette catégorie.</p>
+                                    <ul class="divide-y divide-gray-100">
+                                        <li v-for="x in apprentissageVue.comptes" :key="'apcpt_' + x.cat" data-apprentissage-compte-cat :data-cat="x.cat" class="py-1 flex items-start gap-2">
+                                            <span class="flex-1">« {{ x.label }} » → <b>{{ x.compte }}</b> <span class="text-gray-400">· {{ x.n }}×</span></span>
+                                            <button type="button" @click="oublierCompteAppris(x.cat)" class="text-red-600 hover:underline shrink-0">🗑</button>
                                         </li>
                                     </ul>
                                 </div>
@@ -7799,10 +7810,11 @@
                                 <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Catégorie
                                     <choix-categorie data-frise-edit-cat v-model="journal.brouillon.categorieId" :groupes="categoriesPourRanger" vide="À catégoriser" :libelle-hors="getCategorieLabel" class="mt-0.5 normal-case tracking-normal" classe-bouton="w-full flex items-center justify-between gap-2 text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 text-left"></choix-categorie></label>
                                 <label class="text-[10px] font-black uppercase tracking-wider text-gray-500">Compte
-                                    <select data-frise-edit-compte v-model="journal.brouillon.compteId" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
+                                    <select data-frise-edit-compte v-model="journal.brouillon.compteId" @change="compteBrouillonModifie()" class="mt-0.5 w-full text-xs font-bold px-2 py-1.5 rounded-lg border border-gray-200 bg-white outline-none focus:border-blue-400 normal-case tracking-normal">
                                         <option value="">Sans compte</option>
                                         <option v-for="c in journalComptes" :key="'faeo_' + c.id" :value="String(c.id)">{{ c.label }}</option>
-                                    </select></label>
+                                    </select>
+                                    <span v-if="journal.brouillon.compteAuto" data-frise-compte-auto class="block mt-0.5 normal-case tracking-normal text-[10px] font-semibold text-emerald-700">🔗 {{ journal.brouillon.compteAuto }}</span></label>
                             </div>
                             <div class="flex items-center gap-2">
                                 <button type="button" data-frise-apercu-supprimer @click="supprimerOperation(o.t.id)" :class="['mr-auto px-2.5 py-1.5 rounded-lg text-[11px] font-black', journal.confirmerSuppression === o.t.id ? 'bg-red-600 text-white' : 'text-red-700 bg-red-50 hover:bg-red-100']">{{ journal.confirmerSuppression === o.t.id ? 'Confirmer la suppression' : '🗑️ Supprimer' }}</button>
@@ -8999,8 +9011,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie },
                 setup() {
-                    const CURRENT_VERSION = "37.104 Catégorie par recherche";
+                    const CURRENT_VERSION = "37.105 Le compte suit la catégorie";
                     const CHANGELOG = [
+        { version: "37.105 Le compte suit la catégorie", date: "2026-11-07", changes: [
+            "🔗 LE COMPTE SUIT LA CATÉGORIE — changer la catégorie d'une opération (journal, frise) ou la trouver à la saisie met le compte qui va avec : celui de la ligne du budget qui la porte (le compte choisi sur la charge, ou celui de sa famille ; la source d'une épargne ou d'une dépense exceptionnelle, comme « Voyage Marrakech »). L'écran dit pourquoi (« 🔗 compte de « Voyage Marrakech » »). Un compte que vous avez choisi vous-même ne bouge plus.",
+            "🧠 L'APPRENTISSAGE RETIENT VOS COMPTES — prenez un autre compte que celui de la catégorie : c'est retenu (« diesel skoda se paiera avec Compte Courant, sans vous redemander »), dans le journal comme à la saisie. Revenir au compte de la ligne efface ce choix. « Ce que l'appli a appris de vous » montre les « 💳 Comptes par catégorie », 🗑 pour oublier.",
+        ] },
         { version: "37.104 Catégorie par recherche", date: "2026-11-07", changes: [
             "🔍 CHOISIR UNE CATÉGORIE EN CHERCHANT — la longue liste déroulante est remplacée partout (saisie, saisie rapide, « autre… » dans « À vérifier », journal : filtre, clic sur la catégorie, modifier ; frise) par un panneau avec une recherche déjà active : « dies » → diesel skoda (Voiture) ; « voiture » → la mère et toutes ses lignes ; accents et majuscules ne comptent pas ; plusieurs mots (« eau villa ») sont tous retrouvés.",
             "📱 Au téléphone, le panneau s'ouvre en haut de l'écran : le clavier ne cache ni la recherche ni les résultats. Sans recherche, toute la liste, rangée comme avant ; ↑ ↓ Entrée au clavier, Échap ou un appui à côté pour fermer.",
@@ -10858,10 +10874,59 @@
                         if (!p.apprentissage || typeof p.apprentissage !== 'object') p.apprentissage = {};
                         const a = p.apprentissage;
                         if (a.actif === undefined) a.actif = true;
-                        ['noms', 'actions', 'oublis', 'variantes'].forEach(k => { if (!a[k] || typeof a[k] !== 'object' || Array.isArray(a[k])) a[k] = {}; });
+                        ['noms', 'actions', 'oublis', 'variantes', 'comptes'].forEach(k => { if (!a[k] || typeof a[k] !== 'object' || Array.isArray(a[k])) a[k] = {}; });
                         return a;
                     };
                     const apprentissageActif = computed(() => { calculationTick.value; return _apprLu().actif !== false; });
+
+                    //  v37.105 — LE COMPTE D'UNE CATÉGORIE. Changer la catégorie d'une opération (ou la trouver à la saisie) met
+                    //  le compte qui va avec : d'abord celui que VOUS avez pris pour cette catégorie (appris), sinon celui de la
+                    //  ligne du budget qui la porte — le compte choisi sur la charge (ou celui de sa famille), la source d'une
+                    //  épargne ou d'une dépense exceptionnelle (« Voyage Marrakech ») ; une ligne de détail : celui de sa dépense.
+                    const _compteDeCle = (cle) => {
+                        const k = String(cle || ''), L = comptes.value || [];
+                        if (k.startsWith('cpt_')) return L.find(c => String(c.id) === k.slice(4)) || null;
+                        if (k === 'courant') return L.find(c => c.type === 'courant' || c.type === 'liquide') || null;
+                        return null;
+                    };
+                    const _ligneDeCategorie = (catId) => {
+                        const D = donneesAnnuelles.value || {}, a0 = String(anneeAffichage.value);
+                        for (const an of [a0, ...Object.keys(D).filter(a => a !== a0)]) {
+                            const d = D[an];
+                            if (!d || typeof d !== 'object') continue;
+                            for (const it of Object.values(d.chargesFixes || {})) if (it && (it.categorieId === catId || (it.parts || []).some(x => x && x.categorieId === catId))) return { nature: 'fixe', item: it, nom: it.label, ou: 'charge fixe' };
+                            for (const it of Object.values(d.chargesVariables || {})) {
+                                if (!it) continue;
+                                const det = (it.details || []).find(x => x && x.categorieId === catId);
+                                if (det || it.categorieId === catId || (it.parts || []).some(x => x && x.categorieId === catId)) return { nature: 'variable', item: it, nom: det ? det.nom : it.label, ou: 'charge variable' };
+                            }
+                            for (const ep of (Array.isArray(d.epargne) ? d.epargne : [])) if (ep && ep.categorieId === catId) return { nature: 'epargne', item: ep, nom: ep.nom, ou: 'épargne' };
+                            if (catId !== 'cat_irr_depense_exceptionnelle') for (const dep of (Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [])) if (dep && dep.categorieId === catId) return { nature: 'exceptionnel', item: dep, nom: dep.nom, ou: 'dépense exceptionnelle' };
+                        }
+                        return null;
+                    };
+                    const _compteDeLigne = (catId) => { const l = catId ? _ligneDeCategorie(catId) : null; const c = l ? _compteDeCle(compteDeFlux(l.nature, l.item)) : null; return c ? { c, l } : null; };
+                    const compteDeLaCategorie = (catId) => {
+                        if (!catId || catId === 'cat_misc') return null;
+                        const p = apprentissageActif.value ? (_apprLu().comptes || {})[catId] : null;
+                        const cp = p && (comptes.value || []).find(c => String(c.id) === String(p.compteId));
+                        if (cp) return { id: cp.id, label: cp.label, appris: true, raison: 'appris : « ' + _libCat(catId) + ' » se paie avec « ' + cp.label + ' »' };
+                        const x = _compteDeLigne(catId);
+                        return x ? { id: x.c.id, label: x.c.label, appris: false, raison: 'compte de « ' + String(x.l.nom || '').trim() + ' » (' + x.l.ou + ')' } : null;
+                    };
+                    //  Vous choisissez un autre compte que celui de la catégorie : retenu (la fois suivante, sans vous redemander).
+                    //  Vous revenez au compte de la ligne : le choix appris est oublié. Rend la phrase « Retenu : … », ou null.
+                    const retenirCompteCategorie = (catId, compteId) => {
+                        if (!apprentissageActif.value || !catId || catId === 'cat_misc' || compteId == null || compteId === '') return null;
+                        const c = (comptes.value || []).find(k => String(k.id) === String(compteId));
+                        if (!c) return null;
+                        const a = _appr(), x = _compteDeLigne(catId);
+                        if (x && String(x.c.id) === String(c.id)) { if (a.comptes[catId]) { delete a.comptes[catId]; return '« ' + _libCat(catId) + ' » reprend le compte de sa ligne (« ' + c.label + ' »)'; } return null; }
+                        const e = a.comptes[catId];
+                        if (e && String(e.compteId) === String(c.id)) { e.n = (e.n || 1) + 1; e.t = _ymd(new Date()); return null; }
+                        a.comptes[catId] = { compteId: c.id, n: 1, t: _ymd(new Date()) };
+                        return '« ' + _libCat(catId) + ' » se paiera avec « ' + c.label + ' », sans vous redemander';
+                    };
                     const _medianeAppr = (l) => { const s = l.slice().sort((a, b) => a - b), k = s.length >> 1; return s.length ? (s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2) : 0; };
 
                     //  Ce que vos transactions déjà rangées apprennent : par libellé entier et par mot.
@@ -11100,6 +11165,7 @@
                     //  v37.61 : le compte appris (votre dernière saisie du même libellé), l'erreur d'enregistrement, et
                     //  l'annonce « ✓ ajouté » avec son « ↶ Annuler »
                     const saisieCompteAppris = ref(false);
+                    const saisieCompteCat = ref('');   // v37.105 : d'où vient le compte proposé (« compte de « Voyage Marrakech » »…)
                     const saisieErreur = ref('');
                     const saisieAnnonce = reactive({ texte: '', txId: null, minuterie: null });
 
@@ -11125,6 +11191,7 @@
                         saisieRapide.value = '';
                         // v32.60 : sinon le 'manuel' de la saisie précédente bloquerait la suivante
                         if (saisieCatSource) saisieCatSource.value = null;
+                        saisieCompteCat.value = '';   // v37.105
                         if (saisieCatSuggestions) saisieCatSuggestions.value = [];
                         saisieCatStatut.value = null; saisieCatRaison.value = '';
                     };
@@ -11137,6 +11204,9 @@
                         saisieCatSource.value = 'manuel';
                         saisieCatStatut.value = 'sur'; saisieCatRaison.value = 'Choisi par vous';
                         saisieCatSuggestions.value = [];
+                        //  v37.105 : la catégorie choisie amène son compte (sauf le compte appris du même libellé, ou choisi à la main)
+                        const lib = String(saisieForm.value.libelle || '').trim();
+                        if (!saisieForm.value.compteManuel && !(lib && saisieCompteAppris.value && !saisieCompteCat.value)) _compteSaisieDeCategorie();
                     };
 
                     //  v37.61 — la catégorie (et le compte appris) d'après le libellé et le montant du formulaire. Un choix fait
@@ -11161,9 +11231,17 @@
                             const cle = _analyseLibelle(lib).toks.join(' ');
                             const x = cle && apprentissageActif.value ? journalToutes.value.find(y => y.t.compteId != null && y.t.source !== 'banque' && _analyseLibelle(y.t.libelle).toks.join(' ') === cle) : null;
                             const c = x && (comptes.value || []).find(k => String(k.id) === String(x.t.compteId));
-                            if (c) { f.compteId = c.id; saisieCompteAppris.value = true; }
-                            else if (saisieCompteAppris.value) { f.compteId = saisieCompteDefaut.value || (comptes.value && comptes.value[0] ? comptes.value[0].id : null); saisieCompteAppris.value = false; }
+                            if (c) { f.compteId = c.id; saisieCompteAppris.value = true; saisieCompteCat.value = ''; }
+                            else _compteSaisieDeCategorie();
                         }
+                    };
+                    //  v37.105 — sinon, le compte de la catégorie trouvée (ou choisie) ; rien : le compte par défaut
+                    const _compteSaisieDeCategorie = () => {
+                        const f = saisieForm.value;
+                        if (f.compteManuel) return;
+                        const cc = f.categorieId ? compteDeLaCategorie(f.categorieId) : null;
+                        if (cc) { f.compteId = cc.id; saisieCompteAppris.value = true; saisieCompteCat.value = cc.raison; }
+                        else if (saisieCompteAppris.value) { f.compteId = saisieCompteDefaut.value || (comptes.value && comptes.value[0] ? comptes.value[0].id : null); saisieCompteAppris.value = false; saisieCompteCat.value = ''; }
                     };
                     // Watch sur smart input → remplit le formulaire en temps réel
                     //  v37.61 : le texte fait foi — un nombre effacé efface le montant, un libellé effacé le libellé (sauf ceux
@@ -11188,7 +11266,7 @@
                     const libelleSaisieModifie = () => { saisieForm.value.libelleManuel = true; _categoriserSaisie(); };
                     const montantSaisieModifie = () => { saisieForm.value.montantManuel = true; if (saisieCatSource.value !== 'manuel') _categoriserSaisie(); };
                     const dateSaisieModifiee = () => { saisieForm.value.dateFixee = true; };
-                    const compteSaisieModifie = () => { saisieForm.value.compteManuel = true; saisieCompteAppris.value = false; };
+                    const compteSaisieModifie = () => { saisieForm.value.compteManuel = true; saisieCompteAppris.value = false; saisieCompteCat.value = ''; };
                     const ouvrirAjusterSaisie = () => {
                         if (!showSaisieDetails.value && !saisieForm.value.dateFixee) saisieForm.value.datetime = _nowLocalDateTime();
                         showSaisieDetails.value = !showSaisieDetails.value;
@@ -11259,6 +11337,8 @@
                         //  v37.61 : rien d'enregistré → le formulaire reste, et on le dit
                         if (!txId) { saisieErreur.value = "⚠️ Saisie NON enregistrée (année " + dt.slice(0, 4) + " introuvable) : rien n'est perdu, réessayez."; return false; }
                         if (statut === 'inconnu') demanderCategorieIA(txId);
+                        //  v37.105 : un compte choisi à la main pour une catégorie connue est retenu pour elle
+                        if (f.compteManuel && statut !== 'inconnu' && f.categorieId) retenirCompteCategorie(f.categorieId, f.compteId);
                         const c = (comptes.value || []).find(k => String(k.id) === String(f.compteId));
                         _fermerAnnonce();
                         Object.assign(saisieAnnonce, { txId, texte: '✓ ' + (String(f.libelle || '').trim() || 'Sans libellé') + ' · ' + formatMAD(f.montant)
@@ -11467,14 +11547,17 @@
                         }).filter(Boolean).sort((p, q) => String(q.t).localeCompare(String(p.t)));
                         const variantes = Object.entries(a.variantes || {}).map(([mot, e]) => ({ mot, label: _libCat(e.c), src: e.src, n: e.n || 1, t: e.t || '', ex: e.ex || '' }))
                             .sort((p, q) => String(q.t).localeCompare(String(p.t)) || p.mot.localeCompare(q.mot));
-                        return { actif: a.actif !== false, categories, noms, actions, variantes, oublis: Object.keys(a.oublis || {}).length,
-                                 total: categories.length + noms.length + actions.length + variantes.length };
+                        const comptesAppris = Object.entries(a.comptes || {}).map(([cat, e]) => ({ cat, label: _libCat(cat), compte: ((comptes.value || []).find(c => String(c.id) === String(e.compteId)) || {}).label || '?', n: e.n || 1, t: e.t || '' }))
+                            .sort((p, q) => String(q.t).localeCompare(String(p.t)));   // v37.105
+                        return { actif: a.actif !== false, categories, noms, actions, variantes, comptes: comptesAppris, oublis: Object.keys(a.oublis || {}).length,
+                                 total: categories.length + noms.length + actions.length + variantes.length + comptesAppris.length };
                     });
                     const _apprModifie = () => { calculationTick.value++; handleDataChange(); };
                     const basculerApprentissage = () => { const a = _appr(); a.actif = a.actif === false; _apprModifie(); };
                     const oublierCategorieApprise = (cle) => { _appr().oublis[cle] = true; const w = _motVariante(cle); if (w) delete _appr().variantes[w]; _apprModifie(); };   // v37.76 : et sa variante
                     const oublierNomAppris = (k) => { delete _appr().noms[k]; _apprModifie(); };
                     const oublierActionApprise = (k) => { delete _appr().actions[k]; _apprModifie(); };
+                    const oublierCompteAppris = (cat) => { delete _appr().comptes[cat]; _apprModifie(); };   // v37.105
                     //  v37.76 : le mot qui nomme le commerçant — le premier qui n'est ni un mot de banque, ni une ville, ni un nombre
                     const _MOTS_BANQUE = new Set(['paiement', 'retrait', 'gab', 'virement', 'vir', 'prelevement', 'prlv', 'frais', 'com', 'commission', 'achat',
                         'tpe', 'ecom', 'web', 'www', 'sarl', 'ste', 'store', 'shop', 'market', 'maroc', 'marrakech', 'casablanca', 'casa', 'rabat', 'tanger',
@@ -11714,8 +11797,15 @@
                         if (!t) return;
                         const quand = String(t.datetime || (t.date ? t.date + 'T12:00' : '')).slice(0, 16);
                         journal.ouvert = id; journal.confirmerSuppression = null; journal.appris = null;
-                        journal.brouillon = { libelle: t.libelle || '', montant: Number(t.montant) || 0, datetime: quand, categorieId: t.categorieId || '', compteId: t.compteId == null ? '' : String(t.compteId), note: t.note || '', lecon: !!t.lecon };
+                        journal.brouillon = { compteManuel: false, compteAuto: '', libelle: t.libelle || '', montant: Number(t.montant) || 0, datetime: quand, categorieId: t.categorieId || '', compteId: t.compteId == null ? '' : String(t.compteId), note: t.note || '', lecon: !!t.lecon };
                     };
+                    //  v37.105 — la catégorie change (même brouillon) : le compte suit, sauf si vous l'avez choisi vous-même
+                    watch(() => [journal.brouillon, journal.brouillon ? journal.brouillon.categorieId : undefined], ([b, nv], [bo, ov]) => {
+                        if (!b || b !== bo || nv === ov || b.compteManuel) return;
+                        const c = compteDeLaCategorie(nv);
+                        if (c) { b.compteId = String(c.id); b.compteAuto = c.raison; } else b.compteAuto = '';
+                    });
+                    const compteBrouillonModifie = () => { if (journal.brouillon) { journal.brouillon.compteManuel = true; journal.brouillon.compteAuto = ''; } };
                     const _seauDeTx = (id) => {
                         for (const [an, d] of Object.entries(donneesAnnuelles.value || {})) {
                             const arr = d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : [];
@@ -11757,6 +11847,9 @@
                         }
                         journal.ouvert = null; journal.brouillon = null;
                         _retenirCorrection(t, avant);
+                        //  v37.105 : un compte choisi à la main pour cette catégorie est retenu
+                        const _rc = b.compteManuel ? retenirCompteCategorie(t.categorieId, t.compteId) : null;
+                        if (_rc) { if (journal.appris) journal.appris.lignes.push(_rc); else journal.appris = { lignes: [_rc], similaires: [], min: 0, max: 0, libelle: null, ancien: t.libelle, categorieId: null }; }
                         calculationTick.value++;
                         handleDataChange();
                         return true;
@@ -26400,7 +26493,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         // v37.49 : catégorisation — règles, IA, À catégoriser
                         categoriserLibelle, saisieCatStatut, saisieCatRaison, SOURCES_CATEGORIE, iaCategorisation, demanderCategorieIA,
-                        aCategoriser, estACategoriser, rangerTransaction, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
+                        aCategoriser, estACategoriser, rangerTransaction, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,
