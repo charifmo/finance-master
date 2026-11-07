@@ -5,6 +5,7 @@
  * Décor FICTIF.
  */
 import fs from 'node:fs';
+import { twCompiler } from './tw_cache.mjs';   // v37.109 : Tailwind compilé une fois pour toutes les suites
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
@@ -517,7 +518,7 @@ z.close()`, src, zip]);
             if (!fs.existsSync(twBin)) return null;
             fs.writeFileSync(path.join(tmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
             fs.writeFileSync(path.join(tmp, 'tw.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'sante', 'index.html')) + ']};');
-            execFileSync(twBin, ['-c', path.join(tmp, 'tw.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'tw.css'), '--minify'], { stdio: 'ignore' });
+            twCompiler(twBin, ['-c', path.join(tmp, 'tw.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'tw.css'), '--minify'], { stdio: 'ignore' });
             const css = fs.readFileSync(path.join(tmp, 'tw.css'), 'utf8'); return css.length > 5000 ? css : null;
         });
         const MISE_EN_PAGE = !!twCss;

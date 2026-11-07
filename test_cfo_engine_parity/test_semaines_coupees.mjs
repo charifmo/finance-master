@@ -19,6 +19,7 @@
  *     H. le titre dit ce qu'on voit (« Début du cycle », « Cycle précédent ») ; plus de note à déplier.
  */
 import fs from 'node:fs';
+import { twCompiler } from './tw_cache.mjs';   // v37.109 : Tailwind compilé une fois pour toutes les suites
 import http from 'node:http';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -107,7 +108,7 @@ if (fs.existsSync(twBin)) {
     const tmp = fs.mkdtempSync(path.join((await import('node:os')).tmpdir(), 'tw-sc-'));
     fs.writeFileSync(path.join(tmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
     fs.writeFileSync(path.join(tmp, 'cfg.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'index.html')) + '],theme:{extend:{}}};');
-    essai(() => execFileSync(twBin, ['-c', path.join(tmp, 'cfg.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'out.css'), '--minify'], { stdio: 'ignore' }));
+    essai(() => twCompiler(twBin, ['-c', path.join(tmp, 'cfg.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'out.css'), '--minify'], { stdio: 'ignore' }));
     twCss = essai(() => fs.readFileSync(path.join(tmp, 'out.css'), 'utf8')) || '';
 }
 const page0 = html
