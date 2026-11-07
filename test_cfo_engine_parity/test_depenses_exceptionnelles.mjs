@@ -205,6 +205,34 @@ try {
     await section('J', async () => {
         const b = await page.evaluate((ST) => eval(ST).rangerDepensesExceptionnelles(), ST);
         v('J. relancé : plus rien à faire (le ménage est idempotent)', b.lignes === 0 && b.registre === 0 && b.transactions === 0, JSON.stringify(b));
+    });
+    await section('K', async () => {
+        //  v37.105 — « Il n'y a pas les dépenses exceptionnelles ici ! » : la frise du cycle (27 sept. → 26 oct., horloge du test au 13 oct.)
+        await page.evaluate(async (ST) => {
+            const st = eval(ST), d = st.donneesAnnuelles[2026];
+            d.depensesIrregulieres.push({ id: 810, mois: 10, annee: 2026, nom: 'Cadeau mariage', montant: 500, jourPrevu: 15, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' },
+                                        { id: 811, mois: 10, annee: 2026, nom: 'Révision chaudière', montant: 300, jourPrevu: 20, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' },
+                                        { id: 812, mois: 10, annee: 2026, nom: 'Remboursement mutuelle', montant: -400, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_revenu_exceptionnel' });
+            st.rangerDepensesExceptionnelles();
+            d.transactionsReelles.push({ id: 9101, date: '2026-10-14', datetime: '2026-10-14T10:00', mois: 10, libelle: 'cadeau mariage', montant: 650, categorieId: 'cat_irr_l_cadeau_mariage', compteId: 1, source: 'manuel' },
+                                       { id: 9102, date: '2026-10-12', datetime: '2026-10-12T10:00', mois: 10, libelle: 'imprévu', montant: 40, categorieId: 'cat_irr_depense_exceptionnelle', compteId: 1, source: 'manuel' });
+            st.calculationTick++; st.friseOuverte = true; await Vue.nextTick();
+        }, ST);
+        const f = await page.evaluate((ST) => { const fc = eval(ST).friseCycle; return JSON.parse(JSON.stringify({ du: fc.du, au: fc.au, exc: fc.categories.find(c => c.key === '__exceptionnel') || null, alertes: fc.alertes })); }, ST);
+        const L = (f.exc || { lignes: [] }).lignes, cad = L.find(l => l.nom === 'Cadeau mariage'), rev = L.find(l => l.nom === 'Révision chaudière'), aut = L.find(l => /Autres/.test(l.nom));
+        v('K. la frise du cycle a son bloc « ⚡ Dépenses exceptionnelles » : Cadeau mariage 650 / 500 (dépassé), Révision chaudière 0 / 300, Autres 40',
+          !!f.exc && cad && cad.engage === 650 && cad.enveloppe === 500 && cad.depasse && rev && rev.engage === 0 && rev.enveloppe === 300 && aut && aut.engage === 40 && !L.some(l => /mutuelle/i.test(l.nom)), JSON.stringify(f.exc));
+        v('  → un repère à la date prévue (15 oct.), le total du bloc 690 / 800, et le dépassement dans les alertes de la frise',
+          cad.seances.length === 1 && cad.seances[0].quand === '15 oct.' && cad.seances[0].etat === 'paye' && f.exc.engage === 690 && f.exc.budget === 800
+          && f.alertes.some(a => /Cadeau mariage \(dépense exceptionnelle\) : 650 DH pour 500 prévus — dépassement de 150 DH/.test(a)), JSON.stringify([cad.seances, f.exc.engage, f.exc.budget, f.alertes]));
+        await page.waitForSelector('[data-frise-categorie][data-cat="__exceptionnel"]', { state: 'visible', timeout: 10000 });
+        const bloc = (await page.textContent('[data-frise-categorie][data-cat="__exceptionnel"]')).replace(/\s+/g, ' ');
+        v('  → à l’écran : « ⚡ Dépenses exceptionnelles », « Cadeau mariage / cycle », « 650 / 500 DH sur le cycle »', /⚡ Dépenses exceptionnelles/.test(bloc) && /Cadeau mariage \/ cycle/.test(bloc) && /650 \/ 500 DH sur le cycle/.test(bloc), bloc.slice(0, 300));
+        await page.click('[data-frise-categorie][data-cat="__exceptionnel"] [data-frise-ligne][data-poste="irr_810"] [data-frise-enveloppe]');
+        await page.waitForSelector('[data-frise-apercu]', { state: 'visible', timeout: 5000 });
+        const ap = (await page.textContent('[data-frise-apercu]')).replace(/\s+/g, ' ');
+        v('  → la toucher montre l’opération derrière (« cadeau mariage », 650 DH), comme les autres lignes', /cadeau mariage/i.test(ap) && /650/.test(ap) && !/imprévu/.test(ap), ap.slice(0, 300));
+        await page.evaluate((ST) => { const st = eval(ST); st.fermerApercuFrise(); st.friseOuverte = false; }, ST);
         v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
     });
 } catch (e) {

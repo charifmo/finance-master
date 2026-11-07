@@ -7737,9 +7737,9 @@
                         <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 items-center">
                             <p class="min-w-0"><span class="block truncate text-[12px] md:text-[13px] font-black text-slate-800">{{ c.label }}</span>
                                <span :class="['block text-[10px] font-bold tabular-nums', c.depasse ? 'text-rose-600' : 'text-slate-500']" data-frise-cat-total>{{ formatMAD(c.engage) }} / {{ formatMAD(c.budget) }}{{ c.estime ? ' (estimé)' : '' }}</span></p>
-                            <div class="relative h-3 rounded-full bg-slate-100 overflow-hidden" :title="'Engagé ' + c.pct + ' % du budget ; rythme attendu à ce jour : ' + c.pctAttendu + ' %'">
+                            <div class="relative h-3 rounded-full bg-slate-100 overflow-hidden" :title="'Engagé ' + c.pct + ' % du budget' + (c.pctAttendu !== null ? ' ; rythme attendu à ce jour : ' + c.pctAttendu + ' %' : '')">
                                 <span :class="['absolute inset-y-0 left-0 rounded-full', c.depasse ? 'bg-rose-400' : 'bg-emerald-400']" :style="{ width: c.pct + '%' }"></span>
-                                <span class="absolute inset-y-0 w-0.5 bg-slate-700" :style="{ left: c.pctAttendu + '%' }"></span>
+                                <span v-if="c.pctAttendu !== null" class="absolute inset-y-0 w-0.5 bg-slate-700" :style="{ left: c.pctAttendu + '%' }"></span>
                             </div>
                         </div>
                         <div v-for="l in c.lignes" :key="'fl' + l.cle" data-frise-ligne :data-poste="l.cle" :data-unite="l.unite" class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 items-center">
@@ -9015,6 +9015,7 @@
                     const CHANGELOG = [
         { version: "37.105 Le compte suit la catégorie", date: "2026-11-07", changes: [
             "🔗 LE COMPTE SUIT LA CATÉGORIE — changer la catégorie d'une opération (journal, frise) ou la trouver à la saisie met le compte qui va avec : celui de la ligne du budget qui la porte (le compte choisi sur la charge, ou celui de sa famille ; la source d'une épargne ou d'une dépense exceptionnelle, comme « Voyage Marrakech »). L'écran dit pourquoi (« 🔗 compte de « Voyage Marrakech » »). Un compte que vous avez choisi vous-même ne bouge plus.",
+            "⚡ LA FRISE DU CYCLE MONTRE LES DÉPENSES EXCEPTIONNELLES — un bloc « ⚡ Dépenses exceptionnelles » : chaque dépense prévue dans le cycle (Flux), réel / prévu, un repère à sa date ; « Autres » pour ce qui est rangé dans « Dépense exceptionnelle » sans ligne prévue ; un dépassement s'affiche dans les alertes ; toucher une ligne montre ses opérations.",
             "🧠 L'APPRENTISSAGE RETIENT VOS COMPTES — prenez un autre compte que celui de la catégorie : c'est retenu (« diesel skoda se paiera avec Compte Courant, sans vous redemander »), dans le journal comme à la saisie. Revenir au compte de la ligne efface ce choix. « Ce que l'appli a appris de vous » montre les « 💳 Comptes par catégorie », 🗑 pour oublier.",
         ] },
         { version: "37.104 Catégorie par recherche", date: "2026-11-07", changes: [
@@ -22098,6 +22099,39 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                      pctAttendu: c.budget > 0 ? Math.min(100, Math.round((c.theorique || 0) / c.budget * 100)) : 0,
                                      depasse: engage > c.budget, lignes };
                         });
+                        //  v37.105 — LES DÉPENSES EXCEPTIONNELLES DU CYCLE (Flux) : une ligne chacune, réel / prévu sur le cycle, un repère
+                        //  à sa date prévue ; le réel = les opérations du cycle rangées dans SA catégorie (« · Four maman »). Les
+                        //  opérations restées dans « Dépense exceptionnelle » sans ligne : « Autres ». Revenus exceptionnels exclus.
+                        {
+                            const du = _ymd(debut), au = _ymd(fin), parCat = {};
+                            Object.values(donneesAnnuelles.value || {}).forEach(a => (a && Array.isArray(a.transactionsReelles) ? a.transactionsReelles : []).forEach(t => {
+                                const dt = String((t && t.date) || '').slice(0, 10);
+                                if (t && dt >= du && dt <= au && t.categorieId) parCat[t.categorieId] = (parCat[t.categorieId] || 0) + (Number(t.montant) || 0);
+                            }));
+                            const deps = getDepensesCycle(mb.mois, mb.an).filter(x => x && Number(x.montant) > 0 && !x.sourceAssurance);
+                            const vus = new Set(), lignesX = [];
+                            deps.forEach(dep => {
+                                const propre = dep.categorieId && dep.categorieId !== 'cat_irr_depense_exceptionnelle';
+                                const reel = propre && !vus.has(dep.categorieId) ? Math.round(parCat[dep.categorieId] || 0) : 0;
+                                if (propre) vus.add(dep.categorieId);
+                                const prevu = Math.round(Number(dep.montant) || 0);
+                                const a = Number(dep.annee) || mb.an, m = Number(dep.mois), j = Number(dep.jourPrevu) || 0;
+                                const iso = j ? a + '-' + String(m).padStart(2, '0') + '-' + String(Math.min(j, joursDuMoisCal(m, a))).padStart(2, '0') : null;
+                                const seances = iso && iso >= du && iso <= au ? [{ pos: pos(iso), quand: libIso(iso), etat: reel > 0 ? 'paye' : 'prevue' }] : [];
+                                lignesX.push({ cle: 'irr_' + dep.id, nom: String(dep.nom || 'Dépense').trim(), emoji: '⚡', unite: 'cycle', catKey: '__exceptionnel', catId: propre ? dep.categorieId : null,
+                                               du, au, saisi: null, engage: reel, enveloppe: prevu, pct: prevu > 0 ? Math.min(100, Math.round(reel / prevu * 100)) : (reel > 0 ? 100 : 0),
+                                               depasse: reel > prevu + 0.5, seances, alerte: null });
+                                if (reel > prevu + 0.5) alertes.push('🔴 ' + String(dep.nom || '').trim() + ' (dépense exceptionnelle) : ' + reel + ' DH pour ' + prevu + ' prévus — dépassement de ' + (reel - prevu) + ' DH');
+                            });
+                            const autres = Math.round(parCat['cat_irr_depense_exceptionnelle'] || 0);
+                            if (autres > 0) lignesX.push({ cle: 'irr_autres', nom: 'Autres (sans ligne prévue)', emoji: '⚡', unite: 'cycle', catKey: '__exceptionnel', catId: 'cat_irr_depense_exceptionnelle',
+                                                           du, au, saisi: null, engage: autres, enveloppe: 0, pct: 100, depasse: true, seances: [], alerte: null });
+                            if (lignesX.length) {
+                                const budget = lignesX.reduce((x, l) => x + l.enveloppe, 0), engage = lignesX.reduce((x, l) => x + l.engage, 0);
+                                categories.push({ key: '__exceptionnel', label: '⚡ Dépenses exceptionnelles', budget, engage, estime: false,
+                                                  pct: budget > 0 ? Math.min(100, Math.round(engage / budget * 100)) : (engage > 0 ? 100 : 0), pctAttendu: null, depasse: engage > budget, lignes: lignesX });
+                            }
+                        }
                         //  Une seule note pour les postes « toutes les 2 semaines » (au lieu d'une par poste)
                         const nQ = (L.postesCycle || []).filter(p => p.unite === 'quinzaine').length, fois = nSem / 2;
                         const quinzaine = !nQ ? null : '⏱️ ' + nQ + ' poste' + (nQ > 1 ? 's' : '') + ' « toutes les 2 semaines » : ce cycle de ' + J + ' jours en couvre ≈ ' + String(Math.round(fois * 10) / 10).replace('.', ',') + ' fois'
@@ -22132,12 +22166,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         });
                         const mere = (cvs[A.catKey] || {}).categorieId;
                         const parPoste = A.catId && A.catId !== mere;
+                        const exc = A.catKey === '__exceptionnel';   // v37.105 : une dépense exceptionnelle — ses opérations, par sa catégorie
                         const ops = [];
                         Object.values(donneesAnnuelles.value || {}).forEach(a => {
                             (a && Array.isArray(a.transactionsReelles) ? a.transactionsReelles : []).forEach(t => {
                                 const dt = String(t.date || '').slice(0, 10);
-                                if (!t || !dt || dt < A.du || dt > A.au || carte[t.categorieId] !== A.catKey) return;
-                                if (parPoste && t.categorieId !== A.catId) return;
+                                if (!t || !dt || dt < A.du || dt > A.au) return;
+                                if (exc) { if (!A.catId || t.categorieId !== A.catId) return; }
+                                else { if (carte[t.categorieId] !== A.catKey) return; if (parPoste && t.categorieId !== A.catId) return; }
                                 const heure = String(t.datetime || '').slice(11, 16);
                                 ops.push({ t, quand: _libJourFrise(dt) + (heure && heure !== '12:00' ? ' · ' + heure : ''), montant: Number(t.montant) || 0,
                                            compte: ((comptes.value || []).find(c => String(c.id) === String(t.compteId)) || {}).label || 'sans compte',
