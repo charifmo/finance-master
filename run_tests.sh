@@ -95,6 +95,7 @@ suite "Catégorisation automatique : règles → IA → par défaut"   node test
 suite "Dépenses exceptionnelles : une catégorie chacune, le ménage tout seul"  node test_cfo_engine_parity/test_depenses_exceptionnelles.mjs
 suite "Choisir une catégorie en cherchant (sélecteur avec recherche)"  node test_cfo_engine_parity/test_choix_categorie.mjs
 suite "Le compte suit la catégorie, vos choix de compte retenus"  node test_cfo_engine_parity/test_compte_categorie.mjs
+suite "La saisie apprend : habitudes, autocomplétion, montant habituel"  node test_cfo_engine_parity/test_saisie_apprend.mjs
 suite "Banque : calibrage RIB, lecture locale, réconciliation"  node test_cfo_engine_parity/test_banque.mjs
 suite "Banque : vraies captures, téléphone d'abord"  node test_cfo_engine_parity/test_banque_reel.mjs
 suite "Banque : calibrer une fois, le bon solde toujours"  node test_cfo_engine_parity/test_calibrage_rib.mjs
