@@ -21,7 +21,7 @@ cd "$(dirname "$0")"
 #   sinon, pointer CHROMIUM=/chemin/vers/chrome.
 
 #  v37.95 — EN PARALLÈLE : chaque ligne « suite » ci-dessous est déposée dans une liste ; run_parallel.mjs les
-#  exécute par JOBS (défaut : une par cœur), les plus longues d'abord, et affiche les résultats dans l'ordre.
+#  exécute par JOBS (défaut : deux par cœur, 8 au plus — v37.109), les plus longues d'abord, et affiche les résultats dans l'ordre.
 #  Toutes tournent, même après un échec ; chaque échec est nommé à la fin. JOBS=1 = l'ancien déroulé, une par une.
 LISTE=$(mktemp)
 trap 'rm -f "$LISTE"' EXIT
@@ -150,4 +150,8 @@ suite "Santé Master : l'agent Telegram (Médecin-Chef IA) réécrit et publié"
 suite "Santé Master : l'appli, le stockage, l'API du CMO, le webhook Samsung"  node test_cfo_engine_parity/test_sante_appli.mjs
 suite "Sauvegarde hors du VPS (Telegram) et surveillance"  php test_cfo_engine_parity/test_sauvegarde.php
 
-node run_parallel.mjs "$LISTE" "${JOBS:-$(nproc 2>/dev/null || echo 4)}"
+#  v37.109 — DEUX SUITES PAR CŒUR (8 au plus) par défaut : une suite « navigateur » attend beaucoup (Chromium, minuteries de
+#  l'appli) et laisse ses cœurs libres pendant ce temps — mesuré : ≈ 290 s à 4, ≈ 230 s à 8 sur 4 cœurs. JOBS=… pour choisir.
+COEURS=$(nproc 2>/dev/null || echo 4)
+JOBS_DEFAUT=$((COEURS * 2)); [ "$JOBS_DEFAUT" -gt 8 ] && JOBS_DEFAUT=8
+node run_parallel.mjs "$LISTE" "${JOBS:-$JOBS_DEFAUT}"

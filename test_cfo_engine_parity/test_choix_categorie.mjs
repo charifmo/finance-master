@@ -9,6 +9,7 @@
  *     D. « autre… » dans « À vérifier » · E. au téléphone.
  */
 import fs from 'node:fs';
+import { twCompiler } from './tw_cache.mjs';   // v37.109 : Tailwind compilé une fois pour toutes les suites
 import http from 'node:http';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -45,7 +46,7 @@ if (!fs.existsSync(twBin)) { console.log('  ⏭️  partie navigateur ignorée (
 const twTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-choix-'));
 fs.writeFileSync(path.join(twTmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
 fs.writeFileSync(path.join(twTmp, 'cfg.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'index.html')) + '],theme:{extend:{}}};');
-execFileSync(twBin, ['-c', path.join(twTmp, 'cfg.js'), '-i', path.join(twTmp, 'in.css'), '-o', path.join(twTmp, 'out.css'), '--minify'], { stdio: 'ignore' });
+twCompiler(twBin, ['-c', path.join(twTmp, 'cfg.js'), '-i', path.join(twTmp, 'in.css'), '-o', path.join(twTmp, 'out.css'), '--minify'], { stdio: 'ignore' });
 const tw = fs.readFileSync(path.join(twTmp, 'out.css'), 'utf8');
 fs.rmSync(twTmp, { recursive: true, force: true });
 

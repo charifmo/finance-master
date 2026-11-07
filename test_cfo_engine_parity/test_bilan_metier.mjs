@@ -16,6 +16,7 @@
  *     • journal technique, Google Drive et « Restaurer V10 » rangés dans Paramètres.
  */
 import fs from 'node:fs';
+import { twCompiler } from './tw_cache.mjs';   // v37.109 : Tailwind compilé une fois pour toutes les suites
 import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
@@ -41,7 +42,7 @@ if (!pw || !vueJs || !chartJs || !chromium || !fs.existsSync(twBin)) { console.l
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-bilan-'));
 fs.writeFileSync(path.join(tmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
 fs.writeFileSync(path.join(tmp, 'cfg.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'index.html')) + '],theme:{extend:{}}};');
-execFileSync(twBin, ['-c', path.join(tmp, 'cfg.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'out.css'), '--minify'], { stdio: 'ignore' });
+twCompiler(twBin, ['-c', path.join(tmp, 'cfg.js'), '-i', path.join(tmp, 'in.css'), '-o', path.join(tmp, 'out.css'), '--minify'], { stdio: 'ignore' });
 const tw = fs.readFileSync(path.join(tmp, 'out.css'), 'utf8');
 
 const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
