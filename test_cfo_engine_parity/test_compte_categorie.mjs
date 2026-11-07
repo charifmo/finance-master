@@ -95,6 +95,8 @@ page.on('dialog', d => d.accept());
 await page.route('**/webhook/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ output: '{"id": null, "confiance": "basse", "raison": "test"}' }) }));
 await page.goto(`http://127.0.0.1:${srv.address().port}/finance/`, { waitUntil: 'load' });
 await page.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__ && a.__vue_app__._instance && a.__vue_app__._instance.setupState.moisBudgetaire; }, null, { timeout: 30000 });
+//  les données du décor sont arrivées (l'appli démarre d'abord sur un état vide : sous charge, le serveur répond après)
+await page.waitForFunction((ST) => { const st = eval(ST); return (st.comptes || []).length === 3 && (st.donneesAnnuelles[2026]?.transactionsReelles || []).some(t => t.id === 701); }, ST, { timeout: 30000 });
 
 
 const ouvrirOp = (id) => page.evaluate(({ ST, id }) => { const st = eval(ST); st.journal.ouvert = null; st.journal.brouillon = null; st.ouvrirOperation(id); }, { ST, id });

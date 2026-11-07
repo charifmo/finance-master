@@ -146,7 +146,8 @@ try {
         const fl = await flottants(page);
         const noms = fl.map(x => x.t).sort().join(' ');
         const chev = []; fl.forEach((a, i) => fl.slice(i + 1).forEach(b => { if (a.l < b.r && b.l < a.r && a.h < b.b && b.h < a.b) chev.push(a.t + '×' + b.t); }));
-        v('B. téléphone 390 px : trois boutons flottants exactement — 🧠 📑 ➕', fl.length === 3 && ['🧠', '📑', '➕'].every(t => fl.some(x => x.t === t)), noms);
+        //  v37.107 : sur l'écran Saisie, 📈 (la frise du cycle) rejoint la rangée — demandé : « un raccourci flottant lors de la saisie pour aller vers la frise »
+        v('B. téléphone 390 px, écran Saisie : quatre boutons flottants exactement — 📈 🧠 📑 ➕', fl.length === 4 && ['📈', '🧠', '📑', '➕'].every(t => fl.some(x => x.t === t)), noms);
         const ys = fl.map(x => x.cy);
         v('  → sur UNE rangée (mêmes hauteurs), aucun ne chevauche l\'autre', Math.max(...ys) - Math.min(...ys) <= 6 && chev.length === 0, JSON.stringify([ys, chev]));
         const touch = await page.evaluate((fl) => fl.map(x => (document.elementFromPoint(x.cx, x.cy) || {}).textContent.trim().slice(0, 2)), fl);
@@ -174,13 +175,28 @@ try {
         const pendant = (await flottants(page)).map(x => x.t).filter(t => ['🧠', '📑'].includes(t));
         v('D. 🧠 ouvre le CFO, 📑 le relevé, ➕ la saisie rapide', cfo === true && rel === true && sai === true, JSON.stringify([cfo, rel, sai]));
         v('  → la saisie rapide ouverte, 🧠 et 📑 s\'effacent', pendant.length === 0, JSON.stringify(pendant));
-        await page.evaluate((ST) => eval(ST).closeSaisieQuickModal(), ST);
+        await page.click('[data-saisie-rapide-frise]'); await attendre(300);
+        const depuisRapide = await page.evaluate((ST) => { const st = eval(ST); const x = st.friseOuverte && st.showSaisieQuickModal; st.friseOuverte = false; return x; }, ST);
+        v('  → dans la saisie rapide, « 📈 Frise » ouvre la frise par-dessus (la saisie reste ouverte dessous)', depuisRapide === true);
+        await page.evaluate((ST) => eval(ST).closeSaisieQuickModal(), ST); await attendre();
+        await page.click('[data-flottant="frise"]'); await attendre(400);
+        const frise = await page.evaluate((ST) => eval(ST).friseOuverte, ST);
+        const pendantFrise = !!(await page.$('[data-flottant="frise"]'));
+        await page.evaluate((ST) => { eval(ST).friseOuverte = false; }, ST); await attendre();
+        v('  → 📈 ouvre la frise du cycle (et s\'efface tant qu\'elle est ouverte)', frise === true && !pendantFrise, JSON.stringify([frise, pendantFrise]));
+        await page.evaluate(async (ST) => { const st = eval(ST); st.activeTab = 'dashboard'; await new Promise(r => setTimeout(r, 300)); }, ST);
+        const ailleurs = (await flottants(page)).map(x => x.t);
+        await page.evaluate(async (ST) => { const st = eval(ST); st.activeTab = 'saisie'; await new Promise(r => setTimeout(r, 300)); }, ST);
+        v('  → hors de l\'écran Saisie : les trois boutons habituels, sans 📈', ailleurs.length === 3 && !ailleurs.includes('📈'), JSON.stringify(ailleurs));
     });
     await section('E', async () => {
         const pc = await ouvrirPage({ viewport: { width: 1300, height: 900 } });
         const fl = (await flottants(pc)).map(x => x.t);
         const m = await pc.evaluate((ST) => { const st = eval(ST); const b = document.querySelector('button.merlin-wand-btn'); if (!b) return null; b.click(); const x = st.merlinActive; if (x) st.toggleMerlin(); return x; }, ST);
         v('E. ordinateur : aucun 🪄 ni 💾 flottant ; Merlin au pied de la barre latérale, qui s\'active', !fl.includes('🪄') && !fl.includes('💾') && m === true, JSON.stringify([fl, m]));
+        await pc.evaluate(async (ST) => { const st = eval(ST); st.activeTab = 'saisie'; await new Promise(r => setTimeout(r, 300)); }, ST);
+        await pc.click('[data-flottant-frise-pc]'); await new Promise(r => setTimeout(r, 300));
+        v('  → ordinateur, écran Saisie : la pastille « 📈 Frise du cycle » ouvre la frise', await pc.evaluate((ST) => eval(ST).friseOuverte, ST) === true);
     });
     await section('F', async () => {
         envois.length = 0;

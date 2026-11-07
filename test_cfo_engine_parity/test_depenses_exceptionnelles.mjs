@@ -14,6 +14,8 @@
  */
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +44,17 @@ if (!pw || !vueJs || !fs.existsSync(chartJs) || !fs.existsSync(chromium)) {
     process.exit(ko === 0 ? 0 : 1);
 }
 
+//  v37.107 : le vrai CSS (Tailwind compilé depuis index.html) — pour vérifier ce qui passe devant quoi dans la frise
+const twBin = path.join(RACINE, 'node_modules/.bin/tailwindcss');
+let tw = '';
+if (fs.existsSync(twBin)) {
+    const twTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-exc-'));
+    fs.writeFileSync(path.join(twTmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
+    fs.writeFileSync(path.join(twTmp, 'cfg.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'index.html')) + '],theme:{extend:{}}};');
+    execFileSync(twBin, ['-c', path.join(twTmp, 'cfg.js'), '-i', path.join(twTmp, 'in.css'), '-o', path.join(twTmp, 'out.css'), '--minify'], { stdio: 'ignore' });
+    tw = fs.readFileSync(path.join(twTmp, 'out.css'), 'utf8');
+    fs.rmSync(twTmp, { recursive: true, force: true });
+}
 const P = 'cat_irr_depense_exceptionnelle';
 const fixture = () => {
     const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
@@ -83,7 +96,7 @@ const fixture = () => {
 const page0 = html
     .replace('<script src="https://unpkg.com/vue@3/dist/vue.global.js"', '<script src="/vue.js"')
     .replace('<script src="https://cdn.jsdelivr.net/npm/chart.js"', '<script src="/chart.js"')
-    .replace(/<script src="https:\/\/cdn\.tailwindcss\.com"[^>]*><\/script>/, '')
+    .replace(/<script src="https:\/\/cdn\.tailwindcss\.com"[^>]*><\/script>/, tw ? '<link rel="stylesheet" href="/tailwind.css">' : '')
     .replace(/<script[^>]*src="https:\/\/[^"]*"[^>]*><\/script>/g, '');
 const sauvegardes = [];
 const srv = http.createServer((req, res) => {
@@ -95,6 +108,7 @@ const srv = http.createServer((req, res) => {
     }
     if (p === '/finance/') return s(200, page0, 'text/html; charset=utf-8');
     if (p === '/vue.js') return s(200, fs.readFileSync(vueJs), 'text/javascript');
+    if (p === '/tailwind.css') return s(200, tw, 'text/css');
     if (p === '/chart.js') return s(200, fs.readFileSync(chartJs), 'text/javascript');
     if (p === '/finance/finance_data.json') return s(200, JSON.stringify(fixture()));
     return s(200, '{"status":"ok"}');
@@ -109,6 +123,8 @@ page.on('dialog', d => d.accept());
 await page.route('**/webhook/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ output: '{"id": null, "confiance": "basse", "raison": "test"}' }) }));
 await page.goto(`http://127.0.0.1:${srv.address().port}/finance/`, { waitUntil: 'load' });
 await page.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__ && a.__vue_app__._instance && a.__vue_app__._instance.setupState.moisBudgetaire; }, null, { timeout: 30000 });
+//  les données du décor sont arrivées (l'appli démarre d'abord sur un état vide : sous charge, le serveur répond après)
+await page.waitForFunction((ST) => { const st = eval(ST); return (st.donneesAnnuelles[2026]?.transactionsReelles || []).some(t => t.id === 901) && (st.donneesAnnuelles[2027]?.depensesIrregulieres || []).some(d => d.id === 806); }, ST, { timeout: 30000 });
 
 const lire = () => page.evaluate((ST) => {
     const st = eval(ST), D = st.donneesAnnuelles;
@@ -210,7 +226,7 @@ try {
         //  v37.105 — « Il n'y a pas les dépenses exceptionnelles ici ! » : la frise du cycle (27 sept. → 26 oct., horloge du test au 13 oct.)
         await page.evaluate(async (ST) => {
             const st = eval(ST), d = st.donneesAnnuelles[2026];
-            d.depensesIrregulieres.push({ id: 810, mois: 10, annee: 2026, nom: 'Cadeau mariage', montant: 500, jourPrevu: 15, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' },
+            d.depensesIrregulieres.push({ id: 810, mois: 10, annee: 2026, nom: 'Cadeau mariage', montant: 500, jourPrevu: 12, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' },
                                         { id: 811, mois: 10, annee: 2026, nom: 'Révision chaudière', montant: 300, jourPrevu: 20, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' },
                                         { id: 812, mois: 10, annee: 2026, nom: 'Remboursement mutuelle', montant: -400, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_revenu_exceptionnel' });
             st.rangerDepensesExceptionnelles();
@@ -222,17 +238,54 @@ try {
         const L = (f.exc || { lignes: [] }).lignes, cad = L.find(l => l.nom === 'Cadeau mariage'), rev = L.find(l => l.nom === 'Révision chaudière'), aut = L.find(l => /Autres/.test(l.nom));
         v('K. la frise du cycle a son bloc « ⚡ Dépenses exceptionnelles » : Cadeau mariage 650 / 500 (dépassé), Révision chaudière 0 / 300, Autres 40',
           !!f.exc && cad && cad.engage === 650 && cad.enveloppe === 500 && cad.depasse && rev && rev.engage === 0 && rev.enveloppe === 300 && aut && aut.engage === 40 && !L.some(l => /mutuelle/i.test(l.nom)), JSON.stringify(f.exc));
-        v('  → un repère à la date prévue (15 oct.), le total du bloc 690 / 800, et le dépassement dans les alertes de la frise',
-          cad.seances.length === 1 && cad.seances[0].quand === '15 oct.' && cad.seances[0].etat === 'paye' && f.exc.engage === 690 && f.exc.budget === 800
+        v('  → un repère à la date prévue (12 oct., le milieu du cycle), le total du bloc 690 / 800, et le dépassement dans les alertes de la frise',
+          cad.seances.length === 1 && cad.seances[0].quand === '12 oct.' && cad.seances[0].etat === 'paye' && f.exc.engage === 690 && f.exc.budget === 800
           && f.alertes.some(a => /Cadeau mariage \(dépense exceptionnelle\) : 650 DH pour 500 prévus — dépassement de 150 DH/.test(a)), JSON.stringify([cad.seances, f.exc.engage, f.exc.budget, f.alertes]));
         await page.waitForSelector('[data-frise-categorie][data-cat="__exceptionnel"]', { state: 'visible', timeout: 10000 });
         const bloc = (await page.textContent('[data-frise-categorie][data-cat="__exceptionnel"]')).replace(/\s+/g, ' ');
         v('  → à l’écran : « ⚡ Dépenses exceptionnelles », « Cadeau mariage / cycle », « 650 / 500 DH sur le cycle »', /⚡ Dépenses exceptionnelles/.test(bloc) && /Cadeau mariage \/ cycle/.test(bloc) && /650 \/ 500 DH sur le cycle/.test(bloc), bloc.slice(0, 300));
+        if (tw) {
+            const cache = await page.evaluate(() => {
+                const l = document.querySelector('[data-frise-ligne][data-poste="irr_810"]'); l.scrollIntoView({ block: 'center' });
+                const ch = l.querySelector('[data-frise-chiffres]'), mk = l.querySelector('[data-frise-seance]');
+                const r = ch.getBoundingClientRect(), m = mk.getBoundingClientRect(), cy = (r.top + r.bottom) / 2;
+                const chevauche = m.left < r.right && m.right > r.left;
+                const points = Array.from({ length: 21 }, (_, i) => r.left + 2 + (r.width - 4) * i / 20);
+                const caches = points.filter(x => { const e = document.elementFromPoint(x, cy); return !e || !e.closest('[data-frise-chiffres]'); }).length;
+                return { chevauche, caches, opacite: getComputedStyle(mk).opacity };
+            });
+            v('  → le repère du 12 oct. tombe SUR « 650 / 500 DH sur le cycle » : les chiffres restent devant (aucun point caché), repère translucide',
+              cache.chevauche && cache.caches === 0 && Number(cache.opacite) < 1, JSON.stringify(cache));
+        }
         await page.click('[data-frise-categorie][data-cat="__exceptionnel"] [data-frise-ligne][data-poste="irr_810"] [data-frise-enveloppe]');
         await page.waitForSelector('[data-frise-apercu]', { state: 'visible', timeout: 5000 });
         const ap = (await page.textContent('[data-frise-apercu]')).replace(/\s+/g, ' ');
         v('  → la toucher montre l’opération derrière (« cadeau mariage », 650 DH), comme les autres lignes', /cadeau mariage/i.test(ap) && /650/.test(ap) && !/imprévu/.test(ap), ap.slice(0, 300));
         await page.evaluate((ST) => { const st = eval(ST); st.fermerApercuFrise(); st.friseOuverte = false; }, ST);
+    });
+    await section('L', async () => {
+        //  v37.107 — « C'est déjà en saisie et toujours attendu » : une opération rangée dans la catégorie d'une dépense exceptionnelle
+        //  la règle (Relevé, projection, Pilotage). Cycle du 13 oct. : 27 sept. → 26 oct.
+        const lire = () => page.evaluate(async (ST) => { const st = eval(ST); st.calculationTick++; await Vue.nextTick();
+            const D = st.donneesAnnuelles[2026], dep = (id) => D.depensesIrregulieres.find(x => x.id === id);
+            return { payeCadeau: st.isItemPaid(dep(810), 500), payeChaud: st.isItemPaid(dep(811), 300), regleChaud: st.getPaidAmount(dep(811), 300),
+                     lignes: st.atterrissageCycle.comptes.flatMap(c => (c.lignes || []).map(l => [l.libelle, Math.round(l.montant)])).filter(([x]) => /Cadeau|Révision|Abonnements/i.test(x)) }; }, ST);
+        let r = await lire();
+        v('L. « Cadeau mariage » déjà saisi (650 DH dans sa catégorie) : réglé, le Relevé ne l\u2019attend plus ; « Révision chaudière » (rien de saisi) reste attendue en entier',
+          r.payeCadeau === true && r.payeChaud === false && !r.lignes.some(([x]) => /Cadeau/.test(x)) && r.lignes.some(([x, m]) => /Révision chaudière/.test(x) && m === 300), JSON.stringify(r));
+        await page.evaluate((ST) => { const st = eval(ST); st.donneesAnnuelles[2026].transactionsReelles.push({ id: 9103, date: '2026-10-10', datetime: '2026-10-10T09:00', mois: 10, libelle: 'acompte chaudière', montant: 120, categorieId: 'cat_irr_l_revision_chaudiere', compteId: 1, source: 'manuel' }); }, ST);
+        r = await lire();
+        v('  → un acompte de 120 DH saisi pour la chaudière : 120 réglés, le Relevé n\u2019attend plus que les 180 qui restent',
+          r.regleChaud === 120 && r.lignes.some(([x, m]) => /Révision chaudière/.test(x) && m === 180), JSON.stringify(r));
+        //  et une charge variable MENSUELLE sans ligne de détail, réglée par sa propre catégorie
+        const cv = await page.evaluate(async (ST) => { const st = eval(ST), D = st.donneesAnnuelles[2026];
+            D.chargesVariables.abonnements = { label: 'Abonnements', valeur: 150, periode: 'mois', paye: false, montantPaye: 0, exceptions: [], categorieId: 'cat_cv_abonnements' };
+            st.calculationTick++; await Vue.nextTick();
+            const avant = st.isItemPaid(D.chargesVariables.abonnements, 150);
+            D.transactionsReelles.push({ id: 9104, date: '2026-10-05', datetime: '2026-10-05T09:00', mois: 10, libelle: 'netflix spotify', montant: 150, categorieId: 'cat_cv_abonnements', compteId: 1, source: 'manuel' });
+            st.calculationTick++; await Vue.nextTick();
+            return { avant, apres: st.isItemPaid(D.chargesVariables.abonnements, 150) }; }, ST);
+        v('  → une charge variable mensuelle SANS détail (« Abonnements ») : réglée dès qu\u2019une opération de sa catégorie est saisie', cv.avant === false && cv.apres === true, JSON.stringify(cv));
         v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
     });
 } catch (e) {

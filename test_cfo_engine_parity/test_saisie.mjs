@@ -217,8 +217,10 @@ try {
         await page.evaluate(async (ST) => { eval(ST).openSaisieQuickModal(); await new Promise(r => setTimeout(r, 300)); }, ST);
         const g = await page.evaluate(() => { const m = document.querySelector('.fixed.inset-0.z-\\[80\\]');
             const vis = [...m.querySelectorAll('input, select, button')].filter(e => e.offsetParent);
-            return { focus: document.activeElement && document.activeElement.hasAttribute('data-saisie-rapide-champ'), n: vis.length, premier: (vis[1] && vis[1].textContent || '').trim() }; });
-        v('G. la saisie rapide (➕) : le clavier s\'ouvre tout de suite ; 4 éléments (✕, import, le champ, Valider) au lieu de 9', g.focus && g.n === 4 && /Importer mes captures/.test(g.premier), JSON.stringify(g));
+            return { focus: document.activeElement && document.activeElement.hasAttribute('data-saisie-rapide-champ'), n: vis.length, textes: vis.map(e => (e.textContent || e.placeholder || '').trim()) }; });
+        //  v37.107 : « 📈 Frise » rejoint l'en-tête (demandé : un raccourci vers la frise pendant la saisie) — 5 éléments, toujours loin des 9 d'avant
+        v('G. la saisie rapide (➕) : le clavier s\'ouvre tout de suite ; 5 éléments (📈 Frise, ✕, import, le champ, Valider) au lieu de 9',
+          g.focus && g.n === 5 && g.textes.some(t => /Importer mes captures/.test(t)) && g.textes.some(t => /📈/.test(t)) && g.textes.some(t => /VALIDER|Valider/i.test(t)), JSON.stringify(g));
         await page.fill('[data-saisie-rapide-champ]', '45 zara'); await attendre();
         const et = await page.textContent('[data-saisie-rapide-etiquette]');
         v('  → l\'étiquette : 💵 45 DH, le compte, « Maintenant », « ⚙️ Ajuster »', /45\sDH/.test(et) && /Compte Courant/.test(et) && /Maintenant/.test(et) && /Ajuster/.test(et), et.replace(/\s+/g, ' '));
