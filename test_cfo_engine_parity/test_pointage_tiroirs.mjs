@@ -283,8 +283,10 @@ try {
     await page.evaluate(() => { localStorage.removeItem('finance_ui_v1'); });
     await page.reload({ waitUntil: 'load' }); await pret(page); await page.waitForTimeout(600); await auPilotage(page);
     await page.evaluate(async (ST) => { const st = eval(ST); const deps = st.donneesAnnuelles[2026].depensesIrregulieres;
-        [704, 702].forEach(id => { const d = deps.find(x => x.id === id); st.toggleItemPaid(d, d.montant); });
-        await new Promise(r => setTimeout(r, 650)); }, ST);
+        [704, 702].forEach(id => { const d = deps.find(x => x.id === id); st.toggleItemPaid(d, d.montant); }); }, ST);
+    //  attente sur l'ÉCRAN (plus 650 ms fixes, trop courtes sous charge) : les deux lignes pointées ont quitté le tiroir des exceptionnels.
+    //  Si elles ne partaient jamais, l'attente expire et c'est le contrôle plus bas qui le dit, avec les valeurs.
+    await page.waitForFunction((ids) => { const d = document.querySelector('#pilotage-inbox [data-tiroir="exceptionnel"]'); return !d || ![...d.querySelectorAll('[data-tache-nom]')].some(e => /TOIT/.test(e.textContent)); }, null, { timeout: 10000 }).catch(() => {});
     f = await file(page);
     v('I. un tiroir par nature présente, dans l\'ordre : Entrées, Fixes, Épargne, Exceptionnels',
       JSON.stringify(f.tiroirs.map(x => x.cle)) === '["entrees","fixe","epargne","exceptionnel"]'
