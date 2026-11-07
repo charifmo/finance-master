@@ -106,6 +106,11 @@ await new Promise(r => srv.listen(0, '127.0.0.1', r));
 const port = srv.address().port;
 const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
+//  v37.104 — la catégorie se choisit dans un sélecteur avec recherche (plus une liste déroulante) : on l'ouvre et on clique, comme à la main
+const choisirCategorie = async (page, sel, id) => {
+    if (!(await page.$('[data-cc-panneau]'))) await page.click(`${sel} [data-cc-ouvrir]`);
+    await page.click(`[data-cc-panneau] [data-cc-option][data-id="${id}"]`);
+};
 
 //  L'IA simulée : la réponse dépend du libellé ; on mesure la simultanéité
 const ia = { requetes: [], enVol: 0, maxEnVol: 0 };
@@ -289,11 +294,13 @@ try {
           m2.categorieId === await idDe('cafe Resto Wknd') && m2.categorieSource === 'règle' && !m2.aVerifier && !(await ligne(m2.id)) && !(await page.$('[data-appliquer-sures]')), JSON.stringify(m2));
         const k = await tx('kfc');
         await page.click(`[data-journal-cat][data-tx="${k.id}"]`); await page.waitForTimeout(150);
-        await page.selectOption('[data-journal-cat-select]', await idDe('barber')); await page.waitForTimeout(200);
+        await choisirCategorie(page, '[data-journal-cat-select]', await idDe('barber')); await page.waitForTimeout(200);
         const k2 = await tx('kfc');
         v('  → journal : un clic sur la catégorie, une autre choisie → rangée (« vous »), le menu se referme',
           k2.categorieId === await idDe('barber') && k2.categorieSource === 'vous' && !(await page.$('[data-journal-cat-select]')), JSON.stringify(k2));
-        const autre = await page.evaluate(() => [...(document.querySelector('[data-ranger-autre]')?.options || [])].map(o => o.textContent.trim()));
+        await page.click('[data-ranger-autre] [data-cc-ouvrir]');
+        const autre = await page.$$eval('[data-cc-panneau] [data-cc-option] [data-cc-libelle]', l => l.map(o => o.textContent.trim()));
+        await page.keyboard.press('Escape');
         v('  → « autre… » : vos catégories vivantes, lignes sous leur mère — sans revenus, ni « Marjane Lait »',
           autre.includes('· samak') && autre.includes('Alimentation (Tqdya)') && !autre.includes('· Marjane Lait') && !autre.includes('Marjane Lait') && !autre.some(x => /Salaire|Revenu exceptionnel|Non catégorisé/.test(x)), JSON.stringify(autre.slice(0, 8)));
     });

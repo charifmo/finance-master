@@ -87,6 +87,11 @@ await new Promise(r => srv.listen(0, '127.0.0.1', r));
 const port = srv.address().port;
 const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
+//  v37.104 — la catégorie se choisit dans un sélecteur avec recherche (plus une liste déroulante) : on l'ouvre et on clique, comme à la main
+const choisirCategorie = async (page, sel, id) => {
+    if (!(await page.$('[data-cc-panneau]'))) await page.click(`${sel} [data-cc-ouvrir]`);
+    await page.click(`[data-cc-panneau] [data-cc-option][data-id="${id}"]`);
+};
 const erreurs = [];
 const page = await browser.newPage({ viewport: { width: 1300, height: 1000 } });
 await page.clock.setFixedTime(new Date(2026, 9, 19, 9, 30, 0));
@@ -107,7 +112,7 @@ const poser = (liste) => page.evaluate(async ({ ST, liste }) => { const st = eva
     st.calculationTick++; st.journal.periode = 'tout'; st.journal.vue = 'date'; st.activeTab = 'saisie'; await new Promise(r => setTimeout(r, 400)); }, { ST, liste });
 const enregistrer = async (id, catId) => {
     await page.click(`[data-journal-ligne][data-tx="${id}"] [data-journal-ouvrir]`); await attendre();
-    if (catId) await page.selectOption('[data-journal-edit-cat]', catId);
+    if (catId) await choisirCategorie(page, '[data-journal-edit-cat]', catId);
     await page.click('[data-journal-enregistrer]'); await attendre(350);
 };
 

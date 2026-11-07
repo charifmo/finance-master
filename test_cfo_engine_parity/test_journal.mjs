@@ -111,6 +111,11 @@ await new Promise(r => srv.listen(0, '127.0.0.1', r));
 const port = srv.address().port;
 const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
+//  v37.104 — la catégorie se choisit dans un sélecteur avec recherche (plus une liste déroulante) : on l'ouvre et on clique, comme à la main
+const choisirCategorie = async (page, sel, id) => {
+    if (!(await page.$('[data-cc-panneau]'))) await page.click(`${sel} [data-cc-ouvrir]`);
+    await page.click(`[data-cc-panneau] [data-cc-option][data-id="${id}"]`);
+};
 const erreurs = [], externes = [];
 const ouvrirPage = async (opts) => {
     const ctx = await browser.newContext(opts);
@@ -183,10 +188,10 @@ try {
         v('C. chercher « marjane » : les 3 tickets, archives comprises (dépliées par la recherche)', JSON.stringify(r) === '["9001","9002","9005"]', JSON.stringify(r));
         await page.fill('[data-journal-recherche]', '96'); await attendre();
         v('  → chercher un montant (« 96 ») le trouve', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('[data-journal-ligne]')].map(e => e.dataset.tx))) === '["9002"]');
-        await page.fill('[data-journal-recherche]', ''); await page.selectOption('[data-journal-filtre-cat]', MERE); await attendre();
+        await page.fill('[data-journal-recherche]', ''); await choisirCategorie(page, '[data-journal-filtre-cat]', MERE); await attendre();
         const f = await J('st.journalFiltrees.map(x => x.t.id)');
         v('  → filtrer « Alimentation » (une famille) prend ses lignes (les 3 Marjane) et ce qui est rangé sur elle (l\'objet bizarre, rangé par défaut)', JSON.stringify(f) === '[9001,9002,9007,9005]', JSON.stringify(f));
-        await page.selectOption('[data-journal-filtre-cat]', ''); await page.selectOption('[data-journal-filtre-compte]', ''); await page.check('[data-journal-filtre-verifier]'); await attendre();
+        await choisirCategorie(page, '[data-journal-filtre-cat]', ''); await page.selectOption('[data-journal-filtre-compte]', ''); await page.check('[data-journal-filtre-verifier]'); await attendre();
         v('  → « à vérifier » seul : l\'objet bizarre', JSON.stringify(await J('st.journalFiltrees.map(x => x.t.id)')) === '[9007]');
         await page.click('[data-journal-effacer]'); await attendre();
         v('  → « effacer les filtres » : tout revient', (await J('st.journalFiltrees.length')) === 8);
@@ -205,7 +210,7 @@ try {
           lig.length === 2 && /^Marjane2 × · moy\. 138 DH · dernier 14\/10−276 DHMarjane ×2$/.test(lig[0]) && /\(sans ligne\)/.test(lig[1]), JSON.stringify(lig));
         await page.click('[data-journal-famille][data-cat="cat_cv_alimentation"] [data-journal-voir-cat]'); await attendre();
         v('  → un clic sur la ligne : retour à la vue par date, filtrée sur elle', (await J('[st.journal.vue, st.journal.cat, st.journalFiltrees.length]')).join() === 'date,' + MARJ + ',2');
-        await page.selectOption('[data-journal-filtre-cat]', ''); await attendre();
+        await choisirCategorie(page, '[data-journal-filtre-cat]', ''); await attendre();
     });
     await section('E', async () => {
         await page.click('[data-journal-ligne][data-tx="9002"] [data-journal-ouvrir]'); await attendre();
@@ -220,7 +225,7 @@ try {
           t.libelle === 'Marjane Ménara' && t.montant === 106.5 && t.compteId === null && t.note === 'Samedi soir : panier +40 %, y aller en semaine' && t.lecon === true, JSON.stringify(t));
         v('  → la note s\'affiche sous l\'opération (💡)', /💡 Samedi soir/.test(await page.textContent('[data-journal-ligne][data-tx="9002"]')));
         await page.click('[data-journal-ligne][data-tx="9007"] [data-journal-ouvrir]'); await attendre();
-        await page.selectOption('[data-journal-edit-cat]', 'cat_cv_sorties'); await page.click('[data-journal-enregistrer]'); await attendre();
+        await choisirCategorie(page, '[data-journal-edit-cat]', 'cat_cv_sorties'); await page.click('[data-journal-enregistrer]'); await attendre();
         const t7 = await tx(9007);
         v('  → changer la catégorie : rangée « vous », plus « à vérifier »', t7.categorieId === 'cat_cv_sorties' && t7.categorieSource === 'vous' && !t7.aVerifier, JSON.stringify(t7));
         await page.click('[data-journal-ligne][data-tx="9003"] [data-journal-ouvrir]'); await attendre();
