@@ -608,7 +608,9 @@ z.close()`, src, zip]);
         items[0].detail = '2 œufs\n50 g de pain d’orge'; items[0].repas = true;
         fs.writeFileSync(DATA, JSON.stringify({ profil: { nom: 'TESTEUR', sexe: 'H', naissance: '1980-01-01', pas_objectif: 10000 }, objectifs: { poids_kg: 95 },
             poids: [{ date: ici(-45), kg: 113.2, source: 'saisie' }, { date: ici(-12), kg: 110.7, source: 'samsung' }], journal, plans: { protocole: { titre: 'Protocole long', items } },
-            sync_auto: { derniere: '2020-01-01T00:00:00Z', source: 'HC Webhook', jours: 1, detail_pas: { date: ici(0), retenu: 7300, sources: { montre: 6100, 'téléphone': 4200 } } } }));
+            sync_auto: { derniere: '2020-01-01T00:00:00Z', source: 'HC Webhook', jours: 1, detail_pas: { date: ici(0), retenu: 7300, sources: { montre: 6100, 'téléphone': 4200 } },
+                //  v1.24 — relevé du serveur : seuls les pas d'Android arrivent (Samsung Health n'écrit pas), ni FC ni sommeil
+                vus: { steps: { d: new Date().toISOString(), s: { 'téléphone': new Date().toISOString(), 'Samsung Health': '2020-01-01T00:00:00Z' } }, active_calories: { d: new Date().toISOString(), s: { 'téléphone': new Date().toISOString() } } } } }));
         const pr = await ouvrir();
         await pr.click('[data-onglet="pilotage"]'); await pr.waitForTimeout(400);
         const pos = await pr.evaluate(() => ({ kpi: document.querySelector('[data-kpis]').getBoundingClientRect().top, courbes: document.querySelector('[data-courbes]').getBoundingClientRect().top, plan: document.querySelector('[data-ma-journee]').getBoundingClientRect().top,
@@ -653,6 +655,14 @@ z.close()`, src, zip]);
           && fr.regles.some(r => /Coût/.test(r.texte) && r.section === 'Rangé hors des cases') && fr.lecons_plan[0].bucket === 'regle' && !(await pr.$('[data-hors-actions]')), [avantRangement, fr.lecons_plan]);
         await pr.evaluate((ST) => { eval(ST).onglet = 'pilotage'; }, ST); await pr.waitForTimeout(100);
         v('  → la synchro du téléphone : état visible en tête (ancienne → signalée)', /Synchro/.test(await pr.textContent('[data-statut-synchro]')) && /rose/.test(await pr.getAttribute('[data-statut-synchro]', 'class')));
+        const diag = {}; for (const id of ['hc_samsung', 'hc_types', 'hc_veille']) diag[id] = (await pr.$(`[data-manque="${id}"]`)) ? (await pr.textContent(`[data-manque="${id}"]`)).replace(/\s+/g, ' ') : null;
+        v('  → v1.24 diagnostic de la synchro : pas venus du seul téléphone (Samsung Health vu il y a plus de 48 h ne compte pas), FC et sommeil jamais reçus, appli endormie',
+          /seulement de téléphone/.test(diag.hc_samsung || '') && /Samsung Health n’écrit pas/.test(diag.hc_samsung || '') && /fréquence cardiaque, sommeil/.test(diag.hc_types || '') && /en veille/.test(diag.hc_veille || ''), diag);
+        await pr.click('[data-manque="hc_samsung"] button');
+        await pr.waitForSelector('[data-diagnostic-synchro]', { state: 'visible' });
+        const diagSamsung = await pr.$$eval('[data-diagnostic-synchro] [data-diag]', l => l.map(e => e.dataset.diag));
+        v('  → « Comment régler » ouvre la synchro (onglet Samsung & poids) : le même diagnostic et les réglages (batterie non restreinte)',
+          JSON.stringify(diagSamsung) === JSON.stringify(['hc_samsung', 'hc_types', 'hc_veille']) && /Non restreinte/.test(await pr.textContent('[data-diagnostic-synchro]')) && await pr.evaluate((ST) => eval(ST).onglet === 'poids', ST), diagSamsung);
         await pr.close();
     });
     await section('S', async () => {

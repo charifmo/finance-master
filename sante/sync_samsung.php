@@ -26,6 +26,8 @@ if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, '
 
 //  v1.12 — le bouton « Test » de HC Webhook envoie de FAUSSES données de démonstration (« test »: true) : on confirme la
 //  connexion (jeton et mot de passe sont bons) sans rien écrire dans le journal
+//  v1.24 — résumé de chaque envoi gardé à côté des sauvegardes (diagnostic : « php sante/hc_diagnostic.php » sur le serveur)
+if (empty($p['test']) && empty($p['metadata']['test'])) { $dSauve = dirname(sante_fichier()) . '/backups'; if (!is_dir($dSauve)) @mkdir($dSauve, 0775, true); sante_hc_noter_envoi($p, $dSauve); }
 if (sante_hc_est_format_b($p)) $p = sante_hc_convertir_b($p);   // v1.15 : l'appli installée envoie metadata / data
 if (sante_hc_est_demo($p)) {
     echo json_encode(['ok' => true, 'test' => true, 'message' => 'Connexion OK : Santé Master a bien reçu le test (données de démonstration, rien n’est enregistré).'], JSON_UNESCAPED_UNICODE);
@@ -50,7 +52,7 @@ if (sante_hc_est_payload($p)) {
         $refus[] = ($call['args']['date'] ?? '?') . ' : ' . implode(', ', $raisons) . ' ' . json_encode($call['args'], JSON_UNESCAPED_UNICODE);
     }
     if ($refus) error_log('[sante_sync] jours refusés : ' . implode(' | ', $refus));
-    $courant['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => $appliques, 'recu' => $r['recu'], 'sources' => $r['sources']] + ($r['detail_pas'] ? ['detail_pas' => $r['detail_pas']] : []);
+    $courant['sync_auto'] = ['derniere' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'HC Webhook ' . mb_substr((string)($p['app_version'] ?? ''), 0, 20), 'jours' => $appliques, 'recu' => $r['recu'], 'sources' => $r['sources'], 'vus' => sante_hc_vus_fusionner((array)($etat['sync_auto']['vus'] ?? []), (array)($p['_vus'] ?? []), gmdate('Y-m-d\TH:i:s\Z'))] + ($r['detail_pas'] ? ['detail_pas' => $r['detail_pas']] : []);
     if ($refus) $courant['sync_auto']['erreur'] = mb_substr(implode(' ; ', $refus), 0, 400);
     $w = sante_ecrire($courant);
     $tout_refuse = $r['calls'] && !$appliques;

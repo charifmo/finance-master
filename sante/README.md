@@ -41,6 +41,21 @@ initial (profil, bilans, protocole) se charge par **« 📂 Importer mon dossier
 - **🧹 Tout effacer** : les analyses seules, ou toute l'appli ; confirmé en tapant `EFFACER`. Le serveur garde ses
   30 sauvegardes tournantes.
 
+## Pourquoi des pas ou des mesures manquent : le diagnostic (v1.24)
+La chaîne est Samsung Health (et la montre) → **Health Connect** → l'appli webhook du téléphone → `sync_samsung.php`. Chaque maillon
+peut perdre des mesures :
+- **Samsung Health n'écrit pas dans Health Connect** (autorisation d'écriture absente) : seuls les pas comptés par Android
+  (`com.android.healthconnect.phone…`, « téléphone ») arrivent, avec calories actives et distance ; ni la montre, ni le sommeil,
+  ni la FC. Réglage : Samsung Health › Paramètres › Health Connect › Autorisations des applis › Samsung Health › tout autoriser.
+  Samsung recopie ses données avec du retard (minutes à heures) et ne partage pas la FC au repos (Santé l'estime d'après la FC).
+- **L'appli webhook endormie par Android** (« Synchro il y a 3 h ») : Batterie › Non restreinte ; chaque type coché dans l'appli.
+- **Côté serveur** : deux mesures d'une même appli sur le même intervalle dans un envoi s'écrasaient ; on garde la plus grande.
+
+Le serveur relève, à chaque envoi, quels types arrivent et de quelles applis (`sync_auto.vus`) : Pilotage signale ce qui manque
+(`data-manque="hc_samsung" | "hc_types" | "hc_veille"`). Il garde aussi le résumé des 30 derniers envois dans `backups/hc_envois.json`
+(derrière le mot de passe du site). Sur le serveur : `sudo php /var/www/finance/sante/hc_diagnostic.php` (ajoutez `--brut` pour des
+exemples de mesures) dit ce qui arrive, d'où, ce qui arrive en retard, et où chercher. Le script répond 404 par le web.
+
 ## Une vraie journée de mesures (v1.23)
 Montre + téléphone écrivent des pas presque à chaque minute : une journée dépasse vite 1 500 mesures par type. Jusqu'à la v1.22,
 seules les 1 500 **premières** étaient gardées et le reste de la journée était jeté à chaque synchro (les pas s'arrêtaient vers 9 h).
