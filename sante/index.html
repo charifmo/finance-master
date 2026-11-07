@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.23"></script>
-    <script src="sante_import.js?v=1.23"></script>
-    <script src="sante_samsung.js?v=1.23"></script>
-    <script src="sante_protocole.js?v=1.23"></script>
+    <script src="sante_calculs.js?v=1.24"></script>
+    <script src="sante_import.js?v=1.24"></script>
+    <script src="sante_samsung.js?v=1.24"></script>
+    <script src="sante_protocole.js?v=1.24"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -719,11 +719,14 @@
                             <p v-if="etat.sync_auto && etat.sync_auto.erreur" class="w-full text-[11px] font-bold text-rose-700 break-words" data-erreur-synchro>⚠️ Dernier envoi : certains jours refusés par le serveur — {{ etat.sync_auto.erreur }}</p>
                         </div>
                         <p class="text-xs text-slate-600">Une page web ne peut pas lire Samsung Health toute seule (Android l’interdit aux sites). La petite appli gratuite <b>HC Webhook</b> le fait pour elle : elle lit Samsung Health (via Health Connect) et envoie ici vos pas, calories, sommeil, poids et fréquence cardiaque — toute seule toutes les heures, ou d’un appui sur son widget « Synchroniser ».</p>
+                        <div data-diagnostic-synchro v-if="diagnosticSynchro.length" class="text-xs rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-900"><b>🩺 Ce qui cloche aujourd’hui :</b>
+                                <ul class="list-disc pl-5 mt-1 space-y-0.5"><li v-for="d in diagnosticSynchro" :key="d.id" :data-diag="d.id">{{ d.texte }}</li></ul>
+                                <span class="block mt-1">Appli webhook : Paramètres Android → Applis → l’appli webhook → <b>Batterie → Non restreinte</b> (sinon Android l’endort), et cochez dans l’appli chaque type de mesure (FC, sommeil…). Puis « Synchroniser maintenant ».</span></div>
                         <ol class="list-decimal pl-5 space-y-1.5 text-xs">
-                            <li><b>Samsung Health</b> → ≡ → <b>Paramètres</b> → <b>Health Connect</b> : autorisez le partage (pas, calories, poids, sommeil, fréquence cardiaque).</li>
+                            <li><b>Samsung Health</b> → ≡ → <b>Paramètres</b> → <b>Health Connect</b> → <b>Autorisations des applis</b> → <b>Samsung Health</b> → <b>Tout autoriser</b>, en <b>écriture</b> surtout (pas, calories, poids, sommeil, fréquence cardiaque, métabolisme de base). Sans l’écriture, seuls les pas comptés par Android arrivent : ni la montre, ni le sommeil, ni la FC. Samsung recopie ses données dans Health Connect avec du retard (de quelques minutes à quelques heures).</li>
                             <li>Installez <b>« Health Connect Webhook »</b> (développeur <b>Naveen MC</b>), au choix :
                                 <ul class="list-disc pl-5 mt-1 space-y-0.5" data-installer-hc>
-                                    <li><b>Play Store, paiement unique</b> (environ 52 MAD, pas d’abonnement) : le plus simple, mises à jour automatiques. Attention : d’autres applis aux noms voisins existent (« Health Connect Webhook App », « WebhookDC »…) et ne sont pas compatibles.</li>
+                                    <li><b>Play Store, paiement unique</b> (environ 52 MAD, pas d’abonnement) : le plus simple, mises à jour automatiques. Une autre appli voisine, « Health Connect Webhook App » (environ 10 MAD, format metadata + data), est compatible aussi depuis la v1.15 ; « WebhookDC » ne l’est pas.</li>
                                     <li><b>Gratuit</b> : l’appli est libre. Installez <a href="https://github.com/ImranR98/Obtainium" target="_blank" rel="noopener" class="font-bold text-emerald-700 underline">Obtainium</a>, ajoutez l’adresse <code class="bg-slate-100 px-1 rounded break-all">https://github.com/mcnaveen/health-connect-webhook</code> : il télécharge et met à jour l’APK officiel (autorisez l’installation depuis cette source quand Android le demande).</li>
                                     <li><b>Sans aucune appli</b> : l’import du .zip de Samsung Health (option 2, juste en dessous).</li>
                                 </ul>
@@ -899,7 +902,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.23';
+        const VERSION = '1.24';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1661,6 +1664,24 @@ createApp({
             if (!C.num(etat.profil.taille_cm)) l.push({ id: 'taille', texte: 'Taille non renseignée : le métabolisme de base et le bilan net ne peuvent pas se calculer.', bouton: 'Renseigner ma taille', action: allerProfil });
             if (!der) l.push({ id: 'pesee', texte: 'Aucune pesée enregistrée.', bouton: 'Ajouter une pesée', action: () => { onglet.value = 'poids'; } });
             else { const j = Math.round((Date.parse(dateJour.value) - Date.parse(der.date)) / 864e5); if (j > 7) l.push({ id: 'pesee', texte: 'Dernière pesée il y a ' + j + ' jours (' + fmt1(der.kg) + ' kg) : le téléphone n’envoie que les nouvelles mesures.', bouton: 'Noter une pesée', action: () => { onglet.value = 'poids'; } }); }
+            //  v1.24 — la synchro du téléphone : ce qui manque, et pourquoi (relevé par le serveur à chaque envoi)
+            const voir = () => { onglet.value = 'poids'; nextTick(() => { const e = document.querySelector('[data-synchro-auto]'); if (e) e.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); };
+            for (const d of diagnosticSynchro.value) l.push({ ...d, bouton: 'Comment régler', action: voir });
+            return l;
+        });
+        const diagnosticSynchro = computed(() => {
+            const s = etat.sync_auto, l = []; if (!s || !s.derniere) return l;
+            const vus = s.vus || {}, types = Object.keys(vus), recent = (d) => Date.now() - Date.parse(d) < 48 * 36e5;
+            const norm = (t) => String(t).replace(/[^a-z]/g, '');
+            const pas = Object.entries((vus.steps || {}).s || {}).filter(([, d]) => recent(d)).map(([n]) => n);
+            if (pas.length && !pas.some(n => n === 'Samsung Health' || n === 'montre'))
+                l.push({ id: 'hc_samsung', texte: 'Les pas reçus viennent seulement de ' + pas.join(', ') + ' (le compteur d’Android) : Samsung Health n’écrit pas dans Health Connect, donc la montre et le total Samsung manquent.' });
+            if (types.length) {
+                const absents = [['heartrate', 'fréquence cardiaque'], ['sleep', 'sommeil']].filter(([t]) => !types.some(k => norm(k).startsWith(t))).map(([, lib]) => lib);
+                if (absents.length) l.push({ id: 'hc_types', texte: 'Jamais reçus du téléphone : ' + absents.join(', ') + '. À cocher dans l’appli webhook ET à autoriser pour Samsung Health dans Health Connect.' });
+            }
+            const min = (Date.now() - Date.parse(s.derniere)) / 60000;
+            if (min > 3 * 60) l.push({ id: 'hc_veille', texte: 'Pas d’envoi du téléphone depuis ' + Math.round(min / 60) + ' h alors qu’il en fait un toutes les 15 min à 1 h : Android met l’appli webhook en veille.' });
             return l;
         });
         //  les courbes (Chart.js), redessinées quand la période ou les données changent et que l'onglet est affiché
@@ -1975,7 +1996,7 @@ createApp({
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  valeursSuspectes, docsOuverts, basculerDocs, nbValeursTotal, verifierBilanIA, accepterBilanIA, refuserBilanIA, toutAccepterBilanIA, texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
                  editionTable, docSurligne, sourceValeur, groupesBilan, bilansRecents, nbDocuments, lignesOuvertes, bornesTexte, aConfirmer, confirmer, supprimerValeur, supprimerDocument, supprimerBilan, nettoyage, messageNettoyage, toutEffacer,
-                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, journeeHeures, aujourdhui, afficherDetails, detailOuvert, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
+                 TYPES_PLAN, JOURS_PLAN, MOMENTS_PLAN, suivis, MOMENTS_P, LIB_MOMENT, JOURS7, BUCKETS, protocole, suiviProto, groupesProto, parMoment, journeeHeures, aujourdhui, afficherDetails, detailOuvert, horsActions, rangerHorsActions, plansSepares, fusionnerPlans, periodePilotage, kpis, mesuresJour, prochainesEtapes, fraicheurSync, manquesPilotage, diagnosticSynchro, tauxJournee, detailsOuverts, tauxJourProto, tri, ouvrirTri, importerProtocole, lireTexteProtocole,
                  triPar, basculerJour, supprimerTri, estCorrige, triCorrections, enregistrerProtocole, oublierLecon, reglesParSection, supprimerProtocole, verif, verifierAvecIA, accepterIA, refuserIA, toutAccepterIA, groupesDuJour, semaineGrille, cocherPlan, editeurPlan, ouvrirEditeurPlan, importerPlan, lireTextePlan, ajouterElementPlan, enregistrerPlan, supprimerPlan,
                  repas, repasItems, repasScore, repasTotaux, ajouterRepas, retirerRepas, pesee, ajouterPesee, projection, urlWebhook, messageCsv, importerCsv, importerSamsung, configAuto, preparerSynchro, enTetesAuto, urlAvecJeton, valeurAuth, copier, depuisQuand, rechargerEtat, deposerSamsung, survolSamsung, enCours,
                  cmoUrl, sauverCmoUrl, LIB_HC, cmoMessages, cmoQuestion, cmoAttente, demanderCmo, envoyerCmo, nouvelleConversationCmo, copierCmo, cmoFil, cmoChamp, cmoCopie, estMobile, CMO_SUGGESTIONS,

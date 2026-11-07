@@ -57,9 +57,12 @@ function sante_hc_convertir_b(array $p): array {
     foreach ($p['data'] as $type => $liste) {
         if (!is_array($liste) || !array_is_list($liste)) continue;
         $t = $norm($type);
-        $out['_recu'][substr(preg_replace('/[^a-z0-9_]/', '', strtolower((string)$type)), 0, 40) ?: 'x'] = count($liste);
+        $tk = substr(preg_replace('/[^a-z0-9_]/', '', strtolower((string)$type)), 0, 40) ?: 'x';
+        $out['_recu'][$tk] = count($liste);
         foreach ($liste as $r) {
             if (!is_array($r)) continue;
+            //  v1.24 — quelles applis écrivent quoi dans Health Connect (Samsung Health, la montre, le téléphone seul…)
+            $out['_vus'][$tk][sante_hc_nom_source((string)($r['source'] ?? ''))] = true;
             $meta = ['id' => $cle($r)]; $deb = $r['start_time'] ?? ($r['time'] ?? null); $fin = $r['end_time'] ?? $deb;
             if (in_array($t, ['steps', 'stepscount', 'step'], true) && is_numeric($r['value'] ?? null)) $out['steps'][] = ['count' => (float)$r['value'], 'start_time' => $deb, 'end_time' => $fin, 'metadata' => $meta];
             elseif (in_array($t, ['activecalories', 'activecaloriesburned', 'activeenergy', 'activeenergyburned', 'caloriesactive'], true) && is_numeric($r['value'] ?? null)) $out['active_calories'][] = ['calories' => $kcal($r), 'start_time' => $deb, 'end_time' => $fin, 'metadata' => $meta];
@@ -88,6 +91,14 @@ function sante_hc_convertir_b(array $p): array {
                 if ($dur) $out['sleep'][] = ['session_end_time' => $fin, 'duration_seconds' => $dur, 'metadata' => $meta];
             }
         }
+    }
+    //  v1.24 — deux mesures de la même source sur le même intervalle dans un envoi (téléphone et montre passés par Samsung
+    //  Health) avaient la même clé : la dernière écrasait l'autre. On garde la plus grande (les deux comptent les mêmes pas).
+    foreach (['steps' => 'count', 'active_calories' => 'calories', 'distance' => 'meters', 'total_calories' => 'calories', 'hydration' => 'milliliters'] as $type => $champ) {
+        if (empty($out[$type])) continue;
+        $par = [];
+        foreach ($out[$type] as $r) { $k = $r['metadata']['id']; if (!isset($par[$k]) || $r[$champ] > $par[$k][$champ]) $par[$k] = $r; }
+        $out[$type] = array_values($par);
     }
     return $out;
 }
@@ -325,6 +336,43 @@ function sante_hc_somme_sources(array $morceaux): float {
     foreach ($min as $s) $total += max($s);
     foreach ($autres as $s) $total += max($s);
     return $total;
+}
+
+/**
+ * v1.24 — garde le résumé des 30 derniers envois du téléphone (backups/hc_envois.json, à côté des sauvegardes, derrière le
+ * mot de passe du site) : par type, combien de mesures, de quelles applis, quels champs, la plus ancienne et la plus récente,
+ * et combien datent d'AVANT l'envoi précédent (arrivées en retard). C'est ce qui dit si une mesure manque côté téléphone
+ * (jamais envoyée) ou côté serveur (reçue mais mal comptée). Lu par « php sante/hc_diagnostic.php ».
+ */
+function sante_hc_noter_envoi($brut, string $dossier): void {
+    if (!is_array($brut) || !is_dir($dossier) || !is_writable($dossier)) return;
+    $f = $dossier . '/hc_envois.json';
+    $L = is_file($f) ? (json_decode((string)@file_get_contents($f), true) ?: []) : [];
+    $avant = $L ? (string)($L[count($L) - 1]['recu_le'] ?? '') : '';
+    $data = is_array($brut['data'] ?? null) ? $brut['data'] : array_filter($brut, fn($v) => is_array($v) && array_is_list($v));
+    $types = [];
+    foreach ($data as $t => $liste) {
+        if (!is_array($liste) || !array_is_list($liste)) continue;
+        $x = ['n' => count($liste), 'sources' => [], 'champs' => [], 'debut' => null, 'fin' => null, 'somme' => 0, 'en_retard' => 0, 'exemples' => []];
+        foreach ($liste as $i => $r) {
+            if (!is_array($r)) continue;
+            $src = (string)($r['source'] ?? ($r['metadata']['data_origin'] ?? ''));
+            $x['sources'][$src] = ($x['sources'][$src] ?? 0) + 1;
+            foreach (array_keys($r) as $k) $x['champs'][(string)$k] = true;
+            $deb = (string)($r['start_time'] ?? ($r['time'] ?? '')); $fin = (string)($r['end_time'] ?? $deb);
+            if ($deb !== '' && ($x['debut'] === null || strcmp($deb, $x['debut']) < 0)) $x['debut'] = $deb;
+            if ($fin !== '' && ($x['fin'] === null || strcmp($fin, $x['fin']) > 0)) $x['fin'] = $fin;
+            $v = $r['value'] ?? ($r['count'] ?? null); if (is_numeric($v)) $x['somme'] += (float)$v;
+            if ($avant !== '' && ($t2 = strtotime($fin)) && ($t1 = strtotime($avant)) && $t2 < $t1) $x['en_retard']++;
+            if ($i < 2 || $i >= count($liste) - 2) $x['exemples'][] = mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 400);
+        }
+        $x['champs'] = array_keys($x['champs']); $x['somme'] = round($x['somme'], 1);
+        $types[mb_substr((string)$t, 0, 40)] = $x;
+    }
+    $L[] = ['recu_le' => gmdate('Y-m-d\TH:i:s\Z'), 'metadata' => is_array($brut['metadata'] ?? null) ? array_slice($brut['metadata'], 0, 12) : array_intersect_key($brut, ['timestamp' => 1, 'app_version' => 1, 'timezone' => 1]), 'types' => $types];
+    $L = array_slice($L, -30);
+    $tmp = $f . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode($L, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)) !== false) @rename($tmp, $f); else @unlink($tmp);
 }
 
 /** v1.17 — nom lisible d'une source Health Connect (paquet Android) */

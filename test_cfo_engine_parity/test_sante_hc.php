@@ -141,6 +141,52 @@ $fcj = []; for ($k = 0; $k < 1500; $k++) { $t = $k * 50; $fcj[] = ['start_time' 
 [$eF2] = $appliquer(sante_hc_convertir_b(['metadata' => $B['metadata'], 'data' => ['heart_rate' => $fcj]]), []);
 v('  → FC : 1 500 mesures (nuit à 52, journée à 80) — la nuit n\'est plus jetée : FC au repos estimée 52, entrées ≤ 2 000',
   ($eF2['journal'][$d1]['samsung']['fc_repos_est'] ?? 0) == 52 && count($eF2['journal'][$d1]['hc']['fc'] ?? []) <= 2000 && min($eF2['journal'][$d1]['hc']['fc'] ?? [0]) == 52, [$eF2['journal'][$d1]['samsung']['fc_repos_est'] ?? null, count($eF2['journal'][$d1]['hc']['fc'] ?? [])]);
+//  v1.24 — M. doublons dans un envoi, applis vues, résumé des envois, diagnostic sur le serveur
+$srcSH = 'com.sec.android.app.shealth';
+$dbl = ['metadata' => $B['metadata'], 'data' => ['steps' => [
+    ['start_time' => "{$d1}T15:00:00.000Z", 'end_time' => "{$d1}T15:01:00.000Z", 'unit' => 'steps', 'source' => $srcSH, 'value' => 50],
+    ['start_time' => "{$d1}T15:00:00.000Z", 'end_time' => "{$d1}T15:01:00.000Z", 'unit' => 'steps', 'source' => $srcSH, 'value' => 30]]]];
+$cD = sante_hc_convertir_b($dbl);
+[$eD] = $appliquer($cD, []);
+v('M. même appli, même minute, deux fois dans un envoi (téléphone + montre via Samsung) : 50 gardés, pas le dernier (30)',
+  count($cD['steps']) === 1 && ($eD['journal'][$d1]['samsung']['pas'] ?? 0) == 50, [count($cD['steps']), $eD['journal'][$d1]['samsung']['pas'] ?? null]);
+$cB = sante_hc_convertir_b($B);
+v('  → chaque type reçu dit de quelles applis il vient (pas : téléphone et montre ; FC : téléphone)',
+  isset($cB['_vus']['steps']['téléphone'], $cB['_vus']['steps']['montre'], $cB['_vus']['heart_rate']['téléphone']) && !isset($cB['_vus']['heart_rate']['montre']), $cB['_vus'] ?? null);
+$hier = gmdate('Y-m-d\TH:i:s\Z', time() - 86400); $now = gmdate('Y-m-d\TH:i:s\Z');
+$vus = sante_hc_vus_fusionner(['steps' => ['d' => $hier, 's' => ['Samsung Health' => $hier]], 'Mauvais Type!' => ['d' => $hier], 'sleep' => ['d' => 'pas une date']], ['steps' => ['téléphone' => true], 'heart_rate' => ['téléphone' => true]], $now);
+$vus = json_decode(json_encode($vus), true);
+v('  → relevé cumulé : les pas gardent Samsung Health (hier) et ajoutent le téléphone (maintenant) ; rien d\'invalide gardé',
+  ($vus['steps']['s']['Samsung Health'] ?? '') === $hier && ($vus['steps']['s']['téléphone'] ?? '') === $now && $vus['steps']['d'] === $now && isset($vus['heart_rate']) && count($vus) === 2, $vus);
+$eV = json_decode(json_encode(sante_normaliser(['sync_auto' => ['derniere' => $now, 'vus' => $vus]])), true);
+$eV2 = json_decode(json_encode(sante_normaliser(sante_normaliser(['sync_auto' => ['derniere' => $now, 'vus' => $vus]]))), true);
+v('  → le relevé passe la normalisation (et une deuxième normalisation) sans rien perdre', ($eV['sync_auto']['vus'] ?? null) == $vus && ($eV2['sync_auto']['vus'] ?? null) == $vus, $eV2['sync_auto'] ?? null);
+$dirE = sys_get_temp_dir() . '/sante_hc_envois_' . getmypid(); @mkdir($dirE);
+sante_hc_noter_envoi($dbl, $dirE);
+$L = json_decode((string)file_get_contents("$dirE/hc_envois.json"), true);
+$L[0]['recu_le'] = gmdate('Y-m-d\TH:i:s\Z', strtotime("{$d1}T16:00:00Z")); file_put_contents("$dirE/hc_envois.json", json_encode($L));
+sante_hc_noter_envoi($dbl, $dirE);
+$L = json_decode((string)file_get_contents("$dirE/hc_envois.json"), true);
+v('  → résumé des envois : nombre, appli, champs, somme ; une mesure finie AVANT l\'envoi précédent est comptée « en retard »',
+  count($L) === 2 && $L[1]['types']['steps']['n'] === 2 && isset($L[1]['types']['steps']['sources'][$srcSH]) && in_array('value', $L[1]['types']['steps']['champs'], true)
+  && $L[1]['types']['steps']['somme'] == 80 && $L[0]['types']['steps']['en_retard'] === 0 && $L[1]['types']['steps']['en_retard'] === 2, $L[1]['types']['steps'] ?? $L);
+for ($k = 0; $k < 35; $k++) sante_hc_noter_envoi(['metadata' => $B['metadata'], 'data' => []], $dirE);
+v('  → au plus 30 envois gardés, fichier toujours lisible', count(json_decode((string)file_get_contents("$dirE/hc_envois.json"), true) ?: []) === 30);
+//  le script du serveur : un état où seuls les pas du téléphone arrivent, plus d'envoi depuis 5 h, ni FC ni sommeil
+$fDiag = "$dirE/sante_data.json"; @mkdir("$dirE/backups");
+copy("$dirE/hc_envois.json", "$dirE/backups/hc_envois.json");
+file_put_contents($fDiag, json_encode(['sync_auto' => ['derniere' => gmdate('Y-m-d\TH:i:s\Z', time() - 5 * 3600), 'recu' => [], 'vus' => ['steps' => ['d' => $now, 's' => ['téléphone' => $now]]]]]));
+$sortie = []; $code = 0;
+exec('SANTE_DATA_FILE=' . escapeshellarg($fDiag) . ' ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../sante/hc_diagnostic.php') . ' 2>&1', $sortie, $code);
+$txt = implode("\n", $sortie);
+v('  → « php sante/hc_diagnostic.php » : dit que Samsung Health n\'écrit pas (seuls les pas d\'Android), FC et sommeil jamais reçus, appli endormie',
+  $code === 0 && str_contains($txt, 'Aucune mesure de Samsung Health') && str_contains($txt, 'Jamais reçu : fréquence cardiaque') && str_contains($txt, 'Jamais reçu : sommeil') && str_contains($txt, 'Non restreinte') && str_contains($txt, '30 derniers envois'), $txt);
+file_put_contents($fDiag, json_encode(['sync_auto' => ['derniere' => $now, 'vus' => ['steps' => ['d' => $now, 's' => ['Samsung Health' => $now]], 'heart_rate' => ['d' => $now, 's' => ['Samsung Health' => $now]], 'sleep' => ['d' => $now, 's' => ['Samsung Health' => $now]], 'weight' => ['d' => $now, 's' => ['Samsung Health' => $now]]]]]));
+@unlink("$dirE/backups/hc_envois.json"); $sortie = [];
+exec('SANTE_DATA_FILE=' . escapeshellarg($fDiag) . ' ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../sante/hc_diagnostic.php') . ' 2>&1', $sortie, $code);
+$txt = implode("\n", $sortie);
+v('  → tout arrive de Samsung Health, synchro récente : « Rien d\'anormal »', $code === 0 && str_contains($txt, 'Rien d\'anormal') && !str_contains($txt, 'Jamais reçu'), $txt);
+array_map('unlink', glob("$dirE/backups/*") ?: []); @rmdir("$dirE/backups"); array_map('unlink', glob("$dirE/*") ?: []); @rmdir($dirE);
 @unlink(getenv('SANTE_DATA_FILE'));
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

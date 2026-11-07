@@ -86,6 +86,28 @@ function sante_norm_plan($p, string $type): ?array {
     foreach (['corrections', 'corrections_avant'] as $k) if (sante_num($p[$k] ?? null) !== null) $o[$k] = (int)sante_num($p[$k]);
     return $o;
 }
+/** v1.24 — { type: { d: dernière fois reçu, s: { appli qui l'écrit: dernière fois } } } : ce que le téléphone envoie vraiment */
+function sante_hc_vus_fusionner(array $ancien, array $nouveau, string $quand): array {
+    $date = fn($d) => is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}T[\d:]{8}/', $d) ? substr($d, 0, 30) : null;
+    $o = [];
+    foreach ($ancien as $t => $v) {
+        if ($v instanceof stdClass) $v = (array)$v;
+        if (!is_string($t) || !preg_match('/^[a-z0-9_]{1,40}$/', $t) || !is_array($v) || !($d = $date($v['d'] ?? null))) continue;
+        $s = [];
+        foreach ((array)($v['s'] ?? []) as $n => $dn) if (is_string($n) && $n !== '' && ($dn = $date($dn))) $s[mb_substr($n, 0, 30)] = $dn;
+        $o[$t] = ['d' => $d, 's' => $s];
+    }
+    if ($date($quand)) foreach ($nouveau as $t => $sources) {
+        if (!is_string($t) || !preg_match('/^[a-z0-9_]{1,40}$/', $t) || !is_array($sources)) continue;
+        $s = $o[$t]['s'] ?? [];
+        foreach (array_keys($sources) as $n) $s[mb_substr((string)$n, 0, 30)] = $quand;
+        arsort($s);
+        $o[$t] = ['d' => $quand, 's' => array_slice($s, 0, 6, true)];
+    }
+    foreach ($o as &$v) $v['s'] = (object)$v['s'];
+    return array_slice($o, -30, 30, true);
+}
+
 /**
  * v1.23 — LES MORCEAUX REÇUS DU TÉLÉPHONE, SANS LIMITE QUI JETTE. Une journée de montre + téléphone dépasse vite 1 200 mesures
  * par type. Au-delà, les plus anciennes sont regroupées en une valeur par minute sous la source « s000000 » (fusion) :
@@ -197,6 +219,8 @@ function sante_normaliser($e): array {
         + (is_array($e['sync_auto']['sources'] ?? null) ? ['sources' => (object)array_slice(array_map(fn($n) => mb_substr((string)$n, 0, 30), array_filter($e['sync_auto']['sources'], fn($n, $k) => is_string($k) && preg_match('/^s[0-9a-f]{6}$/', $k), ARRAY_FILTER_USE_BOTH)), -12, 12, true)] : [])
         + (is_array($e['sync_auto']['detail_pas'] ?? null) && sante_date_ok($e['sync_auto']['detail_pas']['date'] ?? null) ? ['detail_pas' => ['date' => $e['sync_auto']['detail_pas']['date'], 'retenu' => (int)($e['sync_auto']['detail_pas']['retenu'] ?? 0),
             'sources' => (object)array_slice(array_map('intval', array_filter((array)($e['sync_auto']['detail_pas']['sources'] ?? []), 'is_numeric')), 0, 12, true)]] : [])
+        //  v1.24 — chaque type déjà reçu : quand pour la dernière fois, et de quelles applis
+        + (!empty($e['sync_auto']['vus']) && ($vus = sante_hc_vus_fusionner((array)$e['sync_auto']['vus'], [], '')) ? ['vus' => (object)$vus] : [])
         + (is_array($e['sync_auto']['recu'] ?? null) ? ['recu' => (object)array_slice(array_filter(array_map(fn($n) => is_numeric($n) ? (int)$n : null, $e['sync_auto']['recu']), fn($n, $k) => $n !== null && is_string($k) && preg_match('/^[a-z0-9_]{1,40}$/', $k), ARRAY_FILTER_USE_BOTH), 0, 30, true)] : []);
     $pl = is_array($e['plans'] ?? null) ? $e['plans'] : [];
     $o['plans'] = new stdClass();
