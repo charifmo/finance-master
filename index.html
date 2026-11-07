@@ -5635,6 +5635,19 @@
                                             class="text-[9px] font-black px-2 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:border-red-500 hover:text-red-300 transition-all">↩</button>
                                     <span class="text-[10px] font-bold text-slate-500 w-full md:w-auto">Chaque cycle ne déduit que les jours qui tombent chez lui.</span>
                                 </div>
+                                <!-- v37.108 : la destination (et un budget) → une ligne « Voyage <destination> » dans le Flux, et la case « voyage » à la saisie -->
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Vers</span>
+                                    <input type="text" v-valeur="soldesInitiaux.voyageDestination || ''" data-voyage-destination placeholder="Marrakech, Paris…"
+                                           @change="setVoyage('voyageDestination', $event.target.value)"
+                                           class="bg-slate-950 text-sky-300 border border-slate-600 rounded p-1.5 text-xs font-bold outline-none focus:border-sky-400 w-36"/>
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">budget</span>
+                                    <input type="number" min="0" inputmode="decimal" v-valeur="soldesInitiaux.voyageBudget || ''" data-voyage-budget placeholder="facultatif"
+                                           @change="setVoyage('voyageBudget', $event.target.value)"
+                                           class="bg-slate-950 text-sky-300 border border-slate-600 rounded p-1.5 text-xs font-bold outline-none focus:border-sky-400 w-24"/>
+                                    <span v-if="voyageSaisie.nom" data-voyage-ligne class="text-[10px] font-bold text-emerald-300 w-full md:w-auto">✓ « {{ voyageSaisie.nom }} » est dans le Flux ; à la saisie, la case « ✈️ Dépense du voyage » l'y range.</span>
+                                    <span v-else class="text-[10px] font-bold text-slate-500 w-full md:w-auto">Dates + destination : une ligne « Voyage … » est créée dans le Flux.</span>
+                                </div>
                                 <p v-if="modeVoyageActif" class="text-[10px] font-bold text-slate-400">
                                     {{ voyageJoursDuMois.total }} j sur ce cycle ({{ cycleLabel }}) · {{ voyageDetailMois }} · {{ voyageJoursDuMois.weekend }} we · {{ voyageJoursDuMois.semaine }} sem · présence {{ Math.round(facteurPresence * 100) }} %
                                 </p>
@@ -5899,6 +5912,13 @@
 
                     <!-- ═══ v22.21 — Saisie minimaliste : 1 ligne + feedback discret + form repliable ═══ -->
                     <div class="bg-white rounded-xl border border-gray-200 px-3 py-2.5 md:px-4 md:py-3 shadow-sm">
+                        <!-- v37.108 : en voyage — le rappel et la case -->
+                        <div v-if="voyageSaisie.actif" data-saisie-voyage-bandeau class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2">
+                            <span class="text-xs font-black text-sky-900">✈️ Vous êtes en voyage<span v-if="voyageSaisie.dest"> — {{ voyageSaisie.dest }}</span> <span class="font-semibold text-sky-700">({{ voyageSaisie.periode }})</span></span>
+                            <label class="flex items-center gap-1.5 text-xs font-bold text-sky-900 cursor-pointer">
+                                <input type="checkbox" v-model="saisieVoyageCoche" data-saisie-voyage class="w-4 h-4 accent-sky-600"> Dépense du voyage → « {{ voyageSaisie.nom }} »
+                            </label>
+                        </div>
                         <!-- Ligne principale : input + bouton ➕ -->
                         <div class="flex gap-2 items-center">
                             <input v-model="saisieRapide" @keyup.enter="validerSaisieForm" type="text"
@@ -5929,7 +5949,8 @@
                             <span v-if="saisieForm.montant" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">💵 {{ formatMAD(saisieForm.montant) }}</span>
                             <span v-else data-saisie-sans-montant class="text-[10px] font-black px-2 py-0.5 rounded-full bg-gray-50 text-gray-500 border border-dashed border-gray-300">💵 montant ? (ex. « 45 {{ saisieForm.libelle || 'café' }} »)</span><button v-if="!saisieForm.montant && montantHabituelSaisie" type="button" data-saisie-montant-habituel @click="appliquerMontantHabituel()" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100">💡 {{ formatMAD(montantHabituelSaisie) }} d'habitude</button>
                             <!-- v37.49 : la catégorie proposée dit d'où elle vient, et si elle est sûre -->
-                            <span v-if="saisieForm.categorieId" data-saisie-cat :data-statut="saisieCatSource === 'manuel' ? 'sur' : saisieCatStatut" :title="saisieCatRaison"
+                            <span v-if="voyageSaisie.actif && saisieVoyageCoche" data-saisie-cat-voyage class="text-[10px] font-black px-2 py-0.5 rounded-full border bg-sky-50 text-sky-800 border-sky-200">✈️ {{ voyageSaisie.nom }}</span>
+                            <span v-else-if="saisieForm.categorieId" data-saisie-cat :data-statut="saisieCatSource === 'manuel' ? 'sur' : saisieCatStatut" :title="saisieCatRaison"
                                   :class="['text-[10px] font-black px-2 py-0.5 rounded-full border', saisieCatSource === 'manuel' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (saisieCatStatut === 'doute' ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-blue-50 text-blue-700 border-blue-200')]">
                                 {{ saisieCatStatut === 'doute' && saisieCatSource !== 'manuel' ? '⚠️' : '🏷️' }} {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}<span v-if="saisieCatSource" class="font-bold opacity-70"> · {{ SOURCES_CATEGORIE[saisieCatSource] || saisieCatSource }}</span><span v-if="saisieCatStatut === 'doute' && saisieCatSource !== 'manuel'" class="font-bold"> · à vérifier</span>
                             </span>
@@ -6931,6 +6952,13 @@
                     </div>
                 </div>
                 <div class="p-4 space-y-3">
+                        <!-- v37.108 : en voyage — le rappel et la case -->
+                        <div v-if="voyageSaisie.actif" data-saisie-voyage-bandeau class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2">
+                            <span class="text-xs font-black text-sky-900">✈️ Vous êtes en voyage<span v-if="voyageSaisie.dest"> — {{ voyageSaisie.dest }}</span> <span class="font-semibold text-sky-700">({{ voyageSaisie.periode }})</span></span>
+                            <label class="flex items-center gap-1.5 text-xs font-bold text-sky-900 cursor-pointer">
+                                <input type="checkbox" v-model="saisieVoyageCoche" data-saisie-voyage class="w-5 h-5 accent-sky-600"> Dépense du voyage → « {{ voyageSaisie.nom }} »
+                            </label>
+                        </div>
                     <button type="button" data-import-ouvrir-rapide @click="closeSaisieQuickModal(); ouvrirImportBanque()"
                             class="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50 text-indigo-800 font-black text-sm">🏦 Importer mes captures bancaires</button>
                     <input v-model="saisieRapide" @keyup.enter="validerSaisieFormFromQuick" type="text" data-saisie-rapide-champ enterkeyhint="done" autocomplete="off"
@@ -6960,7 +6988,8 @@
                     <p v-if="saisieErreur" data-saisie-erreur class="-mt-1 text-[11px] font-black text-red-700">{{ saisieErreur }}</p>
                     <!-- v37.49 : la même étiquette que sur bureau, et les pistes en cas de doute -->
                     <div v-if="saisieForm.libelle && (saisieForm.categorieId || saisieCatStatut === 'inconnu')" data-saisie-etiquette-mobile class="flex flex-wrap items-center gap-1.5 -mt-1">
-                        <span v-if="saisieForm.categorieId" data-saisie-cat :data-statut="saisieCatSource === 'manuel' ? 'sur' : saisieCatStatut" :title="saisieCatRaison"
+                        <span v-if="voyageSaisie.actif && saisieVoyageCoche" data-saisie-cat-voyage class="text-[10px] font-black px-2 py-0.5 rounded-full border bg-sky-50 text-sky-800 border-sky-200">✈️ {{ voyageSaisie.nom }}</span>
+                            <span v-else-if="saisieForm.categorieId" data-saisie-cat :data-statut="saisieCatSource === 'manuel' ? 'sur' : saisieCatStatut" :title="saisieCatRaison"
                                   :class="['text-[10px] font-black px-2 py-0.5 rounded-full border', saisieCatSource === 'manuel' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (saisieCatStatut === 'doute' ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-blue-50 text-blue-700 border-blue-200')]">
                                 {{ saisieCatStatut === 'doute' && saisieCatSource !== 'manuel' ? '⚠️' : '🏷️' }} {{ getCategorieLabel(saisieForm.categorieId) || 'Misc' }}<span v-if="saisieCatSource" class="font-bold opacity-70"> · {{ SOURCES_CATEGORIE[saisieCatSource] || saisieCatSource }}</span><span v-if="saisieCatStatut === 'doute' && saisieCatSource !== 'manuel'" class="font-bold"> · à vérifier</span>
                             </span>
@@ -9053,8 +9082,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie },
                 setup() {
-                    const CURRENT_VERSION = "37.107 La frise à portée de doigt";
+                    const CURRENT_VERSION = "37.108 Le voyage à la saisie";
                     const CHANGELOG = [
+        { version: "37.108 Le voyage à la saisie", date: "2026-11-07", changes: [
+            "✈️ LE VOYAGE DÉCLARÉ A SA LIGNE — dans « ✈️ Voyage · absence » (Pilotage), une destination (et un budget, facultatif) avec les dates : la dépense exceptionnelle « Voyage Marrakech » est créée d'office dans le Flux, à la date du départ, avec sa catégorie. Elle suit les changements (destination, dates, budget) ; effacer le voyage la retire si rien n'y a été dépensé.",
+            "🧳 À LA SAISIE, PENDANT LE VOYAGE — un rappel « ✈️ Vous êtes en voyage — Marrakech (du … au …) » et une case « Dépense du voyage » : cochée, la dépense va dans la ligne du voyage (catégorie et compte), sans règles ni IA ; décochée, le traitement normal. La case reste comme vous l'avez laissée d'une saisie à l'autre ; hors des dates, plus de rappel.",
+            "🧠 Ce qui est rangé par la case « voyage » n'apprend rien : après le retour, « diesel » reste « diesel skoda ». Le budget du voyage se consomme au fur et à mesure (Relevé, frise).",
+        ] },
         { version: "37.107 La frise à portée de doigt", date: "2026-11-07", changes: [
             "📈 PENDANT LA SAISIE, LA FRISE EN UN APPUI — au téléphone, 📈 rejoint la rangée des boutons flottants de l'écran Saisie (📈 🧠 📑 ➕) ; dans la saisie rapide, « 📈 Frise » dans l'en-tête ; sur ordinateur, une pastille « 📈 Frise du cycle » en bas à droite.",
             "✅ DÉJÀ SAISIE = PLUS ATTENDUE — une dépense exceptionnelle (« Four maman ») saisie dans sa catégorie restait projetée dans le Relevé, comptée deux fois. Une opération rangée dans sa catégorie, dans son cycle, la règle désormais : le Relevé, l'atterrissage, le radar et le Pilotage ne l'attendent plus (le reste seulement, si elle est payée en partie). Même chose pour une charge variable mensuelle sans ligne de détail.",
@@ -11001,6 +11035,7 @@
                         };
                         Object.values(donneesAnnuelles.value || {}).forEach(d => (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).forEach(t => {
                             if (!t || !t.categorieId || t.categorieId === 'cat_misc' || t.aVerifier || !vivantes.has(t.categorieId)) return;
+                            if (t.categorieSource === 'voyage') return;   // v37.108 : « diesel » pendant le voyage n'apprend pas « diesel → Voyage Marrakech »
                             const toks = _analyseLibelle(t.libelle).toks;
                             if (!toks.length || oublis[toks.join(' ')]) return;
                             ajouter(exact, toks.join(' '), t);
@@ -11427,8 +11462,12 @@
                         const dt = (f.dateFixee && f.datetime) || _nowLocalDateTime();
                         //  v37.49 : un choix à la main est sûr ; un doute ou rien de trouvé part
                         //  « À catégoriser » — et rien de trouvé est confié à l'IA, en arrière-plan
-                        const manuel = saisieCatSource.value === 'manuel';
-                        const statut = manuel ? 'sur' : (f.categorieId && f.categorieId !== 'cat_misc' ? (saisieCatStatut.value || 'sur') : 'inconnu');
+                        //  v37.108 : en voyage, la case « ✈️ Dépense du voyage » cochée → la ligne du voyage (catégorie et compte), sans règles ni IA ;
+                        //  source « voyage » : l'apprentissage ne retient rien (après le retour, « diesel » reste « diesel »)
+                        const _voy = voyageSaisie.value, enVoyage = !!(_voy.actif && saisieVoyageCoche.value && _voy.catId);
+                        if (enVoyage) { f.categorieId = _voy.catId; if (!f.compteManuel) { const _cv = compteDeLaCategorie(_voy.catId); if (_cv) f.compteId = _cv.id; } }
+                        const manuel = !enVoyage && saisieCatSource.value === 'manuel';
+                        const statut = (manuel || enVoyage) ? 'sur' : (f.categorieId && f.categorieId !== 'cat_misc' ? (saisieCatStatut.value || 'sur') : 'inconnu');
                         const txId = ajouterTransactionReelle({
                             datetime: dt,
                             date: dt.slice(0, 10),
@@ -11436,7 +11475,7 @@
                             libelle: f.libelle,
                             montant: f.montant,
                             categorieId: f.categorieId || 'cat_misc',
-                            categorieSource: manuel ? 'vous' : (statut !== 'inconnu' ? (saisieCatSource.value || null) : null),
+                            categorieSource: enVoyage ? 'voyage' : (manuel ? 'vous' : (statut !== 'inconnu' ? (saisieCatSource.value || null) : null)),
                             aVerifier: statut !== 'sur',
                             compteId: f.compteId,
                         });
@@ -11444,7 +11483,7 @@
                         if (!txId) { saisieErreur.value = "⚠️ Saisie NON enregistrée (année " + dt.slice(0, 4) + " introuvable) : rien n'est perdu, réessayez."; return false; }
                         if (statut === 'inconnu') demanderCategorieIA(txId);
                         //  v37.105 : un compte choisi à la main pour une catégorie connue est retenu pour elle
-                        if (f.compteManuel && statut !== 'inconnu' && f.categorieId) retenirCompteCategorie(f.categorieId, f.compteId);
+                        if (f.compteManuel && statut !== 'inconnu' && f.categorieId && !enVoyage) retenirCompteCategorie(f.categorieId, f.compteId);
                         const c = (comptes.value || []).find(k => String(k.id) === String(f.compteId));
                         _fermerAnnonce();
                         Object.assign(saisieAnnonce, { txId, texte: '✓ ' + (String(f.libelle || '').trim() || 'Sans libellé') + ' · ' + formatMAD(f.montant)
@@ -11562,7 +11601,7 @@
                     };
 
                     // ── v37.49 : À CATÉGORISER — le doute et l'inconnu, surlignés ───────────
-                    const SOURCES_CATEGORIE = { vous: 'vous', manuel: 'vous', appris: 'appris', 'libellé': 'votre libellé', 'règle': 'règle', ia: 'IA', 'défaut': 'par défaut' };
+                    const SOURCES_CATEGORIE = { voyage: '✈️ voyage', vous: 'vous', manuel: 'vous', appris: 'appris', 'libellé': 'votre libellé', 'règle': 'règle', ia: 'IA', 'défaut': 'par défaut' };
                     const estACategoriser = (t) => !!t && (!t.categorieId || t.categorieId === 'cat_misc' || !!t.aVerifier);
                     const aCategoriser = computed(() => {
                         calculationTick.value;
@@ -22227,7 +22266,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const dt = String((t && t.date) || '').slice(0, 10);
                                 if (t && dt >= du && dt <= au && t.categorieId) parCat[t.categorieId] = (parCat[t.categorieId] || 0) + (Number(t.montant) || 0);
                             }));
-                            const deps = getDepensesCycle(mb.mois, mb.an).filter(x => x && Number(x.montant) > 0 && !x.sourceAssurance);
+                            const deps = getDepensesCycle(mb.mois, mb.an).filter(x => x && (Number(x.montant) > 0 || x.voyage) && !x.sourceAssurance);   // v37.108 : le voyage, même sans budget
                             const vus = new Set(), lignesX = [];
                             deps.forEach(dep => {
                                 const propre = dep.categorieId && dep.categorieId !== 'cat_irr_depense_exceptionnelle';
@@ -22817,15 +22856,69 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return Math.max(0, coutVariableDuCycle(c, moisBudgetaire.value.mois, moisBudgetaire.value.an, true) - economieCategorieAbsence(cv));
                     };
 
+                    //  v37.108 — LE VOYAGE DÉCLARÉ : une destination, des dates (et un budget, facultatif) → une dépense exceptionnelle
+                    //  « Voyage <destination> » dans le Flux, à la date du départ, avec sa catégorie (v37.103), créée et tenue à jour
+                    //  d'office (destination, dates, budget). Effacer le voyage la retire si rien n'y a été dépensé.
+                    const _voyageDep = () => {
+                        const id = (soldesInitiaux.value || {}).voyageDepId;
+                        if (id == null || id === '') return null;
+                        for (const [an, d] of Object.entries(donneesAnnuelles.value || {})) {
+                            const arr = d && Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [];
+                            const i = arr.findIndex(x => x && x.id === id);
+                            if (i >= 0) return { an, arr, i, dep: arr[i] };
+                        }
+                        return null;
+                    };
+                    const synchroniserVoyage = () => {
+                        const si = soldesInitiaux.value || {}, dest = String(si.voyageDestination || '').trim();
+                        const d1 = _dateVoyage(si.voyageDebut), d2 = _dateVoyage(si.voyageFin);
+                        if (!dest || !d1 || !d2 || d2.getTime() < d1.getTime()) return false;
+                        const an = d1.getFullYear(), seau = _assurerSeauAnnee(an);
+                        if (!seau) return false;
+                        if (!Array.isArray(seau.depensesIrregulieres)) seau.depensesIrregulieres = [];
+                        const x = _voyageDep();
+                        let dep;
+                        if (x) { dep = x.dep; if (String(x.an) !== String(an)) { x.arr.splice(x.i, 1); seau.depensesIrregulieres.push(dep); } }
+                        else {
+                            const ids = new Set(Object.values(donneesAnnuelles.value || {}).flatMap(d => (d && Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : []).map(y => y && y.id)));
+                            let id = Date.now(); while (ids.has(id)) id++;
+                            dep = { id, paye: false, montantPaye: 0, sourceCompte: 'courant', categorieId: 'cat_irr_depense_exceptionnelle' };
+                            seau.depensesIrregulieres.push(dep);
+                            si.voyageDepId = id;
+                        }
+                        Object.assign(dep, { nom: 'Voyage ' + dest, mois: d1.getMonth() + 1, annee: an, jourPrevu: d1.getDate(), montant: Math.max(0, Number(si.voyageBudget) || 0), voyage: true });
+                        rangerDepensesExceptionnelles();
+                        return true;
+                    };
                     const setVoyage = (champ, valeur) => {
-                        soldesInitiaux.value[champ] = String(valeur || '');
+                        soldesInitiaux.value[champ] = String(valeur || '').trim();
+                        synchroniserVoyage();
+                        calculationTick.value++;
                         handleDataChange();
                     };
                     const effacerVoyage = () => {
-                        soldesInitiaux.value.voyageDebut = '';
-                        soldesInitiaux.value.voyageFin = '';
+                        const si = soldesInitiaux.value, x = _voyageDep();
+                        if (x) {
+                            const cat = x.dep.categorieId, depense = Object.values(donneesAnnuelles.value || {}).some(d => (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).some(t => t && t.categorieId === cat));
+                            if (!depense) x.arr.splice(x.i, 1);   // rien dépensé : la ligne s'en va ; sinon elle reste (l'historique du voyage)
+                        }
+                        si.voyageDebut = ''; si.voyageFin = ''; si.voyageDestination = ''; si.voyageBudget = ''; si.voyageDepId = null;
+                        rangerDepensesExceptionnelles();
+                        calculationTick.value++;
                         handleDataChange();
                     };
+                    //  Pendant le voyage (la date de la saisie tombe dedans) : un rappel, et la case « ✈️ Dépense du voyage ». Elle reste
+                    //  comme vous l'avez laissée d'une saisie à l'autre (pas besoin de la recocher à chaque dépense).
+                    const saisieVoyageCoche = ref(false);
+                    const voyageSaisie = computed(() => {
+                        calculationTick.value;
+                        const si = soldesInitiaux.value || {}, x = _voyageDep();
+                        const d1 = _dateVoyage(si.voyageDebut), d2 = _dateVoyage(si.voyageFin);
+                        if (!x || !d1 || !d2) return { actif: false };
+                        const f = saisieForm.value, jour = (f.dateFixee && f.datetime) ? String(f.datetime).slice(0, 10) : _ymd(new Date());
+                        const du = _ymd(d1), au = _ymd(d2), lib = (iso) => Number(iso.slice(8, 10)) + ' ' + _MOIS_COURTS[Number(iso.slice(5, 7)) - 1];
+                        return { actif: jour >= du && jour <= au, nom: String(x.dep.nom || '').trim(), catId: x.dep.categorieId, dest: String(si.voyageDestination || '').trim(), du, au, periode: 'du ' + lib(du) + ' au ' + lib(au) };
+                    });
                     const toggleSuspendreAbsence = (cle) => {
                         const d = donneesAnnuelles.value[moisBudgetaire.value.an];
                         const cv = d && d.chargesVariables ? d.chargesVariables[cle] : null;
@@ -26648,7 +26741,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         // v37.49 : catégorisation — règles, IA, À catégoriser
                         categoriserLibelle, saisieCatStatut, saisieCatRaison, SOURCES_CATEGORIE, iaCategorisation, demanderCategorieIA,
-                        aCategoriser, estACategoriser, rangerTransaction, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
+                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,

@@ -96,6 +96,7 @@ suite "Dépenses exceptionnelles : une catégorie chacune, le ménage tout seul"
 suite "Choisir une catégorie en cherchant (sélecteur avec recherche)"  node test_cfo_engine_parity/test_choix_categorie.mjs
 suite "Le compte suit la catégorie, vos choix de compte retenus"  node test_cfo_engine_parity/test_compte_categorie.mjs
 suite "La saisie apprend : habitudes, autocomplétion, montant habituel"  node test_cfo_engine_parity/test_saisie_apprend.mjs
+suite "Le voyage : une ligne à son nom, une case à la saisie"  node test_cfo_engine_parity/test_voyage_saisie.mjs
 suite "Banque : calibrage RIB, lecture locale, réconciliation"  node test_cfo_engine_parity/test_banque.mjs
 suite "Banque : vraies captures, téléphone d'abord"  node test_cfo_engine_parity/test_banque_reel.mjs
 suite "Banque : calibrer une fois, le bon solde toujours"  node test_cfo_engine_parity/test_calibrage_rib.mjs
