@@ -214,12 +214,23 @@ try {
         await page.waitForSelector('details[data-voyage]', { state: 'attached', timeout: 5000 });
         await page.evaluate(() => { document.querySelector('details[data-voyage]').open = true; });
         await page.waitForSelector('[data-voyage-compte]', { state: 'visible', timeout: 5000 });
+        const fondVoyage = await page.getAttribute('details[data-voyage]', 'class');
+        v('  → en voyage, le bloc « Voyage · absence » a un fond OPAQUE (plus de voile transparent sur la page claire : DU, AU, VERS, PAYÉ PAR lisibles)',
+          /\bbg-sky-950\b/.test(fondVoyage) && !/bg-sky-950\//.test(fondVoyage), fondVoyage);
         const avantCompte = await page.$eval('[data-voyage-compte]', e => e.value);
         await page.selectOption('[data-voyage-compte]', 'cpt_2');
         const ligneCompte = await page.evaluate(({ ST, AG }) => { const st = eval(ST); return [st.donneesAnnuelles[2026].depensesIrregulieres.find(d => d.categorieId === AG).sourceCompte, st.soldesInitiaux.voyageCompte]; }, { ST, AG });
         const dejaSaisies = await page.evaluate((ST) => eval(ST).donneesAnnuelles[2026].transactionsReelles.filter(t => t.categorieSource === 'voyage').map(t => String(t.compteId)), ST);
         v('I. « payé par » à côté de la destination : courant d’office ; « Compte Voyage » choisi → la ligne du voyage le prend, retenu pour le prochain voyage ; les saisies déjà faites (case cochée) le rejoignent',
           avantCompte === 'courant' && ligneCompte[0] === 'cpt_2' && ligneCompte[1] === 'cpt_2' && dejaSaisies.length >= 2 && dejaSaisies.every(c => c === '2'), JSON.stringify([avantCompte, ligneCompte, dejaSaisies]));
+        //  la liaison RESTE : le voyage modifié ensuite (budget), puis l'appli rechargée depuis ce qu'elle enregistre
+        await page.evaluate((ST) => eval(ST).setVoyage('voyageBudget', '3000'), ST);
+        const apresModif = await page.evaluate(({ ST, AG }) => eval(ST).donneesAnnuelles[2026].depensesIrregulieres.find(d => d.categorieId === AG).sourceCompte, { ST, AG });
+        await page.evaluate((ST) => { const st = eval(ST); st.executerImportFusion(JSON.parse(JSON.stringify(st.getExportData()))); }, ST);
+        await page.waitForFunction((ST) => eval(ST).voyageCompteCle === 'cpt_2', ST, { timeout: 5000 }).catch(() => { });
+        const apresRecharge = await page.evaluate((ST) => [eval(ST).voyageCompteCle, eval(ST).soldesInitiaux.voyageCompte, document.querySelector('[data-voyage-compte]') && document.querySelector('[data-voyage-compte]').value], ST);
+        v('  → la liaison reste : budget du voyage modifié ensuite, puis appli rechargée depuis ce qu’elle enregistre — toujours « Compte Voyage »',
+          apresModif === 'cpt_2' && apresRecharge[0] === 'cpt_2' && apresRecharge[1] === 'cpt_2' && apresRecharge[2] === 'cpt_2', JSON.stringify([apresModif, apresRecharge]));
         await page.evaluate(async (ST) => { const st = eval(ST); st.activeTab = 'saisie'; await Vue.nextTick(); st.saisieForm.datetime = ''; st.saisieForm.dateFixee = false; st.saisieVoyageCoche = false; }, ST);
         await page.waitForSelector(CHAMP, { state: 'visible', timeout: 10000 });
         await page.evaluate((ST) => { eval(ST).saisieVoyageCoche = true; }, ST);
@@ -291,6 +302,16 @@ try {
         await page.evaluate((ST) => { const st = eval(ST); st.friseOuverte = false; st.effacerVoyage(); }, ST);
         d = await deps();
         v('  → effacé sans y avoir rien dépensé : « Voyage Rome » disparaît du Flux', !d.some(x => x.nom === 'Voyage Rome') && d.some(x => x.nom === 'Voyage Agadir'), JSON.stringify(d.map(x => x.nom)));
+        //  v37.116 — un premier voyage (aucun compte retenu) : le compte de vos dépenses exceptionnelles est proposé d'office
+        const fes = await page.evaluate((ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026];
+            st.soldesInitiaux.voyageCompte = '';
+            d.depensesIrregulieres.push({ id: 7701, nom: 'Assurance auto', mois: 12, annee: 2026, montant: 4000, sourceCompte: 'cpt_2' }, { id: 7702, nom: 'Vignette', mois: 1, annee: 2026, montant: 700, sourceCompte: 'cpt_2' },
+                                        { id: 7703, nom: 'Cadeau', mois: 5, annee: 2026, montant: 300, sourceCompte: 'courant' });
+            st.setVoyage('voyageDebut', '2026-12-20'); st.setVoyage('voyageFin', '2026-12-22'); st.setVoyage('voyageDestination', 'Fès');
+            const dep = d.depensesIrregulieres.find(x => x.nom === 'Voyage Fès'); return [dep && dep.sourceCompte, st.voyageCompteCle]; }, ST);
+        await page.evaluate((ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026]; st.effacerVoyage(); d.depensesIrregulieres = d.depensesIrregulieres.filter(x => ![7701, 7702, 7703].includes(x.id)); }, ST);
+        v('  → premier voyage sans compte retenu : « payé par » propose d’office le compte de vos dépenses exceptionnelles (Compte Voyage), pas le courant',
+          fes[0] === 'cpt_2' && fes[1] === 'cpt_2', JSON.stringify(fes));
         v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
     });
 } catch (e) {

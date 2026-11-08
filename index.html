@@ -5617,7 +5617,7 @@
                              DOM : la saisie vit sur les lignes de la Météo. Seul son mode
                              Voyage, sans équivalent ailleurs, reste — replié. ═══ -->
                         <details v-if="!isCyclePasse && consoCategoriesT0.length" data-voyage :open="modeVoyageActif"
-                                 :class="['rounded-2xl border text-left shadow-lg', modeVoyageActif ? 'bg-sky-950/40 border-sky-700/60' : 'bg-slate-800 border-slate-700']">
+                                 :class="['rounded-2xl border text-left shadow-lg', modeVoyageActif ? 'bg-sky-950 border-sky-700/60' : 'bg-slate-800 border-slate-700']">
                             <summary class="flex items-center justify-between gap-3 px-4 md:px-5 py-3 cursor-pointer select-none hover:bg-slate-700/30 rounded-2xl flex-wrap">
                                 <span class="text-[11px] font-black uppercase tracking-widest text-sky-200">✈️ Voyage · absence</span>
                                 <span v-if="modeVoyageActif" class="text-[11px] font-black text-emerald-300 tabular-nums">+{{ formatMAD(economieVoyage) }} d'économie sur ce cycle</span>
@@ -9135,8 +9135,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.115 La réponse ne se perd plus";
+                    const CURRENT_VERSION = "37.116 Le voyage garde son compte";
                     const CHANGELOG = [
+        { version: "37.116 Le voyage garde son compte", date: "2026-11-08", changes: [
+            "✈️ UNE ABSENCE DÉCLARÉE : LE COMPTE EST PROPOSÉ, ET IL RESTE — la ligne « Voyage … » créée dans le Flux prend d'office le compte du dernier voyage, sinon celui que vos dépenses exceptionnelles utilisent le plus (Dépenses Annuelles & Projets…), plus le courant par défaut. « Payé par » le montre à côté de la destination ; changer les dates, la destination ou le budget, ou recharger l'appli, ne le change pas.",
+            "👓 Le bloc « Voyage · absence » du Pilotage, pendant le voyage, avait un fond à moitié transparent sur la page claire : DU, AU, VERS, BUDGET, PAYÉ PAR et PENDANT L'ABSENCE étaient presque invisibles. Fond opaque, tout se lit.",
+        ] },
         { version: "37.115 La réponse ne se perd plus", date: "2026-11-08", changes: [
             "📶 UN APPEL PENDANT QUE LE CFO RÉFLÉCHIT : SA RÉPONSE N'EST PLUS PERDUE — la question passe par le VPS (cfo_relais.php), qui attend la réponse de n8n à la place du téléphone et la garde. Répondre à un appel, ouvrir une autre appli, verrouiller l'écran : au retour, la réponse s'affiche (« le CFO continue sur le serveur… »). Même si le téléphone a fermé l'onglet : « Réponse retrouvée sur le serveur ». Jamais de question posée deux fois.",
             "🧷 Le compte posé automatiquement est retenu tel quel : si le CFO (ou le journal, ou un autre appareil) le change ensuite — « passe les saisies depuis vendredi sur Assafa dépenses annuelles » —, plus rien ne le remet sur le compte de la catégorie (la 37.112 pouvait défaire le travail du CFO au rechargement).",
@@ -23109,6 +23113,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         }
                         return null;
                     };
+                    //  v37.116 — le compte le plus utilisé par vos dépenses exceptionnelles (hors voyages), toutes années : proposé d'office
+                    //  pour un premier voyage. Aucun (ou seulement le courant) : le courant.
+                    const _compteHabituelExceptionnelles = () => {
+                        const n = {};
+                        for (const d of Object.values(donneesAnnuelles.value || {}))
+                            for (const x of (d && Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : []))
+                                if (x && !x.voyage && Number(x.montant) > 0 && x.sourceCompte && x.sourceCompte !== 'courant' && _compteDeCle(x.sourceCompte)) n[x.sourceCompte] = (n[x.sourceCompte] || 0) + 1;
+                        const top = Object.entries(n).sort((a, b) => b[1] - a[1])[0];
+                        return top ? top[0] : null;
+                    };
                     const synchroniserVoyage = () => {
                         const si = soldesInitiaux.value || {}, dest = String(si.voyageDestination || '').trim();
                         const d1 = _dateVoyage(si.voyageDebut), d2 = _dateVoyage(si.voyageFin);
@@ -23122,7 +23136,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         else {
                             const ids = new Set(Object.values(donneesAnnuelles.value || {}).flatMap(d => (d && Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : []).map(y => y && y.id)));
                             let id = Date.now(); while (ids.has(id)) id++;
-                            dep = { id, paye: false, montantPaye: 0, sourceCompte: si.voyageCompte || 'courant', categorieId: 'cat_irr_depense_exceptionnelle' };   // v37.112 : le compte du dernier voyage
+                            //  v37.112 : le compte du dernier voyage ; v37.116 : sinon celui que vos dépenses exceptionnelles utilisent le plus
+                            dep = { id, paye: false, montantPaye: 0, sourceCompte: si.voyageCompte || _compteHabituelExceptionnelles() || 'courant', categorieId: 'cat_irr_depense_exceptionnelle' };
                             seau.depensesIrregulieres.push(dep);
                             si.voyageDepId = id;
                         }
@@ -27033,7 +27048,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         // v37.49 : catégorisation — règles, IA, À catégoriser
                         categoriserLibelle, saisieCatStatut, saisieCatRaison, SOURCES_CATEGORIE, iaCategorisation, demanderCategorieIA,
-                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
+                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, getExportData, executerImportFusion, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,
