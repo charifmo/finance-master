@@ -24,7 +24,15 @@ declare(strict_types=1);
 
 const CFO_VP_MAX_LIEUX = 6;
 const CFO_VP_MAX_SUJETS = 12;
-const CFO_VP_MAX_REQUETES = 30;   // v37.42 : quatre portes par média local (Google, page de recherche, Bing, accueil)
+const CFO_VP_MAX_REQUETES = 48;   // v37.42 : quatre portes par média local ; v37.111 : + réseaux sociaux, forums, annonces
+//  v37.111 — au-delà de la presse : pages et groupes publics (Facebook, Instagram, YouTube…), forums, portails d'annonces.
+//  Ils n'ont ni Google Actualités ni page d'accueil lisible : ils sont cherchés par les moteurs du WEB (rôle « web »),
+//  restreints à leur site — ou à une page / un groupe précis (« chemin » : facebook.com/groups/123).
+const CFO_VP_PORTEES = ['locale', 'nationale', 'reseau', 'forum', 'annonces'];
+const CFO_VP_PORTEES_WEB = ['reseau', 'forum', 'annonces'];
+const CFO_VP_NOMS_PORTEES = ['reseau' => 'réseaux sociaux', 'forum' => 'forums', 'annonces' => 'annonces immobilières'];
+/** v37.111 — l'identité d'une source : son domaine, plus sa page ou son groupe s'il y en a un (facebook.com/groups/123). */
+function cfo_vp_cle(array $s): string { return (string)($s['domaine'] ?? '') . (!empty($s['chemin']) ? '/' . $s['chemin'] : ''); }
 
 function cfo_vp_arabe(string $t): bool { return (bool)preg_match('/\p{Arabic}/u', $t); }
 
@@ -88,15 +96,22 @@ function cfo_vp_url(string $gabarit, string $q): string { return str_replace('{q
  * 'specifique' : la requête exige le lieu exact — tout article rendu le concerne.
  */
 function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
-    $moteurs = []; $secondaires = [];
+    $moteurs = []; $secondaires = []; $webs = [];
     foreach ($cfg['moteurs'] ?? [] as $m) {
         if (empty($m['gabarit'])) continue;
-        if (($m['role'] ?? '') === 'site') $secondaires[] = $m; else $moteurs[$m['langue'] ?? 'fr'] = $m;
+        if (($m['role'] ?? '') === 'site') $secondaires[] = $m; elseif (($m['role'] ?? '') === 'web') $webs[] = $m; else $moteurs[$m['langue'] ?? 'fr'] = $m;
     }
     // v37.40 : un média mis en pause depuis l'écran n'est pas interrogé
     $sources = array_values(array_filter($cfg['sources'] ?? [], fn($s) => ($s['actif'] ?? true) !== false && !empty($s['domaine'])));
     $locales = array_values(array_filter($sources, fn($s) => ($s['portee'] ?? '') === 'locale'));
-    $sitesLocaux = cfo_vp_sites($sources, 'locale'); $nationales = cfo_vp_sites($sources, 'nationale');
+    $sitesLocaux = cfo_vp_sites($sources, 'locale');
+    //  v37.111 — la presse nationale par paquets de 10 sites (une requête trop longue est tronquée par les moteurs), chacun
+    //  avec le lieu dans SA langue : les journaux arabophones avec le lieu en arabe
+    $paquetsNat = function (string $lg) use ($sources): array {
+        $n = array_values(array_filter($sources, fn($s) => ($s['portee'] ?? '') === 'nationale'));
+        $l = array_values(array_filter($n, fn($s) => (($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr') === $lg)) ?: $n;
+        return array_map(fn($p) => '(' . implode(' OR ', array_map(fn($s) => 'site:' . $s['domaine'], $p)) . ')', array_chunk($l, 10));
+    };
     $suj = ['fr' => array_slice(array_values(array_filter($sujets, fn($s) => !cfo_vp_arabe($s))), 0, 5),
             'ar' => array_slice(array_values(array_filter($sujets, fn($s) => cfo_vp_arabe($s))), 0, 5)];
     $parLangue = ['fr' => [], 'ar' => []];
@@ -133,11 +148,33 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
     foreach (['fr', 'ar'] as $lg) foreach (array_slice($parLangue[$lg], 0, 2) as $i => $l) {
         $g = cfo_vp_guillemets($l);
         $theme[] = $moteur($lg, trim($g . ' ' . cfo_vp_ou($suj[$lg])), true, $suj[$lg] ? 'lieu + urbanisme' : 'lieu');
-        if ($i === 0 && $nationales) $theme[] = $moteur($lg, $g . ' ' . $nationales, true, 'presse nationale');
+        if ($i === 0) foreach ($paquetsNat($lg) as $paquet) $theme[] = $moteur($lg, $g . ' ' . $paquet, true, 'presse nationale');
+    }
+    //  v37.111 — réseaux sociaux, forums, annonces : les moteurs du web, restreints au site (les sites d'une même famille
+    //  ensemble) ou à la page / au groupe précis ; les lieux des deux langues, exigés
+    $webGroupes = []; $webPages = [];
+    if ($tousLieux && $webs) {
+        $ou = cfo_vp_ou($tousLieux);
+        $web = function (array $m, string $q, string $libelle, array $plus): array {
+            return ['type' => 'moteur', 'canal' => (string)($m['id'] ?? 'web'), 'nom' => (string)($m['nom'] ?? 'web'), 'libelle' => $libelle, 'q' => $q,
+                    'langue' => '*', 'specifique' => true, 'url' => cfo_vp_url($m['gabarit'], $q)] + (!empty($m['format']) ? ['format' => (string)$m['format']] : []) + $plus;
+        };
+        foreach (CFO_VP_PORTEES_WEB as $pt) {
+            $fam = array_values(array_filter($sources, fn($s) => ($s['portee'] ?? '') === $pt));
+            $doms = array_values(array_unique(array_map(fn($s) => $s['domaine'], array_filter($fam, fn($s) => empty($s['chemin'])))));
+            foreach (array_chunk($doms, 8) as $paquet) {
+                $q = '(' . implode(' OR ', array_map(fn($d) => 'site:' . $d, $paquet)) . ') ' . $ou;
+                foreach ($webs as $m) $webGroupes[] = $web($m, $q, CFO_VP_NOMS_PORTEES[$pt], ['groupe' => $pt, 'media' => ucfirst(CFO_VP_NOMS_PORTEES[$pt]) . ' (' . implode(', ', $paquet) . ')', 'domaine' => 'groupe:' . $pt . ':' . $paquet[0]]);
+            }
+            foreach ($fam as $s) if (!empty($s['chemin'])) {
+                $q = 'site:' . cfo_vp_cle($s) . ' ' . $ou;
+                foreach ($webs as $m) $webPages[] = $web($m, $q, 'site:' . cfo_vp_cle($s), ['domaine' => cfo_vp_cle($s), 'media' => $s['nom']]);
+            }
+        }
     }
     if ($suj['fr']) $zone[] = $moteur('fr', 'Marrakech ' . cfo_vp_ou($suj['fr']) . ($sitesLocaux ? ' ' . $sitesLocaux : ''), false, 'zone (Marrakech)');
     if ($suj['ar']) $zone[] = $moteur('ar', 'مراكش ' . cfo_vp_ou($suj['ar']), false, 'zone (مراكش)');
-    return array_slice(array_values(array_filter(array_merge($strict, $theme, $pages, $second, $accueil, $zone))), 0, CFO_VP_MAX_REQUETES);
+    return array_slice(array_values(array_filter(array_merge($strict, $theme, $webGroupes, $pages, $second, $webPages, $accueil, $zone))), 0, CFO_VP_MAX_REQUETES);
 }
 
 /** v37.42 : l'adresse de recherche d'un site, sans demande de flux (« &feed=rss2 », « /feed/ », « format=rss ») — on lit la PAGE. */
@@ -155,13 +192,19 @@ function cfo_vp_accueil(array $s): string {
 }
 
 /** Le média d'un domaine, d'après le fichier de sources (www. et sous-domaines compris). */
-function cfo_vp_media(array $cfg, string $hote): ?array {
-    $hote = strtolower(preg_replace('/^www\./', '', $hote));
+function cfo_vp_media(array $cfg, string $hote, string $chemin = ''): ?array {
+    $hote = strtolower(preg_replace('/^(www|m|web|mobile|fr|ar)\./', '', $hote));
+    $chemin = strtolower(trim($chemin, '/'));
+    $trouve = null;
     foreach ($cfg['sources'] ?? [] as $s) {
         $d = strtolower($s['domaine'] ?? '');
-        if ($d !== '' && ($hote === $d || substr($hote, -strlen($d) - 1) === '.' . $d)) return $s;
+        if ($d === '' || ($hote !== $d && substr($hote, -strlen($d) - 1) !== '.' . $d)) continue;
+        //  v37.111 — plusieurs pages Facebook : celle dont le chemin ouvre l'adresse ; sinon la source « tout le site »
+        $c = strtolower((string)($s['chemin'] ?? ''));
+        if ($c !== '') { if ($chemin === $c || str_starts_with($chemin, $c . '/')) return $s; continue; }
+        $trouve = $trouve ?? $s;
     }
-    return null;
+    return $trouve;
 }
 
 /**
@@ -181,7 +224,7 @@ function cfo_vp_lire_rss(string $xml, array $req, array $cfg): ?array {
         $titre = trim(html_entity_decode(strip_tags($it['titre']), ENT_QUOTES, 'UTF-8'));
         $srcNom = $it['source']; $srcUrl = $it['source_url'];
         $hote = parse_url($srcUrl ?: $url, PHP_URL_HOST) ?: '';
-        $media = cfo_vp_media($cfg, $hote);
+        $media = cfo_vp_media($cfg, $hote, $srcUrl ? '' : (string)parse_url($url, PHP_URL_PATH));
         // Google Actualités suffixe le titre par « - Nom du média »
         if ($srcNom !== '' && mb_substr($titre, -mb_strlen(' - ' . $srcNom)) === ' - ' . $srcNom) $titre = trim(mb_substr($titre, 0, -mb_strlen(' - ' . $srcNom)));
         $extrait = trim((string)preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($it['description']), ENT_QUOTES, 'UTF-8')));
@@ -419,6 +462,7 @@ function cfo_vp_lire_html_brut(string $html, array $req, array $cfg, string $url
  * est lu comme sa liste de résultats.
  */
 function cfo_vp_lire_reponse(string $corps, array $req, array $cfg): array {
+    if (($req['format'] ?? '') === 'html_ddg') { $d = cfo_vp_lire_ddg($corps, $req, $cfg); return ['mode' => $d === null ? null : 'moteur', 'articles' => $d]; }
     if (($req['type'] ?? '') === 'page') {
         if (cfo_vp_est_flux($corps)) return ['mode' => null, 'articles' => null, 'raison' => 'flux'];
         $h = cfo_vp_lire_html($corps, $req, $cfg, (string)($req['url'] ?? ''));
@@ -426,6 +470,40 @@ function cfo_vp_lire_reponse(string $corps, array $req, array $cfg): array {
     }
     $rss = cfo_vp_lire_rss($corps, $req, $cfg);
     return ['mode' => $rss === null ? null : 'moteur', 'articles' => $rss];
+}
+
+/**
+ * v37.111 — la page de résultats de DuckDuckGo (version HTML, sans JavaScript) → articles. Les liens passent par
+ * « //duckduckgo.com/l/?uddg=<adresse> » : on rend l'adresse d'origine. null si ce n'est pas une page de résultats
+ * (vérification anti-robots…) : on le dit, on ne l'invente pas. Pas de date : le tri les classe après les articles datés.
+ */
+function cfo_vp_lire_ddg(string $html, array $req, array $cfg): ?array {
+    if (!preg_match('/class="[^"]*\bresults?\b|class="[^"]*no-results/i', $html)) return null;
+    $out = []; $vus = [];
+    preg_match_all('#<a\b[^>]*class="[^"]*\bresult__a\b[^"]*"[^>]*>.*?</a>#is', $html, $liens, PREG_OFFSET_CAPTURE);
+    foreach ($liens[0] as $k => [$a, $pos]) {
+        if (!preg_match('#\bhref\s*=\s*"([^"]*)"#i', $a, $h)) continue;
+        $href = html_entity_decode($h[1], ENT_QUOTES, 'UTF-8');
+        $q = (string)parse_url(str_starts_with($href, '//') ? 'https:' . $href : $href, PHP_URL_QUERY);
+        parse_str($q, $pq);
+        $url = isset($pq['uddg']) && is_string($pq['uddg']) ? $pq['uddg'] : $href;
+        if (!preg_match('#^https?://#i', $url) || isset($vus[$url])) continue;
+        if (preg_match('#^https?://([a-z0-9-]+\.)*duckduckgo\.com/#i', $url)) continue;              // publicité, lien interne
+        $vus[$url] = true;
+        $titre = trim((string)preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($a), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+        $suite = substr($html, $pos, isset($liens[0][$k + 1]) ? $liens[0][$k + 1][1] - $pos : 4000);
+        $extrait = preg_match('#class="[^"]*\bresult__snippet\b[^"]*"[^>]*>(.*?)</(?:a|div|td)>#is', $suite, $m)
+            ? trim((string)preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'))) : '';
+        if ($titre === '') continue;
+        $hote = (string)parse_url($url, PHP_URL_HOST);
+        $media = cfo_vp_media($cfg, $hote, (string)parse_url($url, PHP_URL_PATH));
+        $out[] = ['titre' => mb_substr($titre, 0, 300), 'url' => $url, 'source' => $media['nom'] ?? $hote, 'domaine' => preg_replace('/^www\./', '', strtolower($hote)),
+                  'portee' => $media['portee'] ?? 'autre', 'ts' => null, 'date' => null,
+                  'extrait' => mb_strlen($extrait) > 280 ? rtrim(mb_substr($extrait, 0, 277)) . '…' : $extrait,
+                  'specifique' => !empty($req['specifique']), 'langue' => $req['langue'] ?? 'fr'];
+        if (count($out) >= 20) break;
+    }
+    return $out;
 }
 
 /** Un flux RSS / Atom (et non une page HTML) ? */
@@ -437,6 +515,20 @@ function cfo_vp_est_flux(string $corps): bool {
 /** Le nom d'une porte, pour l'écran : le moteur, ou la page du journal. */
 function cfo_vp_nom_canal(array $r): string {
     return ['recherche' => 'page de recherche du site', 'accueil' => "page d'accueil"][$r['canal'] ?? ''] ?? (string)($r['nom'] ?? '');
+}
+
+/** v37.111 — les articles retenus qui viennent d'une source (une page précise, un site, ou une famille : réseaux sociaux…). */
+function cfo_vp_retenus_de(array $retenus, array $r): int {
+    if (!empty($r['groupe'])) return count(array_filter($retenus, fn($a) => ($a['portee'] ?? '') === $r['groupe']));
+    $cle = strtolower((string)($r['domaine'] ?? ''));
+    [$dom, $chemin] = array_pad(explode('/', $cle, 2), 2, '');
+    return count(array_filter($retenus, function ($a) use ($dom, $chemin) {
+        $d = strtolower((string)($a['domaine'] ?? ''));
+        if ($d !== $dom && substr($d, -strlen($dom) - 1) !== '.' . $dom) return false;
+        if ($chemin === '') return true;
+        $p = strtolower(trim((string)parse_url((string)($a['url'] ?? ''), PHP_URL_PATH), '/'));
+        return $p === $chemin || str_starts_with($p, $chemin . '/');
+    }));
 }
 
 /** Un code HTTP d'échec, en clair. */
@@ -469,7 +561,7 @@ function cfo_vp_bilan(array $r, array $x, array $cfg): array {
 
 /* ══ v37.40 — LES MÉDIAS, RÉGLABLES DEPUIS L'ÉCRAN ══════════════════════════ */
 
-const CFO_VP_MAX_SOURCES = 60;
+const CFO_VP_MAX_SOURCES = 100;
 
 /** « https://www.Le360.ma/fr/economie » → « le360.ma ». null si ce n'est pas un nom de domaine public. */
 function cfo_vp_domaine($v): ?string {
@@ -492,10 +584,21 @@ function cfo_vp_valider_source($s): array {
     $dom = cfo_vp_domaine($s['domaine'] ?? '');
     if ($dom === null) return ['erreur' => "« " . mb_substr(trim((string)($s['domaine'] ?? '')), 0, 60) . " » n'est pas l'adresse d'un site (attendu : almarrakchia.net)."];
     $portee = $s['portee'] ?? '';
-    if (!in_array($portee, ['locale', 'nationale'], true)) return ['erreur' => 'Portée : presse locale ou nationale.'];
+    if (!in_array($portee, CFO_VP_PORTEES, true)) return ['erreur' => 'Portée : presse locale, nationale, réseau social, forum ou annonces.'];
     $langue = $s['langue'] ?? '';
     if (!in_array($langue, ['fr', 'ar'], true)) return ['erreur' => 'Langue : français ou arabe.'];
     $out = ['nom' => $nom, 'domaine' => $dom, 'portee' => $portee, 'langue' => $langue];
+    //  v37.111 — une page ou un groupe précis (réseaux sociaux, forums, annonces) : le chemin de l'adresse collée
+    if (in_array($portee, CFO_VP_PORTEES_WEB, true)) {
+        $ch = isset($s['chemin']) && $s['chemin'] !== '' ? (string)$s['chemin']
+            : (string)(parse_url(preg_match('#^[a-z][a-z0-9+.\-]*://#i', trim((string)$s['domaine'])) ? trim((string)$s['domaine']) : 'https://' . trim((string)$s['domaine']), PHP_URL_PATH) ?? '');
+        $ch = trim(rawurldecode($ch), '/');
+        if ($ch !== '') {
+            if (strlen($ch) > 120 || str_contains($ch, '..') || !preg_match('#^[\p{L}\p{N}._~\-@]+(?:/[\p{L}\p{N}._~\-@]+){0,4}$#u', $ch))
+                return ['erreur' => "Page ou groupe : « " . mb_substr($ch, 0, 60) . " » n'est pas un chemin d'adresse (attendu : groups/123456 ou kech24)."];
+            $out['chemin'] = $ch;
+        }
+    }
     $flux = trim((string)($s['flux'] ?? ''));
     if ($flux !== '') {
         if (strlen($flux) > 300 || preg_match('/\s/', $flux) || !preg_match('#^https?://#i', $flux)) return ['erreur' => 'Adresse de recherche : une adresse http(s), sans espace.'];
@@ -518,8 +621,9 @@ function cfo_vp_valider_liste($liste): array {
     foreach (array_values($liste) as $i => $s) {
         $v = cfo_vp_valider_source($s);
         if (isset($v['erreur'])) { $err['s' . $i] = 'Source ' . ($i + 1) . ' : ' . $v['erreur']; continue; }
-        if (isset($vus[$v['source']['domaine']])) { $err['s' . $i] = $v['source']['domaine'] . ' figure déjà dans la liste.'; continue; }
-        $vus[$v['source']['domaine']] = true; $out[] = $v['source'];
+        $c = cfo_vp_cle($v['source']);
+        if (isset($vus[$c])) { $err['s' . $i] = $c . ' figure déjà dans la liste.'; continue; }
+        $vus[$c] = true; $out[] = $v['source'];
     }
     return ['sources' => $out, 'erreurs' => $err];
 }
@@ -536,7 +640,7 @@ function cfo_vp_meme_source(array $a, array $b): bool {
  */
 function cfo_vp_fusion(array $defauts, ?array $perso): array {
     $parDef = [];
-    foreach ($defauts as $d) if (!empty($d['domaine'])) $parDef[$d['domaine']] = $d;
+    foreach ($defauts as $d) if (!empty($d['domaine'])) $parDef[cfo_vp_cle($d)] = $d;
     if (!$perso || !is_array($perso['sources'] ?? null)) {
         return ['sources' => array_map(fn($d) => $d + ['origine' => 'origine'], array_values($parDef)), 'supprimees' => []];
     }
@@ -546,9 +650,9 @@ function cfo_vp_fusion(array $defauts, ?array $perso): array {
         $v = cfo_vp_valider_source($s);
         if (isset($v['erreur'])) continue;                    // une ligne abîmée en base ne casse pas la veille
         $s = $v['source'];
-        if (isset($vus[$s['domaine']])) continue;
-        $vus[$s['domaine']] = true;
-        $d = $parDef[$s['domaine']] ?? null;
+        if (isset($vus[cfo_vp_cle($s)])) continue;
+        $vus[cfo_vp_cle($s)] = true;
+        $d = $parDef[cfo_vp_cle($s)] ?? null;
         $s['origine'] = $d === null ? 'ajoutee' : (cfo_vp_meme_source($s, $d) ? 'origine' : 'modifiee');
         $out[] = $s;
     }
@@ -564,6 +668,17 @@ function cfo_vp_fusion(array $defauts, ?array $perso): array {
 /** Tester UN média, par toutes ses portes : le moteur principal et le secondaire sur son site, sa page de recherche, sa page d'accueil. */
 function cfo_vp_requetes_test(array $cfg, array $s): array {
     $lg = ($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr';
+    //  v37.111 — réseau social, forum, annonces : les moteurs du web, sur le site ou sur la page / le groupe précis
+    if (in_array($s['portee'] ?? '', CFO_VP_PORTEES_WEB, true)) {
+        $q = 'site:' . cfo_vp_cle($s) . ' (Marrakech OR مراكش)';
+        $req = [];
+        foreach ($cfg['moteurs'] ?? [] as $m) if (($m['role'] ?? '') === 'web' && !empty($m['gabarit']))
+            $req[] = ['type' => 'moteur', 'canal' => (string)($m['id'] ?? 'web'), 'nom' => (string)($m['nom'] ?? 'web'), 'libelle' => 'test', 'q' => $q, 'langue' => '*',
+                      'specifique' => true, 'url' => cfo_vp_url($m['gabarit'], $q), 'domaine' => cfo_vp_cle($s), 'media' => $s['nom']] + (!empty($m['format']) ? ['format' => (string)$m['format']] : []);
+        if (!empty($s['flux'])) $req[] = ['type' => 'page', 'canal' => 'recherche', 'nom' => $s['nom'], 'libelle' => 'test', 'q' => 'Marrakech', 'langue' => $lg,
+                                          'specifique' => true, 'url' => cfo_vp_url(cfo_vp_sans_flux($s['flux']), 'Marrakech'), 'domaine' => $s['domaine'], 'media' => $s['nom']];
+        return $req;
+    }
     $mot = $lg === 'ar' ? 'مراكش' : 'Marrakech';
     $q = 'site:' . $s['domaine'] . ' ' . $mot;
     $media = ['domaine' => $s['domaine'], 'media' => $s['nom']];

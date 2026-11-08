@@ -70,7 +70,7 @@ if ($action === 'tester') {
         $canaux[] = ['canal' => $r['canal'], 'nom' => cfo_vp_nom_canal($r), 'q' => $r['q']] + $b
                   + ['exemple' => $lus ? ['titre' => $lus[0]['titre'], 'date' => $lus[0]['date']] : null];
     }
-    vs_sortie(['status' => 'ok', 'domaine' => $s['domaine'], 'canaux' => $canaux, 'mode_reseau' => $pre['mode_reseau']]);
+    vs_sortie(['status' => 'ok', 'domaine' => cfo_vp_cle($s), 'canaux' => $canaux, 'mode_reseau' => $pre['mode_reseau']]);
 }
 
 if ($action !== 'enregistrer' && $action !== 'reinitialiser') {
@@ -91,7 +91,7 @@ try {
                    'message' => reset($l['erreurs'])], 400);
     }
     cfo_vp_ecrire_perso($pdo, ['sources' => $l['sources'],
-                               'defauts_connus' => array_values(array_column($def['sources'] ?? [], 'domaine')),
+                               'defauts_connus' => array_values(array_map('cfo_vp_cle', array_filter($def['sources'] ?? [], fn($d) => !empty($d['domaine'])))),
                                'maj' => gmdate('c')]);
     vs_sortie(vs_etat());
 } catch (Throwable $e) {

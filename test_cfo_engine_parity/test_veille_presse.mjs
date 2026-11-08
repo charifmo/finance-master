@@ -123,13 +123,19 @@ const presse = http.createServer(async (req, res) => {
     if (u.hostname === 'marrakech7.com') { await attendre(3500); return html('<!DOCTYPE html><html><body></body></html>'); }   // trop lent : délai de 2 s
     if (u.pathname === '/bing') { res.writeHead(200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
         return res.end(q.startsWith('site:kech24.com ') && q.includes('واحة سيدي ابراهيم') ? BING_KECH24 : rss([])); }
+    //  v37.111 — les moteurs du web : DuckDuckGo (page HTML) trouve un post public d'un groupe Facebook ; Bing web, rien
+    if (u.pathname === '/web/ddg') return html(q.includes('site:facebook.com') && q.includes('Ouahat Sidi Brahim')
+        ? '<html><body><div class="results"><div class="result"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=' + encodeURIComponent('https://www.facebook.com/groups/ouahat/posts/42') + '&amp;rut=x">Ouahat Sidi Brahim : réunion des ayants droit sur la bande RN9</a>'
+          + '<a class="result__snippet">Les propriétaires de la bande RN9 se réunissent samedi au douar Oulad Belaagid.</a></div></div></body></html>'
+        : '<html><body><div class="no-results">No results.</div></body></html>');
+    if (u.pathname === '/web/bing_web') return envoyer([]);
     if (u.pathname === '/gnews') {
         // v37.41 : une requête STRICTE par média local
         if (q.startsWith('site:almarrakchia.net ') && q.includes('Ouahat Sidi Brahim')) return envoyer([ART.agence, ART.piege, ART.js]);
         if (q.startsWith('site:kech24.com ') && q.includes('واحة سيدي ابراهيم')) return envoyer([ART.kechG]);
         if (q.startsWith('site:')) return envoyer([]);                                       // Marrakech Alaan, Marrakech 7 : absents de Google
         if (q.includes('Ouahat Sidi Brahim') && q.includes('RN9')) return envoyer([ART.desk, ART.agenceBis]);
-        if (q.includes('واحة سيدي ابراهيم') && q.includes('site:ledesk.ma')) return envoyer([ART.arabe]);
+        if (q.includes('واحة سيدي ابراهيم') && q.includes('site:hespress.com')) return envoyer([ART.arabe]);
         if (q.startsWith('Marrakech ')) return envoyer([ART.lgv, ART.agadir, ART.vieux]);
         return envoyer([]);
     }
@@ -182,7 +188,8 @@ fs.writeFileSync(path.join(F, 'finance_data.json'), JSON.stringify(fx));
 // Les VRAIES sources, redirigées vers la presse simulée
 const src = JSON.parse(fs.readFileSync(path.join(RACINE, 'veille_sources.json'), 'utf8'));
 src.delai_s = 2;
-src.moteurs = src.moteurs.map(m => ({ ...m, gabarit: m.role === 'site' ? `http://127.0.0.1:${pPresse}/bing?q={q}` : `http://127.0.0.1:${pPresse}/gnews?q={q}&hl=${m.langue}` }));
+src.moteurs = src.moteurs.map(m => ({ ...m, gabarit: m.role === 'site' ? `http://127.0.0.1:${pPresse}/bing?q={q}`
+    : (m.role === 'web' ? `http://127.0.0.1:${pPresse}/web/${m.id}?q={q}` : `http://127.0.0.1:${pPresse}/gnews?q={q}&hl=${m.langue}`) }));
 // les sites en http:// (le proxy local les joue) ; Al Marrakchia garde un ancien réglage « &feed=rss2 », qui ne doit jamais partir
 src.sources = src.sources.map(s => s.flux ? { ...s, flux: s.flux.replace('https://', 'http://') + (s.domaine === 'almarrakchia.net' ? '&feed=rss2' : '') } : s);
 const ecrireSources = (plus = {}) => fs.writeFileSync(path.join(F, 'veille_sources.json'), JSON.stringify({ ...src, ...plus }));
@@ -274,7 +281,7 @@ try {
     recues.length = 0;
     const inj = await revue({ action: 'revue', lieux: ['http://169.254.169.254/latest/meta-data'], sujets: [] });
     v('une URL envoyée comme lieu n\'est qu\'un texte : seule la presse configurée est appelée',
-      inj.code === 200 && recues.length > 0 && recues.every(x => x.hote === '127.0.0.1' ? ['/gnews', '/bing'].includes(x.chemin) : ['www.almarrakchia.net', 'marrakechalaan.com', 'www.kech24.com', 'marrakech7.com'].includes(x.hote))
+      inj.code === 200 && recues.length > 0 && recues.every(x => x.hote === '127.0.0.1' ? ['/gnews', '/bing', '/web/bing_web', '/web/ddg'].includes(x.chemin) : ['www.almarrakchia.net', 'marrakechalaan.com', 'www.kech24.com', 'marrakech7.com'].includes(x.hote))
       && !/[:/]/.test(inj.d.termes.lieux[0]), JSON.stringify(inj.d?.termes));
   });
 
@@ -345,8 +352,15 @@ try {
     v('la question porte les articles lus sur la page de Kech24 (sans RSS)', lignes.some(l => l.includes('Kech24 ·') && l.includes('الوكالة الحضرية تفتح شريط')));
     const medias = await page.$$eval('tr [data-mi-media]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     v('la carte détaille chaque média local, porte par porte (Google, page de recherche, Bing, accueil)',
-      medias.length === 4 && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
+      medias.length === 7 && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
       && medias.some(m => /Marrakech 7 — 0 retenu .*page de recherche du site : échec \(pas de réponse en 2 s\).*page d'accueil : échec \(pas de réponse en 2 s\)/.test(m)), JSON.stringify(medias));
+    v('v37.111 : la carte détaille aussi les familles — réseaux sociaux (1 retenu par DuckDuckGo), forums, annonces',
+      medias.some(m => /^Réseaux sociaux \(facebook\.com, instagram\.com, youtube\.com\) — 1 retenu · Bing \(web\) : aucun article · DuckDuckGo : 1 article$/.test(m))
+      && medias.some(m => /^Forums \(/.test(m)) && medias.some(m => /^Annonces immobilières \(avito\.ma/.test(m)), JSON.stringify(medias));
+    v('  → le post Facebook est dans la question, marqué « (réseau social) », et la consigne dit de le recouper',
+      lignes.some(l => /^\[\d+\] Facebook \(pages et groupes publics\) \(réseau social\) · sans date — « Ouahat Sidi Brahim : réunion des ayants droit/.test(l))
+      && qN.includes('un témoignage ou une rumeur à recouper') && qN.includes('une annonce donne un prix DEMANDÉ'), lignes.join('\n'));
+    v('  → les familles ne sont pas citées comme « médias locaux muets »', !/Médias locaux sans article retenu ici : [^\n]*(Forums|Annonces|groupe:)/.test(qN));
     const arts = await page.$$eval('tr [data-mi-article]', els => els.map(e => ({ t: e.innerText, href: e.querySelector('a')?.getAttribute('href') || null })));
     v('la liste des articles lus suit la numérotation [n] de la question', arts.length === lignes.length && arts[0].t.includes(lignes[0].split(' · ')[0].replace('[1] ', '')), arts.length + ' / ' + lignes.length);
     v('  → chaque lien est http(s), ouvert hors de l\'application', arts.every(a => a.href && /^https?:\/\//.test(a.href))
