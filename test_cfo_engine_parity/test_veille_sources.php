@@ -54,7 +54,7 @@ v('« en pause » conservé', ($p['source']['actif'] ?? null) === false);
 $l = cfo_vp_valider_liste([['nom' => 'A', 'domaine' => 'a.ma'], ['nom' => 'Média A', 'domaine' => 'a.ma', 'portee' => 'locale', 'langue' => 'fr'],
                            ['nom' => 'Média B', 'domaine' => 'https://www.a.ma/x', 'portee' => 'locale', 'langue' => 'fr']]);
 v('erreurs par position, lisibles ; doublon de domaine refusé', count($l['erreurs']) === 2 && str_contains(implode(' ', $l['erreurs']), 'a.ma figure déjà') && count($l['sources']) === 1, $j($l));
-v('au plus 60 médias', isset(cfo_vp_valider_liste(array_fill(0, 61, ['nom' => 'M', 'domaine' => 'm.ma']))['erreurs']['liste']));
+v('au plus ' . CFO_VP_MAX_SOURCES . ' médias (v37.111 : 100, réseaux sociaux, forums et annonces compris)', CFO_VP_MAX_SOURCES === 100 && isset(cfo_vp_valider_liste(array_fill(0, CFO_VP_MAX_SOURCES + 1, ['nom' => 'M', 'domaine' => 'm.ma']))['erreurs']['liste']));
 v('pas une liste : refusé', isset(cfo_vp_valider_liste('x')['erreurs']['liste']));
 
 /* ── 4. Vos réglages sur la liste d'origine ───────────────────────────── */

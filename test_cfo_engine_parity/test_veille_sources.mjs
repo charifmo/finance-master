@@ -173,7 +173,7 @@ try {
     v('« localhost » refusé, avec la raison', loc.code === 400 && loc.d?.error === 'SOURCES_INVALIDES' && /n'est pas l'adresse d'un site/.test(loc.d.message), loc.t.slice(0, 200));
     const ail = await appel({ action: 'enregistrer', sources: [...liste, { nom: 'Média', domaine: 'exemple.ma', portee: 'locale', langue: 'fr', flux: 'https://evil.example/?q={q}' }] });
     v('flux hors du site du média refusé, avec la raison', ail.code === 400 && /doit être sur le site du média/.test(ail.d?.message || ''), ail.t.slice(0, 200));
-    v('61 médias refusés', (await appel({ action: 'enregistrer', sources: Array.from({ length: 61 }, (_, i) => ({ nom: 'M' + i, domaine: `m${i}.ma`, portee: 'locale', langue: 'fr' })) })).code === 400);
+    v('101 médias refusés (plafond 100, v37.111)', (await appel({ action: 'enregistrer', sources: Array.from({ length: 101 }, (_, i) => ({ nom: 'M' + i, domaine: `m${i}.ma`, portee: 'locale', langue: 'fr' })) })).code === 400);
     v('après ces refus, rien n\'est écrit en base', enBase() === null);
     v('action inconnue → 400', (await appel({ action: 'detruire' })).code === 400);
   });
@@ -206,8 +206,10 @@ try {
     v('Supervision IA → « 📰 Sources presse » ouvre la fenêtre', !!(await page.$('[data-vs-modale]')));
     v('  → rien ne manque au PHP du serveur : pas de bandeau de prérequis', !(await page.$('[data-vs-prerequis]')));
     const nbLoc = SRC.sources.filter(s => s.portee === 'locale').length;
-    v(`les ${NB} médias, groupés : presse locale (${nbLoc}) et nationale (${NB - nbLoc})`,
-      (await page.$$('[data-vs-source]')).length === NB && (await page.$$('[data-vs-groupe="locale"] [data-vs-source]')).length === nbLoc);
+    const parGroupe = {}; for (const g of ['locale', 'nationale', 'reseau', 'forum', 'annonces']) parGroupe[g] = (await page.$$(`[data-vs-groupe="${g}"] [data-vs-source]`)).length;
+    const attendu = {}; for (const g of Object.keys(parGroupe)) attendu[g] = SRC.sources.filter(s => s.portee === g).length;
+    v(`les ${NB} médias, groupés : presse locale (${nbLoc}), nationale, réseaux sociaux, forums, annonces (v37.111)`,
+      (await page.$$('[data-vs-source]')).length === NB && JSON.stringify(parGroupe) === JSON.stringify(attendu) && attendu.reseau >= 3 && attendu.forum >= 2 && attendu.annonces >= 4, JSON.stringify(parGroupe));
 
     // ── ajouter, en collant une adresse complète
     await page.click('[data-vs-ajouter]');
@@ -231,6 +233,31 @@ try {
     v('saisie refusée : la raison s\'affiche, le formulaire reste ouvert', /n'est pas l'adresse d'un site/.test(await page.textContent('[data-vs-erreur]').catch(() => '')) && !!(await page.$('[data-vs-form]')));
     v('  → la base n\'a pas bougé', JSON.stringify(enBase()) === JSON.stringify(b1));
     await page.click('[data-vs-form] button:has-text("Annuler")');
+
+    // ── v37.111 : un groupe Facebook précis, en collant son adresse
+    await page.click('[data-vs-ajouter]');
+    await page.fill('[data-vs-nom]', 'Groupe Ouahat');
+    await page.fill('[data-vs-domaine]', 'https://www.facebook.com/groups/987654/?ref=share');
+    await page.selectOption('[data-vs-portee]', 'reseau');
+    await page.waitForSelector('[data-vs-chemin]', { state: 'visible' });
+    v('réseau social : le champ « page ou groupe » apparaît ; ni case WordPress ni page de recherche', !(await page.$('[data-vs-wordpress]')) && !(await page.$('[data-vs-flux]')));
+    await page.click('[data-vs-valider]'); await calme();
+    const grp = (enBase()?.sources || []).find(s => s.domaine === 'facebook.com' && s.chemin === 'groups/987654');
+    v("  → enregistré : facebook.com + groups/987654 (repris de l'adresse), rangé dans « Réseaux sociaux », à côté de Facebook entier",
+      grp && !grp.flux && grp.portee === 'reseau' && !!(await page.$('[data-vs-groupe="reseau"] [data-domaine="facebook.com/groups/987654"]'))
+      && !!(await page.$('[data-vs-groupe="reseau"] [data-domaine="facebook.com"]')) && /ajoutée par vous/.test(await texteLigne('facebook.com/groups/987654')), JSON.stringify(grp));
+    const b0 = enBase();
+    await page.click('[data-vs-ajouter]');
+    await page.fill('[data-vs-nom]', 'Groupe Ouahat bis');
+    await page.fill('[data-vs-domaine]', 'facebook.com');
+    await page.selectOption('[data-vs-portee]', 'reseau');
+    await page.fill('[data-vs-chemin]', '/groups/987654/');
+    await page.click('[data-vs-valider]'); await calme();
+    v("  → le même groupe une deuxième fois : refusé, dit, la base n'a pas bougé", (await page.textContent('[data-vs-erreur]').catch(() => '')).includes('facebook.com/groups/987654 figure déjà')
+      && JSON.stringify(enBase()) === JSON.stringify(b0));
+    await page.click('[data-vs-form] button:has-text("Annuler")');
+    await (await ligne('facebook.com/groups/987654')).$('[data-vs-supprimer]').then(b => b.click()); await calme();
+    v('  → retiré : Facebook entier reste', !(await ligne('facebook.com/groups/987654')) && !!(await ligne('facebook.com')));
 
     // ── modifier
     await (await ligne('ledesk.ma')).$('[data-vs-modifier]').then(b => b.click());

@@ -89,11 +89,12 @@ v('ordre d\'importance : Google site: d\'abord, puis lieu/presse nationale, page
   array_slice($ordre, 0, 4) === ['moteur', 'moteur', 'moteur', 'moteur'] && $R[4]['libelle'] === 'lieu + urbanisme' && max(array_keys($ordre, 'recherche')) < min(array_keys($ordre, 'bing'))
   && max(array_keys($ordre, 'bing')) < min(array_keys($ordre, 'accueil')) && str_starts_with(end($R)['libelle'], 'zone'), $j(array_column($R, 'libelle')));
 $cfg8 = $cfg;
-foreach (range(1, 4) as $k) $cfg8['sources'][] = ['nom' => "Local $k", 'domaine' => "local$k.ma", 'portee' => 'locale', 'langue' => 'ar', 'flux' => "https://local$k.ma/?s={q}"];
+//  v37.111 : plafond porté à 48 (réseaux sociaux, forums, annonces) — 12 médias locaux pour le dépasser
+foreach (range(1, 8) as $k) $cfg8['sources'][] = ['nom' => "Local $k", 'domaine' => "local$k.ma", 'portee' => 'locale', 'langue' => 'ar', 'flux' => "https://local$k.ma/?s={q}"];
 $R8 = cfo_vp_requetes($cfg8, $lieux, $sujets);
-v('8 médias locaux : plafonné à ' . CFO_VP_MAX_REQUETES . ', la presse nationale et toutes les requêtes Google site: restent',
-  count($R8) === CFO_VP_MAX_REQUETES && (bool)array_filter($R8, fn($r) => $r['libelle'] === 'presse nationale')
-  && count(array_filter($R8, fn($r) => $r['canal'] === 'moteur' && str_starts_with($r['libelle'], 'site:'))) === 8, (string)count($R8));
+v('12 médias locaux : plafonné à ' . CFO_VP_MAX_REQUETES . ', la presse nationale, les réseaux sociaux et toutes les requêtes Google site: restent',
+  count($R8) === CFO_VP_MAX_REQUETES && (bool)array_filter($R8, fn($r) => $r['libelle'] === 'presse nationale') && (bool)array_filter($R8, fn($r) => ($r['groupe'] ?? '') === 'reseau')
+  && count(array_filter($R8, fn($r) => $r['canal'] === 'moteur' && str_starts_with($r['libelle'], 'site:'))) === 12, (string)count($R8));
 
 /* ── 3. Les flux ───────────────────────────────────────────────────────── */
 $gnews = <<<XML
@@ -203,6 +204,86 @@ v('en tête : les articles qui nomment le lieu, locaux et récents (FR et AR)',
   array_slice($titres, 0, 2) == ['واحة سيدي إبراهيم: تصميم التهيئة الجديد', "Ouahat Sidi Brahim : le plan d'aménagement adopté"], $j($titres));
 v('le bien nommé, même il y a un an, passe devant la zone seule récente', array_search('Ouahat Sidi Brahim : nouveau lotissement autorisé', $titres, true) < array_search('Marrakech : le contournement de la RN9 lancé', $titres, true), $j($titres));
 v('plafond max_articles respecté', count(cfo_vp_selection(array_map(fn($i) => $art("Ouahat Sidi Brahim $i", $i), range(1, 40)), ['Ouahat Sidi Brahim'], [], $cfg, $now)) === (int)$cfg['max_articles']);
+
+/* ── 5. v37.111 : réseaux sociaux, forums, annonces — les moteurs du web ── */
+$ouL = '("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim" OR "Oulad Belaagid")';
+$web = array_values(array_filter($R, fn($r) => !empty($r['groupe'])));
+$parGroupe = []; foreach ($web as $r) $parGroupe[$r['groupe']][] = $r['canal'];
+v('réseaux sociaux, forums, annonces : chacun cherché par Bing (web) ET DuckDuckGo',
+  ($parGroupe['reseau'] ?? []) === ['bing_web', 'ddg'] && ($parGroupe['forum'] ?? []) === ['bing_web', 'ddg'] && ($parGroupe['annonces'] ?? []) === ['bing_web', 'ddg'], $j($parGroupe));
+$rs = array_values(array_filter($web, fn($r) => $r['groupe'] === 'reseau'));
+v('  → réseaux sociaux : (site:facebook.com OR site:instagram.com OR site:youtube.com) + les lieux des deux langues, exigés',
+  ($rs[0]['q'] ?? '') === '(site:facebook.com OR site:instagram.com OR site:youtube.com) ' . $ouL && $rs[0]['specifique'] && $rs[0]['type'] === 'moteur', $j($rs[0] ?? null));
+v('  → Bing web en RSS de résultats ; DuckDuckGo en page HTML (format html_ddg)', str_starts_with($rs[0]['url'], 'https://www.bing.com/search?q=') && str_contains($rs[0]['url'], 'format=rss')
+  && str_starts_with($rs[1]['url'], 'https://html.duckduckgo.com/html/?q=') && ($rs[1]['format'] ?? '') === 'html_ddg' && empty($rs[0]['format']), $j([$rs[0]['url'] ?? '', $rs[1]['url'] ?? '']));
+$ann = array_values(array_filter($web, fn($r) => $r['groupe'] === 'annonces'));
+v('  → annonces : Avito, Mubawab, Sarouty, Yakeey, Agenz, Marocannonces', str_starts_with($ann[0]['q'] ?? '', '(site:avito.ma OR site:mubawab.ma OR site:sarouty.ma OR site:yakeey.com OR site:agenz.ma OR site:marocannonces.com) '), $ann[0]['q'] ?? '');
+$nat = array_values(array_filter($R, fn($r) => $r['libelle'] === 'presse nationale'));
+$fr = array_values(array_filter($nat, fn($r) => $r['langue'] === 'fr')); $ar = array_values(array_filter($nat, fn($r) => $r['langue'] === 'ar'));
+v('presse nationale par paquets de 10 sites au plus, chacun avec le lieu dans SA langue (hespress avec le lieu arabe, ledesk avec le lieu français)',
+  $fr && $ar && !array_filter($nat, fn($r) => substr_count($r['q'], 'site:') > 10) && str_contains($ar[0]['q'], 'site:hespress.com') && !str_contains($fr[0]['q'] . ($fr[1]['q'] ?? ''), 'hespress')
+  && str_starts_with($ar[0]['q'], '"واحة سيدي ابراهيم"') && !str_contains(implode(' ', array_column($ar, 'q')), 'ledesk'), $j(array_column($nat, 'q')));
+v('chaque source nationale est interrogée (aucune perdue par les paquets)', count(array_filter($cfg['sources'], fn($x) => $x['portee'] === 'nationale' && !str_contains(implode(' ', array_column($nat, 'q')), 'site:' . $x['domaine']))) === 0);
+//  une page / un groupe précis
+$cfgG = $cfg; $cfgG['sources'][] = ['nom' => 'Groupe Ouahat', 'domaine' => 'facebook.com', 'chemin' => 'groups/123456', 'portee' => 'reseau', 'langue' => 'ar'];
+$RG = cfo_vp_requetes($cfgG, $lieux, $sujets);
+$grp = array_values(array_filter($RG, fn($r) => ($r['domaine'] ?? '') === 'facebook.com/groups/123456'));
+v('un groupe Facebook précis : site:facebook.com/groups/123456 + lieux, par les deux moteurs du web', count($grp) === 2 && $grp[0]['q'] === 'site:facebook.com/groups/123456 ' . $ouL && $grp[0]['media'] === 'Groupe Ouahat', $j($grp));
+v('  → le groupe précis ne retire pas Facebook de la recherche large', (bool)array_filter($RG, fn($r) => ($r['groupe'] ?? '') === 'reseau' && str_contains($r['q'], 'site:facebook.com')));
+//  la saisie depuis l'écran
+$vg = cfo_vp_valider_source(['nom' => 'Groupe Ouahat', 'domaine' => 'https://www.facebook.com/groups/123456/?ref=share', 'portee' => 'reseau', 'langue' => 'ar']);
+v('adresse d\'un groupe collée : domaine facebook.com, chemin groups/123456 (paramètres retirés)', ($vg['source']['domaine'] ?? '') === 'facebook.com' && ($vg['source']['chemin'] ?? '') === 'groups/123456', $j($vg));
+$vl = cfo_vp_valider_source(['nom' => 'Kech24', 'domaine' => 'https://www.kech24.com/category/x', 'portee' => 'locale', 'langue' => 'ar']);
+v('  → la presse garde le site entier (pas de chemin)', ($vl['source']['domaine'] ?? '') === 'kech24.com' && !isset($vl['source']['chemin']), $j($vl));
+v('  → un chemin piégé (« .. », caractères) : refusé, dit en clair', isset(cfo_vp_valider_source(['nom' => 'X', 'domaine' => 'facebook.com', 'chemin' => '../../etc', 'portee' => 'reseau', 'langue' => 'ar'])['erreur'])
+  && isset(cfo_vp_valider_source(['nom' => 'X', 'domaine' => 'facebook.com', 'chemin' => 'a b"<x>', 'portee' => 'reseau', 'langue' => 'ar'])['erreur']));
+v('  → portée inconnue : refusée', isset(cfo_vp_valider_source(['nom' => 'X', 'domaine' => 'x.ma', 'portee' => 'blog', 'langue' => 'fr'])['erreur']));
+$L2 = cfo_vp_valider_liste([['nom' => 'Facebook', 'domaine' => 'facebook.com', 'portee' => 'reseau', 'langue' => 'ar'], ['nom' => 'Groupe', 'domaine' => 'facebook.com/groups/1', 'portee' => 'reseau', 'langue' => 'ar'],
+                            ['nom' => 'Groupe bis', 'domaine' => 'facebook.com', 'chemin' => 'groups/1', 'portee' => 'reseau', 'langue' => 'ar']]);
+v('plusieurs pages Facebook dans la liste ; la même page deux fois : refusée', count($L2['sources']) === 2 && count($L2['erreurs']) === 1 && str_contains(reset($L2['erreurs']), 'facebook.com/groups/1'), $j($L2));
+$fu = cfo_vp_fusion($cfg['sources'], ['sources' => array_merge($cfg['sources'], [['nom' => 'Groupe', 'domaine' => 'facebook.com', 'chemin' => 'groups/1', 'portee' => 'reseau', 'langue' => 'ar']]),
+                                      'defauts_connus' => array_map('cfo_vp_cle', $cfg['sources'])]);
+$orig = array_column(array_map(fn($x) => ['c' => cfo_vp_cle($x), 'o' => $x['origine']], $fu['sources']), 'o', 'c');
+v('  → vos réglages : le groupe « ajouté par vous », Facebook (tout le site) reste « d\'origine »', ($orig['facebook.com/groups/1'] ?? '') === 'ajoutee' && ($orig['facebook.com'] ?? '') === 'origine', $j($orig));
+//  qui a écrit quoi : la page précise d'abord
+v('un résultat facebook.com/groups/123456/posts/9 → le groupe ; facebook.com/autre → Facebook (tout le site)',
+  (cfo_vp_media($cfgG, 'www.facebook.com', '/groups/123456/posts/9')['nom'] ?? '') === 'Groupe Ouahat' && (cfo_vp_media($cfgG, 'm.facebook.com', '/autre')['nom'] ?? '') === 'Facebook (pages et groupes publics)'
+  && (cfo_vp_media($cfgG, 'facebook.com', '/groups/1234567')['nom'] ?? '') === 'Facebook (pages et groupes publics)');
+//  DuckDuckGo (HTML)
+$reqD = $grp[1];
+$ddg = '<html><body><div class="results">'
+     . '<div class="result results_links"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.facebook.com%2Fgroups%2F123456%2Fposts%2F9&amp;rut=abc">Lotissement à Ouahat Sidi Brahim : les prix</a>'
+     . '<a class="result__snippet" href="#">Terrain de 5 000 m² à <b>Ouahat Sidi Brahim</b>, 450 DH le m²…</a></div>'
+     . '<div class="result result--ad"><a class="result__a" href="https://duckduckgo.com/y.js?ad_domain=x.com&amp;u3=1">Publicité</a></div>'
+     . '<div class="result"><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.avito.ma%2Ffr%2Fmarrakech%2Fterrains%2F12345.htm">Terrain 2 ha Oulad Belaagid</a>'
+     . '<a class="result__snippet">Vente terrain agricole</a></div></div></body></html>';
+$bD = cfo_vp_bilan($reqD, ['http' => 200, 'corps' => $ddg], $cfgG);
+$aD = $bD['articles'];
+v('DuckDuckGo : 2 résultats (publicité écartée), adresses d\'origine rendues, extrait lu, page attribuée au groupe, annonce à Avito',
+  $bD['statut'] === 'ok' && count($aD) === 2 && $aD[0]['url'] === 'https://www.facebook.com/groups/123456/posts/9' && $aD[0]['source'] === 'Groupe Ouahat' && $aD[0]['portee'] === 'reseau'
+  && str_contains($aD[0]['extrait'], '450 DH') && $aD[1]['source'] === 'Avito' && $aD[1]['portee'] === 'annonces' && $aD[0]['specifique'], $j($bD));
+$bC = cfo_vp_bilan($reqD, ['http' => 200, 'corps' => '<html><body><form id="challenge-form">Unfortunately, bots use DuckDuckGo too.</form></body></html>'], $cfgG);
+v('  → une page anti-robots : « illisible », dit, rien d\'inventé', $bC['statut'] === 'illisible' && $bC['articles'] === [], $j($bC));
+$bV = cfo_vp_bilan($reqD, ['http' => 200, 'corps' => '<html><body><div class="no-results">No results.</div></body></html>'], $cfgG);
+v('  → aucun résultat : « vide », pas un échec', $bV['statut'] === 'vide', $j($bV));
+//  Bing web (RSS)
+$bingWeb = '<?xml version="1.0" encoding="utf-8" ?><rss version="2.0"><channel><title>Bing</title>'
+         . '<item><title>Terrain à vendre Ouahat Sidi Brahim - Mubawab</title><link>https://www.mubawab.ma/fr/a/1234/terrain</link><description>3 ha titré</description><pubDate>' . gmdate('D, d M Y H:i:s', $now - 5 * 86400) . ' GMT</pubDate></item>'
+         . '<item><title>Forum Yabiladi : Ouahat Sidi Brahim</title><link>https://www.yabiladi.com/forum/x-1-2.html</link><description>discussion</description></item></channel></rss>';
+$bB = cfo_vp_bilan($rs[0], ['http' => 200, 'corps' => $bingWeb], $cfg);
+v('Bing web (RSS) : annonce Mubawab et forum Yabiladi reconnus, datés quand le moteur date', $bB['statut'] === 'ok' && $bB['articles'][0]['source'] === 'Mubawab' && $bB['articles'][0]['portee'] === 'annonces'
+  && $bB['articles'][0]['date'] !== null && $bB['articles'][1]['portee'] === 'forum' && $bB['articles'][1]['date'] === null, $j($bB['articles']));
+$sel = cfo_vp_selection(array_merge($aD, $bB['articles']), ['Ouahat Sidi Brahim'], [], $cfg, $now);
+v('  → triés avec la presse : les quatre gardés (requêtes qui exigeaient le lieu)', count($sel) === 4, $j(array_column($sel, 'titre')));
+//  combien de retenus par source
+$ret = array_merge($aD, $bB['articles']);
+v('retenus par source : famille « annonces » 2, groupe Facebook 1, Facebook entier 1',
+  cfo_vp_retenus_de($ret, ['groupe' => 'annonces']) === 2 && cfo_vp_retenus_de($ret, ['domaine' => 'facebook.com/groups/123456']) === 1 && cfo_vp_retenus_de($ret, ['domaine' => 'facebook.com']) === 1
+  && cfo_vp_retenus_de($ret, ['domaine' => 'facebook.com/groups/999']) === 0);
+//  tester une source du web depuis l'écran
+$tq = cfo_vp_requetes_test($cfgG, ['nom' => 'Groupe Ouahat', 'domaine' => 'facebook.com', 'chemin' => 'groups/123456', 'portee' => 'reseau', 'langue' => 'ar']);
+v('🧪 tester un groupe : Bing (web) et DuckDuckGo sur site:facebook.com/groups/123456, sans page d\'accueil', array_column($tq, 'canal') === ['bing_web', 'ddg']
+  && $tq[0]['q'] === 'site:facebook.com/groups/123456 (Marrakech OR مراكش)' && ($tq[1]['format'] ?? '') === 'html_ddg', $j($tq));
 
 echo "  " . str_repeat('─', 86) . "\n";
 echo $ko === 0 ? "  ✅ TOUT PASSE — $n contrôles\n" : "  ❌ $ko contrôle(s) en échec sur $n\n";

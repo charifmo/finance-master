@@ -79,13 +79,14 @@ foreach ($requetes as $i => $r) {
         $couverture[$r['domaine']]['nom'] = $r['media'] ?? $r['nom'];
         $couverture[$r['domaine']]['domaine'] = $r['domaine'];
         $couverture[$r['domaine']]['canaux'][] = ['canal' => $r['canal'], 'nom' => cfo_vp_nom_canal($r)] + array_intersect_key($b, array_flip(['statut', 'n', 'mode', 'erreur']));
+        $couverture[$r['domaine']]['_req'] = $r;
+        if (!empty($r['groupe'])) $couverture[$r['domaine']]['groupe'] = $r['groupe'];
     }
 }
 
 $retenus = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], $cfg);
-foreach ($couverture as $dom => &$c) {
-    $c['retenus'] = count(array_filter($retenus, fn($a) => $a['domaine'] === $dom || substr($a['domaine'], -strlen($dom) - 1) === '.' . $dom));
-}
+//  v37.111 — une source = un site, une page / un groupe précis, ou une famille (réseaux sociaux, forums, annonces)
+foreach ($couverture as $dom => &$c) { $c['retenus'] = cfo_vp_retenus_de($retenus, $c['_req']); unset($c['_req']); }
 unset($c);
 vp_sortie([
     'status' => 'ok',
