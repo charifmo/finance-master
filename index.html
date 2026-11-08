@@ -9135,8 +9135,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.114 Le ruban du voyage";
+                    const CURRENT_VERSION = "37.115 La réponse ne se perd plus";
                     const CHANGELOG = [
+        { version: "37.115 La réponse ne se perd plus", date: "2026-11-08", changes: [
+            "📶 UN APPEL PENDANT QUE LE CFO RÉFLÉCHIT : SA RÉPONSE N'EST PLUS PERDUE — la question passe par le VPS (cfo_relais.php), qui attend la réponse de n8n à la place du téléphone et la garde. Répondre à un appel, ouvrir une autre appli, verrouiller l'écran : au retour, la réponse s'affiche (« le CFO continue sur le serveur… »). Même si le téléphone a fermé l'onglet : « Réponse retrouvée sur le serveur ». Jamais de question posée deux fois.",
+            "🧷 Le compte posé automatiquement est retenu tel quel : si le CFO (ou le journal, ou un autre appareil) le change ensuite — « passe les saisies depuis vendredi sur Assafa dépenses annuelles » —, plus rien ne le remet sur le compte de la catégorie (la 37.112 pouvait défaire le travail du CFO au rechargement).",
+            "💾 Avant d'envoyer une question au CFO, vos changements en attente sont enregistrés : le CFO travaille sur vos derniers chiffres, et son écriture ne croise plus une sauvegarde de l'écran (moins de « Le serveur a changé, l'écran non »).",
+        ] },
         { version: "37.114 Le ruban du voyage", date: "2026-11-08", changes: [
             "🎗️ EN VOYAGE, UN RUBAN EN TÊTE DE L'APPLI — « ✈️ En voyage — Marrakech · jour 3/6 · 1 250 / 3 000 DH prévus (42 %) », une barre avec le repère du rythme, le reste (ou « dépassé de … »), et sur ordinateur le rythme (« 1 500 prévus à ce jour ») et la dépense du jour. Bleu dans le rythme, orange au-dessus, rouge au-delà du budget.",
             "🪶 Il ne recouvre rien : une ligne fine dans l'en-tête (Prévisionnel, Réalisé, téléphone), qui pousse le reste. ▴ le réduit en pastille « ✈️ 42 % » (retenu sur cet appareil, pour ce voyage) ; un clic sur « ✈️ En voyage » ouvre le bloc du voyage. Il disparaît après le voyage.",
@@ -11304,7 +11309,9 @@
                         if (data.categorieSource) tx.categorieSource = data.categorieSource;
                         if (data.aVerifier) tx.aVerifier = true;
                         //  v37.112 : compte NON choisi à la main → il suivra la catégorie que l'IA (le CFO) posera ensuite
-                        if (data.compteAuto === true) tx.compteAuto = true; else if (data.compteAuto === false) tx.compteAuto = false;   // false : choisi à la main
+                        //  v37.115 : le compte posé automatiquement est RETENU (pas un simple « vrai ») : si le CFO, le journal ou un autre
+                        //  appareil le change ensuite, il ne correspond plus, et plus rien ne le réaligne
+                        if (data.compteAuto === true) tx.compteAuto = String(tx.compteId); else if (data.compteAuto === false) tx.compteAuto = false;   // false : choisi à la main
                         seau.transactionsReelles.push(tx);
                         handleDataChange();
                         return tx.id;
@@ -11634,23 +11641,27 @@
                     //  sur le compte par défaut ; quand l'IA du CFO (ou le rangement par défaut) la range ensuite — « Voyage Marrakech »
                     //  —, le compte passe à celui de la ligne (« Dépenses voyage »…), sauf si vous l'aviez choisi vous-même ou si
                     //  l'opération vient de la banque (son compte est celui du relevé).
+                    //  v37.115 — un compte est encore « automatique » s'il est resté celui que l'appli a posé (compteAuto = ce compte) ;
+                    //  une saisie d'avant (compteAuto absent, ou « true » de la 37.112) : seulement si elle est sur le compte par défaut.
+                    //  Changé depuis (le CFO, le journal, un autre appareil) : il ne bouge plus jamais.
+                    const _compteParDefautCle = () => saisieCompteDefaut.value != null ? String(saisieCompteDefaut.value) : (comptes.value && comptes.value[0] ? String(comptes.value[0].id) : '');
+                    const _compteEncoreAuto = (t) => {
+                        if (!t || t.source === 'banque' || t.compteAuto === false) return false;
+                        if (typeof t.compteAuto === 'string') return String(t.compteId) === t.compteAuto;
+                        return t.compteId == null || String(t.compteId) === _compteParDefautCle();
+                    };
                     const _compteSuitCategorie = (t) => {
-                        if (!t || !t.compteAuto || t.source === 'banque') return false;
+                        if (!_compteEncoreAuto(t)) return false;
                         const c = compteDeLaCategorie(t.categorieId);
                         if (!c || String(c.id) === String(t.compteId)) return false;
-                        t.compteId = c.id;
+                        t.compteId = c.id; t.compteAuto = String(c.id);
                         return true;
                     };
                     const realignerComptesSaisies = () => {
-                        const defaut = saisieCompteDefaut.value != null ? String(saisieCompteDefaut.value) : (comptes.value && comptes.value[0] ? String(comptes.value[0].id) : '');
                         let n = 0;
                         for (const d of Object.values(donneesAnnuelles.value || {})) for (const t of (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : [])) {
-                            if (!t || t.source === 'banque' || t.compteAuto === false || !['ia', 'défaut', 'voyage'].includes(t.categorieSource)) continue;
-                            //  une saisie d'avant la v37.112 sur un AUTRE compte que celui par défaut : posé exprès, on n'y touche pas
-                            if (!t.compteAuto && t.compteId != null && String(t.compteId) !== defaut) continue;
-                            const c = compteDeLaCategorie(t.categorieId);
-                            if (!c || String(c.id) === String(t.compteId)) continue;
-                            t.compteId = c.id; t.compteAuto = true; n++;
+                            if (!t || !['ia', 'défaut', 'voyage'].includes(t.categorieSource)) continue;
+                            if (_compteSuitCategorie(t)) n++;
                         }
                         return n;
                     };
@@ -12592,6 +12603,39 @@
                         simulation: ['Simulation faite — le CFO rédige sa réponse…', 'Il vérifie le résultat de la simulation…'],
                         validation: ['Écriture en cours sur le serveur…', 'Le CFO rédige le compte rendu…'],
                         annulation: ['Simulation annulée — le CFO vous répond…'],
+                        relais: ['📶 Connexion coupée — le CFO continue sur le serveur…', 'Sa réponse s’affichera ici dès qu’elle arrive…', 'Vous pouvez utiliser votre téléphone : rien n’est perdu…'],
+                    };
+                    //  v37.115 — LE RELAIS : la question passe par le VPS (cfo_relais.php), qui attend la réponse de n8n à la place du
+                    //  téléphone et la garde. Un appel, une autre appli, l'écran verrouillé : au retour, la réponse est relue et
+                    //  affichée. Seulement quand le CFO est servi par le même serveur que l'appli (sinon : en direct, comme avant).
+                    const CFO_RELAIS_URL = '/finance/cfo_relais.php';
+                    const _cfoCheminRelais = () => {
+                        try {
+                            const u = new URL(cfoWebhookUrl.value, window.location.href);
+                            return u.origin === window.location.origin && /^\/webhook(-test)?\/[A-Za-z0-9_\-\/]+$/.test(u.pathname) ? u.pathname : null;
+                        } catch (_) { return null; }
+                    };
+                    const _cfoNouveauRid = () => { try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (_) { } return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12); };
+                    const _CFO_ATTENTE_CLE = 'cfo_relais_en_attente';
+                    const _cfoAttenteMemo = { lire: () => { try { return JSON.parse(localStorage.getItem(_CFO_ATTENTE_CLE) || 'null'); } catch (_) { return null; } },
+                                              poser: (x) => { try { localStorage.setItem(_CFO_ATTENTE_CLE, JSON.stringify(x)); } catch (_) { } },
+                                              oublier: () => { try { localStorage.removeItem(_CFO_ATTENTE_CLE); } catch (_) { } } };
+                    //  Relit la réponse gardée par le VPS : { raw } quand elle est là ; null si rien (question jamais arrivée, délai dépassé)
+                    const _cfoSonderRelais = async (rid, { maxMs = 15 * 60 * 1000, pas = 3000, inconnuMaxMs = 20000, stop = () => false } = {}) => {
+                        const t0 = Date.now();
+                        while (Date.now() - t0 < maxMs && !stop()) {
+                            try {
+                                const r = await fetch(CFO_RELAIS_URL + '?rid=' + encodeURIComponent(rid) + '&t=' + Date.now(), { cache: 'no-store' });
+                                if (r.ok) {
+                                    const j = await r.json();
+                                    if (j.etat === 'fini') return { raw: String(j.corps || ''), http: j.http };
+                                    if (j.etat === 'erreur') return { erreur: String(j.erreur || 'relais') };
+                                    if (j.etat === 'inconnu' && Date.now() - t0 > inconnuMaxMs) return null;
+                                }
+                            } catch (_) { /* réseau coupé : on réessaie */ }
+                            await new Promise(res => setTimeout(res, pas));
+                        }
+                        return null;
                     };
                     const _cfoDuree = (ms) => {
                         const s = Math.max(0, ms) / 1000;
@@ -12657,6 +12701,29 @@
                         const b = ev.target && ev.target.closest && ev.target.closest('[data-cfo-renvoyer]');
                         if (b && !cfoLoading.value) consulterCFO(b.getAttribute('data-question') || '');
                     });
+                    //  v37.115 — l'onglet a été fermé par le téléphone pendant l'attente (la page se recharge) : la question attendait
+                    //  une réponse que le VPS a gardée — on la relit et on l'affiche
+                    const reprendreReponseCFO = async () => {
+                        const m = _cfoAttenteMemo.lire();
+                        if (!m || !m.rid) return false;
+                        if (Date.now() - Number(m.t || 0) > 20 * 60 * 1000 || cfoLoading.value) { if (!cfoLoading.value) _cfoAttenteMemo.oublier(); return false; }
+                        cfoLoading.value = true;
+                        _cfoAttenteDemarrer(); _cfoDernierCode = 'relais';
+                        let ok = false;
+                        try {
+                            const x = await _cfoSonderRelais(m.rid, { inconnuMaxMs: 15000 });
+                            if (x && x.raw !== undefined) {
+                                ok = true;
+                                cfoMessages.value.push({ role: 'agent', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                                    content: '<div data-cfo-reprise style="font-size:10px;color:#64748b;margin-bottom:4px">📶 Réponse retrouvée sur le serveur — la connexion avait été coupée pendant l’attente.</div>' + _lireReponseCFO(x.raw).html });
+                            }
+                        } finally {
+                            _cfoAttenteMemo.oublier(); _cfoAttenteArreter(); cfoLoading.value = false; scrollCFOToBottom();
+                            if (ok) { try { await rafraichirDepuisServeur(); } catch (_) { } }
+                        }
+                        return ok;
+                    };
+                    if (typeof window !== 'undefined') setTimeout(() => { reprendreReponseCFO().catch(() => { }); }, 2500);
                     const chatFullScreen = ref(false);
                     const showCfoModal   = ref(false); // v26.95 : widget modal flottant CFO
                     const cfoMaximized   = ref(false); // v27.1 : plein écran du widget
@@ -13126,18 +13193,60 @@
                                     finance_data: _buildPayloadCFO(),
                                 });
                         try {
-                            const res = await fetch(cfoWebhookUrl.value, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    session_id: cfoSessionId.value,
-                                    question: _avecConsigneMemoire(question),   // v37.38 : un appel memory_writer par entité
-                                    source: 'web',
-                                    system_prompt: CFO_SYSTEM_PROMPT,
-                                    finance_data: _buildPayloadCFO(),
-                                })
-                            });
-                            const raw = await res.text();
+                            //  v37.115 : d'abord vos changements en attente — le CFO travaille sur vos derniers chiffres, et son écriture
+                            //  ne croise pas une sauvegarde de cet onglet (« Le serveur a changé, l'écran non »)
+                            if (serverSyncStatus.value === 'modified' && typeof saveToServer === 'function') { clearTimeout(_autoSaveTimer); try { await saveToServer(); } catch (_) { } }
+                            let raw = null;
+                            const chemin = _cfoCheminRelais();
+                            if (chemin) {
+                                const rid = _cfoNouveauRid();
+                                _cfoAttenteMemo.poser({ rid, question, t: Date.now() });
+                                let fini = false;
+                                const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                                const parFetch = fetch(CFO_RELAIS_URL, { method: 'POST', signal: ac ? ac.signal : undefined,
+                                        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                                        body: JSON.stringify({ ...JSON.parse(_corps()), rid, cible: chemin }) })
+                                    .then(async (r) => {
+                                        //  la réponse du relais porte sa signature ; sans elle (serveur pas à jour, relais refusé, VPS qui ne joint
+                                        //  pas n8n — 502 RELAIS_INJOIGNABLE) : la question part en direct, comme avant
+                                        if (!r.headers.get('X-Finance-Relais')) {
+                                            //  …sauf si le relais a déjà transmis la question (coupé ensuite par un délai du serveur) : renvoyer en
+                                            //  direct la poserait DEUX fois au CFO (deux saisies) — on attend sa réponse sur le VPS
+                                            try { const e = await (await fetch(CFO_RELAIS_URL + '?rid=' + encodeURIComponent(rid) + '&t=' + Date.now(), { cache: 'no-store' })).json();
+                                                  if (e && (e.etat === 'en_cours' || e.etat === 'fini')) return { coupe: new TypeError('relais coupé') }; } catch (_) { }
+                                            if (r.status === 502) addLog('📶 Relais du CFO : le VPS ne joint pas n8n — question envoyée en direct (sa réponse se perdrait si l\'onglet est suspendu). Piste : \'cfo_webhook_interne\' dans db_config.php.', 'warn');
+                                            return { direct: true };
+                                        }
+                                        return { raw: await r.text() };
+                                    })
+                                    .catch((e) => ({ coupe: e }));
+                                //  le VPS garde la réponse : relue dès qu'elle y est, même si la connexion de cet onglet est gelée
+                                const parSondage = (async () => {
+                                    await new Promise(res => setTimeout(res, 8000));
+                                    while (!fini) {
+                                        try {
+                                            const r = await fetch(CFO_RELAIS_URL + '?rid=' + encodeURIComponent(rid) + '&t=' + Date.now(), { cache: 'no-store' });
+                                            if (r.ok) { const x = await r.json(); if (x.etat === 'fini') return { raw: String(x.corps || '') }; }
+                                        } catch (_) { /* réseau coupé : on réessaie */ }
+                                        await new Promise(res => setTimeout(res, 3000));
+                                    }
+                                    return new Promise(() => { });
+                                })();
+                                let g = await Promise.race([parFetch, parSondage]);
+                                if (g.coupe) {                       // connexion coupée (appel, autre appli…) : le CFO continue sur le VPS
+                                    _cfoDernierCode = 'relais';
+                                    const x = await _cfoSonderRelais(rid);
+                                    if (x && x.raw !== undefined) g = x; else if (x && x.erreur) g = { direct: true };
+                                }
+                                fini = true;
+                                _cfoAttenteMemo.oublier();
+                                if (g.raw !== undefined) { raw = g.raw; if (ac) { try { ac.abort(); } catch (_) { } } }
+                                else if (g.coupe) throw g.coupe;     // rien sur le VPS non plus : le diagnostic d'avant
+                            }
+                            if (raw === null) {
+                                const res = await fetch(cfoWebhookUrl.value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: _corps() });
+                                raw = await res.text();
+                            }
                             let html = '';
                             try {
                                 html = _lireReponseCFO(raw).html;   // v37.4 : jamais de JSON brut en bulle

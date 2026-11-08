@@ -252,7 +252,7 @@ try {
         await page.waitForFunction((ST) => { const t = eval(ST).donneesAnnuelles[2026].transactionsReelles.filter(x => x.libelle === 'zqrv tbkl').pop(); return t && t.categorieSource === 'ia'; }, ST, { timeout: 10000 });
         const riad = await tx('zqrv tbkl');
         v('  → saisie inconnue, rangée ensuite par l’IA du CFO dans « Voyage Agadir » : le compte passe du courant au Compte Voyage',
-          riad.categorieId === AG && riad.categorieSource === 'ia' && String(riad.compteId) === '2' && riad.compteAuto === true, JSON.stringify(riad));
+          riad.categorieId === AG && riad.categorieSource === 'ia' && String(riad.compteId) === '2' && riad.compteAuto === '2', JSON.stringify(riad));
         //  un compte choisi à la main n'est jamais déplacé
         await page.evaluate((ST) => { const st = eval(ST); st.saisieForm.compteId = 1; st.compteSaisieModifie(); }, ST);
         await saisir('90 wxmj pqzd');
@@ -266,12 +266,17 @@ try {
                    { ...base, id: 902, libelle: 'ancien voyage', compteId: 1, source: 'manuel', categorieSource: 'voyage' },
                    { ...base, id: 903, libelle: 'ancien vous', compteId: 1, source: 'manuel', categorieSource: 'vous' },
                    { ...base, id: 904, libelle: 'ancien banque', compteId: 1, source: 'banque', categorieSource: 'ia' },
-                   { ...base, id: 905, libelle: 'ancien journal', compteId: 1, source: 'manuel', categorieSource: 'ia', compteAuto: false });
+                   { ...base, id: 905, libelle: 'ancien journal', compteId: 1, source: 'manuel', categorieSource: 'ia', compteAuto: false },
+                   //  v37.115 : posée sur le courant par l'appli, puis passée par le CFO sur le compte 7 (Dépenses annuelles) : on n'y touche plus
+                   { ...base, id: 906, libelle: 'changé par le CFO', compteId: 7, source: 'manuel', categorieSource: 'voyage', compteAuto: '1' },
+                   //  la 37.112 avait écrit « true » : déplacée ensuite par le CFO (pas sur le compte par défaut) → intouchable aussi
+                   { ...base, id: 907, libelle: 'ancien true CFO', compteId: 7, source: 'manuel', categorieSource: 'ia', compteAuto: true },
+                   { ...base, id: 908, libelle: 'auto resté', compteId: 1, source: 'manuel', categorieSource: 'ia', compteAuto: '1' });
             const n = st.realignerComptesSaisies(), n2 = st.realignerComptesSaisies();
             return { n, n2, c: Object.fromEntries(T.filter(t => t.id >= 901).map(t => [t.libelle, t.compteId])) }; }, { ST, AG });
-        v('  → réparation au chargement : les anciennes saisies rangées par l’IA ou par la case voyage passent au Compte Voyage (« diesel » et « restaurant » de D y sont déjà) ; ni la main, ni la banque, ni un compte corrigé au journal ; une 2ᵉ fois : rien',
-          r.n === 2 && r.n2 === 0 && r.c['restaurant'] === 2 && r.c['wxmj pqzd'] === 1 && r.c['diesel'] === 1 && r.c['ancien ia'] === 2 && r.c['ancien voyage'] === 2 && r.c['ancien vous'] === 1 && r.c['ancien banque'] === 1 && r.c['ancien journal'] === 1, JSON.stringify(r));
-        await page.evaluate((ST) => { const st = eval(ST); st.donneesAnnuelles[2026].transactionsReelles = st.donneesAnnuelles[2026].transactionsReelles.filter(t => !(t.id >= 901 && t.id <= 905) && !['zqrv tbkl', 'wxmj pqzd'].includes(t.libelle)); }, ST);
+        v('  → réparation au chargement : les anciennes saisies rangées par l’IA ou par la case voyage passent au Compte Voyage (« diesel » et « restaurant » de D y sont déjà)  ; ni la main, ni la banque, ni un compte corrigé au journal, ni un compte changé ensuite par le CFO (v37.115) ; une 2ᵉ fois : rien',
+          r.n === 3 && r.n2 === 0 && r.c['auto resté'] === 2 && r.c['changé par le CFO'] === 7 && r.c['ancien true CFO'] === 7 && r.c['restaurant'] === 2 && r.c['wxmj pqzd'] === 1 && r.c['diesel'] === 1 && r.c['ancien ia'] === 2 && r.c['ancien voyage'] === 2 && r.c['ancien vous'] === 1 && r.c['ancien banque'] === 1 && r.c['ancien journal'] === 1, JSON.stringify(r));
+        await page.evaluate((ST) => { const st = eval(ST); st.donneesAnnuelles[2026].transactionsReelles = st.donneesAnnuelles[2026].transactionsReelles.filter(t => !(t.id >= 901 && t.id <= 908) && !['zqrv tbkl', 'wxmj pqzd'].includes(t.libelle)); }, ST);
         await page.unroute('**/webhook/**');
         await page.route('**/webhook/**', r2 => r2.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ output: '{"id": null, "confiance": "basse", "raison": "test"}' }) }));
     });
