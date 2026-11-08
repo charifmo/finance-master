@@ -193,6 +193,21 @@ try {
         const decoche = await page.evaluate((ST) => String(eval(ST).saisieForm.compteId), ST);
         v('  → la case « ✈️ Dépense du voyage » cochée : le compte affiché devient celui de la ligne (Compte Voyage) ; décochée : il revient',
           coche === '2' && decoche === '1', JSON.stringify([coche, decoche]));
+        //  v37.113 — case cochée PUIS un libellé connu (« diesel », payé d'habitude par le courant) : le compte affiché reste celui du voyage
+        await page.evaluate((ST) => { eval(ST).saisieVoyageCoche = true; }, ST);
+        await page.fill(CHAMP, '70 diesel');
+        await page.waitForFunction((ST) => eval(ST).saisieForm.montant === 70, ST, { timeout: 5000 });
+        const affiche = await page.evaluate((ST) => [String(eval(ST).saisieForm.compteId), eval(ST).saisieCompteCat], ST);
+        await page.locator(CHAMP).press('Enter'); await page.waitForFunction((ST) => eval(ST).saisieRapide === '', ST, { timeout: 5000 });
+        const d70 = await tx('diesel');
+        await page.evaluate((ST) => { eval(ST).saisieVoyageCoche = false; }, ST);
+        await page.fill(CHAMP, '35 diesel');
+        await page.waitForFunction((ST) => eval(ST).saisieForm.montant === 35, ST, { timeout: 5000 });
+        const afficheSans = await page.evaluate((ST) => String(eval(ST).saisieForm.compteId), ST);
+        await page.fill(CHAMP, '');
+        v('  → case cochée puis « 70 diesel » (payé d’habitude par le courant) : le formulaire montre le Compte Voyage, enregistré dessus ; case décochée : « diesel » reprend le courant',
+          affiche[0] === '2' && /Voyage Agadir/.test(affiche[1] || '') && d70.montant === 70 && String(d70.compteId) === '2' && d70.categorieSource === 'voyage' && afficheSans === '1', JSON.stringify([affiche, d70, afficheSans]));
+        await page.evaluate(({ ST, id }) => { const st = eval(ST); st.donneesAnnuelles[2026].transactionsReelles = st.donneesAnnuelles[2026].transactionsReelles.filter(t => t.id !== id); st.calculationTick++; }, { ST, id: d70.id });
         //  l'IA (le CFO) range « zqrv tbkl » dans le voyage : le compte suit
         await page.unroute('**/webhook/**');
         await page.route('**/webhook/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ output: JSON.stringify({ id: AG, confiance: 'haute', raison: 'hébergement pendant le voyage' }) }) }));

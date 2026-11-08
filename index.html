@@ -9101,8 +9101,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie },
                 setup() {
-                    const CURRENT_VERSION = "37.112 Le compte suit le voyage";
+                    const CURRENT_VERSION = "37.113 Le voyage d'abord";
                     const CHANGELOG = [
+        { version: "37.113 Le voyage d'abord", date: "2026-11-08", changes: [
+            "✈️ CASE « DÉPENSE DU VOYAGE » COCHÉE : LE COMPTE DU VOYAGE PASSE AVANT TOUT — cocher puis taper « diesel » (payé d'habitude par le courant) affichait le courant, même si l'enregistrement allait bien sur le compte du voyage. Le formulaire montre désormais le compte du voyage ; décocher rend le compte habituel.",
+            "🏦 L'ordre du compte proposé, partout le même : 1. choisi à la main ; 2. en voyage, case cochée : « payé par » ; 3. celui de votre dernière saisie du même libellé ; 4. celui de la catégorie (appris, sinon celui de sa ligne) ; 5. le compte par défaut. Rangée ensuite par l'IA du CFO, une saisie sans compte choisi prend celui de sa catégorie.",
+        ] },
         { version: "37.112 Le compte suit le voyage", date: "2026-11-08", changes: [
             "🏦 LE COMPTE SUIT LA CATÉGORIE POSÉE PAR L'IA — une saisie que les règles ne connaissaient pas partait sur le compte courant ; quand l'IA du CFO la rangeait ensuite dans « Voyage Marrakech », le compte restait le courant. Désormais il passe à celui de la ligne, sauf si vous l'aviez choisi vous-même (ou si l'opération vient de la banque).",
             "✈️ « PAYÉ PAR » — à côté de la destination du voyage (Pilotage), le compte qui paie le voyage : la ligne « Voyage … » le prend, il est retenu pour le prochain voyage, et les saisies du voyage déjà faites le rejoignent.",
@@ -11349,7 +11353,9 @@
                             saisieCatSuggestions.value = r.statut === 'sur' ? [] : (r.candidats.length ? r.candidats : categoriesLesPlusUtilisees.value.slice(0, 3));
                         }
                         //  le compte de votre dernière saisie du même libellé (si vous ne l'avez pas choisi)
-                        if (!f.compteManuel) {
+                        //  v37.113 : en voyage, case cochée, le compte du voyage passe avant (« diesel » payé d'habitude par le courant)
+                        if (!f.compteManuel && _compteVoyageCoche()) _compteSaisieDeCategorie();
+                        else if (!f.compteManuel) {
                             const cle = _analyseLibelle(lib).toks.join(' ');
                             const x = cle && apprentissageActif.value ? journalToutes.value.find(y => y.t.compteId != null && y.t.source !== 'banque' && _analyseLibelle(y.t.libelle).toks.join(' ') === cle) : null;
                             const c = x && (comptes.value || []).find(k => String(k.id) === String(x.t.compteId));
@@ -11358,10 +11364,17 @@
                         }
                     };
                     //  v37.105 — sinon, le compte de la catégorie trouvée (ou choisie) ; rien : le compte par défaut
+                    //  v37.113 — l'ordre du compte proposé à la saisie : 1. choisi à la main ; 2. en voyage, case cochée : le compte
+                    //  du voyage (« payé par ») ; 3. celui de votre dernière saisie du même libellé ; 4. celui de la catégorie (appris,
+                    //  sinon celui de sa ligne) ; 5. le compte par défaut.
+                    const _compteVoyageCoche = () => {
+                        const v = voyageSaisie.value;
+                        return v && v.actif && saisieVoyageCoche.value && v.catId ? compteDeLaCategorie(v.catId) : null;
+                    };
                     const _compteSaisieDeCategorie = () => {
                         const f = saisieForm.value;
                         if (f.compteManuel) return;
-                        const cc = f.categorieId ? compteDeLaCategorie(f.categorieId) : null;
+                        const cc = _compteVoyageCoche() || (f.categorieId ? compteDeLaCategorie(f.categorieId) : null);
                         if (cc) { f.compteId = cc.id; saisieCompteAppris.value = true; saisieCompteCat.value = cc.raison; }
                         else if (saisieCompteAppris.value) { f.compteId = saisieCompteDefaut.value || (comptes.value && comptes.value[0] ? comptes.value[0].id : null); saisieCompteAppris.value = false; saisieCompteCat.value = ''; }
                     };
