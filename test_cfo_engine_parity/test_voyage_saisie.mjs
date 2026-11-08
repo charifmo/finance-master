@@ -314,6 +314,37 @@ try {
           fes[0] === 'cpt_2' && fes[1] === 'cpt_2', JSON.stringify(fes));
         v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
     });
+    await section('V', async () => {
+        //  v37.117 — « toujours aucun budget prévu, et on ne voit pas le budget lié » : votre ligne « Voyage … » (créée à la main,
+        //  1 500 DH) et celle créée à la déclaration coexistaient ; le ruban lisait la 2ᵉ, à 0
+        const lignes = (nom) => page.evaluate(({ ST, nom }) => Object.values(eval(ST).donneesAnnuelles).flatMap(d => (d.depensesIrregulieres || []).filter(x => x.nom === nom)).map(x => JSON.parse(JSON.stringify(x))), { ST, nom });
+        await page.evaluate((ST) => { const st = eval(ST); st.effacerVoyage(); st.soldesInitiaux.voyageCompte = '';
+            st.donneesAnnuelles[2026].depensesIrregulieres.push({ id: 8801, nom: 'Voyage Tanger', mois: 12, annee: 2026, jourPrevu: 3, montant: 1500, paye: false, montantPaye: 0, sourceCompte: 'cpt_2' });
+            st.setVoyage('voyageDebut', '2026-12-05'); st.setVoyage('voyageFin', '2026-12-08'); st.setVoyage('voyageDestination', 'Tanger'); }, ST);
+        const t1 = await lignes('Voyage Tanger'), b1 = await page.evaluate((ST) => [eval(ST).voyageBudgetLigne, eval(ST).soldesInitiaux.voyageDepId], ST);
+        v('V. une ligne « Voyage Tanger » (1 500 DH) existe déjà : la déclaration la REPREND — pas de doublon, son budget et son compte gardés, au départ du voyage',
+          t1.length === 1 && t1[0].id === 8801 && t1[0].montant === 1500 && t1[0].sourceCompte === 'cpt_2' && t1[0].jourPrevu === 5 && t1[0].voyage === true && b1[0] === '1500' && b1[1] === 8801, JSON.stringify([t1, b1]));
+        await page.evaluate((ST) => eval(ST).setVoyage('voyageFin', '2026-12-09'), ST);
+        const t2 = await lignes('Voyage Tanger');
+        await page.evaluate((ST) => eval(ST).setVoyage('voyageBudget', '1800'), ST);
+        const t3 = await lignes('Voyage Tanger');
+        v('  → changer les dates ne remet plus le budget à 0 ; la case « budget » règle le montant de la ligne (1 800)', t2[0].montant === 1500 && t3[0].montant === 1800, JSON.stringify([t2[0].montant, t3[0].montant]));
+        //  votre cas : les DEUX lignes déjà là (version d'avant) — fusionnées au chargement
+        const r = await page.evaluate(async (ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026];
+            st.effacerVoyage();
+            d.depensesIrregulieres = d.depensesIrregulieres.filter(x => x.nom !== 'Voyage Tanger');
+            d.depensesIrregulieres.push({ id: 8811, nom: 'Voyage Fès', mois: 11, annee: 2026, jourPrevu: 4, montant: 1500, paye: false, montantPaye: 0, sourceCompte: 'courant' },
+                                        { id: 8812, nom: 'Voyage Fès', mois: 11, annee: 2026, jourPrevu: 6, montant: 0, paye: false, montantPaye: 0, sourceCompte: 'cpt_2', voyage: true });
+            Object.assign(st.soldesInitiaux, { voyageDebut: '2026-11-06', voyageFin: '2026-11-08', voyageDestination: 'Fès', voyageBudget: '', voyageDepId: 8812, voyageCompte: 'cpt_2' });
+            st.executerImportFusion(JSON.parse(JSON.stringify(st.getExportData())));
+            await new Promise(res => setTimeout(res, 400));
+            const f = Object.values(st.donneesAnnuelles).flatMap(x => (x.depensesIrregulieres || []).filter(y => y.nom === 'Voyage Fès'));
+            return { f: JSON.parse(JSON.stringify(f)), dep: st.soldesInitiaux.voyageDepId, budget: st.voyageBudgetLigne, statut: st.serverSyncStatus }; }, ST);
+        v('  → les deux lignes déjà là (la vôtre à 1 500 DH, celle de la déclaration à 0) : fusionnées au chargement — la vôtre reste, sur le compte « payé par », budget 1 500 visible, enregistré',
+          r.f.length === 1 && r.f[0].id === 8811 && r.f[0].montant === 1500 && r.f[0].sourceCompte === 'cpt_2' && r.dep === 8811 && r.budget === '1500' && r.statut === 'modified', JSON.stringify(r));
+        await page.evaluate((ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026]; st.effacerVoyage(); d.depensesIrregulieres = d.depensesIrregulieres.filter(x => x.nom !== 'Voyage Fès'); }, ST);
+        v('  → aucune erreur JavaScript (V)', erreurs.length === 0, erreurs[0] || '');
+    });
 } catch (e) {
     v('exécution sans exception', false, String(e && e.stack || e).slice(0, 400));
 } finally {
