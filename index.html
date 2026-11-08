@@ -566,6 +566,8 @@
         <div v-if="!isMobile && appMode === 'previsionnel'" class="flex-1 flex flex-col bg-gray-50 md:h-full md:overflow-hidden relative">
             
             <div v-show="!chatFullScreen" class="sticky top-0 shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+                <!-- v37.114 : en voyage, un ruban fin — où en sont les dépenses du voyage par rapport au prévu -->
+                <ruban-voyage :r="rubanVoyage" @voir="allerAuVoyage"></ruban-voyage>
                 <div class="px-6 py-1.5 flex flex-wrap gap-4 justify-between items-center bg-slate-50 border-b border-gray-200">
                     <div class="flex items-center gap-3">
                         <!-- v37.63 : « Année : » sous 1 536 px — le patrimoine projeté garde sa place, en haut à droite -->
@@ -3629,6 +3631,7 @@
 
             <!-- TOP BAR (sticky) -->
             <div class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm px-4 py-3">
+                <ruban-voyage :r="rubanVoyage" @voir="allerAuVoyage" class="-mx-4 -mt-3 mb-2"></ruban-voyage>
                 <div class="flex items-start justify-between mb-2 gap-3">
                     <div class="flex-1 min-w-0">
                         <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">Patrimoine Liquide ({{ nomDuMois(soldesInitiaux.moisActuel) }})</p>
@@ -5203,6 +5206,7 @@
         <div v-if="appMode === 'reel'" class="flex-1 flex flex-col bg-gray-50 min-h-screen md:h-full md:overflow-hidden relative w-full pb-20 md:pb-0">
             <!-- Top-bar Réalisé (sticky, master switch sur mobile + year selector) -->
             <div class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-emerald-200 shadow-sm px-3 md:px-6 py-3">
+                <ruban-voyage :r="rubanVoyage" @voir="allerAuVoyage" class="-mx-3 md:-mx-6 -mt-3 mb-2"></ruban-voyage>
                 <div class="flex items-center justify-between gap-3">
                     <div v-if="isMobile" class="inline-flex rounded-xl border border-slate-300 bg-slate-100 p-1 shrink-0">
                         <button @click="appMode = 'previsionnel'; activeTab = 'dashboard'" class="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 transition-colors">🔮 Prévi</button>
@@ -8130,6 +8134,36 @@
         //    v-model (ou :model-value) — l'id choisi ; groupes — categoriesPourRanger ; vide — libellé du choix « aucune »
         //    (absent : pas de choix vide) ; action — le bouton garde son texte (« autre… »), seul l'événement « choisi » compte ;
         //    ouvert — s'ouvre dès l'affichage ; libelleHors — le nom d'une catégorie actuelle absente de la liste.
+        //  v37.114 — LE RUBAN DU VOYAGE. Pendant le voyage (aujourd'hui entre ses dates), une bande fine en tête de l'appli :
+        //  la destination, le jour du voyage, ce qui est dépensé sur le prévu (barre, repère du rythme), le reste, aujourd'hui.
+        //  Dans le flux de l'en-tête (rien n'est recouvert) ; ▴ la réduit en pastille « ✈️ 42 % » (retenu sur cet appareil,
+        //  pour ce voyage) ; un clic sur le titre ouvre le bloc du voyage (Pilotage).
+        const RubanVoyage = {
+            props: { r: { type: Object, default: null } },
+            emits: ['voir'],
+            data() { return { reduit: false }; },
+            watch: { 'r.cle': { immediate: true, handler(c) { let v = false; try { v = !!c && localStorage.getItem('fm_ruban_voyage_reduit') === String(c); } catch (_) { } this.reduit = v; } } },
+            methods: {
+                fmt(n) { return Math.round(Number(n) || 0).toLocaleString('fr-FR'); },
+                reduire(oui) { this.reduit = oui; try { if (oui) localStorage.setItem('fm_ruban_voyage_reduit', String(this.r.cle)); else localStorage.removeItem('fm_ruban_voyage_reduit'); } catch (_) { } },
+            },
+            template: `<div v-if="r" data-ruban-voyage :data-etat="r.depasse ? 'depasse' : (r.enAvance ? 'avance' : 'ok')"
+                 :class="['w-full text-[11px] leading-tight border-b', r.depasse ? 'bg-rose-50 text-rose-900 border-rose-200' : (r.enAvance ? 'bg-amber-50 text-amber-900 border-amber-200' : 'bg-sky-50 text-sky-900 border-sky-200')]">
+                <div v-if="!reduit" class="px-3 md:px-6 py-1 flex items-center gap-x-3 gap-y-0.5 flex-wrap">
+                    <button type="button" @click="$emit('voir')" data-ruban-voyage-titre class="font-black whitespace-nowrap hover:underline" title="Ouvrir le voyage (Pilotage)">✈️ En voyage{{ r.dest ? ' — ' + r.dest : '' }} <span class="font-semibold opacity-70">· jour {{ r.jour }}/{{ r.jours }}</span></button>
+                    <span data-ruban-voyage-etat class="tabular-nums font-bold whitespace-nowrap">{{ fmt(r.depense) }}<template v-if="r.budget"> / {{ fmt(r.budget) }} DH prévus ({{ r.pct }} %)</template><template v-else> DH dépensés (aucun budget prévu)</template></span>
+                    <span v-if="r.budget" data-ruban-voyage-barre class="relative flex-1 min-w-[40px] max-w-[220px] h-1.5 rounded-full bg-white ring-1 ring-black/10 overflow-hidden" :title="fmt(r.prevuAce) + ' DH prévus à ce jour'">
+                        <span :class="['absolute inset-y-0 left-0 rounded-full', r.depasse ? 'bg-rose-500' : (r.enAvance ? 'bg-amber-500' : 'bg-sky-500')]" :style="{ width: Math.min(100, r.pct) + '%' }"></span>
+                        <span class="absolute inset-y-0 w-px bg-slate-700/60" :style="{ left: Math.min(100, Math.round(r.prevuAce / r.budget * 100)) + '%' }"></span>
+                    </span>
+                    <span v-if="r.budget" data-ruban-voyage-reste class="font-semibold whitespace-nowrap tabular-nums">{{ r.depasse ? 'dépassé de ' + fmt(-r.reste) + ' DH' : 'reste ' + fmt(r.reste) + ' DH' }}</span>
+                    <span v-if="r.budget && !r.depasse" data-ruban-voyage-rythme class="hidden sm:inline opacity-70 whitespace-nowrap">{{ r.enAvance ? 'au-dessus du rythme' : 'dans le rythme' }} ({{ fmt(r.prevuAce) }} prévus à ce jour)</span>
+                    <span v-if="r.aujourdhui" class="hidden sm:inline opacity-70 whitespace-nowrap tabular-nums">· aujourd’hui {{ fmt(r.aujourdhui) }} DH</span>
+                    <button type="button" @click="reduire(true)" data-ruban-voyage-reduire class="ml-auto opacity-60 hover:opacity-100 px-1 font-black" title="Réduire le ruban" aria-label="Réduire le ruban">▴</button>
+                </div>
+                <button v-else type="button" @click="reduire(false)" data-ruban-voyage-mini class="px-3 md:px-6 py-0.5 font-black tabular-nums whitespace-nowrap" title="Afficher le ruban du voyage">✈️ {{ r.budget ? r.pct + ' %' : fmt(r.depense) + ' DH' }} ▾</button>
+            </div>`,
+        };
         const ChoixCategorie = {
             props: { modelValue: { type: [String, Number], default: '' }, groupes: { type: Array, required: true }, vide: { type: String, default: '' },
                      placeholder: { type: String, default: 'Choisir une catégorie' }, action: { type: Boolean, default: false },
@@ -9099,10 +9133,14 @@
 
         try {
             const app = createApp({
-                components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie },
+                components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.113 Le voyage d'abord";
+                    const CURRENT_VERSION = "37.114 Le ruban du voyage";
                     const CHANGELOG = [
+        { version: "37.114 Le ruban du voyage", date: "2026-11-08", changes: [
+            "🎗️ EN VOYAGE, UN RUBAN EN TÊTE DE L'APPLI — « ✈️ En voyage — Marrakech · jour 3/6 · 1 250 / 3 000 DH prévus (42 %) », une barre avec le repère du rythme, le reste (ou « dépassé de … »), et sur ordinateur le rythme (« 1 500 prévus à ce jour ») et la dépense du jour. Bleu dans le rythme, orange au-dessus, rouge au-delà du budget.",
+            "🪶 Il ne recouvre rien : une ligne fine dans l'en-tête (Prévisionnel, Réalisé, téléphone), qui pousse le reste. ▴ le réduit en pastille « ✈️ 42 % » (retenu sur cet appareil, pour ce voyage) ; un clic sur « ✈️ En voyage » ouvre le bloc du voyage. Il disparaît après le voyage.",
+        ] },
         { version: "37.113 Le voyage d'abord", date: "2026-11-08", changes: [
             "✈️ CASE « DÉPENSE DU VOYAGE » COCHÉE : LE COMPTE DU VOYAGE PASSE AVANT TOUT — cocher puis taper « diesel » (payé d'habitude par le courant) affichait le courant, même si l'enregistrement allait bien sur le compte du voyage. Le formulaire montre désormais le compte du voyage ; décocher rend le compte habituel.",
             "🏦 L'ordre du compte proposé, partout le même : 1. choisi à la main ; 2. en voyage, case cochée : « payé par » ; 3. celui de votre dernière saisie du même libellé ; 4. celui de la catégorie (appris, sinon celui de sa ligne) ; 5. le compte par défaut. Rangée ensuite par l'IA du CFO, une saisie sans compte choisi prend celui de sa catégorie.",
@@ -23032,6 +23070,38 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (c) { f.compteId = c.id; saisieCompteAppris.value = true; saisieCompteCat.value = c.raison; }
                         else _compteSaisieDeCategorie();
                     });
+                    //  v37.114 — le ruban : aujourd'hui (pas la date de la saisie) dans le voyage ; dépensé = les opérations rangées
+                    //  dans sa ligne ; prévu = son budget ; rythme = le budget au prorata des jours écoulés.
+                    const rubanVoyage = computed(() => {
+                        calculationTick.value;
+                        const si = soldesInitiaux.value || {}, x = _voyageDep();
+                        const d1 = _dateVoyage(si.voyageDebut), d2 = _dateVoyage(si.voyageFin);
+                        if (!x || !d1 || !d2) return null;
+                        const auj = _ymd(new Date()), du = _ymd(d1), au = _ymd(d2);
+                        if (auj < du || auj > au) return null;
+                        const cat = x.dep.categorieId;
+                        let depense = 0, aujourdhui = 0;
+                        for (const d of Object.values(donneesAnnuelles.value || {}))
+                            for (const t of (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : [])) {
+                                if (!t || !cat || t.categorieId !== cat) continue;
+                                const m = Math.abs(Number(t.montant) || 0);
+                                depense += m;
+                                if ((t.date || String(t.datetime || '').slice(0, 10)) === auj) aujourdhui += m;
+                            }
+                        const budget = Math.max(0, Math.round(Number(x.dep.montant) || 0));
+                        const jours = Math.round((d2 - d1) / 864e5) + 1, jour = Math.round((_dateVoyage(auj) - d1) / 864e5) + 1;
+                        const prevuAce = budget ? Math.round(budget * jour / jours) : 0;
+                        depense = Math.round(depense * 100) / 100;
+                        return { cle: String(x.dep.id), dest: String(si.voyageDestination || '').trim(), nom: String(x.dep.nom || '').trim(), jour, jours,
+                                 depense, aujourdhui: Math.round(aujourdhui * 100) / 100, budget, pct: budget ? Math.round(depense / budget * 100) : null,
+                                 reste: Math.round(budget - depense), depasse: budget > 0 && depense > budget + 0.5, prevuAce, enAvance: budget > 0 && depense > prevuAce + 0.5 };
+                    });
+                    const allerAuVoyage = async () => {
+                        appMode.value = 'reel'; activeTab.value = 'pilotage';
+                        await nextTick();
+                        const el = document.querySelector('details[data-voyage]');
+                        if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+                    };
                     const toggleSuspendreAbsence = (cle) => {
                         const d = donneesAnnuelles.value[moisBudgetaire.value.an];
                         const cv = d && d.chargesVariables ? d.chargesVariables[cle] : null;
@@ -26854,7 +26924,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         // v37.49 : catégorisation — règles, IA, À catégoriser
                         categoriserLibelle, saisieCatStatut, saisieCatRaison, SOURCES_CATEGORIE, iaCategorisation, demanderCategorieIA,
-                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
+                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,

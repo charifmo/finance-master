@@ -154,6 +154,43 @@ try {
             return { paye: st.isItemPaid(dep, 3000), regle: st.getPaidAmount(dep, 3000), lignes: st.atterrissageCycle.comptes.flatMap(c => (c.lignes || []).map(l => [l.libelle, Math.round(l.montant)])).filter(([x]) => /Voyage/.test(x)) }; }, ST);
         v('E. le budget du voyage se consomme : 180 DH réglés sur 3 000, le Relevé n’attend plus que 2 820', e.paye === false && e.regle === 180 && e.lignes.some(([x, m]) => /Voyage Marrakech/.test(x) && m === 2820), JSON.stringify(e));
     });
+    await section('R', async () => {
+        //  v37.114 — le ruban du voyage, en tête de l'appli : visible, sans rien recouvrir, réductible
+        const texte = async () => (await page.textContent('[data-ruban-voyage]')).replace(/\s+/g, ' ');
+        await page.waitForSelector('[data-ruban-voyage]', { state: 'visible', timeout: 5000 });
+        const t1 = await texte();
+        v('R. en voyage : le ruban en tête — « ✈️ En voyage — Marrakech · jour 3/6 », 180 / 3 000 DH prévus (6 %), reste 2 820, dans le rythme (1 500 prévus à ce jour), aujourd’hui 180',
+          /✈️ En voyage — Marrakech · jour 3\/6/.test(t1) && /180 \/ 3\s000 DH prévus \(6 %\)/.test(t1) && /reste 2\s820 DH/.test(t1) && /dans le rythme \(1\s500 prévus à ce jour\)/.test(t1) && /aujourd’hui 180 DH/.test(t1)
+          && await page.getAttribute('[data-ruban-voyage]', 'data-etat') === 'ok', t1);
+        const place = await page.evaluate(() => { const r = document.querySelector('[data-ruban-voyage]'), b = r.getBoundingClientRect(), tete = r.parentElement;
+            const sous = r.nextElementSibling ? r.nextElementSibling.getBoundingClientRect() : null;
+            return { h: Math.round(b.height), dansTete: tete.classList.contains('sticky'), recouvre: sous ? sous.top < b.bottom - 1 : true, haut: Math.round(b.top) }; });
+        v('  → fin (≤ 40 px), dans l’en-tête collant, rien en dessous n’est recouvert (il pousse, il ne masque pas)', place.h > 0 && place.h <= 40 && place.dansTete && !place.recouvre, JSON.stringify(place));
+        await page.click('[data-ruban-voyage-reduire]');
+        await page.waitForSelector('[data-ruban-voyage-mini]', { state: 'visible', timeout: 3000 });
+        const mini = (await page.textContent('[data-ruban-voyage-mini]')).replace(/\s+/g, ' ').trim();
+        await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'previsionnel'; st.activeTab = 'dashboard'; await Vue.nextTick(); }, ST);
+        await page.waitForSelector('[data-ruban-voyage]', { state: 'visible', timeout: 5000 });
+        const miniAilleurs = !!(await page.$('[data-ruban-voyage-mini]')) && !(await page.$('[data-ruban-voyage-titre]'));
+        v('  → ▴ le réduit en pastille « ✈️ 6 % ▾ » ; retenu ailleurs dans l’appli (Prévisionnel)', mini === '✈️ 6 % ▾' && miniAilleurs, JSON.stringify([mini, miniAilleurs]));
+        await page.click('[data-ruban-voyage-mini]');
+        await page.waitForSelector('[data-ruban-voyage-titre]', { state: 'visible', timeout: 3000 });
+        //  dépassé : rouge, « dépassé de … »
+        await page.evaluate(async (ST) => { const st = eval(ST); st.donneesAnnuelles[2026].depensesIrregulieres.find(d => d.voyage).montant = 150; st.calculationTick++; await Vue.nextTick(); }, ST);
+        const t2 = await texte(), e2 = await page.getAttribute('[data-ruban-voyage]', 'data-etat');
+        await page.evaluate(async (ST) => { const st = eval(ST); st.donneesAnnuelles[2026].depensesIrregulieres.find(d => d.voyage).montant = 300; st.calculationTick++; await Vue.nextTick(); }, ST);
+        const t3 = await texte(), e3 = await page.getAttribute('[data-ruban-voyage]', 'data-etat');
+        await page.evaluate(async (ST) => { const st = eval(ST); st.donneesAnnuelles[2026].depensesIrregulieres.find(d => d.voyage).montant = 3000; st.calculationTick++; await Vue.nextTick(); }, ST);
+        v('  → budget de 150 : « dépassé de 30 DH » (rouge) ; budget de 300 : au-dessus du rythme (150 prévus à ce jour, orange)',
+          e2 === 'depasse' && /dépassé de 30 DH/.test(t2) && e3 === 'avance' && /au-dessus du rythme \(150 prévus à ce jour\)/.test(t3), JSON.stringify([e2, t2, e3, t3]));
+        //  un clic sur le titre : le bloc du voyage (Réalisé › Pilotage), ouvert
+        await page.click('[data-ruban-voyage-titre]');
+        await page.waitForFunction(() => { const d = document.querySelector('details[data-voyage]'); return d && d.open; }, null, { timeout: 5000 });
+        const ou = await page.evaluate((ST) => [eval(ST).appMode, eval(ST).activeTab], ST);
+        v('  → un clic sur « ✈️ En voyage » ouvre le bloc du voyage (Réalisé › Pilotage)', ou[0] === 'reel' && ou[1] === 'pilotage', JSON.stringify(ou));
+        await page.evaluate(async (ST) => { const st = eval(ST); st.activeTab = 'saisie'; await Vue.nextTick(); }, ST);
+        await page.waitForSelector(CHAMP, { state: 'visible', timeout: 10000 });
+    });
     await section('F', async () => {
         await page.evaluate(async (ST) => { const st = eval(ST); st.saisieForm.datetime = '2026-10-20T10:00'; st.saisieForm.dateFixee = true; await Vue.nextTick(); }, ST);
         const bandeau = !!(await page.$('[data-saisie-voyage-bandeau]'));
@@ -242,7 +279,7 @@ try {
         await page.evaluate((ST) => eval(ST).effacerVoyage(), ST);
         let d = await deps();
         const bandeau = !!(await page.$('[data-saisie-voyage-bandeau]'));
-        v('H. voyage effacé : la ligne reste (on y a dépensé), le rappel disparaît', d.length === 1 && d[0].nom === 'Voyage Agadir' && !bandeau, JSON.stringify([d, bandeau]));
+        v('H. voyage effacé : la ligne reste (on y a dépensé), le rappel disparaît — et le ruban aussi', d.length === 1 && d[0].nom === 'Voyage Agadir' && !bandeau && !(await page.$('[data-ruban-voyage]')), JSON.stringify([d, bandeau]));
         await page.evaluate((ST) => { const st = eval(ST); st.setVoyage('voyageDebut', '2026-10-20'); st.setVoyage('voyageFin', '2026-10-24'); st.setVoyage('voyageDestination', 'Rome'); st.calculationTick++; st.friseOuverte = true; }, ST);
         const f = await page.evaluate(async (ST) => { await Vue.nextTick(); const fc = eval(ST).friseCycle; const b = fc.categories.find(c => c.key === '__exceptionnel'); return b ? b.lignes.map(l => [l.nom, l.engage, l.enveloppe]) : null; }, ST);
         v('  → un voyage à Rome sans budget : sa ligne est dans la frise (0 / 0), à côté de celle d’Agadir', !!f && f.some(([n]) => n === 'Voyage Rome') && f.some(([n, e]) => n === 'Voyage Agadir' && e === 180), JSON.stringify(f));
