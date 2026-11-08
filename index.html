@@ -1741,7 +1741,7 @@
                                 </span>
                             </div>
                             <div v-show="moisOuverts.includes(moisNum)" class="p-4 md:p-6 bg-white space-y-3">
-                                <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" class="bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
+                                <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" :data-dep-id="depense.id" class="bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
                                     <!-- v18.00 : overflow-x-auto pour éviter l'élargissement horizontal sur mobile -->
                                     <div class="overflow-x-auto">
                                     <div class="flex items-center gap-3 p-3 min-w-max md:min-w-0">
@@ -3886,7 +3886,7 @@
                     </div>
                     <!-- Items -->
                     <template v-if="donneesAnnuelles[anneeAffichage] && Array.isArray(donneesAnnuelles[anneeAffichage].depensesIrregulieres)">
-                        <div v-for="(choc, i) in donneesAnnuelles[anneeAffichage].depensesIrregulieres" :key="choc.id || i"
+                        <div v-for="(choc, i) in donneesAnnuelles[anneeAffichage].depensesIrregulieres" :key="choc.id || i" :data-dep-id="choc.id"
                              :class="['rounded-2xl border p-3 mb-3 shadow-sm', choc.montant < 0 ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200']">
                             <div class="mb-2">
                                 <div class="flex items-center gap-2 mb-1">
@@ -5659,7 +5659,8 @@
                                             <option v-for="ep in epargneNonLiee" :key="'vep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                         </select>
                                     </template>
-                                    <span v-if="voyageSaisie.nom" data-voyage-ligne class="text-[10px] font-bold text-emerald-300 w-full md:w-auto">✓ « {{ voyageSaisie.nom }} » est dans le Flux ; à la saisie, la case « ✈️ Dépense du voyage » l'y range.</span>
+                                    <span v-if="voyageSaisie.nom" data-voyage-ligne class="text-[10px] font-bold text-emerald-300 w-full md:w-auto">✓ « {{ voyageSaisie.nom }} » est dans le Flux ; à la saisie, la case « ✈️ Dépense du voyage » l'y range.
+                                        <button type="button" @click="allerLigneVoyageFlux()" data-voyage-voir-flux class="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/30 font-black whitespace-nowrap">⚡ Voir dans le Flux →</button></span>
                                     <span v-else class="text-[10px] font-bold text-slate-500 w-full md:w-auto">Dates + destination : une ligne « Voyage … » est créée dans le Flux.</span>
                                 </div>
                                 <p v-if="modeVoyageActif" class="text-[10px] font-bold text-slate-400">
@@ -9135,8 +9136,11 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.117 Un seul voyage, son budget";
+                    const CURRENT_VERSION = "37.118 Du voyage au Flux";
                     const CHANGELOG = [
+        { version: "37.118 Du voyage au Flux", date: "2026-11-08", changes: [
+            "⚡ « VOIR DANS LE FLUX → » — dans le bloc « Voyage · absence », un bouton ouvre le Flux (Prévisionnel) directement sur la ligne « Voyage … » : son mois est déplié, la ligne surlignée. Sur téléphone, l'onglet Flux s'ouvre au même endroit.",
+        ] },
         { version: "37.117 Un seul voyage, son budget", date: "2026-11-08", changes: [
             "✈️ VOTRE LIGNE « VOYAGE … » EST REPRISE, PLUS DOUBLÉE — une ligne « Voyage Marrakech » déjà dans le Flux (créée à la main, avec son budget de 1 500 DH) restait à côté de celle créée en déclarant l'absence (0 DH) : le ruban lisait la seconde, « aucun budget prévu ». Déclarer une absence reprend désormais la ligne existante (même destination, même année, mois proche) ; les deux lignes déjà présentes sont fusionnées au chargement — la vôtre reste, avec son budget, sur le compte choisi dans « payé par ».",
             "💰 La case « budget » du voyage montre et règle le montant de la ligne du Flux ; changer les dates ou la destination ne le remet plus à 0.",
@@ -23273,6 +23277,28 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                  depense, aujourdhui: Math.round(aujourdhui * 100) / 100, budget, pct: budget ? Math.round(depense / budget * 100) : null,
                                  reste: Math.round(budget - depense), depasse: budget > 0 && depense > budget + 0.5, prevuAce, enAvance: budget > 0 && depense > prevuAce + 0.5 };
                     });
+                    //  v37.118 — « je ne vois pas de lien qui m'envoie vers le Flux » : la ligne du voyage, ouverte et surlignée dans le Flux
+                    //  (Prévisionnel › Flux ; sur ordinateur, son mois est déplié)
+                    const allerLigneVoyageFlux = async () => {
+                        const x = _voyageDep(); if (!x) return false;
+                        const id = x.dep.id, mois = Number(x.dep.mois) || 1;
+                        appMode.value = 'previsionnel';
+                        anneeAffichage.value = Number(x.dep.annee || x.an) || anneeAffichage.value;
+                        if (isMobile.value) activeMobileTab.value = 'flux';
+                        else { activeTab.value = 'irregulieres'; if (!moisOuverts.value.includes(mois)) moisOuverts.value = [...moisOuverts.value, mois]; }
+                        for (let k = 0; k < 20; k++) {
+                            await nextTick();
+                            const el = document.querySelector('[data-dep-id="' + String(id).replace(/"/g, '') + '"]');
+                            if (el) {
+                                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                el.setAttribute('data-surligne', '1'); el.classList.add('ring-4', 'ring-sky-400');
+                                setTimeout(() => { el.classList.remove('ring-4', 'ring-sky-400'); el.removeAttribute('data-surligne'); }, 3000);
+                                return true;
+                            }
+                            await new Promise(r => setTimeout(r, 50));
+                        }
+                        return false;
+                    };
                     const allerAuVoyage = async () => {
                         appMode.value = 'reel'; activeTab.value = 'pilotage';
                         await nextTick();
@@ -27101,7 +27127,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         // v37.49 : catégorisation — règles, IA, À catégoriser
                         categoriserLibelle, saisieCatStatut, saisieCatRaison, SOURCES_CATEGORIE, iaCategorisation, demanderCategorieIA,
-                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, getExportData, executerImportFusion, voyageBudgetLigne, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
+                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, allerLigneVoyageFlux, getExportData, executerImportFusion, voyageBudgetLigne, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,

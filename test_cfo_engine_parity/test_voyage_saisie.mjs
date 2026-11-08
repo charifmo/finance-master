@@ -223,6 +223,16 @@ try {
         const dejaSaisies = await page.evaluate((ST) => eval(ST).donneesAnnuelles[2026].transactionsReelles.filter(t => t.categorieSource === 'voyage').map(t => String(t.compteId)), ST);
         v('I. « payé par » à côté de la destination : courant d’office ; « Compte Voyage » choisi → la ligne du voyage le prend, retenu pour le prochain voyage ; les saisies déjà faites (case cochée) le rejoignent',
           avantCompte === 'courant' && ligneCompte[0] === 'cpt_2' && ligneCompte[1] === 'cpt_2' && dejaSaisies.length >= 2 && dejaSaisies.every(c => c === '2'), JSON.stringify([avantCompte, ligneCompte, dejaSaisies]));
+        //  v37.118 — un lien visible vers la ligne du voyage dans le Flux
+        await page.click('[data-voyage-voir-flux]');
+        await page.waitForSelector('[data-dep-id][data-surligne]', { state: 'visible', timeout: 5000 }).catch(() => { });
+        const flux = await page.evaluate(({ ST, AG }) => { const st = eval(ST), dep = st.donneesAnnuelles[2026].depensesIrregulieres.find(d => d.categorieId === AG), el = document.querySelector('[data-dep-id][data-surligne]');
+            return { mode: st.appMode, tab: st.activeTab, surligne: el ? el.getAttribute('data-dep-id') : null, id: String(dep.id), nom: el ? /Voyage Agadir/.test(el.innerHTML) || !!el.querySelector('input') : false }; }, { ST, AG });
+        const mobile = await page.evaluate(async ({ ST }) => { const st = eval(ST); st.isMobile = true; const ok = await st.allerLigneVoyageFlux(); const r = { ok, tab: st.activeMobileTab, el: !!document.querySelector('[data-dep-id][data-surligne]') }; st.isMobile = false; return r; }, { ST });
+        v('  → « ⚡ Voir dans le Flux → » ouvre le Flux (Prévisionnel) sur la ligne du voyage, surlignée ; sur téléphone aussi (onglet Flux)',
+          flux.mode === 'previsionnel' && flux.tab === 'irregulieres' && flux.surligne === flux.id && mobile.ok && mobile.tab === 'flux' && mobile.el, JSON.stringify([flux, mobile]));
+        await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'reel'; st.activeTab = 'pilotage'; await Vue.nextTick(); document.querySelector('details[data-voyage]').open = true; }, ST);
+        await page.waitForSelector('[data-voyage-compte]', { state: 'visible', timeout: 5000 });
         //  la liaison RESTE : le voyage modifié ensuite (budget), puis l'appli rechargée depuis ce qu'elle enregistre
         await page.evaluate((ST) => eval(ST).setVoyage('voyageBudget', '3000'), ST);
         const apresModif = await page.evaluate(({ ST, AG }) => eval(ST).donneesAnnuelles[2026].depensesIrregulieres.find(d => d.categorieId === AG).sourceCompte, { ST, AG });
