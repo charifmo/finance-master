@@ -63,7 +63,7 @@ suite() {
 }
 
 echo "▸ Syntaxe PHP"
-[ "$PERIMETRE" = sante ] || for f in cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php sante/sante_lib.php sante/sante_integrity.php sante/sante_intent_engine.php sante/sante_store.php sante/save_sante.php sante/sante_reparation.php sante/sante_api.php sante/sync_samsung.php sante/sante_hc.php sante/sante_jeton.php sante/sante_cmo.php n8n/maj_workflow_sante.php sauvegarde.php; do
+[ "$PERIMETRE" = sante ] || for f in cfo_relais.php cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php sante/sante_lib.php sante/sante_integrity.php sante/sante_intent_engine.php sante/sante_store.php sante/save_sante.php sante/sante_reparation.php sante/sante_api.php sante/sync_samsung.php sante/sante_hc.php sante/sante_jeton.php sante/sante_cmo.php n8n/maj_workflow_sante.php sauvegarde.php; do
     [ -f "$f" ] && php -l "$f" > /dev/null && echo "  ✅ $f"
 done
 
@@ -169,6 +169,7 @@ suite "Recalibrer l’année en un geste ; les garde-fous"                 node 
 suite "Écran « Aujourd’hui », mode expert, réponses instantanées du CFO"  node test_cfo_engine_parity/test_aujourdhui.mjs
 suite "Mes applis : passer de Finance à Santé (lanceur, apps.json, accueil)"  node test_cfo_engine_parity/test_lanceur.mjs
 suite "Connexion au CFO : « Failed to fetch » diagnostiqué, nouvel essai, écran allumé"  node test_cfo_engine_parity/test_connexion_cfo.mjs
+suite "La réponse du CFO ne se perd plus : le VPS l'attend et la garde (relais)"  node test_cfo_engine_parity/test_cfo_relais.mjs
 suite "Santé Master : calculs, règle de Gilbert, intégrité, moteur d'intentions"  php test_cfo_engine_parity/test_sante_calculs.php
 suite "Santé Master : le fichier de secours (sante/ ou pending/), l’erreur dite"  php test_cfo_engine_parity/test_sante_stockage.php
 suite "Santé Master : lecture des vrais comptes rendus (Soit, Cerba, bornes), statut « à vérifier »"  node test_cfo_engine_parity/test_sante_import_reel.mjs
