@@ -403,6 +403,12 @@ z.close()`, src, zip]);
         v('  → synchro sans nouveauté (« data »: {}) : 200, rien de refusé', repVide.status === 200 && (await repVide.json()).ok === true, repVide.status);
         const mauvais = await fetch(U + 'sync_samsung.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sante-Token': 'faux-jeton-faux-jeton' }, body: JSON.stringify(envoi) });
         v('  → avec un mauvais jeton : 403', mauvais.status === 403);
+        //  v1.25 — chaque tentative est notée par le serveur, même refusée (backups/hc_tentatives.json, lu par hc_diagnostic.php)
+        const tent = JSON.parse(fs.readFileSync(path.join(tmp, 'backups', 'hc_tentatives.json'), 'utf8'));
+        const [tB, tVide, tMauvais] = tent.slice(-3);
+        v('  → v1.25 : les tentatives notées — format réel accepté (200, pas et FC reçus), synchro vide (200), mauvais jeton refusé (403, dit)',
+          tB.code === 200 && tB.auth === 'mot de passe du site' && tB.recu && tB.recu.steps === 400 && tB.recu.heart_rate === 140 && tB.jours >= 1
+          && tVide.code === 200 && !tVide.recu?.steps && tMauvais.code === 403 && tMauvais.auth === 'jeton invalide' && /jeton invalide/.test(tMauvais.message || ''), JSON.stringify(tent.slice(-3)));
         await p7.evaluate((ST) => eval(ST).rechargerEtat(), ST);          // revenir sur la page (visibilitychange)
         await p7.waitForSelector('[data-derniere-synchro]', { timeout: 5000 });
         v('  → de retour sur la page : « ✓ dernière synchro à l\'instant », les pas du jour affichés', /dernière synchro à l’instant/.test(await p7.textContent('[data-derniere-synchro]')) && (await p7.textContent('[data-samsung-jour]')).replace(/\D/g, '').startsWith('8'), await p7.textContent('[data-samsung-jour]'));
