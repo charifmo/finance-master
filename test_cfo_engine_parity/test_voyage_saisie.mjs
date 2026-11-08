@@ -168,6 +168,61 @@ try {
         const d = await deps(), r = await tx('restaurant');
         v('G. destination changée en Agadir : la ligne devient « Voyage Agadir », les dépenses du voyage la suivent', d.length === 1 && d[0].nom === 'Voyage Agadir' && d[0].categorieId === 'cat_irr_l_voyage_agadir' && r.categorieId === 'cat_irr_l_voyage_agadir', JSON.stringify([d, r]));
     });
+    await section('I', async () => {
+        //  v37.112 — « le CFO remplit la saisie (Voyage Marrakech) mais met le compte courant » : la ligne du voyage est payée
+        //  par un autre compte ; une saisie que les règles ne connaissent pas part sur le compte par défaut, puis l'IA la range
+        const AG = 'cat_irr_l_voyage_agadir';
+        await page.evaluate(({ ST }) => { const st = eval(ST); st.comptes.push({ id: 2, label: 'Compte Voyage', type: 'epargne', solde: 5000, icone: '✈️' }); st.activeTab = 'pilotage'; }, { ST });
+        //  le compte du voyage se choisit là où on le déclare (Pilotage) : « payé par »
+        await page.waitForSelector('details[data-voyage]', { state: 'attached', timeout: 5000 });
+        await page.evaluate(() => { document.querySelector('details[data-voyage]').open = true; });
+        await page.waitForSelector('[data-voyage-compte]', { state: 'visible', timeout: 5000 });
+        const avantCompte = await page.$eval('[data-voyage-compte]', e => e.value);
+        await page.selectOption('[data-voyage-compte]', 'cpt_2');
+        const ligneCompte = await page.evaluate(({ ST, AG }) => { const st = eval(ST); return [st.donneesAnnuelles[2026].depensesIrregulieres.find(d => d.categorieId === AG).sourceCompte, st.soldesInitiaux.voyageCompte]; }, { ST, AG });
+        const dejaSaisies = await page.evaluate((ST) => eval(ST).donneesAnnuelles[2026].transactionsReelles.filter(t => t.categorieSource === 'voyage').map(t => String(t.compteId)), ST);
+        v('I. « payé par » à côté de la destination : courant d’office ; « Compte Voyage » choisi → la ligne du voyage le prend, retenu pour le prochain voyage ; les saisies déjà faites (case cochée) le rejoignent',
+          avantCompte === 'courant' && ligneCompte[0] === 'cpt_2' && ligneCompte[1] === 'cpt_2' && dejaSaisies.length >= 2 && dejaSaisies.every(c => c === '2'), JSON.stringify([avantCompte, ligneCompte, dejaSaisies]));
+        await page.evaluate(async (ST) => { const st = eval(ST); st.activeTab = 'saisie'; await Vue.nextTick(); st.saisieForm.datetime = ''; st.saisieForm.dateFixee = false; st.saisieVoyageCoche = false; }, ST);
+        await page.waitForSelector(CHAMP, { state: 'visible', timeout: 10000 });
+        await page.evaluate((ST) => { eval(ST).saisieVoyageCoche = true; }, ST);
+        await page.waitForFunction((ST) => String(eval(ST).saisieForm.compteId) === '2', ST, { timeout: 5000 }).catch(() => {});
+        const coche = await page.evaluate((ST) => String(eval(ST).saisieForm.compteId), ST);
+        await page.evaluate((ST) => { eval(ST).saisieVoyageCoche = false; }, ST);
+        await page.waitForFunction((ST) => String(eval(ST).saisieForm.compteId) !== '2', ST, { timeout: 5000 }).catch(() => {});
+        const decoche = await page.evaluate((ST) => String(eval(ST).saisieForm.compteId), ST);
+        v('  → la case « ✈️ Dépense du voyage » cochée : le compte affiché devient celui de la ligne (Compte Voyage) ; décochée : il revient',
+          coche === '2' && decoche === '1', JSON.stringify([coche, decoche]));
+        //  l'IA (le CFO) range « zqrv tbkl » dans le voyage : le compte suit
+        await page.unroute('**/webhook/**');
+        await page.route('**/webhook/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ output: JSON.stringify({ id: AG, confiance: 'haute', raison: 'hébergement pendant le voyage' }) }) }));
+        await saisir('250 zqrv tbkl');
+        await page.waitForFunction((ST) => { const t = eval(ST).donneesAnnuelles[2026].transactionsReelles.filter(x => x.libelle === 'zqrv tbkl').pop(); return t && t.categorieSource === 'ia'; }, ST, { timeout: 10000 });
+        const riad = await tx('zqrv tbkl');
+        v('  → saisie inconnue, rangée ensuite par l’IA du CFO dans « Voyage Agadir » : le compte passe du courant au Compte Voyage',
+          riad.categorieId === AG && riad.categorieSource === 'ia' && String(riad.compteId) === '2' && riad.compteAuto === true, JSON.stringify(riad));
+        //  un compte choisi à la main n'est jamais déplacé
+        await page.evaluate((ST) => { const st = eval(ST); st.saisieForm.compteId = 1; st.compteSaisieModifie(); }, ST);
+        await saisir('90 wxmj pqzd');
+        await page.waitForFunction((ST) => { const t = eval(ST).donneesAnnuelles[2026].transactionsReelles.filter(x => x.libelle === 'wxmj pqzd').pop(); return t && t.categorieSource === 'ia'; }, ST, { timeout: 10000 });
+        const souk = await tx('wxmj pqzd');
+        v('  → compte choisi à la main (courant), puis rangé par l’IA dans le voyage : il reste sur le courant', souk.categorieId === AG && String(souk.compteId) === '1' && souk.compteAuto === false, JSON.stringify(souk));
+        //  les saisies d'avant la correction : réalignées au chargement (sauf la main et la banque)
+        const r = await page.evaluate(({ ST, AG }) => { const st = eval(ST), T = st.donneesAnnuelles[2026].transactionsReelles;
+            const base = { datetime: '2026-10-12T20:00', date: '2026-10-12', mois: 10, montant: 100, categorieId: AG };
+            T.push({ ...base, id: 901, libelle: 'ancien ia', compteId: 1, source: 'manuel', categorieSource: 'ia' },
+                   { ...base, id: 902, libelle: 'ancien voyage', compteId: 1, source: 'manuel', categorieSource: 'voyage' },
+                   { ...base, id: 903, libelle: 'ancien vous', compteId: 1, source: 'manuel', categorieSource: 'vous' },
+                   { ...base, id: 904, libelle: 'ancien banque', compteId: 1, source: 'banque', categorieSource: 'ia' },
+                   { ...base, id: 905, libelle: 'ancien journal', compteId: 1, source: 'manuel', categorieSource: 'ia', compteAuto: false });
+            const n = st.realignerComptesSaisies(), n2 = st.realignerComptesSaisies();
+            return { n, n2, c: Object.fromEntries(T.filter(t => t.id >= 901).map(t => [t.libelle, t.compteId])) }; }, { ST, AG });
+        v('  → réparation au chargement : les anciennes saisies rangées par l’IA ou par la case voyage passent au Compte Voyage (« diesel » et « restaurant » de D y sont déjà) ; ni la main, ni la banque, ni un compte corrigé au journal ; une 2ᵉ fois : rien',
+          r.n === 2 && r.n2 === 0 && r.c['restaurant'] === 2 && r.c['wxmj pqzd'] === 1 && r.c['diesel'] === 1 && r.c['ancien ia'] === 2 && r.c['ancien voyage'] === 2 && r.c['ancien vous'] === 1 && r.c['ancien banque'] === 1 && r.c['ancien journal'] === 1, JSON.stringify(r));
+        await page.evaluate((ST) => { const st = eval(ST); st.donneesAnnuelles[2026].transactionsReelles = st.donneesAnnuelles[2026].transactionsReelles.filter(t => !(t.id >= 901 && t.id <= 905) && !['zqrv tbkl', 'wxmj pqzd'].includes(t.libelle)); }, ST);
+        await page.unroute('**/webhook/**');
+        await page.route('**/webhook/**', r2 => r2.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ output: '{"id": null, "confiance": "basse", "raison": "test"}' }) }));
+    });
     await section('H', async () => {
         await page.evaluate((ST) => eval(ST).effacerVoyage(), ST);
         let d = await deps();
