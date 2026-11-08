@@ -55,6 +55,10 @@ Le serveur relève, à chaque envoi, quels types arrivent et de quelles applis (
 (`data-manque="hc_samsung" | "hc_types" | "hc_veille"`). Il garde aussi le résumé des 30 derniers envois dans `backups/hc_envois.json`
 (derrière le mot de passe du site). Sur le serveur : `sudo php /var/www/finance/sante/hc_diagnostic.php` (ajoutez `--brut` pour des
 exemples de mesures) dit ce qui arrive, d'où, ce qui arrive en retard, et où chercher. Le script répond 404 par le web.
+v1.25 : chaque tentative du téléphone est notée, même refusée (`backups/hc_tentatives.json`, 60 dernières : heure, code HTTP,
+mode d'authentification, taille, types reçus, message). Une synchro forcée qui ne laisse aucune ligne s'est arrêtée avant PHP
+(mot de passe refusé par Caddy, mauvaise adresse, pas de réseau). Avant tout relevé, le diagnostic lit aussi l'appli d'origine
+des pas déjà stockés.
 
 ## Une vraie journée de mesures (v1.23)
 Montre + téléphone écrivent des pas presque à chaque minute : une journée dépasse vite 1 500 mesures par type. Jusqu'à la v1.22,

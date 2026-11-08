@@ -43,6 +43,15 @@ for ($i = 0; $i < 3; $i++) {
     echo "  (" . count((array)($j['hc']['pas'] ?? [])) . " mesures)\n";
 }
 
+//  v1.25 — ce que le serveur a reçu du téléphone, même refusé
+$fT = dirname(sante_fichier()) . '/backups/hc_tentatives.json';
+$T = is_file($fT) ? (json_decode((string)file_get_contents($fT), true) ?: []) : [];
+echo "\n-- " . count($T) . " tentatives du téléphone reçues par le serveur (acceptées ou refusées, depuis la v1.25)\n";
+foreach (array_slice($T, -12) as $x) {
+    $recuT = empty($x['recu']) ? 'rien de neuf' : implode(' · ', array_map(fn($k, $v) => "$k $v", array_keys($x['recu']), $x['recu']));
+    echo '   ' . ($x['quand'] ?? '?') . '  HTTP ' . ($x['code'] ?? '?') . '  ' . ($x['auth'] ?? '') . '  ' . ($x['taille'] ?? 0) . ' octets  ' . $recuT
+       . (isset($x['message']) ? '  — ' . $x['message'] : '') . "\n";
+}
 $f = dirname(sante_fichier()) . '/backups/hc_envois.json';
 $L = is_file($f) ? (json_decode((string)file_get_contents($f), true) ?: []) : [];
 echo "\n-- " . count($L) . " derniers envois gardés ($f)\n";
@@ -66,12 +75,26 @@ echo "\n== Ce qu'il faut regarder\n";
 $noms = [];
 foreach ($L as $x) foreach ((array)($x['types'] ?? []) as $y) foreach (array_keys((array)($y['sources'] ?? [])) as $src) $noms[] = sante_hc_nom_source((string)$src);
 foreach ($vus as $v) $noms = array_merge($noms, array_keys((array)($v['s'] ?? [])));
+//  v1.25 — et les pas déjà stockés : de quelles applis viennent-ils ? (avant tout relevé, c'est la seule trace)
+$nomsPas = [];
+for ($i = 0; $i < 3; $i++) foreach (array_keys((array)($e['journal'][date('Y-m-d', time() - $i * 86400)]['hc']['pas'] ?? [])) as $k)
+    if (preg_match('/^(?:id:)?(s[0-9a-f]{6})\|/', (string)$k, $m) && $m[1] !== 's000000') $nomsPas[] = (string)($s['sources'][$m[1]] ?? '?');
+$noms = array_merge($noms, $nomsPas);
 $samsung = (bool)array_intersect($noms, ['Samsung Health', 'montre']);
 $n = 0;
-if (($vus || $L) && !$samsung) echo ++$n . ". Aucune mesure de Samsung Health ni de la montre : seuls les pas comptés par Android arrivent. Samsung Health\n   n'écrit pas dans Health Connect → Samsung Health › Paramètres › Health Connect › autoriser l'ÉCRITURE de tout.\n";
+if (($vus || $L || $nomsPas) && !$samsung) echo ++$n . ". Aucune mesure de Samsung Health ni de la montre : seuls les pas comptés par Android arrivent. Samsung Health\n   n'écrit pas dans Health Connect → Samsung Health › Paramètres › Health Connect › autoriser l'ÉCRITURE de tout.\n";
 foreach (['heart_rate' => 'fréquence cardiaque', 'sleep' => 'sommeil', 'weight' => 'poids'] as $type => $lib)
     if (($vus || $L) && !isset($vus[$type]) && !array_filter(array_keys($types), fn($k) => str_starts_with(preg_replace('/[^a-z]/', '', strtolower($k)), str_replace('_', '', $type))))
         echo ++$n . ". Jamais reçu : $lib → cochez-le dans l'appli webhook (types de données) et autorisez-le pour Samsung Health dans Health Connect.\n";
-if (strtotime((string)($s['derniere'] ?? '')) < time() - 3 * 3600) echo ++$n . ". Pas d'envoi depuis plus de 3 h : Android endort l'appli webhook → Paramètres › Applis › (appli webhook) › Batterie › Non restreinte.\n";
+$derT = $T ? end($T) : null;
+if ($derT && (int)($derT['code'] ?? 200) >= 400)
+    echo ++$n . ". La dernière tentative (" . $derT['quand'] . ") a été REFUSÉE par le serveur : HTTP " . $derT['code'] . (isset($derT['message']) ? ' — ' . $derT['message'] : '') . ".\n";
+if (strtotime((string)($s['derniere'] ?? '')) < time() - 3 * 3600) {
+    echo ++$n . ". Pas d'envoi accepté depuis plus de 3 h : Android endort l'appli webhook → Paramètres › Applis › (appli webhook) › Batterie › Non restreinte.\n";
+    if (!$derT || strtotime((string)$derT['quand']) < time() - 3 * 3600)
+        echo "   Et RIEN n'a atteint le serveur (même refusé) " . ($derT ? 'depuis ' . $derT['quand'] : 'depuis la v1.25') . " : si une synchro forcée ne laisse aucune ligne ci-dessus,\n"
+           . "   la requête s'arrête avant PHP — mot de passe du site refusé par Caddy (401), mauvaise adresse, ou pas de réseau. Regardez le code\n"
+           . "   de réponse dans le journal de l'appli webhook.\n";
+}
 if ($retard) echo ++$n . ". $retard mesure(s) arrivées après l'envoi suivant : Samsung Health écrit en retard ; elles sont bien comptées ici quand elles arrivent.\n";
 if (!$n) echo "Rien d'anormal vu ici. Si les pas restent bas, comparez avec Health Connect › Données et accès › Pas (même total que Samsung ?).\n";

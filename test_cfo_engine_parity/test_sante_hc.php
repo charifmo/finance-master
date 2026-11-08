@@ -186,6 +186,24 @@ file_put_contents($fDiag, json_encode(['sync_auto' => ['derniere' => $now, 'vus'
 exec('SANTE_DATA_FILE=' . escapeshellarg($fDiag) . ' ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../sante/hc_diagnostic.php') . ' 2>&1', $sortie, $code);
 $txt = implode("\n", $sortie);
 v('  → tout arrive de Samsung Health, synchro récente : « Rien d\'anormal »', $code === 0 && str_contains($txt, 'Rien d\'anormal') && !str_contains($txt, 'Jamais reçu'), $txt);
+//  v1.25 — le cas réel du 08/11 : aucun relevé encore, mais les pas stockés ne viennent QUE du téléphone, plus d'envoi depuis 3,7 h
+$cleTel = 'id:s1ed985|' . str_replace('-', '', date('Y-m-d', time() - 86400)) . 'T100000000Z|' . str_replace('-', '', date('Y-m-d', time() - 86400)) . 'T100100000Z';
+$etatReel = ['sync_auto' => ['derniere' => gmdate('Y-m-d\TH:i:s\Z', time() - 13300), 'recu' => [], 'sources' => ['s1ed985' => 'téléphone']],
+             'journal' => [date('Y-m-d', time() - 86400) => ['samsung' => ['pas' => 4260], 'hc' => ['pas' => [$cleTel => 4260]]]]];
+file_put_contents($fDiag, json_encode($etatReel));
+$diag = function () use ($fDiag) { $o = []; exec('SANTE_DATA_FILE=' . escapeshellarg($fDiag) . ' ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../sante/hc_diagnostic.php') . ' 2>&1', $o, $c); return [$c, implode("\n", $o)]; };
+[$code, $txt] = $diag();
+v('  → v1.25 : avant tout relevé, les pas stockés (téléphone seul) suffisent : « Aucune mesure de Samsung Health » ; rien reçu, même refusé : dit',
+  $code === 0 && str_contains($txt, 'Aucune mesure de Samsung Health') && str_contains($txt, "RIEN n'a atteint le serveur") && str_contains($txt, 'Caddy (401)'), $txt);
+sante_hc_noter_tentative("$dirE/backups", ['quand' => gmdate('Y-m-d\TH:i:s\Z', time() - 60), 'code' => 403, 'methode' => 'POST', 'taille' => 812, 'auth' => 'jeton invalide', 'message' => 'jeton invalide et pas de mot de passe du site']);
+[$code, $txt] = $diag();
+v('  → une synchro forcée refusée il y a 1 min : listée (HTTP 403, jeton invalide) et nommée comme cause ; plus de « RIEN n\'a atteint »',
+  $code === 0 && str_contains($txt, '1 tentatives du téléphone') && str_contains($txt, 'HTTP 403  jeton invalide  812 octets') && str_contains($txt, 'a été REFUSÉE par le serveur : HTTP 403')
+  && !str_contains($txt, "RIEN n'a atteint"), $txt);
+for ($k = 0; $k < 70; $k++) sante_hc_noter_tentative("$dirE/backups", ['quand' => gmdate('Y-m-d\TH:i:s\Z'), 'code' => 200, 'recu' => ['steps' => $k]]);
+$TT = json_decode((string)file_get_contents("$dirE/backups/hc_tentatives.json"), true);
+[$code, $txt] = $diag();
+v('  → au plus 60 tentatives gardées ; la dernière acceptée : plus de « REFUSÉE »', count($TT) === 60 && $TT[59]['recu']['steps'] === 69 && !str_contains($txt, 'REFUSÉE') && str_contains($txt, 'steps 69'), count($TT));
 array_map('unlink', glob("$dirE/backups/*") ?: []); @rmdir("$dirE/backups"); array_map('unlink', glob("$dirE/*") ?: []); @rmdir($dirE);
 @unlink(getenv('SANTE_DATA_FILE'));
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";

@@ -375,6 +375,16 @@ function sante_hc_noter_envoi($brut, string $dossier): void {
     if (@file_put_contents($tmp, json_encode($L, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)) !== false) @rename($tmp, $f); else @unlink($tmp);
 }
 
+/** v1.25 — les 60 dernières tentatives du téléphone (acceptées ou refusées) : backups/hc_tentatives.json */
+function sante_hc_noter_tentative(string $dossier, array $t): void {
+    if (!is_dir($dossier) || !is_writable($dossier)) return;
+    $f = $dossier . '/hc_tentatives.json';
+    $L = is_file($f) ? (json_decode((string)@file_get_contents($f), true) ?: []) : [];
+    $L[] = $t;
+    $tmp = $f . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode(array_slice($L, -60), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false) @rename($tmp, $f); else @unlink($tmp);
+}
+
 /** v1.17 — nom lisible d'une source Health Connect (paquet Android) */
 function sante_hc_nom_source(string $s): string {
     $l = strtolower($s);

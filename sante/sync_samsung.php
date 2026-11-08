@@ -11,6 +11,25 @@ require_once __DIR__ . '/sante_store.php';
 require_once __DIR__ . '/sante_intent_engine.php';
 require_once __DIR__ . '/sante_hc.php';
 header('Content-Type: application/json; charset=utf-8');
+//  v1.25 — CHAQUE tentative du téléphone est notée, même refusée (jeton, JSON, jours refusés) : le diagnostic
+//  (php sante/hc_diagnostic.php) distingue « le téléphone n'envoie rien » de « le serveur refuse ».
+ob_start();
+register_shutdown_function(function () {
+    $corps = (string)ob_get_contents();
+    $r = json_decode($corps, true);
+    $t = ['quand' => gmdate('Y-m-d\TH:i:s\Z'), 'code' => (int)(http_response_code() ?: 200), 'methode' => (string)($_SERVER['REQUEST_METHOD'] ?? '?'),
+          'taille' => (int)($_SERVER['CONTENT_LENGTH'] ?? 0), 'auth' => (string)($GLOBALS['sante_auth_mode'] ?? 'non vérifiée')];
+    if (is_array($r)) {
+        foreach (['erreur', 'message'] as $k) if (!empty($r[$k]) && is_string($r[$k])) $t['message'] = mb_substr($r[$k], 0, 200);
+        if (isset($r['jours'])) $t['jours'] = (int)$r['jours'];
+        if (!empty($r['test'])) $t['test'] = true;
+        if (!empty($r['refus'])) $t['message'] = mb_substr(implode(' ; ', (array)$r['refus']), 0, 200);
+    }
+    if (!empty($GLOBALS['sante_recu'])) $t['recu'] = $GLOBALS['sante_recu'];
+    $d = dirname(sante_fichier()) . '/backups';
+    if (!is_dir($d)) @mkdir($d, 0775, true);
+    sante_hc_noter_tentative($d, $t);
+});
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['ok' => false, 'erreur' => 'POST attendu']); exit; }
 //  v1.5 — jetons valides : db_config.php (sante_samsung_token), SANTE_SAMSUNG_TOKEN, ou celui créé depuis l'appli (sante_jeton.php)
 $valides = sante_jetons_valides();
@@ -20,6 +39,7 @@ $recu = (string)($_SERVER['HTTP_X_SANTE_TOKEN'] ?? ($_GET['token'] ?? ''));
 $bon = sante_auth_amont() !== null;
 foreach ($valides as $v) if ($recu !== '' && hash_equals($v, $recu)) $bon = true;
 if (!$bon && !$valides) { http_response_code(503); echo json_encode(['ok' => false, 'erreur' => "non autorisé : envoyez le mot de passe du site (en-tête Authorization) ou configurez un jeton (onglet Samsung & Poids)"], JSON_UNESCAPED_UNICODE); exit; }
+$GLOBALS['sante_auth_mode'] = sante_auth_amont() !== null ? 'mot de passe du site' : ($bon ? 'jeton' : ($recu !== '' ? 'jeton invalide' : 'aucune'));
 if (!$bon) { http_response_code(403); echo json_encode(['ok' => false, 'erreur' => 'jeton invalide et pas de mot de passe du site'], JSON_UNESCAPED_UNICODE); exit; }
 $p = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, 'erreur' => 'JSON attendu']); exit; }
@@ -28,7 +48,7 @@ if (!is_array($p)) { http_response_code(400); echo json_encode(['ok' => false, '
 //  connexion (jeton et mot de passe sont bons) sans rien écrire dans le journal
 //  v1.24 — résumé de chaque envoi gardé à côté des sauvegardes (diagnostic : « php sante/hc_diagnostic.php » sur le serveur)
 if (empty($p['test']) && empty($p['metadata']['test'])) { $dSauve = dirname(sante_fichier()) . '/backups'; if (!is_dir($dSauve)) @mkdir($dSauve, 0775, true); sante_hc_noter_envoi($p, $dSauve); }
-if (sante_hc_est_format_b($p)) $p = sante_hc_convertir_b($p);   // v1.15 : l'appli installée envoie metadata / data
+if (sante_hc_est_format_b($p)) { $p = sante_hc_convertir_b($p); $GLOBALS['sante_recu'] = $p['_recu'] ?? []; }   // v1.15 : l'appli installée envoie metadata / data
 if (sante_hc_est_demo($p)) {
     echo json_encode(['ok' => true, 'test' => true, 'message' => 'Connexion OK : Santé Master a bien reçu le test (données de démonstration, rien n’est enregistré).'], JSON_UNESCAPED_UNICODE);
     exit;
