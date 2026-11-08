@@ -5646,7 +5646,7 @@
                                            @change="setVoyage('voyageDestination', $event.target.value)"
                                            class="bg-slate-950 text-sky-300 border border-slate-600 rounded p-1.5 text-xs font-bold outline-none focus:border-sky-400 w-36"/>
                                     <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">budget</span>
-                                    <input type="number" min="0" inputmode="decimal" v-valeur="soldesInitiaux.voyageBudget || ''" data-voyage-budget placeholder="facultatif"
+                                    <input type="number" min="0" inputmode="decimal" v-valeur="voyageSaisie.nom ? voyageBudgetLigne : (soldesInitiaux.voyageBudget || '')" data-voyage-budget placeholder="facultatif"
                                            @change="setVoyage('voyageBudget', $event.target.value)"
                                            class="bg-slate-950 text-sky-300 border border-slate-600 rounded p-1.5 text-xs font-bold outline-none focus:border-sky-400 w-24"/>
                                     <!-- v37.112 : le compte qui paie le voyage — celui que prennent ses saisies (case cochée, ou rangées par l'IA) -->
@@ -9135,8 +9135,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.116 Le voyage garde son compte";
+                    const CURRENT_VERSION = "37.117 Un seul voyage, son budget";
                     const CHANGELOG = [
+        { version: "37.117 Un seul voyage, son budget", date: "2026-11-08", changes: [
+            "✈️ VOTRE LIGNE « VOYAGE … » EST REPRISE, PLUS DOUBLÉE — une ligne « Voyage Marrakech » déjà dans le Flux (créée à la main, avec son budget de 1 500 DH) restait à côté de celle créée en déclarant l'absence (0 DH) : le ruban lisait la seconde, « aucun budget prévu ». Déclarer une absence reprend désormais la ligne existante (même destination, même année, mois proche) ; les deux lignes déjà présentes sont fusionnées au chargement — la vôtre reste, avec son budget, sur le compte choisi dans « payé par ».",
+            "💰 La case « budget » du voyage montre et règle le montant de la ligne du Flux ; changer les dates ou la destination ne le remet plus à 0.",
+        ] },
         { version: "37.116 Le voyage garde son compte", date: "2026-11-08", changes: [
             "✈️ UNE ABSENCE DÉCLARÉE : LE COMPTE EST PROPOSÉ, ET IL RESTE — la ligne « Voyage … » créée dans le Flux prend d'office le compte du dernier voyage, sinon celui que vos dépenses exceptionnelles utilisent le plus (Dépenses Annuelles & Projets…), plus le courant par défaut. « Payé par » le montre à côté de la destination ; changer les dates, la destination ou le budget, ou recharger l'appli, ne le change pas.",
             "👓 Le bloc « Voyage · absence » du Pilotage, pendant le voyage, avait un fond à moitié transparent sur la page claire : DU, AU, VERS, BUDGET, PAYÉ PAR et PENDANT L'ABSENCE étaient presque invisibles. Fond opaque, tout se lit.",
@@ -17332,6 +17336,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const IRR_PARENT = 'cat_irr_depense_exceptionnelle', IRR_PREFIXE = 'cat_irr_l_';
                     const _IRR_NOMS_VIDES = new Set(['x', 'nouveau', 'nouvelle', 'nouvelle_depense', 'depense', 'depense_exceptionnelle', 'sans_nom', 'sans_libelle']);
                     let _irrSignature = null, _irrMinuterie = null, _irrAuChargement = null;
+                    let _enregistrerApresChargement = false;   // v37.117 : une réparation faite au chargement (doublon du voyage, comptes réalignés)
                     const _irrSignatureActuelle = () => Object.values(donneesAnnuelles.value || {}).map(d => (d && Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [])
                         .map(x => x ? [x.id, x.nom, x.categorieId, Number(x.montant) < 0 ? '-' : '+', x.sourceAssurance ? 'a' : ''].join('|') : '').join('§')).join('¤');
                     const rangerDepensesExceptionnelles = () => {
@@ -17537,8 +17542,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             if (_irr.lignes || _irr.registre || _irr.transactions) touched = true;
                             //  v37.112 : les saisies rangées par l'IA / par défaut / par la case voyage, restées sur le compte par défaut
                             //  alors que leur ligne en a un autre : réalignées (jamais un compte choisi à la main, ni la banque)
+                            //  v37.117 : deux lignes du même voyage (la vôtre et celle de la déclaration) → une seule, la vôtre
+                            if (_fusionnerVoyageDoublon()) { touched = true; _enregistrerApresChargement = true; addLog('✈️ Voyage : votre ligne « ' + String((_voyageDep() || { dep: {} }).dep.nom || '') + ' » (avec son budget) reprend le voyage ; le doublon créé à la déclaration est retiré.', 'success'); }
                             const _real = realignerComptesSaisies();
-                            if (_real) { touched = true; addLog('🏦 ' + _real + ' saisie(s) remise(s) sur le compte de leur ligne (« Voyage … » et autres rangées par l\'IA).', 'success'); }
+                            if (_real) { touched = true; _enregistrerApresChargement = true; addLog('🏦 ' + _real + ' saisie(s) remise(s) sur le compte de leur ligne (« Voyage … » et autres rangées par l\'IA).', 'success'); }
                             if (_irr.transactions) addLog('🏷️ Dépenses exceptionnelles : ' + _irr.transactions + ' opération(s) rangée(s) dans leur ligne (« Four maman »…), sans rien faire à la main.', 'success');
 
                             if (touched) {
@@ -17713,7 +17720,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 }
                                 //  v37.103 : le ménage des dépenses exceptionnelles fait au chargement est enregistré (une fois)
                                 const _irr = _irrAuChargement; _irrAuChargement = null;
-                                if (_irr && (_irr.lignes || _irr.transactions)) handleDataChange();
+                                if ((_irr && (_irr.lignes || _irr.transactions)) || _enregistrerApresChargement) { _enregistrerApresChargement = false; handleDataChange(); }
                             }, 200);
                         } catch(err) {
                             _importInProgress.value = false; // reset aussi en cas d'erreur
@@ -23130,9 +23137,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const an = d1.getFullYear(), seau = _assurerSeauAnnee(an);
                         if (!seau) return false;
                         if (!Array.isArray(seau.depensesIrregulieres)) seau.depensesIrregulieres = [];
+                        _fusionnerVoyageDoublon();                       // v37.117 : votre ligne « Voyage … » déjà là reprend le voyage
                         const x = _voyageDep();
                         let dep;
+                        const deja = x ? null : _ligneVoyageExistante(dest, null, d1);
                         if (x) { dep = x.dep; if (String(x.an) !== String(an)) { x.arr.splice(x.i, 1); seau.depensesIrregulieres.push(dep); } }
+                        else if (deja) {
+                            //  v37.117 : une ligne « Voyage Marrakech » existe déjà (créée à la main, avec son budget) : c'est elle, pas une 2ᵉ
+                            dep = deja.dep;
+                            if (String(deja.an) !== String(an)) { deja.arr.splice(deja.i, 1); seau.depensesIrregulieres.push(dep); }
+                            si.voyageDepId = dep.id;
+                            if (si.voyageCompte) dep.sourceCompte = si.voyageCompte;
+                            if (Number(dep.montant) > 0 && !(Number(si.voyageBudget) > 0)) si.voyageBudget = String(dep.montant);
+                        }
                         else {
                             const ids = new Set(Object.values(donneesAnnuelles.value || {}).flatMap(d => (d && Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : []).map(y => y && y.id)));
                             let id = Date.now(); while (ids.has(id)) id++;
@@ -23141,13 +23158,49 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             seau.depensesIrregulieres.push(dep);
                             si.voyageDepId = id;
                         }
-                        Object.assign(dep, { nom: 'Voyage ' + dest, mois: d1.getMonth() + 1, annee: an, jourPrevu: d1.getDate(), montant: Math.max(0, Number(si.voyageBudget) || 0), voyage: true });
+                        //  v37.117 : le budget n'est écrit qu'à la création (ou par la case « budget ») — jamais remis à 0 par un changement de dates
+                        if (!x && !deja) dep.montant = Math.max(0, Number(si.voyageBudget) || 0);
+                        Object.assign(dep, { nom: 'Voyage ' + dest, mois: d1.getMonth() + 1, annee: an, jourPrevu: d1.getDate(), voyage: true });
                         rangerDepensesExceptionnelles();
                         return true;
                     };
+                    //  v37.117 — la ligne « Voyage <destination> » déjà dans le Flux (même année, mois proche du départ) : reprise, pas doublée
+                    const _normNomVoyage = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+                    const _ligneVoyageExistante = (dest, sauf, d1) => {
+                        const cible = _normNomVoyage('Voyage ' + dest);
+                        if (!dest || !d1) return null;
+                        for (const [an, d] of Object.entries(donneesAnnuelles.value || {})) {
+                            const arr = d && Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [];
+                            const i = arr.findIndex(y => y && y !== sauf && !y.sourceAssurance && Number(y.montant) >= 0 && _normNomVoyage(y.nom) === cible
+                                && Number(y.annee || an) === d1.getFullYear() && Math.abs(Number(y.mois) - (d1.getMonth() + 1)) <= 1);
+                            if (i >= 0) return { an, arr, i, dep: arr[i] };
+                        }
+                        return null;
+                    };
+                    //  Deux lignes du même voyage (la vôtre, avec son budget, et celle créée à la déclaration) : on garde la vôtre — son
+                    //  budget, ses paiements —, sur le compte choisi dans « payé par » ; l'autre s'en va (même nom : mêmes opérations).
+                    const _fusionnerVoyageDoublon = () => {
+                        const si = soldesInitiaux.value || {}, dest = String(si.voyageDestination || '').trim(), x = _voyageDep(), d1 = _dateVoyage(si.voyageDebut);
+                        if (!x || !dest || !d1) return false;
+                        const autre = _ligneVoyageExistante(dest, x.dep, d1);
+                        if (!autre) return false;
+                        const a = autre.dep, b = x.dep;
+                        a.sourceCompte = si.voyageCompte || (b.sourceCompte && b.sourceCompte !== 'courant' ? b.sourceCompte : (a.sourceCompte || 'courant'));
+                        if (!(Number(a.montant) > 0) && Number(b.montant) > 0) a.montant = b.montant;
+                        if (Number(b.montantPaye) > 0 && !(Number(a.montantPaye) > 0)) a.montantPaye = b.montantPaye;
+                        if (b.paye && !a.paye) a.paye = b.paye;
+                        a.voyage = true;
+                        const i = x.arr.indexOf(b); if (i >= 0) x.arr.splice(i, 1);
+                        si.voyageDepId = a.id;
+                        if (Number(a.montant) > 0) si.voyageBudget = String(a.montant);
+                        return true;
+                    };
+                    //  la case « budget » montre et règle le montant de la ligne du voyage (celui du Flux)
+                    const voyageBudgetLigne = computed(() => { calculationTick.value; const x = _voyageDep(); return x && Number(x.dep.montant) > 0 ? String(x.dep.montant) : ''; });
                     const setVoyage = (champ, valeur) => {
                         soldesInitiaux.value[champ] = String(valeur || '').trim();
                         synchroniserVoyage();
+                        if (champ === 'voyageBudget') { const x = _voyageDep(); if (x) x.dep.montant = Math.max(0, Number(valeur) || 0); }
                         calculationTick.value++;
                         handleDataChange();
                     };
@@ -27048,7 +27101,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         // v37.49 : catégorisation — règles, IA, À catégoriser
                         categoriserLibelle, saisieCatStatut, saisieCatRaison, SOURCES_CATEGORIE, iaCategorisation, demanderCategorieIA,
-                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, getExportData, executerImportFusion, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
+                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, getExportData, executerImportFusion, voyageBudgetLigne, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,
