@@ -10,6 +10,7 @@
  *     D. virement vers le Courant (chargement + moteur).
  */
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
@@ -48,11 +49,16 @@ await section('B', async () => {
     const doc = path.join(tmp, 'www'); fs.mkdirSync(path.join(doc, 'finance'), { recursive: true });
     for (const f of ['cfo_etapes.php', 'cfo_contexte.php', 'cfo_system_prompt.md', 'pending_commit.php', 'cfo_intent_engine.php', 'cfo_integrity.php'])
         fs.copyFileSync(path.join(RACINE, f), path.join(doc, 'finance', f));
-    const port = 20000 + Math.floor(Math.random() * 20000);
+    //  v37.119 : un port LIBRE demandé au système (plus un port au hasard, parfois pris par une suite voisine), et le serveur
+    //  attendu jusqu'à ce qu'il réponde (sous la charge de 8 suites en parallèle, 5 s ne suffisaient pas toujours)
+    const port = await new Promise((r, x) => { const sv = net.createServer(); sv.on('error', x); sv.listen(0, '127.0.0.1', () => { const p = sv.address().port; sv.close(() => r(p)); }); });
     const srv = spawn(php, ['-S', `127.0.0.1:${port}`, '-t', doc], { stdio: 'ignore' });
+    let mort = false; srv.on('exit', () => { mort = true; });
     try {
         const U = `http://127.0.0.1:${port}/finance/`;
-        for (let i = 0; i < 50; i++) { try { await fetch(U + 'cfo_etapes.php'); break; } catch { await attendre(100); } }
+        let pret = false;
+        for (let t0 = Date.now(); !pret && !mort && Date.now() - t0 < 30000;) { try { await fetch(U + 'cfo_etapes.php'); pret = true; } catch { await attendre(100); } }
+        if (!pret) throw new Error('serveur PHP de test injoignable sur le port ' + port + (mort ? ' (arrêté)' : ' après 30 s'));
         const post = (f, b) => fetch(U + f, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
         const etapes = (sid) => fetch(U + 'cfo_etapes.php?session_id=' + encodeURIComponent(sid)).then(r => r.json());
         const fd = {

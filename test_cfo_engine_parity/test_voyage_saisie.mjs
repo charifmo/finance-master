@@ -123,6 +123,34 @@ try {
         v('A. voyage déclaré (Marrakech, 11 → 16 oct., budget 3 000) : « Voyage Marrakech » créée dans le Flux, au 11 oct., avec sa catégorie',
           d.length === 1 && d[0].nom === 'Voyage Marrakech' && d[0].mois === 10 && d[0].jourPrevu === 11 && d[0].montant === 3000 && d[0].categorieId === VOY && !!cat, JSON.stringify([d, cat]));
     });
+    await section('P', async () => {
+        //  v37.119 — « j'ai mis khdra 200 / sem et il calcule 180 cette semaine » : l'absence (11 → 16 oct.) ne retire que ses jours
+        const f = await page.evaluate(async (ST) => { const st = eval(ST);
+            st.donneesAnnuelles[2026].chargesVariables.alimentation.details.find(x => x.nom === 'khdra').id = 555;
+            st.calculationTick++; st.friseOuverte = true; await Vue.nextTick();
+            const fc = st.friseCycle, c = fc.categories.find(x => x.key === 'alimentation'), l = c.lignes.find(x => x.nom === 'khdra');
+            return { morceaux: fc.morceaux.map(m => m.debut + '|' + m.jours), prevus: l.cellules.map(x => x.prevu), cle: l.cle }; }, ST);
+        const P = Object.fromEntries(f.morceaux.map((m, i) => [m.split('|')[0], f.prevus[i]]));
+        v('P. khdra 200 / sem, voyage du 11 au 16 oct. : les semaines sans voyage gardent 200 ; celle du 5 oct. (1 jour absent) ≈ 171, celle du 12 oct. (5 jours absents) ≈ 57',
+          P['2026-09-28'] === 200 && P['2026-10-19'] === 200 && Math.abs(P['2026-10-05'] - 171) <= 1 && Math.abs(P['2026-10-12'] - 57) <= 1, JSON.stringify(f));
+        //  ✏️ depuis la frise : la ligne du prévu, ouverte et surlignée
+        await page.click('[data-frise-ligne][data-poste="alimentation::555"] [data-frise-vers-prevu]');
+        await page.waitForSelector('[data-cv-detail="alimentation::555"][data-surligne]', { state: 'visible', timeout: 5000 }).catch(() => { });
+        const bs = await page.evaluate((ST) => ({ mode: eval(ST).appMode, tab: eval(ST).activeTab, frise: eval(ST).friseOuverte, el: !!document.querySelector('[data-cv-detail="alimentation::555"][data-surligne]'),
+            focus: document.activeElement && document.activeElement.closest && !!document.activeElement.closest('[data-cv-detail="alimentation::555"]') }), ST);
+        v('  → ✏️ (ou double-clic) sur « khdra » dans la frise : Budget Structurel, la ligne khdra surlignée, son montant prêt à changer',
+          bs.mode === 'previsionnel' && bs.tab === 'parametres' && !bs.frise && bs.el && bs.focus, JSON.stringify(bs));
+        await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'reel'; st.activeTab = 'saisie'; await Vue.nextTick(); st.friseOuverte = true; await Vue.nextTick(); }, ST);
+        await page.waitForSelector('[data-frise-categorie="__exceptionnel"], [data-frise-categorie][data-cat="__exceptionnel"]', { state: 'attached', timeout: 5000 }).catch(() => { });
+        await page.dblclick('[data-cat="__exceptionnel"] [data-frise-ligne] [data-frise-nom]');
+        await page.waitForSelector('[data-dep-id][data-surligne]', { state: 'visible', timeout: 5000 }).catch(() => { });
+        const ex = await page.evaluate((ST) => { const st = eval(ST), dep = st.donneesAnnuelles[2026].depensesIrregulieres.find(d => d.voyage), el = document.querySelector('[data-dep-id][data-surligne]');
+            return { mode: st.appMode, tab: st.activeTab, el: el ? el.getAttribute('data-dep-id') : null, id: String(dep.id), ouvert: st.moisOuverts.includes(10) }; }, ST);
+        v('  → double-clic sur « Voyage Marrakech » (dépense exceptionnelle) : Calendrier Pluriannuel, son mois déplié, la ligne surlignée',
+          ex.mode === 'previsionnel' && ex.tab === 'irregulieres' && ex.el === ex.id && ex.ouvert, JSON.stringify(ex));
+        await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'reel'; await Vue.nextTick(); st.activeTab = 'saisie'; await Vue.nextTick(); }, ST);
+        await page.waitForSelector(CHAMP, { state: 'visible', timeout: 10000 });
+    });
     await section('B', async () => {
         await page.waitForSelector('[data-saisie-voyage-bandeau]', { state: 'visible', timeout: 5000 });
         const b = (await page.textContent('[data-saisie-voyage-bandeau]')).replace(/\s+/g, ' ');
