@@ -156,16 +156,22 @@ for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $port); $i++) usleep(100000);
 $B = "http://127.0.0.1:$port";
 $R = fn(string $chemin, string $type = 'page') => ['type' => $type, 'canal' => $type === 'page' ? 'recherche' : 'moteur', 'url' => $B . $chemin] + $reqK;
 try {
-    $lot = [$R('/rss', 'moteur'), $R('/page'), $R('/redir'), $R('/interdit'), $R('/lent'), ['url' => "http://127.0.0.1:$ferme/"] + $R('/')];
-    $t0 = microtime(true); $c = cfo_vp_telecharger($lot, 2); $dC = microtime(true) - $t0;
-    $t0 = microtime(true); $f = cfo_vp_telecharger_flux($lot, 2, 20); $dF = microtime(true) - $t0;
+    //  v37.126 : les pages normales avec un délai LARGE (10 s) — sous la charge de 8 suites, la redirection /redir → /page dépassait
+    //  parfois les 2 s (« 302, pas de réponse en 2 s ») ; seule la source lente garde 2 s, c'est elle qui vérifie la coupure
+    $lot = [$R('/rss', 'moteur'), $R('/page'), $R('/redir'), $R('/interdit'), ['url' => "http://127.0.0.1:$ferme/"] + $R('/')];
+    $c = cfo_vp_telecharger($lot, 10);
+    $f = cfo_vp_telecharger_flux($lot, 10, 60);
     $resume = fn($x) => array_map(fn($y) => [$y['http'], md5($y['corps']), $y['erreur']], $x);
     v('curl et flux PHP : mêmes codes, mêmes corps, mêmes causes d\'échec', $resume(array_slice($c, 0, 4)) === $resume(array_slice($f, 0, 4)), $j([$resume($c), $resume($f)]));
     v('  → redirection suivie : la page finale (200)', $f[2]['http'] === 200 && $f[2]['corps'] === $kechServi && $c[2]['http'] === 200);
     v('  → HTTP 403 : code rendu, corps lu (pas une exception)', $f[3]['http'] === 403 && $c[3]['http'] === 403);
-    v('  → trop lent : « pas de réponse en 2 s », dans les deux modes', $c[4]['erreur'] === 'pas de réponse en 2 s' && $f[4]['erreur'] === 'pas de réponse en 2 s', $j([$c[4]['erreur'], $f[4]['erreur']]));
-    v('  → port fermé : « connexion refusée », dans les deux modes', $c[5]['erreur'] === 'connexion refusée' && $f[5]['erreur'] === 'connexion refusée', $j([$c[5]['erreur'], $f[5]['erreur']]));
-    v('curl : en parallèle, le lot tient dans le délai de la plus lente (< 3 s)', $dC < 3.0, sprintf('%.2f s', $dC));
+    v('  → port fermé : « connexion refusée », dans les deux modes', $c[4]['erreur'] === 'connexion refusée' && $f[4]['erreur'] === 'connexion refusée', $j([$c[4]['erreur'], $f[4]['erreur']]));
+    //  la source trop lente (4 s) : coupée à 2 s, dans les deux modes ; curl lance tout en même temps
+    $lent = [$R('/lent'), $R('/lent')];
+    $t0 = microtime(true); $cl = cfo_vp_telecharger($lent, 2); $dC = microtime(true) - $t0;
+    $fl = cfo_vp_telecharger_flux([$R('/lent')], 2, 20);
+    v('  → trop lent : « pas de réponse en 2 s », dans les deux modes', $cl[0]['erreur'] === 'pas de réponse en 2 s' && $fl[0]['erreur'] === 'pas de réponse en 2 s', $j([$cl[0]['erreur'], $fl[0]['erreur']]));
+    v('curl : en parallèle, deux sources lentes tiennent dans le délai d\'une seule (< 3 s, pas 4)', $dC < 3.0 && $cl[1]['erreur'] === 'pas de réponse en 2 s', sprintf('%.2f s ', $dC) . $j(array_map(fn($y) => [$y['http'], $y['erreur']], $cl)));
     v('flux PHP : les articles de la page sont lus comme avec curl', array_column(cfo_vp_bilan($lot[1], $f[1], $cfg)['articles'], 'url') === array_column(cfo_vp_bilan($lot[1], $c[1], $cfg)['articles'], 'url')
       && count(cfo_vp_bilan($lot[1], $f[1], $cfg)['articles']) === 2);
     $bc = cfo_vp_bilan($R('/boucle'), cfo_vp_telecharger([$R('/boucle')], 2)[0], $cfg); $bf = cfo_vp_bilan($R('/boucle'), cfo_vp_telecharger_flux([$R('/boucle')], 2, 20)[0], $cfg);

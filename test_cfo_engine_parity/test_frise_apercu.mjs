@@ -101,6 +101,29 @@ const total = () => page.textContent('[data-frise-apercu-total]').then(t => t.re
 const caseMarjane = (i) => page.locator(`[data-frise-ligne][data-poste="${MARJANE}"] [data-frise-case]`).nth(i);
 
 try {
+    await section('M', async () => {
+        //  v37.126 — « la frise n'est pas adaptée au portable ; ajouter un fond surlignant la semaine en cours pour toute la colonne »
+        const mesure = () => page.evaluate(() => {
+            const cat = document.querySelector('[data-frise-categorie]'), bande = cat && cat.querySelector('[data-frise-semaine-courante]');
+            const caseEnCours = cat && cat.querySelector('[data-frise-case][data-etat="encours"], [data-frise-case][data-etat="depasse"]:nth-child(3)');
+            const enc = [...cat.querySelectorAll('[data-frise-ligne]')].map(l => [...l.querySelectorAll('[data-frise-case]')]).find(c => c.length >= 3);
+            const iEnc = [...document.querySelectorAll('[data-frise-morceau]')].findIndex(m => m.classList.contains('ring-sky-500'));
+            const cellule = enc && iEnc >= 0 ? enc[iEnc] : null;
+            const b = bande && bande.getBoundingClientRect(), c = cellule && cellule.getBoundingClientRect(), k = cat.getBoundingClientRect();
+            const noms = [...document.querySelectorAll('[data-frise-nom]')].slice(0, 12);
+            const cases = cat.querySelector('[data-frise-ligne] [data-frise-case]') ? cat.querySelector('[data-frise-ligne] [data-frise-case]').parentElement.getBoundingClientRect() : null;
+            return { bande: !!bande, ecartG: b && c ? Math.abs(b.left - c.left) : 99, ecartD: b && c ? Math.abs(b.right - c.right) : 99, hauteur: b ? b.height / k.height : 0,
+                     tronques: noms.filter(n => n.scrollWidth > n.clientWidth + 1).length, largeurCases: cases ? cases.width / k.width : 0 };
+        });
+        const pc = await mesure();
+        v('M. ordinateur : la semaine en cours surlignée sur TOUTE la hauteur de la catégorie, pile sur sa colonne de cases (± 3 px)',
+          pc.bande && pc.ecartG <= 3 && pc.ecartD <= 3 && pc.hauteur > 0.85, JSON.stringify(pc));
+        await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(400);
+        const tel = await mesure();
+        v('  → téléphone : la bande pile sur la colonne aussi ; les noms des lignes ENTIERS (plus « Super marc… »), les cases sur toute la largeur',
+          tel.bande && tel.ecartG <= 3 && tel.ecartD <= 3 && tel.tronques === 0 && tel.largeurCases > 0.85, JSON.stringify(tel));
+        await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(300);
+    });
     await section('B', async () => {
         await caseMarjane(1).click();
         await page.waitForSelector('[data-frise-apercu]');
