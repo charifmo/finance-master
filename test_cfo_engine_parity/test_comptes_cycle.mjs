@@ -168,6 +168,10 @@ try {
         //  soient marquées non sauvegardées — sous charge, l'ouverture peut dépasser 4 s
         serveurPlusRecent = false;
         const { ctx: ctx2, page: p2 } = await ouvrir();
+        //  v37.121 : sous la charge, les données pouvaient finir de se charger APRÈS « modifié » (l'état repassait « synchronisé ») et
+        //  la vérification automatique (4 s après l'ouverture) rechargeait alors la page en plein test. On attend qu'elles soient
+        //  chargées et que cette vérification soit passée (elle voit l'ancienne version) avant de marquer des saisies non sauvegardées.
+        await p2.waitForFunction((ST) => { const st = eval(ST); return st.serverSyncStatus === 'synced' && performance.now() > 4600; }, ST, { timeout: 30000, polling: 100 });
         await p2.evaluate((ST) => { eval(ST).serverSyncStatus = 'modified'; }, ST);
         serveurPlusRecent = true;
         await p2.clock.setFixedTime(new Date(T0.getTime() + 600000));
