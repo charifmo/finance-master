@@ -119,6 +119,24 @@ try {
         await page.click('[data-frise-apercu-fermer]'); await page.waitForTimeout(150);
         v('  → ✕ ferme le panneau, la frise reste ouverte', !(await page.$('[data-frise-apercu]')) && !!(await page.$('[data-frise]')), '');
     });
+    await section('E', async () => {
+        //  v37.120 — « il faut ajouter le bouton Ajouter » : une opération sur CE poste, dans CETTE période, sans quitter la frise
+        await caseMarjane(1).click();
+        await page.waitForSelector('[data-frise-apercu]');
+        await page.click('[data-frise-apercu-ajouter]');
+        await page.waitForSelector('[data-frise-apercu-ajout]');
+        const pre = await page.evaluate(() => ({ lib: document.querySelector('[data-frise-ajout-libelle]').value, date: document.querySelector('[data-frise-ajout-date]').value, focus: document.activeElement && document.activeElement.hasAttribute('data-frise-ajout-montant') }));
+        await page.fill('[data-frise-ajout-montant]', '90');
+        await page.fill('[data-frise-ajout-libelle]', 'Marjane (ajout)');
+        await page.click('[data-frise-ajout-valider]'); await page.waitForTimeout(300);
+        const L = await ops(), T = await total(), cell = (await caseMarjane(1).textContent()).replace(/\s+/g, '');
+        const t = await page.evaluate((ST) => JSON.parse(JSON.stringify(eval(ST).donneesAnnuelles[2026].transactionsReelles.find(x => x.libelle === 'Marjane (ajout)') || null)), ST);
+        v('E. « ➕ Ajouter » dans la case Marjane (2 → 8 nov.) : libellé proposé « Marjane », date dans la période (8 nov.), le montant prêt à taper',
+          /Marjane/.test(pre.lib) && pre.date === '2026-11-08' && pre.focus, JSON.stringify(pre));
+        v('  → 90 enregistré dans CE poste, sûr (« vous »), daté du 8 nov. : la liste, le total et la case suivent (2 opérations · 350)',
+          t && t.montant === 90 && t.date === '2026-11-08' && t.categorieSource === 'vous' && !t.aVerifier && L.length === 2 && /^2 opérations · 350/.test(T) && /^350\//.test(cell), JSON.stringify([t, L, T, cell]));
+        await page.click('[data-frise-apercu-fermer]'); await page.waitForTimeout(150);
+    });
     await section('D', async () => {
         await page.click(`[data-frise-ligne][data-poste="${PSY}"] [data-frise-enveloppe]`);
         await page.waitForSelector('[data-frise-apercu]');

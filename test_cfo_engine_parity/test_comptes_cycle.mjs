@@ -148,10 +148,14 @@ try {
     await section('D', async () => {
         //  1. Le serveur a une version plus récente, rien n'est à sauvegarder : l'appli se recharge seule — une fois
         serveurPlusRecent = true;
-        await page.evaluate((ST) => { eval(ST).serverSyncStatus = 'synced'; }, ST);
-        await page.clock.setFixedTime(new Date(T0.getTime() + 120000));
+        //  v37.120 : le rechargement est le résultat attendu — sous la charge de 8 suites, la vérification automatique de
+        //  l'appli peut le déclencher PENDANT ces deux instructions (« Execution context was destroyed ») ; le contrôle
+        //  ci-dessous vérifie toujours qu'il a bien eu lieu, sur la nouvelle version
+        const rechargee = (e) => { if (!/Execution context was destroyed|navigation|Target page, context or browser has been closed/i.test(String(e && e.message || e))) throw e; };
         const nav = page.waitForNavigation({ timeout: 15000 }).catch(() => null);
-        await page.evaluate((ST) => { eval(ST).verifierVersion(); }, ST);
+        await page.evaluate((ST) => { eval(ST).serverSyncStatus = 'synced'; }, ST).catch(rechargee);
+        await page.clock.setFixedTime(new Date(T0.getTime() + 120000));
+        await page.evaluate((ST) => { eval(ST).verifierVersion(); }, ST).catch(rechargee);
         await nav;
         v('D. version plus récente sur le serveur : l\'appli se recharge seule (« ?v=99.0 Test »)', /\?v=99\.0%20Test/.test(page.url()), page.url());
         await page.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__ && a.__vue_app__._instance; }, null, { timeout: 30000 });

@@ -7918,8 +7918,21 @@
                         </div>
                     </div>
                 </div>
+                <!-- v37.120 : ajouter une opération à CE poste, dans CETTE période, sans quitter la frise -->
+                <form v-if="apercuAjout.ouvert" data-frise-apercu-ajout @submit.prevent="ajouterDepuisApercu()" class="px-3 py-2.5 border-t border-slate-100 bg-emerald-50/60 flex flex-wrap items-end gap-2">
+                    <label class="flex flex-col text-[10px] font-black uppercase tracking-widest text-slate-500">Montant
+                        <input type="number" min="0" step="0.01" inputmode="decimal" v-model.number="apercuAjout.montant" data-frise-ajout-montant required class="mt-0.5 w-24 p-1.5 rounded-lg border border-slate-300 text-sm font-black text-slate-800 normal-case tracking-normal"></label>
+                    <label class="flex flex-col flex-1 min-w-[8rem] text-[10px] font-black uppercase tracking-widest text-slate-500">Libellé
+                        <input type="text" v-model="apercuAjout.libelle" data-frise-ajout-libelle class="mt-0.5 p-1.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-800 normal-case tracking-normal"></label>
+                    <label class="flex flex-col text-[10px] font-black uppercase tracking-widest text-slate-500">Le
+                        <input type="date" v-model="apercuAjout.date" :min="apercuFrise.du" :max="apercuFrise.au" data-frise-ajout-date class="mt-0.5 p-1.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-800 normal-case tracking-normal"></label>
+                    <button type="submit" data-frise-ajout-valider :disabled="!(Number(apercuAjout.montant) > 0)" class="px-3 py-2 rounded-lg text-[11px] font-black text-white bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300">Enregistrer</button>
+                    <button type="button" @click="apercuAjout.ouvert = false" class="px-2 py-2 rounded-lg text-[11px] font-black text-slate-500 hover:bg-slate-100">Annuler</button>
+                    <p v-if="apercuAjout.compte" class="w-full text-[10px] font-bold text-slate-500" data-frise-ajout-compte>Compte : {{ apercuAjout.compte }}</p>
+                </form>
                 <div class="px-3 py-2.5 border-t border-slate-100 flex items-center gap-2">
                     <span class="mr-auto text-[11px] font-black text-slate-600 tabular-nums" data-frise-apercu-total>{{ apercuFriseOps.ops.length }} opération{{ apercuFriseOps.ops.length > 1 ? 's' : '' }} · {{ formatMAD(apercuFriseOps.total) }}</span>
+                    <button v-if="!apercuAjout.ouvert && apercuCategorieAjout" type="button" data-frise-apercu-ajouter @click="ouvrirAjoutApercu()" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100">➕ Ajouter</button>
                     <button type="button" data-frise-apercu-prevu @click="allerAuPrevuFrise({ key: apercuFrise.catKey }, { catKey: apercuFrise.catKey, catId: apercuFrise.catId, cle: apercuFrise.cle })" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-sky-700 bg-sky-50 hover:bg-sky-100" title="Budget Structurel ou Calendrier Pluriannuel">✏️ Changer le prévu</button>
                     <button type="button" data-frise-apercu-journal @click="apercuVersJournal()" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200">📋 Voir dans le Journal</button>
                 </div>
@@ -9137,8 +9150,11 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.119 Le prévu au bon endroit";
+                    const CURRENT_VERSION = "37.120 Ajouter depuis la frise";
                     const CHANGELOG = [
+        { version: "37.120 Ajouter depuis la frise", date: "2026-11-09", changes: [
+            "➕ « AJOUTER » DANS LE DÉTAIL D'UNE CASE DE LA FRISE — montant, libellé (le nom du poste proposé), date (dans la période de la case : aujourd'hui s'il y tombe) : l'opération est enregistrée dans CE poste, sur le compte de sa catégorie, sans quitter la frise ; la liste, le total et la case suivent aussitôt.",
+        ] },
         { version: "37.119 Le prévu au bon endroit", date: "2026-11-09", changes: [
             "🥬 « KHDRA 200 / SEM, ET IL CALCULE 181 CETTE SEMAINE ! » — les jours d'absence (voyage) retiraient leur part du cycle de TOUTES ses semaines (−10 % chacune : le « présence 90 % »). Ils sont maintenant retirés des jours d'absence eux-mêmes : une semaine sans voyage garde ses 200, la semaine du voyage perd seulement ses jours absents. Le total du cycle ne change pas.",
             "✏️ DE LA FRISE AU PRÉVU — double-clic sur le nom d'une ligne de la frise (ou son ✏️, ou « ✏️ Changer le prévu » dans le détail d'une case) : une charge variable ouvre le Budget Structurel, sa catégorie dépliée, la ligne surlignée et son montant prêt à changer ; une dépense exceptionnelle ouvre le Calendrier Pluriannuel (le Flux sur téléphone), son mois déplié, la ligne surlignée.",
@@ -22652,6 +22668,36 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         ops.sort((x, y) => String(y.t.datetime || y.t.date).localeCompare(String(x.t.datetime || x.t.date)));
                         return { ops, total: Math.round(ops.reduce((s, o) => s + o.montant, 0) * 100) / 100 };
                     });
+                    //  v37.120 — « ➕ Ajouter » dans le détail d'une case : une opération sur ce poste (sa catégorie), datée dans la période de
+                    //  la case (aujourd'hui s'il y tombe), sur le compte de la catégorie. Choisie par vous : sûre, sans IA.
+                    const apercuAjout = reactive({ ouvert: false, montant: null, libelle: '', date: '', compte: '' });
+                    const apercuCategorieAjout = computed(() => {
+                        const A = apercuFrise.value; if (!A) return null;
+                        if (A.catKey === '__exceptionnel') return A.catId || null;
+                        const cv = ((donneesAnnuelles.value[consoT0Annee.value] || {}).chargesVariables || {})[A.catKey] || {};
+                        return A.catId || cv.categorieId || null;
+                    });
+                    const ouvrirAjoutApercu = () => {
+                        const A = apercuFrise.value, cat = apercuCategorieAjout.value; if (!A || !cat) return;
+                        const auj = _ymd(new Date()), date = auj >= A.du && auj <= A.au ? auj : (auj > A.au ? A.au : A.du);
+                        const c = compteDeLaCategorie(cat);
+                        Object.assign(apercuAjout, { ouvert: true, montant: null, libelle: String(A.nom || '').trim(), date, compte: c ? c.label : '' });
+                        nextTick(() => { const e = document.querySelector('[data-frise-ajout-montant]'); if (e) e.focus(); });
+                    };
+                    const ajouterDepuisApercu = () => {
+                        const A = apercuFrise.value, cat = apercuCategorieAjout.value, m = Math.abs(Number(apercuAjout.montant) || 0);
+                        if (!A || !cat || !(m > 0)) return false;
+                        const date = /^\d{4}-\d{2}-\d{2}$/.test(apercuAjout.date) && apercuAjout.date >= A.du && apercuAjout.date <= A.au ? apercuAjout.date : A.du;
+                        const auj = _ymd(new Date()), heure = date === auj ? _nowLocalDateTime().slice(11, 16) : '12:00';
+                        const c = compteDeLaCategorie(cat);
+                        const id = ajouterTransactionReelle({ datetime: date + 'T' + heure, date, mois: Number(date.slice(5, 7)), libelle: String(apercuAjout.libelle || A.nom || '').trim() || 'Sans libellé',
+                                                              montant: Math.round(m * 100) / 100, categorieId: cat, categorieSource: 'vous', compteId: c ? c.id : undefined, compteAuto: true });
+                        if (!id) return false;
+                        Object.assign(apercuAjout, { ouvert: false, montant: null });
+                        calculationTick.value++;
+                        return id;
+                    };
+                    watch(apercuFrise, () => { apercuAjout.ouvert = false; });
                     const apercuVersJournal = () => {
                         const A = apercuFrise.value; if (!A) return;
                         const d = donneesAnnuelles.value[consoT0Annee.value] || {};
@@ -27202,7 +27248,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         saisieCatSource, saisieCatSuggestions, choisirCategorieSaisie, categoriesLesPlusUtilisees,
                         // v37.49 : catégorisation — règles, IA, À catégoriser
                         categoriserLibelle, saisieCatStatut, saisieCatRaison, SOURCES_CATEGORIE, iaCategorisation, demanderCategorieIA,
-                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, allerLigneVoyageFlux, allerAuPrevuFrise, getExportData, executerImportFusion, voyageBudgetLigne, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
+                        aCategoriser, estACategoriser, rangerTransaction, voyageSaisie, saisieVoyageCoche, synchroniserVoyage, realignerComptesSaisies, voyageCompteCle, setVoyageCompte, rubanVoyage, allerAuVoyage, allerLigneVoyageFlux, allerAuPrevuFrise, apercuAjout, apercuCategorieAjout, ouvrirAjoutApercu, ajouterDepuisApercu, getExportData, executerImportFusion, voyageBudgetLigne, habitudesSaisie, suggestionsSaisie, montantHabituelSaisie, utiliserHabitude, completerSaisie, appliquerMontantHabituel, compteDeLaCategorie, retenirCompteCategorie, compteBrouillonModifie, oublierCompteAppris, saisieCompteCat, rangerDepensesExceptionnelles, appliquerSuggestionsSures, demanderIAPourTout, editionCategorieTx, reglesCategorisation, categoriesPourRanger,
                         transactionsReellesTriees, supprimerTransactionReelle, ajouterTransactionReelle,
                         journal, journalToutes, journalFiltrees, journalResume, journalParDate, journalParCategorie, journalLecons, journalComptes, journalSources,
                         ouvrirOperation, enregistrerOperation, supprimerOperation, ressaisirOperation, filtrerJournalCategorie, filtrerJournalLibelle, effacerFiltresJournal,
