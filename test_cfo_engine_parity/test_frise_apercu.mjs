@@ -6,6 +6,8 @@
  *   dans la catégorie mère (pas Marjane) ; Psy 400 le 9 nov.
  */
 import fs from 'node:fs';
+import os from 'node:os';
+import { twCompiler } from './tw_cache.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -56,12 +58,24 @@ const fixture = () => {
                              T(14, '2026-11-04', 'Épicerie du coin', 60, 'cat_cv_alimentation'), T(15, '2026-11-09', 'Dr Psy', 400, 'cat_cv_alimentation__dpsy')];
     return fx;
 };
+//  v37.124 : le vrai CSS (Tailwind compilé depuis index.html) — ce qui passe devant quoi (le sélecteur de catégorie et le panneau)
+const twBin = path.join(RACINE, 'node_modules/.bin/tailwindcss');
+let tw = '';
+if (fs.existsSync(twBin)) {
+    const twTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-apercu-'));
+    fs.writeFileSync(path.join(twTmp, 'in.css'), '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n');
+    fs.writeFileSync(path.join(twTmp, 'cfg.js'), 'module.exports={content:[' + JSON.stringify(path.join(RACINE, 'index.html')) + '],theme:{extend:{}}};');
+    twCompiler(twBin, ['-c', path.join(twTmp, 'cfg.js'), '-i', path.join(twTmp, 'in.css'), '-o', path.join(twTmp, 'out.css'), '--minify'], { stdio: 'ignore' });
+    tw = fs.readFileSync(path.join(twTmp, 'out.css'), 'utf8');
+    fs.rmSync(twTmp, { recursive: true, force: true });
+}
 const page0 = html.replace('<script src="https://unpkg.com/vue@3/dist/vue.global.js"', '<script src="/vue.js"').replace('<script src="https://cdn.jsdelivr.net/npm/chart.js"', '<script src="/chart.js"')
-    .replace(/<script src="https:\/\/cdn\.tailwindcss\.com"[^>]*><\/script>/, '').replace(/<script[^>]*src="https:\/\/[^"]*"[^>]*><\/script>/g, '');
+    .replace(/<script src="https:\/\/cdn\.tailwindcss\.com"[^>]*><\/script>/, tw ? '<link rel="stylesheet" href="/tailwind.css">' : '').replace(/<script[^>]*src="https:\/\/[^"]*"[^>]*><\/script>/g, '');
 const srv = http.createServer((req, res) => {
     const p = req.url.split('?')[0];
     const s = (c, b, t = 'application/json') => { res.writeHead(c, { 'Content-Type': t }); res.end(b); };
     if (p === '/finance/') return s(200, page0, 'text/html; charset=utf-8');
+    if (p === '/tailwind.css') return s(200, tw, 'text/css');
     if (p === '/vue.js') return s(200, fs.readFileSync(vueJs), 'text/javascript');
     if (p === '/chart.js') return s(200, fs.readFileSync(chartJs), 'text/javascript');
     if (p === '/finance/finance_data.json') return s(200, JSON.stringify(fixture()));
@@ -99,6 +113,16 @@ try {
     await section('C', async () => {
         await page.click('[data-frise-apercu-op][data-tx="12"] [data-frise-apercu-ouvrir]');
         await page.waitForSelector('[data-frise-apercu-edition]');
+        //  v37.124 — « quand je clique sur la catégorie, le menu ne sort pas » : il sortait DERRIÈRE le panneau de la frise
+        await page.click('[data-frise-edit-cat] [data-cc-ouvrir]');
+        await page.waitForSelector('[data-cc-panneau]', { state: 'visible', timeout: 3000 });
+        const dessus = await page.evaluate(() => { const p = document.querySelector('[data-cc-panneau] [data-cc-recherche]'), r = p.getBoundingClientRect();
+            const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!el && !!el.closest('[data-cc-panneau]'); });
+        await page.fill('[data-cc-recherche]', 'marjane');
+        await page.locator('[data-cc-panneau] [data-cc-option]').first().click();
+        const ferme = !(await page.$('[data-cc-panneau]')), toujours = !!(await page.$('[data-frise-apercu-edition]'));
+        v('  → la catégorie d’une opération : le sélecteur s’ouvre AU-DESSUS du panneau de la frise, la recherche marche, le choix referme le sélecteur (la fiche reste)',
+          !!tw && dessus && ferme && toujours, JSON.stringify({ tw: !!tw, dessus, ferme, toujours }));
         await page.fill('[data-frise-edit-montant]', '260');
         await page.fill('[data-frise-edit-libelle]', 'Marjane Hay Riad (corrigé)');
         await page.click('[data-frise-apercu-enregistrer]'); await page.waitForTimeout(300);

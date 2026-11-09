@@ -8252,7 +8252,7 @@
         <span class="truncate" data-cc-texte>{{ texte }}</span><span class="opacity-50 shrink-0">🔍</span>
     </button>
     <teleport to="body">
-        <div v-if="ouvre" data-cc-panneau class="fixed inset-0 z-[300] flex items-start md:items-center justify-center bg-black/40" @click.self="fermer()">
+        <div v-if="ouvre" data-cc-panneau class="fixed inset-0 z-[10050] flex items-start md:items-center justify-center bg-black/40" @click.self="fermer()">
             <div class="w-full md:max-w-md bg-white rounded-b-2xl md:rounded-2xl shadow-2xl flex flex-col max-h-[75vh] md:max-h-[70vh]" @keydown="touche($event)">
                 <div class="flex items-center gap-2 p-3 border-b border-gray-100">
                     <input ref="recherche" v-model="q" data-cc-recherche type="search" enterkeyhint="done" autocomplete="off" placeholder="Rechercher une catégorie…"
@@ -9152,8 +9152,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.123 La presse revérifiée par l'IA";
+                    const CURRENT_VERSION = "37.124 Le menu au premier plan";
                     const CHANGELOG = [
+        { version: "37.124 Le menu au premier plan", date: "2026-11-09", changes: [
+            "🏷️ « QUAND JE CLIQUE SUR LA CATÉGORIE, LE MENU NE SORT PAS » — dans le détail d'une case de la frise, le sélecteur de catégorie s'ouvrait DERRIÈRE le panneau. Il passe maintenant au premier plan, partout (frise, journal, saisie).",
+            "🔗 « ÇA DOIT ÊTRE CLIQUABLE POUR QUE J'ACCÈDE À LA SOURCE ! » — dans la réponse de la Recherche Éclair, chaque adresse écrite en clair devient un lien « 🔗 site » (ouvert dans un nouvel onglet), et chaque renvoi [n] mène à l'article n de la revue de presse lue avant la réponse.",
+        ] },
         { version: "37.123 La presse revérifiée par l'IA", date: "2026-11-09", changes: [
             "🔎 « ÉLARGIR LES ARTICLES, PUIS LES REVÉRIFIER AVEC L'IA AVANT LE RÉSULTAT FINAL » — la Recherche Éclair ramasse maintenant jusqu'à 50 candidats (y compris des articles sur Marrakech sans mot-clé reconnu) ; un premier passage de l'IA note chacun de 0 à 3 pour CE bien, avec une raison (3 : nomme le bien ou un projet qui change son accès, son zonage, son prix ; 2 : projet majeur de la zone ; 1 : Marrakech en général ; 0 : hors sujet). Seuls les 2 et 3 (20 au plus, les mieux notés d'abord) vont à l'analyse finale, avec leur note.",
             "🤖 La carte le dit : « Vérifiés par l'IA : 42 articles trouvés → 17 gardés pour CE bien, 25 écartés » ; chaque article lu montre ses étoiles et la raison. L'IA de tri muette ou illisible : le tri habituel, et c'est dit.",
@@ -14383,6 +14387,34 @@
                     const _ATTRS_SURS = new Set(['class','colspan','rowspan','title']);
 
                     // Le résumé vient du web : on ne lui fait aucune confiance.
+                    //  v37.124 — « ça doit être cliquable pour que j'accède à la source ! » : dans la réponse (déjà assainie), chaque
+                    //  adresse http(s) écrite en clair devient un lien « 🔗 site » (ouvert à part) ; chaque renvoi [n] mène à l'article n
+                    //  de la revue de presse lue avant la réponse. Les liens déjà présents ne sont pas touchés.
+                    const _lierSources = (html, articles) => {
+                        let doc;
+                        try { doc = new DOMParser().parseFromString('<div id="racine">' + String(html || '') + '</div>', 'text/html'); } catch (_) { return html; }
+                        const racine = doc.getElementById('racine'); if (!racine) return html;
+                        const arts = Array.isArray(articles) ? articles : [];
+                        const lien = (href, texte, titre) => { const a = doc.createElement('a'); a.setAttribute('href', href); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer nofollow');
+                            a.setAttribute('data-source-lien', ''); a.setAttribute('class', 'text-sky-700 underline font-bold break-all'); if (titre) a.setAttribute('title', titre); a.textContent = texte; return a; };
+                        const hote = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return 'source'; } };
+                        const textes = []; const w = doc.createTreeWalker(racine, NodeFilter.SHOW_TEXT);
+                        for (let n = w.nextNode(); n; n = w.nextNode()) if (!n.parentElement.closest('a')) textes.push(n);
+                        const RE = /(https?:\/\/[^\s<>"'«»)\]]+[^\s<>"'«»)\].,;:!?])|\[(\d{1,2})\]/g;
+                        textes.forEach(n => {
+                            const t = n.nodeValue; if (!RE.test(t)) return; RE.lastIndex = 0;
+                            const frag = doc.createDocumentFragment(); let i = 0, m;
+                            while ((m = RE.exec(t))) {
+                                if (m.index > i) frag.appendChild(doc.createTextNode(t.slice(i, m.index)));
+                                if (m[1]) frag.appendChild(lien(m[1], '🔗 ' + hote(m[1]), m[1]));
+                                else { const ar = arts[Number(m[2]) - 1]; frag.appendChild(ar && ar.lien ? lien(ar.lien, '[' + m[2] + ']', ar.source + ' — ' + ar.titre) : doc.createTextNode(m[0])); }
+                                i = RE.lastIndex;
+                            }
+                            if (i < t.length) frag.appendChild(doc.createTextNode(t.slice(i)));
+                            n.parentNode.replaceChild(frag, n);
+                        });
+                        return racine.innerHTML;
+                    };
                     const _sanitizeHtml = (brut) => {
                         let doc;
                         try { doc = new DOMParser().parseFromString('<div id="racine">' + String(brut || '') + '</div>', 'text/html'); }
@@ -14735,7 +14767,7 @@
                                     return;
                                 }
                             } catch (_) { html = raw; }
-                            const propre = _sanitizeHtml(html);
+                            const propre = _lierSources(_sanitizeHtml(html), presse && presse.articles);   // v37.124 : sources cliquables
                             _majIntel(id, { html: propre || '<p>Aucune information trouvée pour cette zone.</p>',
                                             at: new Date().toLocaleString('fr-FR') });
                         } catch (e) {

@@ -26,6 +26,8 @@ const afficher = () => {
         const r = resultats[prochainAffiche], s = suites[prochainAffiche];
         console.log(`▸ ${s.desc}  (${fmt(r.ms)})`);
         const lignes = r.sortie.replace(/\s+$/, '').split('\n');
+        //  v37.124 : en échec, CHAQUE contrôle en échec d'abord (les 25 dernières lignes seules le cachaient s'il était plus haut)
+        if (r.code !== 0) { const ko = lignes.filter(l => /❌/.test(l) && !/contrôle\(s\) en échec/.test(l)).slice(0, 30); if (ko.length) console.log(ko.join('\n') + '\n  ⋯'); }
         console.log(lignes.slice(r.code === 0 ? -2 : -25).join('\n'));
         if (r.code !== 0) console.log(`❌ ÉCHEC (${r.code}) : ${s.desc}`);
         prochainAffiche++;

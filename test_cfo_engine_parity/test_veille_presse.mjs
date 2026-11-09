@@ -308,7 +308,7 @@ try {
           '<p><b>Source : Recherche Internet.</b></p><p><b>Verdict — Terrain Nord (Ouahat Sidi Brahim)</b> : hausse probable, portée par l\'ouverture de la bande RN9 à la logistique [1].</p>'
           + '<b>Ce qui bouge autour de la parcelle</b><ul><li>14/09/2026 — bande RN9 ouverte à la logistique — ↑ — [1]</li><li>02/07/2026 — tracé du grand contournement le long de la parcelle — ↑ — [3]</li></ul>'
           + '<b>Prix comparables</b> : aucun comparable fiable trouvé.<b>À faire</b><ul><li>Demander la note de renseignements à l\'Agence urbaine.</li></ul>'
-          + '<b>Sources</b> : [1] Al Marrakchia, 14/09/2026 · [3] Le Desk, 02/07/2026<br>Requêtes utilisées : « واحة سيدي ابراهيم تصميم التهيئة » · « Ouahat Sidi Brahim SDAU Le Desk »' }) });
+          + '<b>Sources</b> : [1] Al Marrakchia, 14/09/2026 · [3] Le Desk, 02/07/2026, https://ledesk.ma/encontinu/contournement-marrakech.<br>Requêtes utilisées : « واحة سيدي ابراهيم تصميم التهيئة » · « Ouahat Sidi Brahim SDAU Le Desk »' }) });
   });
   const page = await ctx.newPage();
   const erreurs = []; page.on('pageerror', e => erreurs.push(String(e)));
@@ -358,6 +358,12 @@ try {
     v('la question nomme les médias locaux restés muets, et comment les cibler',
       qN.includes('Médias locaux sans article retenu ici : Marrakech 7 (marrakech7.com)') && qN.includes('« site:marrakech7.com Ouahat Sidi Brahim »'), (qN.match(/Médias locaux.*/) || [''])[0]);
     v('la question porte les articles lus sur la page de Kech24 (sans RSS)', lignes.some(l => l.includes('Kech24 ·') && l.includes('الوكالة الحضرية تفتح شريط')));
+    //  v37.124 — « ça doit être cliquable pour que j'accède à la source ! »
+    const liens = await page.$$eval('tr .cfo-html a[data-source-lien]', els => els.map(a => ({ t: a.textContent, href: a.getAttribute('href'), cible: a.target, rel: a.rel })));
+    const art1 = await page.evaluate((ST) => { const m = Object.values(eval(ST).marketIntel).find(x => x && x.contexte && x.contexte.presse && x.contexte.presse.articles.length); return m ? m.contexte.presse.articles[0].lien : null; }, ST);
+    v('les sources de la réponse sont CLIQUABLES : l\'adresse en clair → « 🔗 ledesk.ma », le renvoi [1] → l\'article 1 lu ; ouverts à part, sans fuite',
+      liens.some(l => l.t === '🔗 ledesk.ma' && l.href === 'https://ledesk.ma/encontinu/contournement-marrakech') && liens.some(l => l.t === '[1]' && l.href === art1)
+      && liens.every(l => l.cible === '_blank' && /noopener/.test(l.rel) && /^https?:\/\//.test(l.href)), JSON.stringify({ liens, art1 }));
     const medias = await page.$$eval('tr [data-mi-media]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     v('la carte détaille chaque média local, porte par porte (Google, page de recherche, Bing, accueil)',
       medias.length === 7 && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
