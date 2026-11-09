@@ -332,6 +332,26 @@ v('élargi (candidats pour l\'IA) : Marrakech sans sujet reconnu entre aussi —
 $selSeul = cfo_vp_selection($lieuArt, ['Ouahat Sidi Brahim'], ['Grand Stade'], $cfg, $now);
 v('  → sans article de zone, ses places reviennent au lieu (' . $cfg['max_articles'] . ' articles)', count($selSeul) === (int)$cfg['max_articles'] && !array_filter($selSeul, fn($a) => $a['zone']));
 
+/* ── 7. v37.125 : « chambouler » — une requête par grand projet, et la mémoire de la veille ── */
+$proj = array_values(array_filter($RZ, fn($r) => str_ends_with($r['libelle'], '(6 mois)')));
+$qp = array_column($proj, 'q');
+v('une requête PAR grand projet, sur les 6 derniers mois : « "Grand Stade" Marrakech when:180d », « "Mondial 2030" Marrakech… », « "plan de mobilité"… », en arabe aussi',
+  in_array('"Grand Stade" Marrakech when:180d', $qp, true) && in_array('"Mondial 2030" Marrakech when:180d', $qp, true) && in_array('"plan de mobilité" Marrakech when:180d', $qp, true)
+  && (bool)array_filter($qp, fn($q) => str_contains($q, 'مراكش when:180d')) && !array_filter($proj, fn($r) => $r['specifique']) && !preg_grep('/SDAU|aménagement|RN9/u', $qp), $j($qp));
+v('  → juste après les requêtes du lieu (avant les moteurs du web, les pages des journaux et les accueils)',
+  array_search($proj[0], $RZ, true) < min(array_keys(array_column($RZ, 'canal'), 'recherche')) && array_search($proj[0], $RZ, true) > array_search('lieu + urbanisme', array_column($RZ, 'libelle')), $j(array_column($RZ, 'libelle')));
+//  la mémoire : un article trouvé une fois revient ; 180 jours ; 200 au plus ; marqué « déjà trouvé le »
+$m1 = cfo_vp_memoire_maj([], [$le360 + ['zone' => true], $ledesk], $now);
+$m2 = cfo_vp_memoire_maj($m1, [$generique], $now + 86400);
+$memA = cfo_vp_memoire_articles($m2);
+v('mémoire de la veille : Le360 et Le Desk trouvés une fois sont GARDÉS au passage suivant (même si le moteur ne les rend plus), marqués « déjà trouvé le … »',
+  count($m2) === 3 && in_array($le360['url'], array_column($memA, 'url'), true) && ($memA[array_search($le360['url'], array_column($memA, 'url'))]['memoire'] ?? '') === gmdate('Y-m-d', $now), $j($m2));
+$selM = cfo_vp_selection(array_merge($lieuArt, $memA), ['Ouahat Sidi Brahim'], ['Grand Stade'], $cfg, $now + 86400);
+v('  → au tri, l\'article de Le360 revenu de la mémoire est retenu (contexte zone), avec sa marque', (bool)array_filter($selM, fn($a) => $a['url'] === $le360['url'] && !empty($a['memoire']) && $a['zone']), $j(array_column($selM, 'titre')));
+$vieux = cfo_vp_memoire_maj($m1, [], $now + 181 * 86400);
+$beaucoup = cfo_vp_memoire_maj([], array_map(fn($i) => ['titre' => "Article $i", 'url' => "https://x.ma/$i", 'ts' => $now - $i], range(1, 260)), $now);
+v('  → 180 jours sans être revu : oublié ; 200 articles au plus (les plus récents)', $vieux === [] && count($beaucoup) === 200 && $beaucoup[0]['url'] === 'https://x.ma/1', (string)count($beaucoup));
+
 echo "  " . str_repeat('─', 86) . "\n";
 echo $ko === 0 ? "  ✅ TOUT PASSE — $n contrôles\n" : "  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);
