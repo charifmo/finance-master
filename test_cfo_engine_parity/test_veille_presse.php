@@ -285,6 +285,45 @@ $tq = cfo_vp_requetes_test($cfgG, ['nom' => 'Groupe Ouahat', 'domaine' => 'faceb
 v('🧪 tester un groupe : Bing (web) et DuckDuckGo sur site:facebook.com/groups/123456, sans page d\'accueil', array_column($tq, 'canal') === ['bing_web', 'ddg']
   && $tq[0]['q'] === 'site:facebook.com/groups/123456 (Marrakech OR مراكش)' && ($tq[1]['format'] ?? '') === 'html_ddg', $j($tq));
 
+/* ── 6. v37.121 : les catalyseurs de la zone, dans toute la presse ── */
+//  « Pourquoi il ne trouve pas Le360 : Mondial 2030, 7,5 milliards de dirhams pour les accès aux stades de Benslimane et de Marrakech ? »
+$sujZ = ['RN9', 'SDAU', "plan d'aménagement", 'LGV', 'Grand Stade', 'contournement', 'Mondial 2030', 'الطريق الوطنية رقم 9', 'المخطط المديري', 'تصميم التهيئة', 'القطار فائق السرعة', 'الملعب الكبير', 'مونديال 2030'];
+$RZ = cfo_vp_requetes($cfg, $lieux, $sujZ);
+$cz = array_values(array_filter($RZ, fn($r) => str_starts_with($r['libelle'], 'zone · catalyseurs')));
+$czfr = array_values(array_filter($cz, fn($r) => $r['langue'] === 'fr' && $r['canal'] === 'moteur'))[0] ?? null;
+v('zone : « Marrakech + catalyseurs » dans TOUTE la presse (sans site:), synonymes compris — « Mondial 2030 », « stades », « grande vitesse »',
+  $czfr && str_starts_with($czfr['q'], 'Marrakech (') && !str_contains($czfr['q'], 'site:') && str_contains($czfr['q'], '"Mondial 2030"') && str_contains($czfr['q'], 'stades')
+  && str_contains($czfr['q'], '"Grand Stade"') && str_contains($czfr['q'], '"grande vitesse"') && !$czfr['specifique'], $j($czfr));
+v('  → les sujets du lieu (SDAU, plan d\'aménagement, RN9) n\'y sont pas : ils sont cherchés AVEC le lieu', $czfr && !preg_match('/SDAU|aménagement|RN9/u', $czfr['q']), $czfr['q'] ?? '');
+v('  → aussi par Bing (canal à part) et en arabe (« مراكش » + مونديال 2030…) ; juste après les requêtes du lieu',
+  count(array_filter($cz, fn($r) => $r['canal'] === 'bing_zone')) === 1 && (bool)array_filter($cz, fn($r) => $r['langue'] === 'ar' && str_starts_with($r['q'], 'مراكش') && str_contains($r['q'], 'مونديال 2030'))
+  && array_search($cz[0], $RZ, true) < min(array_keys(array_column($RZ, 'canal'), 'recherche')), $j(array_column($RZ, 'libelle')));
+//  le tri : 20 articles qui nomment le lieu, et l'article de Le360 qui n'en parle pas mais touche le Grand Stade
+$lieuArt = array_map(fn($i) => ['titre' => "Ouahat Sidi Brahim : nouvelle info $i", 'extrait' => '', 'url' => "https://almarrakchia.net/a$i", 'source' => 'Al Marrakchia', 'domaine' => 'almarrakchia.net',
+    'portee' => 'locale', 'ts' => $now - $i * 86400, 'date' => null, 'specifique' => true, 'langue' => 'fr'], range(1, 20));
+$le360 = ['titre' => 'Mondial 2030 : 7,5 milliards de dirhams pour les accès aux stades de Benslimane et de Marrakech', 'extrait' => '', 'url' => 'https://fr.le360.ma/sports/mondial-2030-75-milliards',
+    'source' => 'Le360', 'domaine' => 'fr.le360.ma', 'portee' => 'nationale', 'ts' => $now - 3 * 86400, 'date' => null, 'specifique' => false, 'langue' => 'fr'];
+$tanger = ['titre' => 'Mondial 2030 : le stade de Tanger agrandi', 'extrait' => '', 'url' => 'https://le360.ma/tanger', 'source' => 'Le360', 'domaine' => 'le360.ma', 'portee' => 'nationale',
+    'ts' => $now - 2 * 86400, 'date' => null, 'specifique' => false, 'langue' => 'fr'];
+$selZ = cfo_vp_selection(array_merge($lieuArt, [$le360, $tanger]), ['Ouahat Sidi Brahim'], ['Grand Stade'], $cfg, $now);
+$titresZ = array_column($selZ, 'titre');
+v('tri : l\'article de Le360 (« Mondial 2030 », « accès aux stades de … Marrakech ») est GARDÉ, marqué « zone », même face à 20 articles qui nomment le lieu',
+  in_array($le360['titre'], $titresZ, true) && (array_values(array_filter($selZ, fn($a) => $a['titre'] === $le360['titre']))[0]['zone'] ?? false) === true
+  && count($selZ) === (int)$cfg['max_articles'] && count(array_filter($selZ, fn($a) => !$a['zone'])) >= (int)$cfg['max_articles'] - (int)$cfg['quota_zone'], $j($titresZ));
+v('  → « Grand Stade » reconnu par ses synonymes (Mondial 2030, stades) ; un stade hors de Marrakech (Tanger) : écarté', !in_array($tanger['titre'], $titresZ, true));
+//  « Et cet article ? » — Le Desk : « Egis lance les enquêtes du plan de mobilité du Grand Marrakech » — ni le lieu, ni un sujet de la fiche
+$gp = array_values(array_filter($RZ, fn($r) => str_starts_with($r['libelle'], 'zone · grands projets') && $r['canal'] === 'moteur' && $r['langue'] === 'fr'))[0] ?? null;
+v('grands projets de la zone (veille_sources.json) TOUJOURS cherchés dans toute la presse : « Marrakech ("plan de mobilité" OR PMUD OR "Grand Marrakech"…) », + Bing, + arabe',
+  $gp && str_starts_with($gp['q'], 'Marrakech (') && str_contains($gp['q'], '"plan de mobilité"') && str_contains($gp['q'], 'PMUD') && !str_contains($gp['q'], 'site:')
+  && (bool)array_filter($RZ, fn($r) => $r['libelle'] === 'zone · grands projets (Bing)') && (bool)array_filter($RZ, fn($r) => str_starts_with($r['libelle'], 'zone · grands projets') && $r['langue'] === 'ar'), $j($gp));
+$ledesk = ['titre' => 'Egis lance les enquêtes du plan de mobilité du Grand Marrakech', 'extrait' => '5 000 ménages enquêtés, d\'octobre à décembre 2026', 'url' => 'https://ledesk.ma/encontinu/egis-plan-mobilite',
+    'source' => 'Le Desk', 'domaine' => 'ledesk.ma', 'portee' => 'nationale', 'ts' => $now - 4 * 86400, 'date' => null, 'specifique' => false, 'langue' => 'fr'];
+$selD = cfo_vp_selection(array_merge($lieuArt, [$ledesk]), ['Ouahat Sidi Brahim'], ['RN9', 'SDAU'], $cfg, $now);
+v('  → l\'article de Le Desk (plan de mobilité du Grand Marrakech) est GARDÉ, « zone », même si la fiche du bien ne parle pas de mobilité',
+  (bool)array_filter($selD, fn($a) => $a['titre'] === $ledesk['titre'] && $a['zone']), $j(array_column($selD, 'titre')));
+$selSeul = cfo_vp_selection($lieuArt, ['Ouahat Sidi Brahim'], ['Grand Stade'], $cfg, $now);
+v('  → sans article de zone, ses places reviennent au lieu (' . $cfg['max_articles'] . ' articles)', count($selSeul) === (int)$cfg['max_articles'] && !array_filter($selSeul, fn($a) => $a['zone']));
+
 echo "  " . str_repeat('─', 86) . "\n";
 echo $ko === 0 ? "  ✅ TOUT PASSE — $n contrôles\n" : "  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

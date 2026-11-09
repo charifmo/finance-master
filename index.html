@@ -9150,8 +9150,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.120 Ajouter depuis la frise";
+                    const CURRENT_VERSION = "37.122 Toute la frise";
                     const CHANGELOG = [
+        { version: "37.122 Toute la frise", date: "2026-11-09", changes: [
+            "🧾 « OÙ SONT LES CHARGES VARIABLES COMME FACTURES ? ICI JE DOIS POUVOIR TOUT VOIR » — la frise du cycle a maintenant un bloc Factures : une ligne par facture (électricité, téléphone, internet, eau, abonnements…), réglé / prévu sur le cycle ; les opérations restées dans « Factures » sans ligne : « Autres factures ». Comme les autres lignes : toucher pour voir les opérations (➕ Ajouter, modifier), ✏️ / double-clic pour changer le prévu.",
+        ] },
+        { version: "37.121 La zone dans toute la presse", date: "2026-11-09", changes: [
+            "🏟️ « POURQUOI IL NE TROUVE PAS LE360 : MONDIAL 2030, 7,5 MILLIARDS POUR LES ACCÈS AUX STADES DE MARRAKECH ? » — la zone n'était cherchée que dans la presse marrakchie ; la presse nationale seulement avec le nom exact du lieu. Les catalyseurs du bien (Grand Stade, LGV, contournement…) sont maintenant cherchés avec « Marrakech » dans TOUTE la presse (Google FR et AR, Bing), avec leurs synonymes : Grand Stade ↔ Mondial 2030 ↔ stades, LGV ↔ grande vitesse, contournement ↔ rocade.",
+            "🚌 « ET CET ARTICLE ? » (Le Desk : le plan de mobilité du Grand Marrakech) — les grands projets de la zone sont cherchés à chaque fois, même si la fiche du bien n'en parle pas : plan de mobilité, PMUD, Grand Marrakech, Marrakech Mobility, projets structurants, Mondial 2030, tramway, BHNS (réglables dans veille_sources.json).",
+            "📰 Jusqu'à 20 articles, dont 6 places GARDÉES pour ces articles de contexte : ceux qui nomment le lieu ne prennent plus toutes les places. Ils sont marqués « (contexte zone) » pour l'IA, qui doit dire ce que chacun change pour CE bien.",
+        ] },
         { version: "37.120 Ajouter depuis la frise", date: "2026-11-09", changes: [
             "➕ « AJOUTER » DANS LE DÉTAIL D'UNE CASE DE LA FRISE — montant, libellé (le nom du poste proposé), date (dans la période de la case : aujourd'hui s'il y tombe) : l'opération est enregistrée dans CE poste, sur le compte de sa catégorie, sans quitter la frise ; la liste, le total et la case suivent aussitôt.",
         ] },
@@ -14479,6 +14487,8 @@
                         [/plan d['’]am[ée]nagement|\bAUM\b|agence urbaine/i, "plan d'aménagement", 'تصميم التهيئة'],
                         [/\bLGV\b|grande vitesse/i, 'LGV', 'القطار فائق السرعة'],
                         [/grand stade/i, 'Grand Stade', 'الملعب الكبير'],
+                        //  v37.121 : le Grand Stade de Marrakech, c'est le Mondial 2030 — la presse dit « Mondial 2030 », « accès aux stades »
+                        [/grand stade|mondial|coupe du monde/i, 'Mondial 2030', 'مونديال 2030'],
                         [/contournement|rocade/i, 'contournement', 'الطريق المداري'],
                         [/autoroute/i, 'autoroute', 'الطريق السيار'],
                         [/barrage/i, 'barrage', 'سد'],
@@ -14503,7 +14513,7 @@
                         // ce qui fait la valeur d'un terrain, c'est l'urbanisme : SDAU et plan d'aménagement d'abord
                         sfr.push('SDAU', "plan d'aménagement"); sar.push('المخطط المديري', 'تصميم التهيئة');
                         for (const [re, f, a] of _MI_SUJETS) if (re.test(nom + '\n' + texte) && !sfr.includes(f)) { sfr.push(f); sar.push(a); }
-                        return { lieux: [...fr.slice(0, 3), ...ar.slice(0, 3)], sujets: [...sfr.slice(0, 6), ...sar.slice(0, 6)] };
+                        return { lieux: [...fr.slice(0, 3), ...ar.slice(0, 3)], sujets: [...sfr.slice(0, 8), ...sar.slice(0, 8)] };   // v37.121 : 8 + 8
                     };
                     const chargerPresseLocale = async (asset, fiches) => {
                         const { lieux, sujets } = _lieuxEtSujets(asset, fiches);
@@ -14518,7 +14528,7 @@
                             if (!d || d.status !== 'ok') { p.erreur = (d && (d.message || d.error)) || ('HTTP ' + r.status); return p; }
                             p.ok = true;
                             // Le web n'a aucun crédit : un lien n'est cliquable que s'il est http(s)
-                            p.articles = (d.articles || []).map(x => ({ titre: String(x.titre || ''), source: String(x.source || ''), date: x.date || '', portee: String(x.portee || ''),
+                            p.articles = (d.articles || []).map(x => ({ titre: String(x.titre || ''), source: String(x.source || ''), date: x.date || '', portee: String(x.portee || ''), zone: !!x.zone,
                                 extrait: String(x.extrait || ''), langue: x.langue || 'fr', url: String(x.url || ''),
                                 lien: /^https?:\/\//i.test(String(x.url || '')) ? String(x.url) : null }));
                             p.requetes = (d.requetes || []).length; p.ko = d.sources_ko || 0;
@@ -14581,8 +14591,12 @@
                             if (p.articles.some(x => ['reseau', 'forum', 'annonces'].includes(x.portee)))
                                 L.push("Les lignes marquées (réseau social), (forum) ou (annonce) ne sont pas de la presse : un témoignage ou une rumeur à recouper ; "
                                      + "une annonce donne un prix DEMANDÉ, en général au-dessus du prix de vente — cite-la comme telle, jamais comme une transaction.");
+                            //  v37.121 : les articles de « contexte zone » ne nomment pas la parcelle — un catalyseur autour (Grand Stade, LGV…)
+                            if (p.articles.some(x => x.zone))
+                                L.push("Les lignes marquées (contexte zone) ne nomment pas la parcelle : elles portent sur un catalyseur de la zone (Grand Stade / "
+                                     + "Mondial 2030, LGV, contournement…). Dis en une phrase ce que chacune change pour CE bien (distance, accès, calendrier), sans l'ignorer.");
                             const MARQUE = { reseau: ' (réseau social)', forum: ' (forum)', annonces: ' (annonce)' };
-                            p.articles.forEach((x, i) => L.push('[' + (i + 1) + '] ' + x.source + (MARQUE[x.portee] || '') + ' · ' + (x.date || 'sans date') + ' — « ' + x.titre + ' »'
+                            p.articles.forEach((x, i) => L.push('[' + (i + 1) + '] ' + x.source + (MARQUE[x.portee] || '') + (x.zone ? ' (contexte zone)' : '') + ' · ' + (x.date || 'sans date') + ' — « ' + x.titre + ' »'
                                 + (x.extrait ? ' — ' + x.extrait : '') + (x.lien ? ' — ' + x.lien : '')));
                         } else if (p.ok) {
                             L.push("REVUE DE PRESSE LOCALE : aucun article trouvé sur " + (p.lieux.join(' · ') || 'ces lieux') + " (" + p.requetes + " requêtes, presse "
@@ -22567,6 +22581,31 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 categories.push({ key: '__exceptionnel', label: '⚡ Dépenses exceptionnelles', budget, engage, estime: false,
                                                   pct: budget > 0 ? Math.min(100, Math.round(engage / budget * 100)) : (engage > 0 ? 100 : 0), pctAttendu: null, depasse: engage > budget, lignes: lignesX });
                             }
+                            //  v37.122 — « où sont les charges variables comme Factures ? Ici je dois pouvoir tout voir » : les factures (montants
+                            //  exacts, hors de l'enveloppe de consommation) ont leur bloc — une ligne par facture, réglé / prévu sur le cycle ;
+                            //  réglé = les opérations du cycle rangées dans SA catégorie (élec, tel, internet…) ; celles restées dans « Factures »
+                            //  sans ligne : « Autres factures ».
+                            Object.entries(d.chargesVariables || {}).forEach(([key, cv]) => {
+                                if (!cv || cv.categorieId !== 'cat_cv_factures') return;
+                                const budgetF = Math.round(budgetCategorieRevise(cv)), lignesF = [];
+                                const parts = _partsCycleLignes(cv, budgetF, nSem);
+                                parts.forEach(p => {
+                                    const reel = p.x.categorieId ? Math.round(parCat[p.x.categorieId] || 0) : 0;
+                                    lignesF.push({ cle: cleDetailT0(key, p.x), nom: String(p.x.nom || 'Facture').trim(), emoji: '🧾', unite: 'cycle', catKey: key, catId: p.x.categorieId || null,
+                                                   du, au, saisi: null, engage: reel, enveloppe: p.part, pct: p.part > 0 ? Math.min(100, Math.round(reel / p.part * 100)) : (reel > 0 ? 100 : 0),
+                                                   depasse: reel > p.part + 0.5, seances: [], alerte: null });
+                                    if (reel > p.part + 0.5) alertes.push('🔴 ' + String(p.x.nom || '').trim() + ' (facture) : ' + reel + ' DH pour ' + p.part + ' prévus — dépassement de ' + (reel - p.part) + ' DH');
+                                });
+                                const mere = Math.round(parCat[cv.categorieId] || 0);
+                                if (!parts.length) lignesF.push({ cle: key, nom: String(cv.label || 'Factures').trim(), emoji: '🧾', unite: 'cycle', catKey: key, catId: cv.categorieId, du, au, saisi: null,
+                                                                  engage: mere, enveloppe: budgetF, pct: budgetF > 0 ? Math.min(100, Math.round(mere / budgetF * 100)) : (mere > 0 ? 100 : 0), depasse: mere > budgetF + 0.5, seances: [], alerte: null });
+                                else if (mere > 0) lignesF.push({ cle: key + '::autres', nom: 'Autres factures (sans ligne)', emoji: '🧾', unite: 'cycle', catKey: key, catId: cv.categorieId, du, au, saisi: null,
+                                                                  engage: mere, enveloppe: 0, pct: 100, depasse: true, seances: [], alerte: null });
+                                if (!lignesF.length) return;
+                                const budget = lignesF.reduce((x, l) => x + l.enveloppe, 0), engage = lignesF.reduce((x, l) => x + l.engage, 0);
+                                categories.push({ key, label: '🧾 ' + String(cv.label || 'Factures').trim(), budget, engage, estime: false, factures: true,
+                                                  pct: budget > 0 ? Math.min(100, Math.round(engage / budget * 100)) : (engage > 0 ? 100 : 0), pctAttendu: null, depasse: engage > budget, lignes: lignesF });
+                            });
                         }
                         //  Une seule note pour les postes « toutes les 2 semaines » (au lieu d'une par poste)
                         const nQ = (L.postesCycle || []).filter(p => p.unite === 'quinzaine').length, fois = nSem / 2;
@@ -22645,7 +22684,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const d = donneesAnnuelles.value[consoT0Annee.value] || {}, cvs = d.chargesVariables || {};
                         const carte = {};
                         Object.entries(cvs).forEach(([key, cv]) => {
-                            if (!cv || cv.categorieId === 'cat_cv_factures') return;
+                            if (!cv) return;                                                  // v37.122 : les factures aussi
                             if (cv.categorieId) carte[cv.categorieId] = key;
                             (cv.details || []).forEach(det => { if (det && det.categorieId) carte[det.categorieId] = key; });
                         });

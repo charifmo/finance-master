@@ -23,7 +23,42 @@ declare(strict_types=1);
  */
 
 const CFO_VP_MAX_LIEUX = 6;
-const CFO_VP_MAX_SUJETS = 12;
+const CFO_VP_MAX_SUJETS = 16;   // v37.121 : 8 en français + 8 en arabe (catalyseurs et leurs synonymes)
+/**
+ * v37.121 — LES MOTS DE LA PRESSE. « Pourquoi il ne trouve pas Le360 : Mondial 2030, 7,5 milliards pour les accès aux stades
+ * de Benslimane et de Marrakech ? » L'article dit « Mondial 2030 » et « stades » ; l'appli cherchait « Grand Stade ». Chaque
+ * sujet porte ses synonymes : cherchés dans les requêtes de la zone, reconnus au tri.
+ */
+const CFO_VP_SYNONYMES = [
+    'grand stade' => ['Mondial 2030', 'stades', 'Coupe du monde 2030', 'stade de Marrakech'],
+    'mondial 2030' => ['stades', 'Coupe du monde 2030', 'Grand Stade'],
+    'الملعب الكبير' => ['مونديال 2030', 'كأس العالم 2030', 'ملعب مراكش'],
+    'مونديال 2030' => ['كأس العالم 2030', 'الملعب الكبير'],
+    'lgv' => ['grande vitesse', 'TGV', 'Al Boraq'],
+    'القطار فائق السرعة' => ['البراق', 'القطار السريع'],
+    'contournement' => ['rocade', 'périphérique', 'voie de contournement'],
+    'الطريق المداري' => ['الطريق الدائري', 'المدار'],
+    'autoroute' => ['voie express', 'échangeur'],
+    'الطريق السيار' => ['الطريق السريع'],
+    'sdau' => ['schéma directeur'],
+    "plan d'aménagement" => ['agence urbaine'],
+    'zone industrielle' => ['zone logistique', 'parc logistique'],
+    'expropriation' => ['utilité publique'],
+];
+//  Les sujets d'urbanisme du lieu (SDAU, plan d'aménagement, RN…) ne font pas un « catalyseur » de zone : ils n'ont de sens que
+//  pour CE lieu, déjà cherché avec eux
+const CFO_VP_URBANISME = ['sdau', "plan d'amenagement", 'المخطط المديري', 'تصميم التهيئه'];
+/** v37.121 — les grands projets de la zone (veille_sources.json › grands_projets.fr / .ar), nettoyés, 10 au plus par langue. */
+function cfo_vp_grands_projets(array $cfg, string $lg): array {
+    $l = $cfg['grands_projets'][$lg] ?? [];
+    return array_slice(array_values(array_filter(array_map('cfo_vp_terme', is_array($l) ? $l : []))), 0, 10);
+}
+/** Un sujet et ses synonymes (le sujet d'abord). */
+function cfo_vp_variantes(string $sujet): array {
+    $n = cfo_vp_norm($sujet); $v = [$sujet];
+    foreach (CFO_VP_SYNONYMES as $k => $l) if (cfo_vp_norm($k) === $n) $v = array_merge($v, $l);
+    return array_values(array_unique($v));
+}
 const CFO_VP_MAX_REQUETES = 48;   // v37.42 : quatre portes par média local ; v37.111 : + réseaux sociaux, forums, annonces
 //  v37.111 — au-delà de la presse : pages et groupes publics (Facebook, Instagram, YouTube…), forums, portails d'annonces.
 //  Ils n'ont ni Google Actualités ni page d'accueil lisible : ils sont cherchés par les moteurs du WEB (rôle « web »),
@@ -112,8 +147,8 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
         $l = array_values(array_filter($n, fn($s) => (($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr') === $lg)) ?: $n;
         return array_map(fn($p) => '(' . implode(' OR ', array_map(fn($s) => 'site:' . $s['domaine'], $p)) . ')', array_chunk($l, 10));
     };
-    $suj = ['fr' => array_slice(array_values(array_filter($sujets, fn($s) => !cfo_vp_arabe($s))), 0, 5),
-            'ar' => array_slice(array_values(array_filter($sujets, fn($s) => cfo_vp_arabe($s))), 0, 5)];
+    $suj = ['fr' => array_slice(array_values(array_filter($sujets, fn($s) => !cfo_vp_arabe($s))), 0, 8),     // v37.121 : 8 (catalyseurs)
+            'ar' => array_slice(array_values(array_filter($sujets, fn($s) => cfo_vp_arabe($s))), 0, 8)];
     $parLangue = ['fr' => [], 'ar' => []];
     foreach ($lieux as $l) $parLangue[cfo_vp_arabe($l) ? 'ar' : 'fr'][] = $l;
     $tousLieux = array_merge(array_slice($parLangue['ar'], 0, 2), array_slice($parLangue['fr'], 0, 2));
@@ -173,8 +208,37 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
         }
     }
     if ($suj['fr']) $zone[] = $moteur('fr', 'Marrakech ' . cfo_vp_ou($suj['fr']) . ($sitesLocaux ? ' ' . $sitesLocaux : ''), false, 'zone (Marrakech)');
+    //  v37.121 — LES CATALYSEURS DE LA ZONE, DANS TOUTE LA PRESSE : la zone n'était cherchée que dans la presse marrakchie ;
+    //  Le360, Médias24, Hespress… n'étaient interrogés qu'avec le nom exact du lieu. « Marrakech (LGV OR "Grand Stade" OR
+    //  "Mondial 2030" OR stades…) », sans restriction de site, sur Google (FR, AR) et Bing.
+    $catalyseurs = function (string $lg) use ($suj): array {
+        $out = [];
+        foreach ($suj[$lg] as $x) {
+            if (in_array(cfo_vp_norm($x), array_map('cfo_vp_norm', CFO_VP_URBANISME), true) || preg_match('/^rn\s?\d/i', cfo_vp_norm($x)) || str_contains($x, 'الوطنية رقم')) continue;
+            foreach (array_slice(cfo_vp_variantes($x), 0, 3) as $v) $out[] = $v;   // le sujet et ses 2 synonymes les plus parlants
+        }
+        return array_slice(array_values(array_unique($out)), 0, 14);
+    };
+    $catal = [];
+    if ($c = $catalyseurs('fr')) {
+        $q = 'Marrakech ' . cfo_vp_ou($c);
+        $catal[] = $moteur('fr', $q, false, 'zone · catalyseurs (toute la presse)');
+        foreach ($secondaires as $m) $catal[] = ['type' => 'moteur', 'canal' => (string)($m['id'] ?? 'moteur2') . '_zone', 'nom' => (string)($m['nom'] ?? 'moteur'),
+            'libelle' => 'zone · catalyseurs (Bing)', 'q' => $q, 'langue' => 'fr', 'specifique' => false, 'url' => cfo_vp_url($m['gabarit'], $q)];
+    }
+    if ($c = $catalyseurs('ar')) $catal[] = $moteur('ar', 'مراكش ' . cfo_vp_ou($c), false, 'zone · catalyseurs (الصحافة)');
+    //  v37.121 — LES GRANDS PROJETS DE LA ZONE, toujours cherchés (veille_sources.json › grands_projets) : « Egis lance les enquêtes
+    //  du plan de mobilité du Grand Marrakech » (Le Desk) ne nomme ni le lieu ni un sujet de la fiche du bien
+    foreach (['fr' => 'Marrakech', 'ar' => 'مراكش'] as $lg => $ville) {
+        $gp = cfo_vp_grands_projets($cfg, $lg);
+        if (!$gp) continue;
+        $q = $ville . ' ' . cfo_vp_ou($gp);
+        $catal[] = $moteur($lg, $q, false, 'zone · grands projets' . ($lg === 'ar' ? ' (الصحافة)' : ' (toute la presse)'));
+        if ($lg === 'fr') foreach ($secondaires as $m) $catal[] = ['type' => 'moteur', 'canal' => (string)($m['id'] ?? 'moteur2') . '_zone', 'nom' => (string)($m['nom'] ?? 'moteur'),
+            'libelle' => 'zone · grands projets (Bing)', 'q' => $q, 'langue' => 'fr', 'specifique' => false, 'url' => cfo_vp_url($m['gabarit'], $q)];
+    }
     if ($suj['ar']) $zone[] = $moteur('ar', 'مراكش ' . cfo_vp_ou($suj['ar']), false, 'zone (مراكش)');
-    return array_slice(array_values(array_filter(array_merge($strict, $theme, $webGroupes, $pages, $second, $webPages, $accueil, $zone))), 0, CFO_VP_MAX_REQUETES);
+    return array_slice(array_values(array_filter(array_merge($strict, $theme, $catal, $webGroupes, $pages, $second, $webPages, $accueil, $zone))), 0, CFO_VP_MAX_REQUETES);
 }
 
 /** v37.42 : l'adresse de recherche d'un site, sans demande de flux (« &feed=rss2 », « /feed/ », « format=rss ») — on lit la PAGE. */
@@ -295,13 +359,15 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
     $maintenant = $maintenant ?? time();
     $fenetre = (int)($cfg['fenetre_jours'] ?? 730) * 86400;
     $L = array_values(array_filter(array_map('cfo_vp_norm', $lieux)));
-    $S = array_values(array_filter(array_map('cfo_vp_norm', $sujets)));
+    //  v37.121 : un sujet est reconnu par lui-même OU l'un de ses synonymes (« Grand Stade » ← « Mondial 2030 », « stades »)
+    $S = array_values(array_filter(array_map(fn($s) => array_values(array_filter(array_map('cfo_vp_norm', cfo_vp_variantes($s)))),
+        array_merge($sujets, cfo_vp_grands_projets($cfg, 'fr'), cfo_vp_grands_projets($cfg, 'ar')))));
     $vus = []; $garde = [];
     foreach ($articles as $a) {
         if ($a['ts'] !== null && $maintenant - $a['ts'] > $fenetre) continue;
         $txt = cfo_vp_norm($a['titre'] . ' ' . $a['extrait']);
         $nl = count(array_filter($L, fn($l) => mb_strpos($txt, $l) !== false));
-        $ns = count(array_filter($S, fn($s) => mb_strpos($txt, $s) !== false));
+        $ns = count(array_filter($S, fn($vs) => (bool)array_filter($vs, fn($s) => mb_strpos($txt, $s) !== false)));
         $zone = mb_strpos($txt, 'marrakech') !== false || mb_strpos($txt, cfo_vp_norm('مراكش')) !== false;
         if (!$a['specifique'] && !$nl && !($ns && $zone)) continue;
         $cle = mb_substr(cfo_vp_norm($a['titre']), 0, 70);
@@ -309,11 +375,22 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
         $vus[$cle] = $vus[$a['url']] = true;
         $age = $a['ts'] !== null ? ($maintenant - $a['ts']) / 86400 : 9999;
         $a['score'] = 5 * $nl + $ns + ($a['portee'] === 'locale' ? 2 : 0) + ($age <= 90 ? 2 : ($age <= 365 ? 1 : 0));
+        //  v37.121 : un article qui ne nomme pas le lieu mais parle d'un catalyseur de la zone (Grand Stade, LGV…) — dit « zone »
+        $a['zone'] = !$nl && !$a['specifique'];
         $garde[] = $a;
     }
-    usort($garde, fn($x, $y) => [$y['score'], $y['ts'] ?? 0] <=> [$x['score'], $x['ts'] ?? 0]);
-    return array_map(function ($a) { unset($a['ts'], $a['specifique']); return $a; },
-                     array_slice($garde, 0, (int)($cfg['max_articles'] ?? 15)));
+    $ordre = fn($x, $y) => [$y['score'], $y['ts'] ?? 0] <=> [$x['score'], $x['ts'] ?? 0];
+    usort($garde, $ordre);
+    //  v37.121 — des places GARDÉES pour la zone : les articles qui nomment le lieu prenaient les 15 places, un chantier à 7,5
+    //  milliards autour du Grand Stade n'avait aucune chance. Jusqu'à quota_zone places pour eux (les meilleurs), le reste au lieu ;
+    //  une catégorie qui manque laisse ses places à l'autre.
+    $max = (int)($cfg['max_articles'] ?? 15);
+    $lieu = array_values(array_filter($garde, fn($a) => !$a['zone'])); $zoneA = array_values(array_filter($garde, fn($a) => $a['zone']));
+    $k = min(count($zoneA), max(0, (int)($cfg['quota_zone'] ?? 5)));
+    $pris = array_slice($lieu, 0, $max - $k);
+    $pris = array_merge($pris, array_slice($zoneA, 0, $max - count($pris)));
+    usort($pris, $ordre);
+    return array_map(function ($a) { unset($a['ts'], $a['specifique']); return $a; }, $pris);
 }
 
 

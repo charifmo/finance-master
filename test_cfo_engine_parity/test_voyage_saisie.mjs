@@ -133,6 +133,19 @@ try {
         const P = Object.fromEntries(f.morceaux.map((m, i) => [m.split('|')[0], f.prevus[i]]));
         v('P. khdra 200 / sem, voyage du 11 au 16 oct. : les semaines sans voyage gardent 200 ; celle du 5 oct. (1 jour absent) ≈ 171, celle du 12 oct. (5 jours absents) ≈ 57',
           P['2026-09-28'] === 200 && P['2026-10-19'] === 200 && Math.abs(P['2026-10-05'] - 171) <= 1 && Math.abs(P['2026-10-12'] - 57) <= 1, JSON.stringify(f));
+        //  v37.122 — « où sont les charges variables comme Factures ? je dois pouvoir tout voir »
+        const fa = await page.evaluate(async (ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026];
+            d.transactionsReelles.push({ id: 9701, datetime: '2026-10-12T10:00', date: '2026-10-12', mois: 10, libelle: 'facture inwi', montant: 99, categorieId: 'cat_cv_factures', compteId: 1, source: 'manuel', categorieSource: 'vous' });
+            st.calculationTick++; await Vue.nextTick();
+            const c = st.friseCycle.categories.find(x => x.key === 'factures');
+            const r = c ? { label: c.label, budget: c.budget, engage: c.engage, lignes: c.lignes.map(l => [l.nom, l.enveloppe, l.engage]) } : null;
+            d.transactionsReelles = d.transactionsReelles.filter(t => t.id !== 9701); st.calculationTick++; await Vue.nextTick();
+            return r; }, ST);
+        const noms = fa ? fa.lignes.map(l => l[0]) : [];
+        v('  → la frise montre aussi les FACTURES : une ligne par facture (élec, tel, internet, eau, netflix, IA, chatgpt), réglé / prévu ; l\'opération restée dans « Factures » : « Autres factures »',
+          !!fa && /Factures/.test(fa.label) && ['elect', 'tel', 'internet', 'eau', 'netflix', 'IA', 'chatgpt'].every(n => noms.includes(n)) && fa.budget === 1647
+          && (fa.lignes.find(l => /^Autres factures/.test(l[0])) || [])[2] === 99 && fa.engage === 99, JSON.stringify(fa));
+        await page.waitForSelector('[data-cat="factures"] [data-frise-ligne]', { state: 'attached', timeout: 5000 });
         //  ✏️ depuis la frise : la ligne du prévu, ouverte et surlignée
         await page.click('[data-frise-ligne][data-poste="alimentation::555"] [data-frise-vers-prevu]');
         await page.waitForSelector('[data-cv-detail="alimentation::555"][data-surligne]', { state: 'visible', timeout: 5000 }).catch(() => { });
