@@ -369,7 +369,8 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
         $nl = count(array_filter($L, fn($l) => mb_strpos($txt, $l) !== false));
         $ns = count(array_filter($S, fn($vs) => (bool)array_filter($vs, fn($s) => mb_strpos($txt, $s) !== false)));
         $zone = mb_strpos($txt, 'marrakech') !== false || mb_strpos($txt, cfo_vp_norm('مراكش')) !== false;
-        if (!$a['specifique'] && !$nl && !($ns && $zone)) continue;
+        //  v37.123 : « large » (les candidats que l'IA vérifie ensuite) — un article de Marrakech sans sujet reconnu passe aussi
+        if (!$a['specifique'] && !$nl && !($ns && $zone) && !(!empty($cfg['large']) && $zone)) continue;
         $cle = mb_substr(cfo_vp_norm($a['titre']), 0, 70);
         if (isset($vus[$cle]) || isset($vus[$a['url']])) continue;
         $vus[$cle] = $vus[$a['url']] = true;

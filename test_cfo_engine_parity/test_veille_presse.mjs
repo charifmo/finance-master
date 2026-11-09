@@ -292,10 +292,18 @@ try {
   await ctx.route('**/get_ai_memory.php*', (route) => route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'ok', rag: { regles: [{ id: 'u-nord', texte: FICHE_NORD }, { id: 'u-est', texte: FICHE_EST }] } }) }));
   const questions = [], revues = [];
+  let modeTri = false;   // v37.123 : l'IA de tri répond par des notes (sinon : réponse d'analyse → repli, le tri habituel)
   await ctx.route('https://n8n.beau.ink/**', async (route) => {
       const req = route.request();
       if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'POST' } });
-      questions.push(JSON.parse(req.postData() || '{}').question || '');
+      const q = JSON.parse(req.postData() || '{}').question || '';
+      questions.push(q);
+      if (modeTri && q.startsWith('TÂCHE — filtre de pertinence')) {
+          const notes = q.split('\n').filter(l => /^\[\d+\] /.test(l)).map(l => { const n = Number(l.match(/^\[(\d+)\]/)[1]);
+              const p = /Ouahat|واحة/.test(l) ? 3 : (/LGV|contournement|المداري/i.test(l) ? 2 : 0);
+              return { n, p, r: p === 3 ? 'nomme le lieu' : (p === 2 ? 'projet de la zone' : 'hors sujet') }; });
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ html: '<p>' + JSON.stringify({ notes }) + '</p>' }) });
+      }
       await route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ html:
           '<p><b>Source : Recherche Internet.</b></p><p><b>Verdict — Terrain Nord (Ouahat Sidi Brahim)</b> : hausse probable, portée par l\'ouverture de la bande RN9 à la logistique [1].</p>'
           + '<b>Ce qui bouge autour de la parcelle</b><ul><li>14/09/2026 — bande RN9 ouverte à la logistique — ↑ — [1]</li><li>02/07/2026 — tracé du grand contournement le long de la parcelle — ↑ — [3]</li></ul>'
@@ -449,6 +457,30 @@ try {
         await page2.screenshot({ path: path.join(CAPTURES, 'sources_sans_curl.png') });
     }
     v('aucune erreur JavaScript (serveur sans curl)', erreurs2.length === 0, erreurs2.join(' | '));
+  });
+  await partie('T', async () => {
+    console.log('  ── T. v37.123 : les articles élargis, revérifiés par l\'IA avant le résultat final');
+    modeTri = true; questions.length = 0;
+    await page.evaluate((ST) => { eval(ST).marketIntel = {}; }, ST);
+    const qF = await intel('ma_5');
+    const qT = questions.find(q => q.startsWith('TÂCHE — filtre de pertinence')) || '';
+    const cands = qT.split('\n').filter(l => /^\[\d+\] /.test(l));
+    const final = qF.split('\n').filter(l => /^\[\d+\] /.test(l));
+    v('T. un premier passage IA reçoit les candidats ÉLARGIS (plus que les articles d\'avant), numérotés, avec la fiche du bien, et doit répondre en JSON',
+      cands.length > final.length && cands.some(l => /LGV/.test(l)) && /RÉPONDS UNIQUEMENT par ce JSON/.test(qT) && /Douar Oulad Belaagid/.test(qT) && questions.indexOf(qT) < questions.indexOf(qF), JSON.stringify([cands.length, final.length]));
+    v('  → le résultat final ne garde que les notes 2 et 3, les mieux notées d\'abord, chacune avec sa note et sa raison',
+      final.length > 0 && final.every(l => /\(pertinence [23]\/3 : (nomme le lieu|projet de la zone)\)/.test(l)) && /pertinence 3\/3/.test(final[0])
+      && qF.includes('VÉRIFIÉS par un premier passage IA'), final.join('\n'));
+    const bt = await page.$$eval('tr [data-mi-tri-ia]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+    v('  → la carte le dit : « Vérifiés par l’IA : N articles trouvés → M gardés pour CE bien, K écartés »', bt.some(t => new RegExp('Vérifiés par l’IA : ' + cands.length + ' articles trouvés → ' + final.length + ' gardés pour CE bien').test(t)), JSON.stringify(bt));
+    v('  → chaque article de la liste montre ses étoiles et la raison de l\'IA', await page.$$eval('tr [data-mi-article] [data-mi-pertinence]', els => els.length > 0 && els.every(e => /★★/.test(e.textContent))));
+    //  l'IA muette : le tri habituel, et c'est dit
+    modeTri = false; questions.length = 0;
+    await page.evaluate((ST) => { eval(ST).marketIntel = {}; }, ST);
+    const qR = await intel('ma_5');
+    const bt2 = await page.$$eval('tr [data-mi-tri-ia]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+    v('  → IA de tri illisible : le tri habituel s\'applique, la carte le dit (« Vérification par l’IA indisponible »)',
+      bt2.some(t => /Vérification par l’IA indisponible/.test(t)) && qR.split('\n').filter(l => /^\[\d+\] /.test(l)).length > 0 && !qR.includes('VÉRIFIÉS par un premier passage IA'), JSON.stringify(bt2));
   });
 } catch (e) {
     v('scène complète sans exception', false, String(e && e.stack || e));
