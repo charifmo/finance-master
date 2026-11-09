@@ -321,6 +321,14 @@ $ledesk = ['titre' => 'Egis lance les enquêtes du plan de mobilité du Grand Ma
 $selD = cfo_vp_selection(array_merge($lieuArt, [$ledesk]), ['Ouahat Sidi Brahim'], ['RN9', 'SDAU'], $cfg, $now);
 v('  → l\'article de Le Desk (plan de mobilité du Grand Marrakech) est GARDÉ, « zone », même si la fiche du bien ne parle pas de mobilité',
   (bool)array_filter($selD, fn($a) => $a['titre'] === $ledesk['titre'] && $a['zone']), $j(array_column($selD, 'titre')));
+//  v37.123 — élargir : les candidats (vérifiés ensuite par l'IA) prennent aussi Marrakech sans sujet reconnu, jusqu'à max_candidats
+$generique = ['titre' => 'Marrakech : la ville accueille un forum international', 'extrait' => '', 'url' => 'https://le360.ma/forum', 'source' => 'Le360', 'domaine' => 'le360.ma',
+    'portee' => 'nationale', 'ts' => $now - 86400, 'date' => null, 'specifique' => false, 'langue' => 'fr'];
+$candL = cfo_vp_selection(array_merge($lieuArt, [$generique, $le360, $tanger]), ['Ouahat Sidi Brahim'], ['Grand Stade'], ['max_articles' => (int)$cfg['max_candidats'], 'quota_zone' => 20, 'large' => true] + $cfg, $now);
+$selN = cfo_vp_selection(array_merge($lieuArt, [$generique]), ['Ouahat Sidi Brahim'], ['Grand Stade'], $cfg, $now);
+v('élargi (candidats pour l\'IA) : Marrakech sans sujet reconnu entre aussi — pas dans le tri habituel ; Tanger reste dehors ; ' . $cfg['max_candidats'] . ' au plus',
+  in_array($generique['titre'], array_column($candL, 'titre'), true) && !in_array($generique['titre'], array_column($selN, 'titre'), true) && !in_array($tanger['titre'], array_column($candL, 'titre'), true)
+  && count($candL) === 22 && (int)$cfg['max_candidats'] === 50, (string)count($candL));
 $selSeul = cfo_vp_selection($lieuArt, ['Ouahat Sidi Brahim'], ['Grand Stade'], $cfg, $now);
 v('  → sans article de zone, ses places reviennent au lieu (' . $cfg['max_articles'] . ' articles)', count($selSeul) === (int)$cfg['max_articles'] && !array_filter($selSeul, fn($a) => $a['zone']));
 

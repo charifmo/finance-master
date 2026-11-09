@@ -85,12 +85,17 @@ foreach ($requetes as $i => $r) {
 }
 
 $retenus = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], $cfg);
+//  v37.123 — « élargir les articles, puis les revérifier avec l'IA » : jusqu'à max_candidats (50), Marrakech sans sujet compris ;
+//  l'appli les fait noter par l'IA et ne garde que ceux qui comptent pour CE bien (repli : « articles », le tri habituel)
+$maxC = max((int)($cfg['max_articles'] ?? 20), min(80, (int)($cfg['max_candidats'] ?? 50)));
+$candidats = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], ['max_articles' => $maxC, 'quota_zone' => (int)round($maxC * 0.4), 'large' => true] + $cfg);
 //  v37.111 — une source = un site, une page / un groupe précis, ou une famille (réseaux sociaux, forums, annonces)
 foreach ($couverture as $dom => &$c) { $c['retenus'] = cfo_vp_retenus_de($retenus, $c['_req']); unset($c['_req']); }
 unset($c);
 vp_sortie([
     'status' => 'ok',
     'articles' => $retenus,
+    'candidats' => $candidats,
     'lus' => count($articles),
     'requetes' => $diag,
     'couverture' => array_values($couverture),
