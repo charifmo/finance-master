@@ -84,11 +84,30 @@ foreach ($requetes as $i => $r) {
     }
 }
 
+//  v37.125 — la mémoire de la veille de CE bien (ses lieux) : les articles déjà trouvés reviennent, même si le moteur ne les rend plus
+$fMem = null; $memoire = [];
+if ($t['lieux']) {
+    $dMem = __DIR__ . '/pending/veille_memoire';
+    if (!is_dir($dMem)) @mkdir($dMem, 0775, true);
+    $fMem = $dMem . '/' . substr(sha1(implode('|', array_map('cfo_vp_norm', $t['lieux']))), 0, 20) . '.json';
+    $memoire = is_file($fMem) ? (json_decode((string)@file_get_contents($fMem), true) ?: []) : [];
+}
+$frais = count($articles);
+$deja = [];
+foreach ($articles as $a) $deja[(string)$a['url']] = true;
+foreach (cfo_vp_memoire_articles($memoire) as $a) if (!isset($deja[$a['url']])) $articles[] = $a;
 $retenus = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], $cfg);
 //  v37.123 — « élargir les articles, puis les revérifier avec l'IA » : jusqu'à max_candidats (50), Marrakech sans sujet compris ;
 //  l'appli les fait noter par l'IA et ne garde que ceux qui comptent pour CE bien (repli : « articles », le tri habituel)
 $maxC = max((int)($cfg['max_articles'] ?? 20), min(80, (int)($cfg['max_candidats'] ?? 50)));
 $candidats = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], ['max_articles' => $maxC, 'quota_zone' => (int)round($maxC * 0.4), 'large' => true] + $cfg);
+if ($fMem) {
+    $brut = [];
+    foreach ($articles as $a) $brut[(string)$a['url']] = $a;
+    $aGarder = array_values(array_filter(array_map(fn($c) => $brut[(string)$c['url']] ?? null, $candidats)));
+    $tmp = $fMem . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode(cfo_vp_memoire_maj($memoire, $aGarder), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false) @rename($tmp, $fMem); else @unlink($tmp);
+}
 //  v37.111 — une source = un site, une page / un groupe précis, ou une famille (réseaux sociaux, forums, annonces)
 foreach ($couverture as $dom => &$c) { $c['retenus'] = cfo_vp_retenus_de($retenus, $c['_req']); unset($c['_req']); }
 unset($c);
@@ -96,6 +115,7 @@ vp_sortie([
     'status' => 'ok',
     'articles' => $retenus,
     'candidats' => $candidats,
+    'memoire' => ['articles' => count($memoire), 'frais' => $frais],
     'lus' => count($articles),
     'requetes' => $diag,
     'couverture' => array_values($couverture),

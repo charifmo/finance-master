@@ -48,6 +48,36 @@ const CFO_VP_SYNONYMES = [
 //  Les sujets d'urbanisme du lieu (SDAU, plan d'aménagement, RN…) ne font pas un « catalyseur » de zone : ils n'ont de sens que
 //  pour CE lieu, déjà cherché avec eux
 const CFO_VP_URBANISME = ['sdau', "plan d'amenagement", 'المخطط المديري', 'تصميم التهيئه'];
+/**
+ * v37.125 — LA MÉMOIRE DE LA VEILLE, par bien (ses lieux). Un article retenu une fois (parmi les candidats) est gardé 180 jours
+ * (200 au plus) et revient aux passages suivants, même si le moteur ne le renvoie plus : la veille s'enrichit au lieu de
+ * repartir de zéro. $anciens / $nouveaux : articles bruts (titre, url, ts…) ; rend la mémoire à jour.
+ */
+function cfo_vp_memoire_maj(array $anciens, array $nouveaux, ?int $maintenant = null): array {
+    $maintenant = $maintenant ?? time();
+    $par = [];
+    foreach ($anciens as $a) if (is_array($a) && !empty($a['url']) && !empty($a['titre']) && (int)($a['vu_le'] ?? 0) > $maintenant - 180 * 86400) $par[(string)$a['url']] = $a;
+    foreach ($nouveaux as $a) {
+        if (!is_array($a) || empty($a['url']) || empty($a['titre'])) continue;
+        $u = (string)$a['url'];
+        $garde = array_intersect_key($a, array_flip(['titre', 'extrait', 'url', 'source', 'domaine', 'portee', 'ts', 'date', 'specifique', 'langue']));
+        $par[$u] = $garde + ['vu_le' => $maintenant, 'trouve_le' => (int)($par[$u]['trouve_le'] ?? $maintenant)];
+        $par[$u]['vu_le'] = $maintenant;
+    }
+    uasort($par, fn($x, $y) => ($y['ts'] ?? $y['trouve_le'] ?? 0) <=> ($x['ts'] ?? $x['trouve_le'] ?? 0));
+    return array_values(array_slice($par, 0, 200));
+}
+/** Les articles de la mémoire, prêts pour le tri : marqués « memoire » (déjà trouvés le …). */
+function cfo_vp_memoire_articles(array $memoire): array {
+    $out = [];
+    foreach ($memoire as $a) {
+        if (!is_array($a) || empty($a['url']) || empty($a['titre'])) continue;
+        $out[] = ['titre' => (string)$a['titre'], 'extrait' => (string)($a['extrait'] ?? ''), 'url' => (string)$a['url'], 'source' => (string)($a['source'] ?? ''), 'domaine' => (string)($a['domaine'] ?? ''),
+                  'portee' => (string)($a['portee'] ?? 'autre'), 'ts' => isset($a['ts']) ? (int)$a['ts'] : null, 'date' => $a['date'] ?? null, 'specifique' => !empty($a['specifique']),
+                  'langue' => (string)($a['langue'] ?? 'fr'), 'memoire' => gmdate('Y-m-d', (int)($a['trouve_le'] ?? time()))];
+    }
+    return $out;
+}
 /** v37.121 — les grands projets de la zone (veille_sources.json › grands_projets.fr / .ar), nettoyés, 10 au plus par langue. */
 function cfo_vp_grands_projets(array $cfg, string $lg): array {
     $l = $cfg['grands_projets'][$lg] ?? [];
@@ -59,7 +89,7 @@ function cfo_vp_variantes(string $sujet): array {
     foreach (CFO_VP_SYNONYMES as $k => $l) if (cfo_vp_norm($k) === $n) $v = array_merge($v, $l);
     return array_values(array_unique($v));
 }
-const CFO_VP_MAX_REQUETES = 48;   // v37.42 : quatre portes par média local ; v37.111 : + réseaux sociaux, forums, annonces
+const CFO_VP_MAX_REQUETES = 60;   // v37.125 : + une requête par grand projet (récente)   // v37.42 : quatre portes par média local ; v37.111 : + réseaux sociaux, forums, annonces
 //  v37.111 — au-delà de la presse : pages et groupes publics (Facebook, Instagram, YouTube…), forums, portails d'annonces.
 //  Ils n'ont ni Google Actualités ni page d'accueil lisible : ils sont cherchés par les moteurs du WEB (rôle « web »),
 //  restreints à leur site — ou à une page / un groupe précis (« chemin » : facebook.com/groups/123).
@@ -227,6 +257,23 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
             'libelle' => 'zone · catalyseurs (Bing)', 'q' => $q, 'langue' => 'fr', 'specifique' => false, 'url' => cfo_vp_url($m['gabarit'], $q)];
     }
     if ($c = $catalyseurs('ar')) $catal[] = $moteur('ar', 'مراكش ' . cfo_vp_ou($c), false, 'zone · catalyseurs (الصحافة)');
+    //  v37.125 — « IL FAUT CHAMBOULER : IL N'A PAS TROUVÉ L'ARTICLE DU 360 ! » Une requête « Marrakech (A OR B OR C…) » ne remonte
+    //  que les premiers résultats du mélange, différents d'une fois à l'autre. Chaque grand projet a maintenant SA requête, limitée
+    //  aux 6 derniers mois (when:180d, Google Actualités) : « "Grand Stade" Marrakech », « "Mondial 2030" Marrakech »…
+    $projets = [];
+    foreach (['fr', 'ar'] as $lg) {
+        $termes = [];
+        foreach ($suj[$lg] as $x) if (!in_array(cfo_vp_norm($x), array_map('cfo_vp_norm', CFO_VP_URBANISME), true) && !preg_match('/^rn\s?\d/i', cfo_vp_norm($x)) && !str_contains($x, 'الوطنية رقم'))
+            foreach (array_slice(cfo_vp_variantes($x), 0, 2) as $v) $termes[] = $v;
+        foreach (array_slice(cfo_vp_grands_projets($cfg, $lg), 0, 4) as $v) $termes[] = $v;
+        $vus = [];
+        foreach ($termes as $v) {
+            $k = cfo_vp_norm($v);
+            if (isset($vus[$k]) || count($vus) >= ($lg === 'fr' ? 8 : 4)) continue;
+            $vus[$k] = true;
+            $projets[] = $moteur($lg, cfo_vp_guillemets($v) . ' ' . ($lg === 'ar' ? 'مراكش' : 'Marrakech') . ' when:180d', false, 'zone · ' . $v . ' (6 mois)');
+        }
+    }
     //  v37.121 — LES GRANDS PROJETS DE LA ZONE, toujours cherchés (veille_sources.json › grands_projets) : « Egis lance les enquêtes
     //  du plan de mobilité du Grand Marrakech » (Le Desk) ne nomme ni le lieu ni un sujet de la fiche du bien
     foreach (['fr' => 'Marrakech', 'ar' => 'مراكش'] as $lg => $ville) {
@@ -238,7 +285,7 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
             'libelle' => 'zone · grands projets (Bing)', 'q' => $q, 'langue' => 'fr', 'specifique' => false, 'url' => cfo_vp_url($m['gabarit'], $q)];
     }
     if ($suj['ar']) $zone[] = $moteur('ar', 'مراكش ' . cfo_vp_ou($suj['ar']), false, 'zone (مراكش)');
-    return array_slice(array_values(array_filter(array_merge($strict, $theme, $catal, $webGroupes, $pages, $second, $webPages, $accueil, $zone))), 0, CFO_VP_MAX_REQUETES);
+    return array_slice(array_values(array_filter(array_merge($strict, $theme, $projets, $catal, $webGroupes, $pages, $second, $webPages, $accueil, $zone))), 0, CFO_VP_MAX_REQUETES);
 }
 
 /** v37.42 : l'adresse de recherche d'un site, sans demande de flux (« &feed=rss2 », « /feed/ », « format=rss ») — on lit la PAGE. */

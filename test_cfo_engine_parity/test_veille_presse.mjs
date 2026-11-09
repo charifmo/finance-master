@@ -231,6 +231,11 @@ try {
     const titres = (r.d?.articles || []).map(a => a.titre);
     revueA = r;
     v('200, des articles', r.code === 200 && r.d?.status === 'ok' && titres.length > 0, r.t.slice(0, 300));
+    //  v37.125 — la mémoire de la veille : un 2ᵉ passage sur le même bien dit combien d'articles il connaît déjà, et les rend
+    const rM = await revue({ action: 'revue', lieux: ['Ouahat Sidi Brahim', 'واحة سيدي ابراهيم'], sujets: ['RN9', 'LGV', 'المخطط المديري'] });
+    const urlsA = new Set((r.d?.candidats || []).map(a => a.url));
+    v('v37.125 : 2ᵉ passage sur le même bien — la mémoire de la veille garde ses candidats (« articles déjà trouvés »), et ils reviennent',
+      r.d?.memoire?.articles === 0 && rM.d?.memoire?.articles === urlsA.size && urlsA.size > 0 && (rM.d?.candidats || []).filter(a => urlsA.has(a.url)).length === urlsA.size, JSON.stringify([r.d?.memoire, rM.d?.memoire, urlsA.size]));
     for (const dom of ['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'])
         v(`requête STRICTE pour ${dom} : site:${dom} ("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim")`,
           recues.some(x => x.chemin === '/gnews' && x.q === `site:${dom} ("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim")`), JSON.stringify(recues.filter(x => x.q.startsWith('site:')).map(x => x.q)));
