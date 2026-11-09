@@ -70,6 +70,11 @@ const T = maintenant.getDate();
 //  tickets d'aujourd'hui, au lendemain de la paie, n'y figuraient pas (le test tombait ces jours-là).
 let ouverture = new Date(maintenant.getFullYear(), maintenant.getMonth(), T - 1);
 while ([5, 6, 0].includes(ouverture.getDay())) ouverture = new Date(ouverture.getFullYear(), ouverture.getMonth(), ouverture.getDate() - 1);
+//  v37.119 : un LUNDI, reculer de dimanche à jeudi ouvrait le cycle dans la semaine PRÉCÉDENTE : son morceau jeudi → dimanche,
+//  écoulé sans ticket, comptait alors à son prévu (« semaine écoulée sans saisie = son prévu », v37.67) et le test tombait
+//  chaque lundi. La paie tombe alors le jour même (un lundi) : aucun morceau écoulé, comme les autres jours.
+const lundiCetteSemaine = new Date(maintenant.getFullYear(), maintenant.getMonth(), T - ((maintenant.getDay() + 6) % 7));
+if (ouverture < lundiCetteSemaine) ouverture = new Date(maintenant.getFullYear(), maintenant.getMonth(), T);
 const jourDePaie = (T === 1 || ouverture.getMonth() !== maintenant.getMonth() || ouverture.getDate() < 2) ? 28 : Math.min(28, ouverture.getDate());
 const Y = maintenant.getFullYear(), MC = maintenant.getMonth() + 1;
 const MOIS_BUDGET = T >= jourDePaie ? (MC === 12 ? 1 : MC + 1) : MC;
