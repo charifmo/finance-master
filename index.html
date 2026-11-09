@@ -7820,29 +7820,32 @@
                     </div>
                     <p v-if="friseCycle.quinzaine" data-frise-quinzaine class="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-[11px] md:text-xs font-bold text-amber-900 leading-snug">{{ friseCycle.quinzaine }}</p>
                     <p v-if="!friseCycle.alertes.length" data-frise-rien class="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-[11px] md:text-xs font-bold text-emerald-800">✓ Aucun dépassement ce cycle.</p>
-                    <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 gap-y-1 items-center">
-                        <span></span>
+                    <div class="grid grid-cols-1 md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 gap-y-1 items-center" data-frise-axe-ligne>
+                        <span class="hidden md:block"></span>
                         <div class="relative flex h-8 rounded-lg overflow-hidden ring-1 ring-slate-200" data-frise-axe>
                             <div v-for="m in friseCycle.morceaux" :key="'fm' + m.debut" data-frise-morceau :data-debut="m.debut" :data-coupe="m.coupe ? '1' : null" :title="m.titre" :style="{ width: m.part + '%' }"
                                  :class="['flex items-center justify-center text-[9px] md:text-[10px] font-black border-r border-white leading-none text-center',
-                                          m.coupe ? 'bg-amber-100 text-amber-900' : (m.etat === 'passe' ? 'bg-slate-200 text-slate-600' : (m.etat === 'encours' ? 'bg-sky-200 text-sky-900' : 'bg-slate-50 text-slate-500'))]"><span class="relative z-10">{{ m.coupe ? '✂️' : '' }}{{ m.label }}</span></div>
+                                          m.coupe ? 'bg-amber-100 text-amber-900' : (m.etat === 'passe' ? 'bg-slate-200 text-slate-600' : (m.etat === 'encours' ? 'bg-sky-200 text-sky-900' : 'bg-slate-50 text-slate-500')), m.etat === 'encours' ? 'ring-2 ring-inset ring-sky-500' : '']"><span class="relative z-10">{{ m.coupe ? '✂️' : '' }}{{ m.label }}</span></div>
                             <span data-frise-auj class="absolute inset-y-0 w-0.5 bg-rose-500/60" :style="{ left: friseCycle.aujPct + '%' }" title="Aujourd’hui"></span>
                         </div>
                     </div>
-                    <div v-for="c in friseCycle.categories" :key="'fc' + c.key" data-frise-categorie :data-cat="c.key" class="rounded-xl ring-1 ring-slate-200 p-2 md:p-2.5 space-y-1">
-                        <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 items-center">
-                            <p class="min-w-0"><span class="block truncate text-[12px] md:text-[13px] font-black text-slate-800">{{ c.label }}</span>
+                    <div v-for="c in friseCycle.categories" :key="'fc' + c.key" data-frise-categorie :data-cat="c.key" class="relative rounded-xl ring-1 ring-slate-200 p-2 md:p-2.5 space-y-1">
+                        <!-- v37.126 : la semaine en cours, sur toute la hauteur de la colonne (par-dessus, translucide : rien n'est caché) -->
+                        <div v-if="friseCycle.semCourante" data-frise-semaine-courante aria-hidden="true" class="pointer-events-none absolute inset-y-1 z-20 rounded-md bg-sky-400/10 ring-2 ring-sky-400/60 [--fn:0px] md:[--fn:11.5rem] [--pad:0.5rem] md:[--pad:0.625rem]"
+                             :style="{ left: 'calc(var(--pad) + var(--fn) + (100% - 2 * var(--pad) - var(--fn)) * ' + (friseCycle.semCourante.debut / 100) + ')', width: 'calc((100% - 2 * var(--pad) - var(--fn)) * ' + (friseCycle.semCourante.part / 100) + ')' }"></div>
+                        <div class="grid grid-cols-1 md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 gap-y-1 items-center">
+                            <p class="min-w-0 flex items-baseline justify-between gap-2 md:block"><span class="block md:truncate text-[13px] font-black text-slate-800">{{ c.label }}</span>
                                <span :class="['block text-[10px] font-bold tabular-nums', c.depasse ? 'text-rose-600' : 'text-slate-500']" data-frise-cat-total>{{ formatMAD(c.engage) }} / {{ formatMAD(c.budget) }}{{ c.estime ? ' (estimé)' : '' }}</span></p>
                             <div class="relative h-3 rounded-full bg-slate-100 overflow-hidden" :title="'Engagé ' + c.pct + ' % du budget' + (c.pctAttendu !== null ? ' ; rythme attendu à ce jour : ' + c.pctAttendu + ' %' : '')">
                                 <span :class="['absolute inset-y-0 left-0 rounded-full', c.depasse ? 'bg-rose-400' : 'bg-emerald-400']" :style="{ width: c.pct + '%' }"></span>
                                 <span v-if="c.pctAttendu !== null" class="absolute inset-y-0 w-0.5 bg-slate-700" :style="{ left: c.pctAttendu + '%' }"></span>
                             </div>
                         </div>
-                        <div v-for="l in c.lignes" :key="'fl' + l.cle" data-frise-ligne :data-poste="l.cle" :data-unite="l.unite" class="grid grid-cols-[6.5rem_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 items-center">
-                            <p class="min-w-0 truncate text-[11px] font-semibold text-slate-600 pl-1 cursor-pointer select-none" data-frise-nom @dblclick="allerAuPrevuFrise(c, l)" title="Double-clic (ou ✏️) : changer le prévu de cette ligne"><button type="button" @click.stop="allerAuPrevuFrise(c, l)" data-frise-vers-prevu class="mr-0.5 opacity-50 hover:opacity-100" title="Changer le prévu (Budget Structurel ou Calendrier Pluriannuel)" aria-label="Changer le prévu">✏️</button>{{ l.emoji }} {{ l.nom }} <span class="text-slate-400">{{ l.unite === 'semaine' ? '/ sem' : (l.unite === 'quinzaine' ? '/ 15 j' : '/ cycle') }}</span></p>
+                        <div v-for="l in c.lignes" :key="'fl' + l.cle" data-frise-ligne :data-poste="l.cle" :data-unite="l.unite" class="grid grid-cols-1 md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 items-center pt-1 md:pt-0 border-t border-slate-100 md:border-0">
+                            <p class="min-w-0 md:truncate text-[12px] md:text-[11px] font-semibold text-slate-700 md:text-slate-600 pl-1 cursor-pointer select-none leading-snug" data-frise-nom @dblclick="allerAuPrevuFrise(c, l)" title="Double-clic (ou ✏️) : changer le prévu de cette ligne"><button type="button" @click.stop="allerAuPrevuFrise(c, l)" data-frise-vers-prevu class="mr-0.5 opacity-50 hover:opacity-100" title="Changer le prévu (Budget Structurel ou Calendrier Pluriannuel)" aria-label="Changer le prévu">✏️</button>{{ l.emoji }} {{ l.nom }} <span class="text-slate-400">{{ l.unite === 'semaine' ? '/ sem' : (l.unite === 'quinzaine' ? '/ 15 j' : '/ cycle') }}</span></p>
                             <div v-if="l.cellules" class="flex rounded-md overflow-hidden ring-1 ring-slate-200">
                                 <span v-for="(x, i) in l.cellules" :key="'fx' + i" data-frise-case role="button" tabindex="0" @click="ouvrirApercuFrise(c, l, x)" @keydown.enter="ouvrirApercuFrise(c, l, x)" :data-etat="x.depasse && !x.avenir ? 'depasse' : (x.avenir ? 'avenir' : (x.auPrevu ? 'auprevu' : (x.encours ? 'encours' : 'tenu')))" :style="{ width: x.part + '%' }" :title="x.titre + ' : ' + x.reel + ' / ' + x.prevu + ' DH' + (x.auPrevu ? ' (au prévu, rien tapé)' : '')"
-                                      :class="['h-6 flex items-center justify-center text-[9px] md:text-[10px] font-bold tabular-nums border-r border-white leading-none cursor-pointer hover:brightness-95 hover:ring-2 hover:ring-inset hover:ring-blue-400',
+                                      :class="['h-7 md:h-6 flex items-center justify-center text-[11px] md:text-[10px] font-bold tabular-nums border-r border-white leading-none cursor-pointer hover:brightness-95 hover:ring-2 hover:ring-inset hover:ring-blue-400',
                                                x.avenir ? 'bg-slate-50 text-slate-400' : (x.depasse ? 'bg-rose-200 text-rose-900' : (x.auPrevu ? 'bg-emerald-50 text-emerald-700 italic' : (x.encours ? 'bg-sky-100 text-sky-900' : 'bg-emerald-200 text-emerald-900')))]">{{ x.avenir ? x.prevu : x.reel + '/' + x.prevu }}</span>
                             </div>
                             <div v-else class="min-w-0">
@@ -9152,8 +9155,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.125 La veille qui se souvient";
+                    const CURRENT_VERSION = "37.126 La frise au téléphone";
                     const CHANGELOG = [
+        { version: "37.126 La frise au téléphone", date: "2026-11-09", changes: [
+            "📱 LA FRISE ADAPTÉE AU TÉLÉPHONE — chaque ligne sur deux étages : le nom ENTIER au-dessus (plus « Super marc… », « Medecin (re… »), les cases sur toute la largeur en dessous, un peu plus hautes et lisibles ; le nom de la catégorie et son total sur une ligne, sa jauge en dessous. Sur ordinateur, la présentation ne change pas.",
+            "🟦 LA SEMAINE EN COURS SURLIGNÉE SUR TOUTE SA COLONNE — un fond bleuté translucide, de haut en bas de chaque catégorie (lignes « / sem » comme lignes « sur le cycle »), sur téléphone comme sur ordinateur ; sa case dans l'axe des semaines est encadrée.",
+        ] },
         { version: "37.125 La veille qui se souvient", date: "2026-11-09", changes: [
             "🎯 « IL FAUT CHAMBOULER : IL N'A PAS TROUVÉ L'ARTICLE DU 360 ! » — une requête « Marrakech (A OR B OR C…) » ne remonte que les premiers résultats du mélange, différents d'une fois à l'autre. Chaque grand projet a maintenant SA requête, sur les 6 derniers mois : « \"Grand Stade\" Marrakech », « \"Mondial 2030\" Marrakech », « \"plan de mobilité\" Marrakech », LGV, contournement… (en arabe aussi).",
             "🧠 LA MÉMOIRE DE LA VEILLE — un article retenu une fois pour un bien est gardé 180 jours et revient aux recherches suivantes, même si les moteurs ne le rendent plus : la veille s'enrichit au lieu de repartir de zéro. La carte dit « 🧠 mémoire de la veille : N articles déjà trouvés pour ce bien » ; l'IA voit « (déjà trouvé le …) ».",
@@ -22713,7 +22720,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const nQ = (L.postesCycle || []).filter(p => p.unite === 'quinzaine').length, fois = nSem / 2;
                         const quinzaine = !nQ ? null : '⏱️ ' + nQ + ' poste' + (nQ > 1 ? 's' : '') + ' « toutes les 2 semaines » : ce cycle de ' + J + ' jours en couvre ≈ ' + String(Math.round(fois * 10) / 10).replace('.', ',') + ' fois'
                             + (fois - Math.floor(fois + 1e-9) >= 0.05 ? ' — une ' + (Math.floor(fois + 1e-9) + 1) + 'ᵉ fois avant le ' + lib(fin) + ' dépasserait leur enveloppe ; après le ' + lib(fin) + ', elle compte au cycle suivant.' : '.');
-                        return { du: lib(debut), au: lib(fin), jours: J, aujJ, aujPct: aujJ / J * 100, morceaux: morceaux.map(({ vals, T, defs, m, ...x }) => x), categories, alertes, quinzaine };
+                        //  v37.126 : la semaine en cours, surlignée sur toute la hauteur de sa colonne (début et largeur en % des cases)
+                        let cumul = 0, semCourante = null;
+                        morceaux.forEach(m => { if (m.etat === 'encours' && !semCourante) semCourante = { debut: cumul, part: m.part, label: m.label }; cumul += m.part; });
+                        return { du: lib(debut), au: lib(fin), jours: J, aujJ, aujPct: aujJ / J * 100, morceaux: morceaux.map(({ vals, T, defs, m, ...x }) => x), categories, alertes, quinzaine, semCourante };
                     });
                     const friseCycle = computed(() => friseOuverte.value ? _friseCalc.value : null);
 
