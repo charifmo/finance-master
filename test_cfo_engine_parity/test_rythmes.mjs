@@ -197,16 +197,18 @@ try {
               apres.q[1].saisi === 400 && apres.q[0].saisi === 0 && ecrit[0] === 400 && ecrit.slice(1).every(x => x === null) && apres.engage === 400, JSON.stringify([apres, ecrit]));
             await page.click('[data-pulse-categorie][data-cat="alimentation"] [data-pulse-poste-cycle][data-poste="alimentation::2"] [data-pulse-quinzaine-payee][data-rang="1"]'); await page.waitForTimeout(150);
             const ok2 = await st();
-            v('  → ✓ sur la 1ʳᵉ quinzaine : payée au prévu (400) ; Psy engagé 800 sur le cycle', ok2.q[0].saisi === 400 && ok2.q[1].saisi === 400 && ok2.engage === 800, JSON.stringify(ok2));
+            //  v37.131 : la part d'une quinzaine = l'enveloppe du cycle ÷ 2 (≈ 2,2 séances ÷ 2), pas le prix d'UNE séance
+            const PART = Math.round(Math.round(400 * N / 2) / 2);
+            v('  → ✓ sur la 1ʳᵉ quinzaine : payée à SA PART (enveloppe ' + Math.round(400 * N / 2) + ' ÷ 2 = ' + PART + ') ; Psy engagé ' + (400 + PART), ok2.q[0].saisi === PART && ok2.q[1].saisi === 400 && ok2.engage === 400 + PART, JSON.stringify(ok2));
             //  une saisie déjà faite semaine par semaine dans la tranche (200 + 150) : la case montre 350 ; retaper 300 la remplace (une seule semaine garde le montant)
             await page.evaluate(async ({ ST, w }) => { const s = eval(ST); s.saisirSemaineConso(w[0], 'alimentation::2', 200); s.saisirSemaineConso(w[1], 'alimentation::2', 150); await new Promise(r => setTimeout(r, 60)); }, { ST, w: q2.semaines });
             const somme = await st();
             await page.fill(champ, '300'); await page.press(champ, 'Enter'); await page.waitForTimeout(150);
             const rempl = await st();
-            v('  → deux semaines déjà tapées dans la 2ᵉ quinzaine (200 + 150) : la case dit 350 ; retaper 300 → 300, pas 650', somme.q[1].saisi === 350 && rempl.q[1].saisi === 300 && rempl.engage === 700, JSON.stringify([somme.q[1], rempl]));
+            v('  → deux semaines déjà tapées dans la 2ᵉ quinzaine (200 + 150) : la case dit 350 ; retaper 300 → 300, pas 650', somme.q[1].saisi === 350 && rempl.q[1].saisi === 300 && rempl.engage === 300 + PART, JSON.stringify([somme.q[1], rempl]));
             await page.click('[data-pulse-categorie][data-cat="alimentation"] [data-pulse-poste-cycle][data-poste="alimentation::2"] [data-pulse-quinzaine-vider][data-rang="2"]'); await page.waitForTimeout(150);
             const vide = await st();
-            v('  → ✕ vide la 2ᵉ quinzaine (toutes ses semaines) : reste la 1ʳᵉ, 400', !vide.q[1].tape && vide.q[1].saisi === 0 && vide.engage === 400, JSON.stringify(vide));
+            v('  → ✕ vide la 2ᵉ quinzaine (toutes ses semaines) : reste la 1ʳᵉ, sa part', !vide.q[1].tape && vide.q[1].saisi === 0 && vide.engage === PART, JSON.stringify(vide));
             await page.evaluate(async (ST) => { eval(ST).resetConsoT0(); await new Promise(r => setTimeout(r, 120)); }, ST);
         }
         const ligne = await page.evaluate(() => { const l = document.querySelector('[data-pulse-ligne][data-cat="alimentation"]');
