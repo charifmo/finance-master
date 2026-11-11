@@ -171,6 +171,13 @@ try {
           JSON.stringify(Object.keys(vu)) === '["L7m","khdra"]' && vu.L7m === 'Prévu:150DH' && vu.khdra === 'Prévu:100DH'
           && (vc.Psy || '').startsWith('400DH/15j(≈' + String(Math.round(N / 2 * 10) / 10).replace('.', ',') + '×)·0/' + nf(Math.round(400 * N / 2)))
           && (vc.Hri || '').startsWith('1000DH/cycle·0/1000'), JSON.stringify([postes, cyc]));
+        //  v37.127 — « ya pas l7m ni djaj ni aucune sous-catégorie ! » : les postes « / 15 j » et « / cycle » sont SOUS leur catégorie, ouverts,
+        //  avec leur case de saisie (et plus seulement dans un bloc replié tout en bas)
+        const sous = await page.evaluate(() => { const c = document.querySelector('[data-pulse-categorie][data-cat="alimentation"]'), b = c && c.querySelector('[data-pulse-cycle]');
+            return b && { ouvert: b.open, noms: [...b.querySelectorAll('[data-pulse-poste-cycle]')].map(e => e.querySelector('.truncate')?.firstChild?.textContent.trim()),
+                          saisies: b.querySelectorAll('[data-pulse-poste-cycle] input[data-pulse-poste-saisie]').length, hors: !!document.querySelector('[data-pulse-categories] ~ [data-pulse-cycle]') }; });
+        v('  → v37.127 : sous « Alimentation », le bloc « Sur tout le cycle » est OUVERT d\'office : Psy et Hri chacun avec sa case de saisie ; plus de bloc global en bas',
+          !!sous && sous.ouvert === true && JSON.stringify(sous.noms.slice().sort()) === '["Hri","Psy"]' && sous.saisies === 2 && !sous.hors, JSON.stringify(sous));
         const ligne = await page.evaluate(() => { const l = document.querySelector('[data-pulse-ligne][data-cat="alimentation"]');
             return [l?.querySelector('[data-pulse-reste]')?.textContent.replace(/\s+/g, ' ').trim(), l?.querySelector('[data-pulse-prevu-cycle]')?.textContent.replace(/\s+/g, ' ').trim()]; });
         v(`  → la ligne le dit : « Prévu : 250 DH » puis « + ${nf(PC)} DH sur le cycle (Hri · Psy) ↓ »`,

@@ -33,8 +33,8 @@ const section = async (nom, f) => { try { await f(); } catch (e) { v(`${nom} : e
 console.log('\n  SUR TOUT LE CYCLE · SÉANCES À LA QUINZAINE · FRISE DU CYCLE\n  ' + '─'.repeat(80));
 
 /* ── A. Statique ─────────────────────────────────────────────────────── */
-v('A. un bloc « Sur tout le cycle » mémorisé (uiOuvert / uiFixer), replié par défaut',
-  /<details v-if="p\.postesCycle && p\.postesCycle\.length && sm\.dansCycle" data-pulse-cycle :open="uiOuvert\('meteo\.cycle', false\)" @toggle="uiFixer\('meteo\.cycle', \$event\.target\.open\)"/.test(html));
+v('A. un bloc « Sur tout le cycle » PAR CATÉGORIE, sous ses postes de la semaine, mémorisé (uiOuvert / uiFixer), ouvert d\'office (v37.127 : « ya pas l7m ni djaj »)',
+  /<details v-if="c\.sem\.postes\.length && ouverte\(c\.key\) && sm\.dansCycle && cyclePostes\(p, c\.key\)\.length" data-pulse-cycle :data-cat="c\.key" :open="uiOuvert\('meteo\.cycle\.' \+ c\.key, true\)" @toggle="uiFixer\('meteo\.cycle\.' \+ c\.key, \$event\.target\.open\)"/.test(html));
 v('  → la frise s\'ouvre d\'un bouton (les 3 Météo la branchent) ; fermée, elle n\'est pas affichée (v37.77 : ses dépassements, eux, vont à la Météo)',
   /data-ouvrir-frise @click="\$emit\('frise'\)"/.test(html) && (html.match(/@frise="friseOuverte = true"/g) || []).length === 3
   && /const friseCycle = computed\(\(\) => friseOuverte\.value \? _friseCalc\.value : null\);/.test(html));
@@ -151,6 +151,8 @@ try {
         v('  → sur tout le cycle : Hri 1 000 / cycle (1 000 engagés), Psy 400 / 15 j : enveloppe 886, 800 engagés',
           P.length === 2 && P.some(p => p.nom === 'Hri' && p.unite === 'cycle' && p.enveloppe === 1000 && p.engage === 1000)
           && P.some(p => p.nom === 'Psy' && p.unite === 'quinzaine' && p.enveloppe === 886 && p.engage === 800), JSON.stringify(P));
+        //  le bloc vit sous la catégorie : on déplie « Alimentation » (comme l'utilisateur), il s'ouvre d'office
+        await page.click('[data-pulse-ouvrir][data-cat="alimentation"]'); await page.waitForTimeout(250);
         const dom = await page.evaluate(() => {
             const b = document.querySelector('[data-pulse-cycle]');
             return b && { ouvert: b.open, resume: b.querySelector('[data-pulse-cycle-resume]')?.textContent.replace(/\s+/g, ' ').trim(),
@@ -158,8 +160,8 @@ try {
                           alertes: [...b.querySelectorAll('[data-pulse-cycle-alerte]')].map(e => e.textContent.replace(/\s+/g, ' ').trim()),
                           note: b.querySelector('[data-pulse-cycle-quinzaine]')?.textContent.replace(/\s+/g, ' ').trim() };
         });
-        v('  → replié par défaut ; « 📅 Sur tout le cycle · 2 postes … · 1 800 / 1 886 DH »',
-          !!dom && dom.ouvert === false && /^📅 Sur tout le cycle/.test(dom.resume) && sansEsp(dom.resume).includes('1800/1886DH') && dom.lignes.length === 2, JSON.stringify(dom));
+        v('  → ouvert d\'office sous « Alimentation » ; « 📅 Sur tout le cycle · 2 postes … · 1 800 / 1 886 DH »',
+          !!dom && dom.ouvert === true && /^📅 Sur tout le cycle/.test(dom.resume) && sansEsp(dom.resume).includes('1800/1886DH') && dom.lignes.length === 2, JSON.stringify(dom));
         v('  → la ligne du Psy porte l\'alerte « ⚠️ Prochaine séance ≈ 23 nov. : elle dépasserait l\'enveloppe de 314 DH »',
           !!dom && dom.alertes.length === 1 && dom.alertes[0] === '⚠️ Prochaine séance ≈ 23 nov. : elle dépasserait l’enveloppe de 314 DH', JSON.stringify(dom && dom.alertes));
     });

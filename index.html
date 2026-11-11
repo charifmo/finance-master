@@ -8513,6 +8513,8 @@
                 postesVisibles(c) { return this.rxTousPostes ? c.prevu : c.prevu.slice(0, 8); },
                 //  v37.30 : le rythme d'une ligne, en court
                 uniteCourte(u) { return u === 'quinzaine' ? '/ 15 j' : (u === 'cycle' ? '/ cycle' : '/ sem'); },
+                //  v37.127 : les postes « / 15 j » et « / cycle » d'une catégorie (affichés sous elle)
+                cyclePostes(p, cat) { return (p && Array.isArray(p.postesCycle) ? p.postesCycle : []).filter(d => d.cat === cat); },
                 //  v37.51 : le 🔒 d'une case — / sem : la semaine affichée ; / 15 j et / cycle : le cycle
                 titreCloture(nom, unite, clos) {
                     if (clos) return 'Rouvrir ' + nom + ' : sa case attend de nouveau des dépenses';
@@ -8926,35 +8928,35 @@
                             <span aria-hidden="true" class="shrink-0 w-6"></span>
                         </div>
                     </div>
+                        <!-- 📅 v37.66 : les postes du CYCLE (/ 15 j, / cycle) — une enveloppe pour tout le cycle, tapée quand ça arrive ; v37.127 : SOUS LEUR CATÉGORIE, ouverts d'office -->
+                        <details v-if="c.sem.postes.length && ouverte(c.key) && sm.dansCycle && cyclePostes(p, c.key).length" data-pulse-cycle :data-cat="c.key" :open="uiOuvert('meteo.cycle.' + c.key, true)" @toggle="uiFixer('meteo.cycle.' + c.key, $event.target.open)" class="mt-1.5 ml-3 md:ml-5 rounded-xl bg-black/15 ring-1 ring-white/15 p-2 md:p-2.5">
+                            <summary data-pulse-cycle-resume class="cursor-pointer px-1.5 text-[10px] md:text-[11px] font-black uppercase tracking-[0.14em] text-white/85">📅 Sur tout le cycle <span class="normal-case tracking-normal font-semibold text-white/60">· {{ cyclePostes(p, c.key).length }} poste{{ cyclePostes(p, c.key).length > 1 ? 's' : '' }} à la quinzaine ou au cycle · {{ chiffre(cyclePostes(p, c.key).reduce((s, d) => s + d.cycleEngage, 0)) }} / {{ chiffre(cyclePostes(p, c.key).reduce((s, d) => s + d.cyclePrevu, 0)) }} DH</span></summary>
+                            <p class="px-1.5 mt-1 text-[10px] font-semibold text-white/60 leading-snug">{{ p.cycleDu }} → {{ p.cycleAu }} : une enveloppe pour tout le cycle — tapez le montant la semaine où c'est payé.<template v-if="cyclePostes(p, c.key).some(d => d.unite === 'quinzaine')"> <span class="text-amber-200" data-pulse-cycle-quinzaine>« / 15 j » : ≈ {{ cyclePostes(p, c.key).find(d => d.unite === 'quinzaine').fois }} fois sur ce cycle — une fois de plus dépasserait l'enveloppe ; après le {{ p.cycleAu }}, elle compte au cycle suivant.</span></template></p>
+                            <div v-for="d in cyclePostes(p, c.key)" :key="'pcy_' + d.cle" data-pulse-poste data-pulse-poste-cycle :data-poste="d.cle" :data-cat="d.cat" class="mt-1 flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
+                                <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }}</span>
+                                    <span class="block truncate text-[10px] font-semibold text-white/55 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">{{ chiffre(d.prevu) }} DH {{ d.unite === 'quinzaine' ? '/ 15 j (≈ ' + d.fois + '×)' : '/ cycle' }} · <span class="text-white/80" data-pulse-cycle-engage>{{ chiffre(d.cycleEngage) }} / {{ chiffre(d.cyclePrevu) }}</span><template v-if="d.exces > 0"> · <span class="font-black text-rose-200" data-pulse-poste-depasse>dépassement +{{ chiffre(d.exces) }}</span></template><template v-else-if="d.clos"> · <span class="font-black text-white/85" data-pulse-poste-clos>🔒 {{ d.eco > 0 ? chiffre(d.eco) + ' libérés' : 'clôturé' }}</span></template><template v-else> · reste {{ chiffre(d.resteCycle) }}</template></span>
+                                    <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.depasse ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pct + '%' }"></span></span>
+                                    <span v-if="d.alerte && d.alerte.niveau !== 'info'" data-pulse-cycle-alerte :data-niveau="d.alerte.niveau"
+                                          :class="['block mt-0.5 text-[10px] font-bold leading-snug', d.alerte.niveau === 'depasse' ? 'text-rose-200' : (d.alerte.niveau === 'info' ? 'text-amber-200' : 'text-white/60')]">{{ d.alerte.texte }}</span>
+                                </span>
+                                <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner"
+                                       :title="'Payé cette semaine pour ' + d.nom + ' (déjà ' + chiffre(d.cycleEngage) + ' DH ce cycle)'">
+                                    <span class="sr-only">Payé cette semaine pour {{ d.nom }}</span>
+                                    <input :key="'ic_' + d.cle + sm.debut" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="d.cat"
+                                           :value="d.declare ? d.saisi : ''" placeholder="0"
+                                           @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="entrerCase($event, d.cle, 0); fermer()" @blur="sortirCase(d.cle)" @keydown.enter.prevent="$event.target.blur()"
+                                           class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
+                                    <span class="text-[10px] font-bold text-white/45">DH</span>
+                                </label>
+                                <button type="button" data-pulse-cloturer :data-poste="d.cle" :aria-pressed="d.clos ? 'true' : 'false'" :title="titreCloture(d.nom, d.unite, d.clos)"
+                                        @click="$emit('cloturer', sm.debut, d.cle, d.unite); fermer()"
+                                        :class="['shrink-0 w-6 h-6 grid place-items-center rounded-md text-[10px] transition', d.clos ? 'bg-white/25 ring-1 ring-white/60' : 'opacity-35 hover:opacity-100 hover:bg-white/10']">🔒</button>
+                            </div>
+                        </details>
                     </div>
                 </div>
-                <!-- 📅 v37.66 : les postes du CYCLE (/ 15 j, / cycle) — une enveloppe pour tout le cycle, tapée quand ça arrive -->
-                <details v-if="p.postesCycle && p.postesCycle.length && sm.dansCycle" data-pulse-cycle :open="uiOuvert('meteo.cycle', false)" @toggle="uiFixer('meteo.cycle', $event.target.open)" class="mt-3 rounded-xl bg-black/15 ring-1 ring-white/15 p-2 md:p-2.5">
-                    <summary data-pulse-cycle-resume class="cursor-pointer px-1.5 text-[10px] md:text-[11px] font-black uppercase tracking-[0.14em] text-white/85">📅 Sur tout le cycle <span class="normal-case tracking-normal font-semibold text-white/60">· {{ p.postesCycle.length }} poste{{ p.postesCycle.length > 1 ? 's' : '' }} à la quinzaine ou au cycle · {{ chiffre(p.postesCycle.reduce((s, d) => s + d.cycleEngage, 0)) }} / {{ chiffre(p.postesCycle.reduce((s, d) => s + d.cyclePrevu, 0)) }} DH</span></summary>
-                    <p class="px-1.5 mt-1 text-[10px] font-semibold text-white/60 leading-snug">{{ p.cycleDu }} → {{ p.cycleAu }} : une enveloppe pour tout le cycle — tapez le montant la semaine où c'est payé.<template v-if="p.postesCycle.some(d => d.unite === 'quinzaine')"> <span class="text-amber-200" data-pulse-cycle-quinzaine>« / 15 j » : ≈ {{ p.postesCycle.find(d => d.unite === 'quinzaine').fois }} fois sur ce cycle — une fois de plus dépasserait l'enveloppe ; après le {{ p.cycleAu }}, elle compte au cycle suivant.</span></template></p>
-                    <div v-for="d in p.postesCycle" :key="'pcy_' + d.cle" data-pulse-poste data-pulse-poste-cycle :data-poste="d.cle" :data-cat="d.cat" class="mt-1 flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06] transition-colors">
-                        <span aria-hidden="true" class="shrink-0 w-5 text-center text-base leading-none">{{ d.emoji }}</span>
-                        <span class="min-w-0 flex-1">
-                            <span class="block truncate text-[12px] md:text-[13px] font-bold text-white leading-tight">{{ d.nom }} <span class="font-semibold text-white/45">· {{ d.catLabel }}</span></span>
-                            <span class="block truncate text-[10px] font-semibold text-white/55 tabular-nums leading-tight" data-pulse-prevu :data-unite="d.unite">{{ chiffre(d.prevu) }} DH {{ d.unite === 'quinzaine' ? '/ 15 j (≈ ' + d.fois + '×)' : '/ cycle' }} · <span class="text-white/80" data-pulse-cycle-engage>{{ chiffre(d.cycleEngage) }} / {{ chiffre(d.cyclePrevu) }}</span><template v-if="d.exces > 0"> · <span class="font-black text-rose-200" data-pulse-poste-depasse>dépassement +{{ chiffre(d.exces) }}</span></template><template v-else-if="d.clos"> · <span class="font-black text-white/85" data-pulse-poste-clos>🔒 {{ d.eco > 0 ? chiffre(d.eco) + ' libérés' : 'clôturé' }}</span></template><template v-else> · reste {{ chiffre(d.resteCycle) }}</template></span>
-                            <span class="block h-[3px] mt-1 rounded-full bg-black/25 overflow-hidden"><span :class="['block h-full rounded-full transition-all duration-300', d.depasse ? 'bg-rose-300' : 'bg-white/75']" :style="{ width: d.pct + '%' }"></span></span>
-                            <span v-if="d.alerte && d.alerte.niveau !== 'info'" data-pulse-cycle-alerte :data-niveau="d.alerte.niveau"
-                                  :class="['block mt-0.5 text-[10px] font-bold leading-snug', d.alerte.niveau === 'depasse' ? 'text-rose-200' : (d.alerte.niveau === 'info' ? 'text-amber-200' : 'text-white/60')]">{{ d.alerte.texte }}</span>
-                        </span>
-                        <label class="shrink-0 flex items-center gap-1 rounded-lg ring-1 px-2 py-1 bg-black/30 ring-white/35 hover:ring-white/70 focus-within:ring-2 focus-within:ring-white focus-within:bg-black/45 cursor-text transition-colors shadow-inner"
-                               :title="'Payé cette semaine pour ' + d.nom + ' (déjà ' + chiffre(d.cycleEngage) + ' DH ce cycle)'">
-                            <span class="sr-only">Payé cette semaine pour {{ d.nom }}</span>
-                            <input :key="'ic_' + d.cle + sm.debut" type="text" inputmode="decimal" autocomplete="off" data-saisie data-pulse-poste-saisie :data-poste="d.cle" :data-cat="d.cat"
-                                   :value="d.declare ? d.saisi : ''" placeholder="0"
-                                   @input="saisirPoste(d, $event, false)" @change="saisirPoste(d, $event, true)" @focus="entrerCase($event, d.cle, 0); fermer()" @blur="sortirCase(d.cle)" @keydown.enter.prevent="$event.target.blur()"
-                                   class="w-[3.8rem] md:w-[4.8rem] bg-transparent text-right text-[13px] font-black text-white tabular-nums placeholder:text-white/35 placeholder:font-semibold outline-none">
-                            <span class="text-[10px] font-bold text-white/45">DH</span>
-                        </label>
-                        <button type="button" data-pulse-cloturer :data-poste="d.cle" :aria-pressed="d.clos ? 'true' : 'false'" :title="titreCloture(d.nom, d.unite, d.clos)"
-                                @click="$emit('cloturer', sm.debut, d.cle, d.unite); fermer()"
-                                :class="['shrink-0 w-6 h-6 grid place-items-center rounded-md text-[10px] transition', d.clos ? 'bg-white/25 ring-1 ring-white/60' : 'opacity-35 hover:opacity-100 hover:bg-white/10']">🔒</button>
-                    </div>
-                </details>
                 <button v-if="p.horsBudget > 0" type="button" data-rx-ancre data-pulse-hors
                         @pointerenter="survolEntree($event, 'hors', 'hors')" @pointerleave="survolSortie($event)" @click="basculer($event, 'hors', 'hors')"
                         class="hidden md:inline-block mt-3 text-[10px] font-semibold text-white/50 hover:text-white/80 underline decoration-dotted underline-offset-2 text-left">+ {{ formatMad(p.horsBudget) }} saisis hors budget conso (factures…) : non comptés ici</button>
@@ -9155,8 +9157,11 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.126 La frise au téléphone";
+                    const CURRENT_VERSION = "37.127 Les sous-catégories à leur place";
                     const CHANGELOG = [
+        { version: "37.127 Les sous-catégories à leur place", date: "2026-11-11", changes: [
+            "🥩 « YA PAS L7M NI DJAJ NI AUCUNE SOUS-CATÉGORIE ! » (Pilotage mensuel, Alimentation dépliée) — les postes « / 15 j » et « / cycle » (lhrri, kfta+l7m+djaj, samak, Nuggets, djaj, Œufs…) n'étaient que dans un bloc « Sur tout le cycle » replié, tout en bas de la liste des catégories : on ne le voyait pas. Ils sont maintenant SOUS leur catégorie, juste sous les postes de la semaine, ouverts d'office, chacun avec son prévu, son avancement et sa case de saisie. Le bloc du bas disparaît ; replier se mémorise par catégorie.",
+        ] },
         { version: "37.126 La frise au téléphone", date: "2026-11-09", changes: [
             "📱 LA FRISE ADAPTÉE AU TÉLÉPHONE — chaque ligne sur deux étages : le nom ENTIER au-dessus (plus « Super marc… », « Medecin (re… »), les cases sur toute la largeur en dessous, un peu plus hautes et lisibles ; le nom de la catégorie et son total sur une ligne, sa jauge en dessous. Sur ordinateur, la présentation ne change pas.",
             "🟦 LA SEMAINE EN COURS SURLIGNÉE SUR TOUTE SA COLONNE — un fond bleuté translucide, de haut en bas de chaque catégorie (lignes « / sem » comme lignes « sur le cycle »), sur téléphone comme sur ordinateur ; sa case dans l'axe des semaines est encadrée.",
