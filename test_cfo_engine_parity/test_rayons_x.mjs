@@ -346,6 +346,30 @@ try {
     const p4 = await panneau(page);
     v('« hors budget conso » s\'audite aussi', !!p4 && p4.type === 'hors' && p4.lignes.length === 1, JSON.stringify(p4));
     await page.mouse.move(5, 5); await page.waitForTimeout(300);
+    //  v37.129 — « j'ai pas compris c'est quoi hors budget conso ! et pas de filtre (non catégorisé) pour les réaffecter » :
+    //  chaque opération sous SA catégorie, les non catégorisées en tête ; une ligne touchée ouvre le Journal sur elle, catégorie prête
+    const idNC = await page.evaluate(async (ST) => {
+        const st = eval(ST), D = st.donneesAnnuelles[st.moisBudgetaire.an], auj = new Date(), iso = auj.getFullYear() + '-' + String(auj.getMonth() + 1).padStart(2, '0') + '-' + String(auj.getDate()).padStart(2, '0');
+        D.transactionsReelles.push({ id: 777001, date: iso, datetime: iso + 'T10:00', mois: auj.getMonth() + 1, libelle: 'Mcdonald\'s', montant: 103, categorieId: 'cat_ancienne_y', compteId: 1, source: 'manuel' },
+                                   { id: 777002, date: iso, datetime: iso + 'T11:00', mois: auj.getMonth() + 1, libelle: 'ghda', montant: 70, categorieId: 'cat_supprimee_x', compteId: 1, source: 'manuel' });
+        st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 200));
+        return 777001;
+    }, ST);
+    const lien = await page.evaluate(() => document.querySelector('[data-pulse-hors]')?.textContent.replace(/\s+/g, ' ').trim());
+    await page.hover('[data-pulse-hors]'); await page.waitForTimeout(250);
+    const grp = await page.evaluate(() => [...document.querySelectorAll('[data-rx-hors-groupe]')].map(g => ({ cle: g.dataset.cle, nc: g.dataset.noncat, titre: g.querySelector('p')?.textContent.replace(/\s+/g, ' ').trim(), n: g.querySelectorAll('[data-rx-hors-op]').length, trier: !!g.querySelector('[data-rx-trier]') })));
+    v('v37.129 : le lien dit « dépensés hors de ces catégories … dont 173 DH non catégorisés » ; le panneau : « ⚠️ Non catégorisé · 2 » EN TÊTE (catégories disparues), puis les autres sous leur nom',
+      /dépensés hors de ces catégories/.test(lien) && /dont 173\s?DH non catégorisés/.test(lien) && grp.length >= 2 && grp[0].cle === '__aucune' && grp[0].nc === '1' && grp[0].n === 2 && grp[0].trier
+      && /^⚠️ Non catégorisé · 2 op\./.test(grp[0].titre) && grp.slice(1).every(g => g.nc === '0' && g.titre && !/^Catégorie inconnue/.test(g.titre)), JSON.stringify({ lien, grp }));
+    await page.evaluate((id) => document.querySelector('[data-rx-hors-op][data-tx="' + id + '"]').click(), idNC); await page.waitForTimeout(400);
+    const nav = await page.evaluate((ST) => { const st = eval(ST); return { tab: st.activeTab, edition: st.editionCategorieTx, select: !!document.querySelector('[data-journal-cat-select]') }; }, ST);
+    v('  → toucher « Mcdonald\'s » : le Journal s\'ouvre, le choix de catégorie de CETTE opération est ouvert', nav.tab === 'saisie' && nav.edition === 777001 && nav.select, JSON.stringify(nav));
+    const filtre = await page.evaluate(async (ST) => { const st = eval(ST); st.editionCategorieTx = null; st.trierNonCategorises(); await new Promise(r => setTimeout(r, 150));
+        return { cat: st.journal.cat, ids: st.journalFiltrees.map(x => x.t.id), libelle: document.querySelector('[data-journal-filtre-cat]')?.textContent.replace(/\s+/g, ' ').trim() }; }, ST);
+    v('  → filtre « ⚠️ Non catégorisé » dans le Journal : exactement les deux opérations à réaffecter', filtre.cat === '__aucune' && JSON.stringify(filtre.ids.slice().sort()) === '[777001,777002]' && /Non catégorisé/.test(filtre.libelle), JSON.stringify(filtre));
+    await page.evaluate(async (ST) => { const st = eval(ST), D = st.donneesAnnuelles[st.moisBudgetaire.an];
+        D.transactionsReelles = D.transactionsReelles.filter(t => t.id !== 777001 && t.id !== 777002); st.journal.cat = ''; st.activeTab = 'pilotage'; st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 300)); }, ST);
+    await page.mouse.move(5, 5); await page.waitForTimeout(300);
     // Payer le loyer vide le groupe Assafa
     await page.evaluate(async (ST) => {
         const st = eval(ST);
