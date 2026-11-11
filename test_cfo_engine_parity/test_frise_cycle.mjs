@@ -233,6 +233,32 @@ try {
         v('  → Hri à 1 200 : « 🔴 Hri (Courses) : 1200 DH sur une enveloppe de 1000 — dépassement de 200 DH »',
           A.includes('🔴 Hri (Courses) : 1200 DH sur une enveloppe de 1000 — dépassement de 200 DH'), JSON.stringify(A));
         await saisir('S2026-10-27', HRI, 1000);
+        //  v37.128 — AUDIT Réalisé ↔ frise : ce qui est coché / ajouté dans le Réalisé (sans semaine) ne disparaît plus de la frise
+        const au = await page.evaluate(async (ST) => {
+            const st = eval(ST), D = st.donneesAnnuelles[2026], cv = D.chargesVariables.alimentation, det = (id) => cv.details.find(x => x.id === id);
+            const tick = async () => { st.calculationTick++; await Vue.nextTick(); await new Promise(r => setTimeout(r, 30)); return JSON.parse(JSON.stringify(st.friseCycle)); };
+            st.ajouterAuRegle(det(1), 2400, '+2000'); st.ajouterAuRegle(det(3), 1000, '+1200');
+            D.chargesVariables.factures.valeur = 300;
+            D.chargesVariables.factures.details = [{ id: 7, nom: 'Élec', montant: 300, periode: 'cycle', categorieId: 'cat_cv_factures__delec' }];
+            st.calculationTick++; await Vue.nextTick();
+            const F = await tick();
+            st.toggleItemPaid(D.chargesVariables.factures.details[0], 300);
+            const G = await tick();
+            const cat = (X, k) => X.categories.find(c => c.key === k), ligne = (X, k, n) => (cat(X, k)?.lignes || []).find(l => l.nom === n);
+            const dom = [...document.querySelectorAll('[data-frise-ligne][data-poste="alimentation::1"] ~ [data-frise-ecart-realise], [data-frise-ecart-realise]')].map(e => e.textContent.replace(/\s+/g, ' ').trim());
+            const r = { marjane: ligne(F, 'alimentation', 'Marjane'), hri: ligne(F, 'alimentation', 'Hri'), elecAvant: ligne(F, 'factures', 'Élec')?.engage, elecApres: ligne(G, 'factures', 'Élec')?.engage,
+                        realiseElec: Math.round(st.getPaidAmount(D.chargesVariables.factures.details[0], 300)), alertes: G.alertes, dom };
+            delete det(1).trackerRealise; delete det(3).trackerRealise;
+            D.chargesVariables.factures.valeur = 0; D.chargesVariables.factures.details = [];
+            st.calculationTick++; await Vue.nextTick();
+            return r;
+        }, ST);
+        v('  → v37.128 audit : Marjane « + 2 000 » dans le Réalisé, 1 600 tapés dans les semaines : la frise le signale (🟣 400 DH cochés sans semaine)',
+          au.marjane && au.marjane.realise === 2000 && au.marjane.ecartRealise === 400 && au.alertes.some(a => /^🟣 Marjane : le Réalisé dit 2000 DH réglés, les semaines 1600 DH — 400 DH cochés dans le Réalisé sans semaine$/.test(a))
+          && au.dom.some(t => /Réalisé : 2000 DH réglés — dont 400 DH cochés sans semaine/.test(t)), JSON.stringify([au.marjane, au.alertes, au.dom]));
+        v('  → Hri « / cycle » à 1 200 dans le Réalisé (1 000 tapés) : la frise compte 1 200 et voit le dépassement',
+          au.hri && au.hri.engage === 1200 && au.hri.depasse && au.alertes.some(a => /Hri \(Courses\) : 1200 DH sur une enveloppe de 1000/.test(a)), JSON.stringify(au.hri));
+        v('  → facture « Élec » cochée dans le Réalisé (aucune opération) : 0 → 300 dans la frise, comme le Réalisé', au.elecAvant === 0 && au.elecApres === 300 && au.realiseElec === 300, JSON.stringify([au.elecAvant, au.elecApres, au.realiseElec]));
     });
 
     /* ── E. Fermer ────────────────────────────────────────────────────── */

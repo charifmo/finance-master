@@ -175,9 +175,40 @@ try {
         //  avec leur case de saisie (et plus seulement dans un bloc replié tout en bas)
         const sous = await page.evaluate(() => { const c = document.querySelector('[data-pulse-categorie][data-cat="alimentation"]'), b = c && c.querySelector('[data-pulse-cycle]');
             return b && { ouvert: b.open, noms: [...b.querySelectorAll('[data-pulse-poste-cycle]')].map(e => e.querySelector('.truncate')?.firstChild?.textContent.trim()),
-                          saisies: b.querySelectorAll('[data-pulse-poste-cycle] input[data-pulse-poste-saisie]').length, hors: !!document.querySelector('[data-pulse-categories] ~ [data-pulse-cycle]') }; });
-        v('  → v37.127 : sous « Alimentation », le bloc « Sur tout le cycle » est OUVERT d\'office : Psy et Hri chacun avec sa case de saisie ; plus de bloc global en bas',
-          !!sous && sous.ouvert === true && JSON.stringify(sous.noms.slice().sort()) === '["Hri","Psy"]' && sous.saisies === 2 && !sous.hors, JSON.stringify(sous));
+                          saisies: Object.fromEntries([...b.querySelectorAll('[data-pulse-poste-cycle]')].map(e => [e.querySelector('.truncate')?.firstChild?.textContent.trim(), e.querySelectorAll('input[data-pulse-quinzaine-saisie]').length])),
+                          labels: [...b.querySelectorAll('[data-pulse-poste-cycle][data-poste="alimentation::2"] [data-pulse-quinzaine]')].map(e => e.querySelector('label span')?.textContent.trim()),
+                          hors: !!document.querySelector('[data-pulse-categories] ~ [data-pulse-cycle]') }; });
+        const NQ = Math.max(1, Math.round(J / 14));
+        v('  → v37.127/128 : sous « Alimentation », « Sur tout le cycle » OUVERT d\'office ; Psy : une case PAR QUINZAINE (' + NQ + '), Hri : une case « Tout le cycle »',
+          !!sous && sous.ouvert === true && JSON.stringify(sous.noms.slice().sort()) === '["Hri","Psy"]' && sous.saisies.Psy === NQ && sous.saisies.Hri === 1
+          && /^(● )?1ʳᵉ quinzaine$/.test(sous.labels[0] || '') && /^(● )?2ᵉ quinzaine$/.test(sous.labels[1] || '') && sous.labels.filter(x => x.startsWith('●')).length === 1 && !sous.hors, JSON.stringify(sous));
+        //  v37.128 — « on ne peut les rentrer qu'en total du cycle » : la 2ᵉ quinzaine se remplit depuis la semaine affichée (la 1ʳᵉ),
+        //  le montant va dans la PREMIÈRE semaine de SA tranche ; ✓ remplit le prévu ; ✕ vide ; le total du cycle suit
+        {
+            const st = () => page.evaluate((ST) => { const s = eval(ST), q = s.liberteCycle.postesCycle.find(p => p.cle === 'alimentation::2');
+                return { q: q.quinzaines.map(x => ({ du: x.du, au: x.au, semaines: x.semaines, saisi: x.saisi, tape: x.tape })), engage: q.cycleEngage }; }, ST);
+            const avant = await st();
+            const q2 = avant.q[1];
+            const champ = '[data-pulse-categorie][data-cat="alimentation"] [data-pulse-poste-cycle][data-poste="alimentation::2"] input[data-pulse-quinzaine-saisie][data-rang="2"]';
+            await page.click(champ); await page.fill(champ, '400'); await page.press(champ, 'Enter'); await page.waitForTimeout(150);
+            const apres = await st();
+            const ecrit = await page.evaluate(({ ST, semaines }) => semaines.map(iso => { const out = {}; Object.values(eval(ST).donneesAnnuelles || {}).forEach(a => { const r = a && a.consoRealiseeT0 && a.consoRealiseeT0['S' + iso]; if (r) Object.assign(out, r); }); return out['alimentation::2'] ?? null; }), { ST, semaines: q2.semaines });
+            v('  → la 2ᵉ quinzaine (' + q2.du + ' → ' + q2.au + ') tapée depuis la semaine affichée : 400 dans SA première semaine, Psy engagé 400',
+              apres.q[1].saisi === 400 && apres.q[0].saisi === 0 && ecrit[0] === 400 && ecrit.slice(1).every(x => x === null) && apres.engage === 400, JSON.stringify([apres, ecrit]));
+            await page.click('[data-pulse-categorie][data-cat="alimentation"] [data-pulse-poste-cycle][data-poste="alimentation::2"] [data-pulse-quinzaine-payee][data-rang="1"]'); await page.waitForTimeout(150);
+            const ok2 = await st();
+            v('  → ✓ sur la 1ʳᵉ quinzaine : payée au prévu (400) ; Psy engagé 800 sur le cycle', ok2.q[0].saisi === 400 && ok2.q[1].saisi === 400 && ok2.engage === 800, JSON.stringify(ok2));
+            //  une saisie déjà faite semaine par semaine dans la tranche (200 + 150) : la case montre 350 ; retaper 300 la remplace (une seule semaine garde le montant)
+            await page.evaluate(async ({ ST, w }) => { const s = eval(ST); s.saisirSemaineConso(w[0], 'alimentation::2', 200); s.saisirSemaineConso(w[1], 'alimentation::2', 150); await new Promise(r => setTimeout(r, 60)); }, { ST, w: q2.semaines });
+            const somme = await st();
+            await page.fill(champ, '300'); await page.press(champ, 'Enter'); await page.waitForTimeout(150);
+            const rempl = await st();
+            v('  → deux semaines déjà tapées dans la 2ᵉ quinzaine (200 + 150) : la case dit 350 ; retaper 300 → 300, pas 650', somme.q[1].saisi === 350 && rempl.q[1].saisi === 300 && rempl.engage === 700, JSON.stringify([somme.q[1], rempl]));
+            await page.click('[data-pulse-categorie][data-cat="alimentation"] [data-pulse-poste-cycle][data-poste="alimentation::2"] [data-pulse-quinzaine-vider][data-rang="2"]'); await page.waitForTimeout(150);
+            const vide = await st();
+            v('  → ✕ vide la 2ᵉ quinzaine (toutes ses semaines) : reste la 1ʳᵉ, 400', !vide.q[1].tape && vide.q[1].saisi === 0 && vide.engage === 400, JSON.stringify(vide));
+            await page.evaluate(async (ST) => { eval(ST).resetConsoT0(); await new Promise(r => setTimeout(r, 120)); }, ST);
+        }
         const ligne = await page.evaluate(() => { const l = document.querySelector('[data-pulse-ligne][data-cat="alimentation"]');
             return [l?.querySelector('[data-pulse-reste]')?.textContent.replace(/\s+/g, ' ').trim(), l?.querySelector('[data-pulse-prevu-cycle]')?.textContent.replace(/\s+/g, ' ').trim()]; });
         v(`  → la ligne le dit : « Prévu : 250 DH » puis « + ${nf(PC)} DH sur le cycle (Hri · Psy) ↓ »`,
