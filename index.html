@@ -7856,6 +7856,24 @@
                                           :class="['absolute top-0.5 bottom-0.5 w-1.5 -ml-[3px] rounded-full ring-2 opacity-60', s.etat === 'paye' ? 'bg-violet-600 ring-white' : (s.etat === 'suivant' ? 'bg-white ring-amber-500' : 'bg-white ring-violet-500')]" :style="{ left: Math.min(99, s.pos) + '%' }"></span>
                                     <span class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"><span data-frise-chiffres class="pointer-events-auto px-1.5 rounded bg-white/75 text-[10px] font-bold text-slate-700 tabular-nums">{{ l.engage }} / {{ l.enveloppe }} DH sur le cycle{{ l.fois ? ' · ≈ ' + l.fois + '×' : '' }}</span></span>
                                 </div>
+                                <div v-if="l.quinzaines && l.quinzaines.length" data-frise-quinzaines :data-poste="l.cle" class="mt-0.5 flex rounded-md overflow-hidden ring-1 ring-slate-200">
+                                    <span v-for="q in l.quinzaines" :key="'fq' + q.rang" data-frise-quinzaine :data-rang="q.rang" :style="{ width: q.part + '%' }"
+                                          :class="['relative h-7 md:h-6 flex items-center justify-center gap-1 border-r border-white text-[11px] md:text-[10px] font-bold tabular-nums leading-none',
+                                                   (q.saisi + q.tickets) > q.prevu + 0.5 ? 'bg-rose-200 text-rose-900' : ((q.saisi + q.tickets) > 0 ? 'bg-emerald-200 text-emerald-900' : (q.encours ? 'bg-sky-100 text-sky-900' : (q.passe ? 'bg-amber-50 text-amber-800' : 'bg-slate-50 text-slate-500')))]"
+                                          :title="q.label + ' (' + q.dates + ') : ' + (q.saisi + q.tickets) + ' / ' + q.prevu + ' DH' + (q.tickets ? ' (dont ' + q.tickets + ' DH d\u2019opérations du journal)' : '') + ' — touchez pour saisir'">
+                                        <input v-if="friseQEdit === l.cle + '#' + q.rang" data-frise-quinzaine-saisie :data-rang="q.rang" type="text" inputmode="decimal" autocomplete="off"
+                                               :value="q.tape ? q.saisi : ''" :placeholder="String(q.prevu)" @vue:mounted="({ el }) => { el.focus(); el.select(); }"
+                                               @change="saisirQuinzaineFrise(l, q, $event.target.value)" @blur="friseQEdit = null" @keydown.enter.prevent="$event.target.blur()" @keydown.esc="friseQEdit = null"
+                                               class="w-full h-full bg-white text-center text-[12px] font-black text-slate-900 outline-none ring-2 ring-inset ring-blue-400">
+                                        <template v-else>
+                                            <button type="button" data-frise-quinzaine-ouvrir :data-rang="q.rang" @click="friseQEdit = l.cle + '#' + q.rang" class="min-w-0 flex-1 h-full truncate px-1">
+                                                <span class="hidden md:inline">{{ q.rang === 1 && l.quinzaines.length === 1 ? '' : (q.rang + (q.rang === 1 ? 'ʳᵉ' : 'ᵉ') + ' · ') }}</span>{{ (q.saisi + q.tickets) > 0 || q.tape ? q.saisi + q.tickets : '–' }} / {{ q.prevu }}
+                                            </button>
+                                            <button v-if="!(q.saisi + q.tickets > 0) && q.prevu > 0" type="button" data-frise-quinzaine-payee :data-rang="q.rang" @click="saisirQuinzaineFrise(l, q, String(q.prevu))"
+                                                    :title="'Payé au prévu (' + q.prevu + ' DH) — ' + q.label" class="shrink-0 mr-0.5 px-1 rounded bg-white/70 hover:bg-white text-emerald-700 font-black">✓</button>
+                                        </template>
+                                    </span>
+                                </div>
                                 <p v-if="l.alerte && l.alerte.niveau !== 'info'" data-frise-alerte-ligne :class="['mt-0.5 text-[10px] font-bold leading-snug', l.alerte.niveau === 'depasse' ? 'text-rose-600' : (l.alerte.niveau === 'info' ? 'text-amber-700' : 'text-slate-500')]">{{ l.alerte.texte }}</p>
                             </div>
                             <p v-if="l.ecartRealise" data-frise-ecart-realise class="md:col-start-2 text-[10px] font-bold text-violet-700 leading-snug">🟣 Réalisé : {{ l.realise }} DH réglés — dont {{ l.ecartRealise }} DH cochés sans semaine (absents des cases)</p>
@@ -8975,7 +8993,7 @@
                                                     <span class="text-[10px] font-bold text-white/45">DH</span>
                                                 </span>
                                             </label>
-                                            <button v-if="!(q.tape && q.saisi > 0) && q.prevu > 0" type="button" data-pulse-quinzaine-payee :data-rang="q.rang" @click="ecrireQuinzaine(d, q, String(q.prevu)); fermer()"
+                                            <button v-if="!(q.tape && q.saisi > 0) && !(q.tickets > 0) && q.prevu > 0" type="button" data-pulse-quinzaine-payee :data-rang="q.rang" @click="ecrireQuinzaine(d, q, String(q.prevu)); fermer()"
                                                     :title="'Payé : ' + chiffre(q.prevu) + ' DH (le prévu) pour ' + q.label"
                                                     class="shrink-0 rounded-md bg-emerald-400/25 hover:bg-emerald-400/45 ring-1 ring-emerald-200/50 px-1.5 py-1 text-[10px] font-black text-emerald-50 leading-none">✓</button>
                                             <button v-else-if="q.tape" type="button" data-pulse-quinzaine-vider :data-rang="q.rang" @click="ecrireQuinzaine(d, q, ''); fermer()" :title="'Vider ' + q.label"
@@ -9201,8 +9219,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.129 Hors budget, expliqué";
+                    const CURRENT_VERSION = "37.130 Les quinzaines dans la frise";
                     const CHANGELOG = [
+        { version: "37.130 Les quinzaines dans la frise", date: "2026-11-11", changes: [
+            "📈 « C'EST RÉSOLU DANS LA MÉTÉO, PAS DANS LA FRISE » — dans la frise du cycle, chaque poste « / 15 j » (et « / cycle ») a maintenant, sous son enveloppe, UNE CASE PAR QUINZAINE, alignée sur les colonnes des semaines (1ʳᵉ quinzaine sous ses semaines, 2ᵉ sous les siennes). Chaque case dit réel / prévu (le réel compte aussi les opérations du journal), verte si payée, rouge si dépassée, bleue en cours. La toucher ouvre la saisie sur place (« +50 » / « -20 » corrigent) ; ✓ = payée au prévu. Même règle que la Météo : les deux écrans montrent et modifient les mêmes chiffres.",
+            "Météo : le ✓ n'est plus proposé sur une quinzaine déjà couverte par une opération du journal.",
+            "PREUVE — test_frise_cycle : Psy, 2 cases (800 / 400 et – / 400), largeurs 20 et 11 jours sur 31 ; ✓ sur la 2ᵉ → 400 le 16 nov. ; la 1ʳᵉ retapée 450 → 450 dans une seule semaine. test_frise_apercu : l'opération « Dr Psy » remplit la 1ʳᵉ quinzaine (400 / 400, pas de ✓).",
+        ] },
         { version: "37.129 Hors budget, expliqué", date: "2026-11-11", changes: [
             "❓ « J'AI PAS COMPRIS C'EST QUOI HORS BUDGET CONSO ! » (Pilotage, Météo, sous les catégories) — le lien dit maintenant ce que c'est : « + 19 461 DH dépensés hors de ces catégories (factures, voyage, exceptionnel…, dont X DH non catégorisés) : pas dans le Reste à dépenser ». Le panneau range chaque opération SOUS SA CATÉGORIE (Factures, Voyage Marrakech, Appart Aga…), avec le nombre d'opérations et le total ; les NON CATÉGORISÉES en tête, en ambre. Toucher une ligne ouvre le Journal sur CETTE opération, le choix de catégorie déjà ouvert : on la réaffecte en un geste.",
             "🏷️ « IL N'Y A PAS DE FILTRE (NON CATÉGORISÉ) POUR LES RÉAFFECTER » — le filtre de catégorie du Journal commence par « 🔎 À trier · ⚠️ Non catégorisé » : les opérations sans catégorie, en « divers », ou dans une catégorie qui n'existe plus. Le panneau de la Météo y mène directement (« 🏷️ Les reclasser dans le Journal »).",
@@ -22452,7 +22475,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             const tickets = Math.round(tx.filter(x => x.date >= du && x.date <= au).reduce((a, x) => a + Math.abs(Number(x.montant) || 0), 0));
                             return { rang: i + 1, label: n === 1 ? 'Tout le cycle' : (i === 0 ? '1ʳᵉ quinzaine' : (i + 1) + 'ᵉ quinzaine'),
                                      du, au, dates: lib(t[0].debut) + ' → ' + lib(t[t.length - 1].fin), semaines, saisi, tape, tickets, cible,
-                                     encours: du <= auj && auj <= au, passe: au < auj, prevu: Math.round(n === 1 ? (p.cyclePrevu || p.prevu || 0) : (p.prevu || 0)) };
+                                     encours: du <= auj && auj <= au, passe: au < auj, part: t.reduce((a, m) => a + m.jours, 0) / J * 100, prevu: Math.round(n === 1 ? (p.cyclePrevu || p.prevu || 0) : (p.prevu || 0)) };
                         });
                     };
                     const liberteCycle = computed(() => {
@@ -22771,7 +22794,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     }
                                 } else p.paiements.forEach(iso => seances.push({ pos: pos(iso), quand: libIso(iso), etat: 'paye' }));
                                 lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, catKey: c.key, catId: p.categorieId || null, du: _ymd(debut), au: _ymd(fin), saisi: morceaux.reduce((s, m) => s + (Object.prototype.hasOwnProperty.call(m.vals, p.cle) ? Number(m.vals[p.cle] || 0) : 0), 0), enveloppe: p.cyclePrevu, engage: p.cycleEngage, depasse: p.exces > 0, fois: p.unite === 'quinzaine' ? p.fois : null,
-                                              pct: p.cyclePrevu > 0 ? Math.min(100, Math.round(p.cycleEngage / p.cyclePrevu * 100)) : (p.cycleEngage > 0 ? 100 : 0), seances, alerte: p.alerte });
+                                              pct: p.cyclePrevu > 0 ? Math.min(100, Math.round(p.cycleEngage / p.cyclePrevu * 100)) : (p.cycleEngage > 0 ? 100 : 0), seances, alerte: p.alerte,
+                                              quinzaines: p.quinzaines || [] });   // v37.130 : les mêmes cases que la Météo
                                 if (p.exces > 0) alertes.push('🔴 ' + p.nom + ' (' + c.label + ') : ' + Math.round(p.cycleEngage) + ' DH sur une enveloppe de ' + Math.round(p.cyclePrevu) + ' — dépassement de ' + Math.round(p.exces) + ' DH');
                                 else if (p.alerte && p.alerte.niveau === 'depasse') alertes.push(p.alerte.texte.replace('⚠️ ', '⚠️ ' + p.nom + ' : '));
                             });
@@ -22986,6 +23010,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return id;
                     };
                     watch(apercuFrise, () => { apercuAjout.ouvert = false; });
+                    //  v37.130 — « C'EST RÉSOLU ICI (MÉTÉO) MAIS PAS DANS LA FRISE » : les cases par quinzaine, dans la frise aussi
+                    const friseQEdit = ref(null);
+                    const saisirQuinzaineFrise = (l, q, valeur) => {
+                        let t = String(valeur == null ? '' : valeur).trim().replace(',', '.').replace('−', '-');
+                        const m = t.match(/^([+\-])\s*(\d+(?:\.\d+)?)$/);
+                        if (m) t = String(Math.max(0, Math.round(q.saisi + (m[1] === '+' ? 1 : -1) * Number(m[2]))));
+                        if (t !== '' && !/^\d+(\.\d+)?$/.test(t)) return;
+                        q.semaines.forEach(iso => { if (iso !== q.cible) saisirSemaineConso(iso, l.cle, ''); });
+                        saisirSemaineConso(q.cible, l.cle, t);
+                    };
                     const apercuVersJournal = () => {
                         const A = apercuFrise.value; if (!A) return;
                         const d = donneesAnnuelles.value[consoT0Annee.value] || {};
@@ -27640,7 +27674,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, friseQEdit, saisirQuinzaineFrise, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire

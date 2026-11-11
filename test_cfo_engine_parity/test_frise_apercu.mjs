@@ -95,6 +95,13 @@ await page.goto(`http://127.0.0.1:${port}/finance/`, { waitUntil: 'load' });
 await page.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__ && a.__vue_app__._instance && a.__vue_app__._instance.setupState.moisBudgetaire; }, null, { timeout: 30000 });
 await page.waitForTimeout(800);
 await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'previsionnel'; await new Promise(r => setTimeout(r, 250)); st.activeTab = 'pilotageTheo'; st.friseOuverte = true; }, ST);
+//  v37.130 : les cases par quinzaine de la frise comptent aussi les opérations du journal (Dr Psy, 400 DH le 9 nov. → 1ʳᵉ quinzaine)
+{
+    await page.waitForSelector('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine]', { timeout: 10000 });
+    const q = await page.evaluate(() => [...document.querySelectorAll('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine]')].map(e => ({ t: e.textContent.replace(/\s+/g, ' ').trim(), ok: !!e.querySelector('[data-frise-quinzaine-payee]') })));
+    v('frise : Psy, 1ʳᵉ quinzaine « 400 / 400 » grâce à l\u2019opération du journal (pas de ✓ à proposer) ; 2ᵉ « – / 400 » avec ✓',
+      q.length === 2 && /400 \/ 400/.test(q[0].t) && !q[0].ok && /– \/ 400/.test(q[1].t) && q[1].ok, JSON.stringify(q));
+}
 await page.waitForSelector('[data-frise]');
 const ops = () => page.$$eval('[data-frise-apercu-op]', l => l.map(e => e.getAttribute('data-tx') + ':' + e.querySelector('[data-frise-apercu-ouvrir]').textContent.replace(/\s+/g, ' ').trim()));
 const total = () => page.textContent('[data-frise-apercu-total]').then(t => t.replace(/\s+/g, ' ').trim());
