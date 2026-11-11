@@ -99,8 +99,8 @@ await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'prevision
 {
     await page.waitForSelector('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine]', { timeout: 10000 });
     const q = await page.evaluate(() => [...document.querySelectorAll('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine]')].map(e => ({ t: e.textContent.replace(/\s+/g, ' ').trim(), ok: !!e.querySelector('[data-frise-quinzaine-payee]') })));
-    v('frise : Psy, 1ʳᵉ quinzaine « 400 / 400 » grâce à l\u2019opération du journal (pas de ✓ à proposer) ; 2ᵉ « – / 400 » avec ✓',
-      q.length === 2 && /400 \/ 400/.test(q[0].t) && !q[0].ok && /– \/ 400/.test(q[1].t) && q[1].ok, JSON.stringify(q));
+    v('frise : Psy, la 2ᵉ partie (9 → 26 nov.) « 400 / 443 » grâce à l\u2019opération du 9 nov. (pas de ✓) ; la 1ʳᵉ « – / 443 » avec ✓ (443 = 886 ÷ 2)',
+      q.length === 2 && /– \/ 443/.test(q[0].t) && q[0].ok && /400 \/ 443/.test(q[1].t) && !q[1].ok, JSON.stringify(q));
 }
 await page.waitForSelector('[data-frise]');
 const ops = () => page.$$eval('[data-frise-apercu-op]', l => l.map(e => e.getAttribute('data-tx') + ':' + e.querySelector('[data-frise-apercu-ouvrir]').textContent.replace(/\s+/g, ' ').trim()));
@@ -190,15 +190,52 @@ try {
         v('  → 90 enregistré dans CE poste, sûr (« vous »), daté du 8 nov. : la liste, le total et la case suivent (2 opérations · 350)',
           t && t.montant === 90 && t.date === '2026-11-08' && t.categorieSource === 'vous' && !t.aVerifier && L.length === 2 && /^2 opérations · 350/.test(T) && /^350\//.test(cell), JSON.stringify([t, L, T, cell]));
         await page.click('[data-frise-apercu-fermer]'); await page.waitForTimeout(150);
+        //  v37.131 : le montant TAPÉ d'un morceau (sans ticket) se corrige dans l'aperçu, plus « dans la Météo »
+        await caseMarjane(0).click(); await page.waitForSelector('[data-frise-apercu-saisie]');
+        await page.fill('[data-frise-apercu-saisie]', '77'); await page.press('[data-frise-apercu-saisie]', 'Enter'); await page.waitForTimeout(300);
+        const tape = await page.evaluate((ST) => { const r = eval(ST).donneesAnnuelles[2026].consoRealiseeT0; return Object.entries(r).filter(([k, x]) => x && x['alimentation::1'] !== undefined).map(([k, x]) => [k, x['alimentation::1']]); }, ST);
+        v('E2. Marjane, 1ᵉʳ morceau (27 oct. → 1ᵉʳ nov.) : « 77 » tapé dans l\u2019aperçu → enregistré pour CE morceau', JSON.stringify(tape) === '[["S2026-10-27",77]]', JSON.stringify(tape));
+        await page.fill('[data-frise-apercu-saisie]', ''); await page.press('[data-frise-apercu-saisie]', 'Enter'); await page.waitForTimeout(200);
+        await page.click('[data-frise-apercu-fermer]'); await page.waitForTimeout(150);
     });
     await section('D', async () => {
         await page.click(`[data-frise-ligne][data-poste="${PSY}"] [data-frise-enveloppe]`);
         await page.waitForSelector('[data-frise-apercu]');
         const L = await ops(), sous = await page.textContent('[data-frise-apercu] .text-slate-500');
         v('D. l’enveloppe du Psy (/ 15 j) : tout le cycle, du 27 oct. au 26 nov. — la séance du 9 nov.', L.length === 1 && /Dr Psy/.test(L[0]) && /Tout le cycle, du 27 oct\. au 26 nov\./.test(sous), JSON.stringify([L, sous]));
+        //  v37.131 — « c'est quoi ce raccourci ? ça doit se faire ICI ; le cycle divisé sur 2, je rentre chaque partie »
+        const parts = await page.evaluate(() => [...document.querySelectorAll('[data-frise-apercu-quinzaine]')].map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+        await page.fill('[data-frise-apercu-quinzaine-saisie][data-rang="1"]', '443'); await page.press('[data-frise-apercu-quinzaine-saisie][data-rang="1"]', 'Enter'); await page.waitForTimeout(300);
+        const apres = await page.evaluate(() => ({ q: [...document.querySelectorAll('[data-frise-apercu-quinzaine]')].map(e => ({ v: e.querySelector('input').value, ok: !!e.querySelector('[data-frise-apercu-quinzaine-payee]') })),
+            cases: [...document.querySelectorAll('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine]')].map(e => e.textContent.replace(/\s+/g, ' ').trim()),
+            raccourci: /se corrige dans la Météo/.test(document.querySelector('[data-frise-apercu]').textContent) }));
+        v('D2. l\u2019aperçu du Psy : « le cycle en 2 parties », chacune sa part (443) ; taper 443 dans la 1ʳᵉ ICI → la frise suit (443 / 443) ; plus de renvoi vers la Météo',
+          parts.length === 2 && parts.every(t => /part : 443/.test(t)) && apres.q[0].v === '443' && !apres.q[0].ok && /443 \/ 443/.test(apres.cases[0]) && !apres.raccourci, JSON.stringify([parts, apres]));
+        await page.evaluate((ST) => { const st = eval(ST), r = st.donneesAnnuelles[2026].consoRealiseeT0; Object.keys(r).forEach(k => { if (r[k]) delete r[k]['alimentation::2']; }); st.calculationTick++; }, ST);
+        await page.waitForTimeout(200);
         await page.click('[data-frise-apercu-journal]'); await page.waitForTimeout(400);
         const J = await page.evaluate((ST) => { const st = eval(ST); return { tab: st.activeTab, mode: st.appMode, cat: st.journal.cat, frise: st.friseOuverte, periode: st.journal.periode }; }, ST);
         v('  → « Voir dans le Journal » : la Saisie s’ouvre, journal filtré sur le Psy, ce cycle', J.tab === 'saisie' && J.mode === 'reel' && J.cat === 'cat_cv_alimentation__dpsy' && !J.frise && J.periode === 'cycle', JSON.stringify(J));
+    });
+    //  v37.131 — « L'AFFICHAGE DU JOURNAL (RELEVÉ) EN PORTABLE N'EST PAS OK » : plein écran, en-tête compact, une carte par mouvement
+    if (tw) await section('R', async () => {
+        await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(200);
+        await page.evaluate((ST) => { const st = eval(ST); st.friseOuverte = false; st.ouvrirReleve(); }, ST);
+        await page.waitForSelector('[data-releve] [data-releve-carte]', { state: 'visible', timeout: 10000 });
+        const r = await page.evaluate(() => {
+            const m = document.querySelector('[data-releve] > div'), en = m.firstElementChild.getBoundingClientRect(), b = m.getBoundingClientRect();
+            const cartes = [...document.querySelectorAll('[data-releve-carte]')].filter(e => e.offsetParent !== null);
+            const deborde = [...m.querySelectorAll('*')].filter(e => { const x = e.getBoundingClientRect(); return e.offsetParent !== null && x.width > 0 && x.right > window.innerWidth + 1 && !e.closest('[data-releve-periode], [data-releve-comptes]'); }).length;
+            return { plein: Math.round(b.width) === window.innerWidth && Math.round(b.height) === window.innerHeight, entete: Math.round(en.height), cartes: cartes.length,
+                     table: getComputedStyle(document.querySelector('[data-releve-table]')).display, deborde, page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                     montant: cartes.some(c => /[+−]\s?[\d\s\u202f]+/.test(c.textContent)) };
+        });
+        v('R. Relevé au téléphone (390 px) : plein écran, en-tête ≤ 180 px (mois et comptes défilent), des cartes (pas le tableau), rien ne déborde',
+          r.plein && r.entete <= 180 && r.cartes > 0 && r.table === 'none' && r.deborde === 0 && r.page <= 0 && r.montant, JSON.stringify(r));
+        await page.setViewportSize({ width: 1400, height: 900 }); await page.waitForTimeout(200);
+        const pc = await page.evaluate(() => ({ table: getComputedStyle(document.querySelector('[data-releve-table]')).display, cartes: getComputedStyle(document.querySelector('[data-releve-cartes]')).display }));
+        v('  → à l\u2019ordinateur : le tableau, comme avant', pc.table === 'table' && pc.cartes === 'none', JSON.stringify(pc));
+        await page.evaluate((ST) => eval(ST).fermerReleve(), ST);
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally { await browser.close(); srv.close(); }

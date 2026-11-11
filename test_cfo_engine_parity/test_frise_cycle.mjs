@@ -263,16 +263,18 @@ try {
         const lireQ = () => page.evaluate(() => [...document.querySelectorAll('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine]')]
             .map(e => ({ rang: e.dataset.rang, texte: e.textContent.replace(/\s+/g, ' ').trim(), largeur: parseFloat(e.style.width) })));
         const q0 = await lireQ();
-        v('  → v37.130 frise : Psy a 2 cases (1ʳᵉ 27 oct. → 15 nov. : 800 / 400 ; 2ᵉ : – / 400 ✓), alignées sur les semaines (20 et 11 jours sur 31)',
-          q0.length === 2 && /800 \/ 400/.test(q0[0].texte) && /– \/ 400/.test(q0[1].texte) && /✓/.test(q0[1].texte) && Math.abs(q0[0].largeur - 20 / 31 * 100) < 0.01 && Math.abs(q0[1].largeur - 11 / 31 * 100) < 0.01, JSON.stringify(q0));
+        //  v37.131 : la coupure au MILIEU des semaines (27 oct. → 8 nov. : 13 j | 9 → 26 nov. : 18 j), chaque part = 886 ÷ 2 = 443
+        v('  → v37.130/131 frise : Psy a 2 cases (27 oct. → 8 nov. : 400 / 443 ; 9 → 26 nov. : 400 / 443), alignées sur les semaines (13 et 18 jours sur 31)',
+          q0.length === 2 && /400 \/ 443/.test(q0[0].texte) && /400 \/ 443/.test(q0[1].texte) && Math.abs(q0[0].largeur - 13 / 31 * 100) < 0.01 && Math.abs(q0[1].largeur - 18 / 31 * 100) < 0.01, JSON.stringify(q0));
+        await saisir('S2026-11-09', PSY, null);
         await page.click('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine-payee][data-rang="2"]'); await page.waitForTimeout(250);
         await page.click('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine-ouvrir][data-rang="1"]');
         await page.fill('[data-frise-quinzaine-saisie][data-rang="1"]', '450'); await page.press('[data-frise-quinzaine-saisie][data-rang="1"]', 'Enter'); await page.waitForTimeout(250);
         const q1 = await lireQ();
         const stock = await page.evaluate(() => { const r = document.querySelector('#app').__vue_app__._instance.setupState.donneesAnnuelles[2026].consoRealiseeT0;
             return ['S2026-10-27', 'S2026-11-02', 'S2026-11-09', 'S2026-11-16', 'S2026-11-23'].map(k => (r[k] || {})['alimentation::2'] ?? null); });
-        v('  → ✓ sur la 2ᵉ : 400 le 16 nov. ; la 1ʳᵉ retapée 450 : 450 dans UNE semaine (27 oct.), le 9 nov. vidé — la Météo voit la même chose',
-          /450 \/ 400/.test(q1[0].texte) && /400 \/ 400/.test(q1[1].texte) && JSON.stringify(stock) === '[450,null,null,400,null]', JSON.stringify([q1, stock]));
+        v('  → 2ᵉ vidée puis ✓ : sa part (443) dans la semaine affichée (9 nov.) ; la 1ʳᵉ retapée 450 : dans UNE semaine (27 oct.)',
+          /450 \/ 443/.test(q1[0].texte) && /443 \/ 443/.test(q1[1].texte) && JSON.stringify(stock) === '[450,null,443,null,null]', JSON.stringify([q1, stock]));
         await saisir('S2026-10-27', PSY, 400); await saisir('S2026-11-09', PSY, 400); await saisir('S2026-11-16', PSY, null);
     });
 
