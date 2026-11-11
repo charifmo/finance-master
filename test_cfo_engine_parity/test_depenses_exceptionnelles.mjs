@@ -263,6 +263,28 @@ try {
         const ap = (await page.textContent('[data-frise-apercu]')).replace(/\s+/g, ' ');
         v('  → la toucher montre l’opération derrière (« cadeau mariage », 650 DH), comme les autres lignes', /cadeau mariage/i.test(ap) && /650/.test(ap) && !/imprévu/.test(ap), ap.slice(0, 300));
         await page.evaluate((ST) => { const st = eval(ST); st.fermerApercuFrise(); st.friseOuverte = false; }, ST);
+        //  v37.128 — « APPART AGADIR PAYÉ SUR RÉALISÉ, NON PAYÉ SUR LA FRISE — IL FAUT UN AUDIT POUR TOUT ALIGNER » :
+        //  cochée dans le Réalisé (sans opération), la ligne compte dans la frise ; « + ajouter » aussi ; chaque ligne = le réglé du Réalisé
+        const audit = await page.evaluate(async (ST) => {
+            const st = eval(ST), D = st.donneesAnnuelles[2026], dep = (id) => D.depensesIrregulieres.find(x => x.id === id);
+            const frise = async () => { st.calculationTick++; await Vue.nextTick(); const e = st.friseCycle.categories.find(c => c.key === '__exceptionnel'); return Object.fromEntries(e.lignes.map(l => [l.cle, l.engage])); };
+            const realise = () => Object.fromEntries(D.depensesIrregulieres.filter(x => x.montant > 0).map(x => ['irr_' + x.id, Math.round(st.getPaidAmount(x, x.montant))]));
+            st.friseOuverte = true;
+            const avant = await frise();
+            st.toggleItemPaid(dep(811), 300);
+            const coche = await frise(), rCoche = realise();
+            st.ajouterAuRegle(dep(811), 300, '+45');
+            const ajoute = await frise(), rAjoute = realise();
+            st.toggleItemPaid(dep(811), 300);   // décocher
+            const decoche = await frise();
+            st.friseOuverte = false;
+            return { avant, coche, rCoche, ajoute, rAjoute, decoche };
+        }, ST);
+        v('K2. « Révision chaudière » cochée dans le Réalisé, sans opération : la frise passe de 0 à 300 / 300 (le chiffre du Réalisé)',
+          audit.avant.irr_811 === 0 && audit.coche.irr_811 === 300 && audit.rCoche.irr_811 === 300, JSON.stringify(audit));
+        v('  → « + ajouter 45 » dans le Réalisé : 345 des deux côtés ; décochée : 0 ; Cadeau mariage (journal) : 650 partout',
+          audit.ajoute.irr_811 === 345 && audit.rAjoute.irr_811 === 345 && audit.decoche.irr_811 === 0 && audit.coche.irr_810 === 650 && audit.rCoche.irr_810 === 650, JSON.stringify(audit));
+        v('  → audit : chaque ligne exceptionnelle de la frise = le réglé du Réalisé', Object.keys(audit.ajoute).filter(k => k !== 'irr_autres').length === 2 && Object.keys(audit.ajoute).filter(k => k !== 'irr_autres').every(k => audit.ajoute[k] === audit.rAjoute[k]), JSON.stringify([audit.ajoute, audit.rAjoute]));
     });
     await section('L', async () => {
         //  v37.107 — « C'est déjà en saisie et toujours attendu » : une opération rangée dans la catégorie d'une dépense exceptionnelle
