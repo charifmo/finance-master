@@ -259,6 +259,21 @@ try {
         v('  → Hri « / cycle » à 1 200 dans le Réalisé (1 000 tapés) : la frise compte 1 200 et voit le dépassement',
           au.hri && au.hri.engage === 1200 && au.hri.depasse && au.alertes.some(a => /Hri \(Courses\) : 1200 DH sur une enveloppe de 1000/.test(a)), JSON.stringify(au.hri));
         v('  → facture « Élec » cochée dans le Réalisé (aucune opération) : 0 → 300 dans la frise, comme le Réalisé', au.elecAvant === 0 && au.elecApres === 300 && au.realiseElec === 300, JSON.stringify([au.elecAvant, au.elecApres, au.realiseElec]));
+        //  v37.130 — « résolu dans la Météo, pas dans la frise » : les cases par quinzaine, dans la frise aussi
+        const lireQ = () => page.evaluate(() => [...document.querySelectorAll('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine]')]
+            .map(e => ({ rang: e.dataset.rang, texte: e.textContent.replace(/\s+/g, ' ').trim(), largeur: parseFloat(e.style.width) })));
+        const q0 = await lireQ();
+        v('  → v37.130 frise : Psy a 2 cases (1ʳᵉ 27 oct. → 15 nov. : 800 / 400 ; 2ᵉ : – / 400 ✓), alignées sur les semaines (20 et 11 jours sur 31)',
+          q0.length === 2 && /800 \/ 400/.test(q0[0].texte) && /– \/ 400/.test(q0[1].texte) && /✓/.test(q0[1].texte) && Math.abs(q0[0].largeur - 20 / 31 * 100) < 0.01 && Math.abs(q0[1].largeur - 11 / 31 * 100) < 0.01, JSON.stringify(q0));
+        await page.click('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine-payee][data-rang="2"]'); await page.waitForTimeout(250);
+        await page.click('[data-frise-ligne][data-poste="alimentation::2"] [data-frise-quinzaine-ouvrir][data-rang="1"]');
+        await page.fill('[data-frise-quinzaine-saisie][data-rang="1"]', '450'); await page.press('[data-frise-quinzaine-saisie][data-rang="1"]', 'Enter'); await page.waitForTimeout(250);
+        const q1 = await lireQ();
+        const stock = await page.evaluate(() => { const r = document.querySelector('#app').__vue_app__._instance.setupState.donneesAnnuelles[2026].consoRealiseeT0;
+            return ['S2026-10-27', 'S2026-11-02', 'S2026-11-09', 'S2026-11-16', 'S2026-11-23'].map(k => (r[k] || {})['alimentation::2'] ?? null); });
+        v('  → ✓ sur la 2ᵉ : 400 le 16 nov. ; la 1ʳᵉ retapée 450 : 450 dans UNE semaine (27 oct.), le 9 nov. vidé — la Météo voit la même chose',
+          /450 \/ 400/.test(q1[0].texte) && /400 \/ 400/.test(q1[1].texte) && JSON.stringify(stock) === '[450,null,null,400,null]', JSON.stringify([q1, stock]));
+        await saisir('S2026-10-27', PSY, 400); await saisir('S2026-11-09', PSY, 400); await saisir('S2026-11-16', PSY, null);
     });
 
     /* ── E. Fermer ────────────────────────────────────────────────────── */
