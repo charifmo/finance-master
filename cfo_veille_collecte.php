@@ -11,8 +11,10 @@ declare(strict_types=1);
  *  Cron (toutes les 10 minutes, jamais deux à la fois) :
  *    *\/10 * * * * flock -n /tmp/fm-veille.lock php /var/www/finance/cfo_veille_collecte.php >> /var/log/fm-veille.log 2>&1
  *
+ *  Installation automatique : sudo bash install_veille.sh [--brave CLE] [--max 1000]
  *  Option Brave Search (API officielle) — dans db_config.php (non versionné) :
  *    'brave_api_key' => '…', 'brave_max_appels_mois' => 1000
+ *  ou dans /etc/fm-veille.env (écrit par install_veille.sh) : BRAVE_API_KEY=…, BRAVE_MAX_APPELS_MOIS=…
  * ============================================================================
  */
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("ligne de commande seulement\n"); }
@@ -29,7 +31,7 @@ vc_schema($pdo);
 
 $dbc = is_file(__DIR__ . '/db_config.php') ? (include __DIR__ . '/db_config.php') : [];
 $cle = is_array($dbc) ? (string)($dbc['brave_api_key'] ?? (getenv('BRAVE_API_KEY') ?: '')) : (string)(getenv('BRAVE_API_KEY') ?: '');
-$brave = $cle !== '' ? ['cle' => $cle, 'max_mois' => (int)($dbc['brave_max_appels_mois'] ?? 1000)] : null;
+$brave = $cle !== '' ? ['cle' => $cle, 'max_mois' => (int)((is_array($dbc) ? ($dbc['brave_max_appels_mois'] ?? null) : null) ?? (getenv('BRAVE_MAX_APPELS_MOIS') ?: 1000))] : null;
 
 $cmd = $argv[1] ?? 'tout';
 $horo = gmdate('Y-m-d H:i:s');
