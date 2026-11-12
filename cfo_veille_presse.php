@@ -114,6 +114,7 @@ if ($t['lieux']) {
     $memoire = is_file($fMem) ? (json_decode((string)@file_get_contents($fMem), true) ?: []) : [];
 }
 $frais = count($articles);
+$rvV = null;   // v37.138 : la revue de la collecte (bien, revue précédente) — pour dire ce qui est nouveau
 $deja = [];
 foreach ($articles as $a) $deja[(string)$a['url']] = true;
 foreach (cfo_vp_memoire_articles($memoire) as $a) if (!isset($deja[$a['url']])) { $articles[] = $a; $deja[$a['url']] = true; }
@@ -124,7 +125,7 @@ if ($t['lieux'] && function_exists('vc_revue')) {
     $pdoV = vc_pdo($raisonV);
     if ($pdoV) {
         try {
-            $rv = vc_revue($pdoV, $t['lieux'], $t['sujets'], $requetes, $trouves, $cfg);
+            $rv = vc_revue($pdoV, $t['lieux'], $t['sujets'], $requetes, $trouves, $cfg); $rvV = $rv;
             foreach ($rv['corpus'] as $a) if (!isset($deja[$a['url']])) { $articles[] = $a; $deja[$a['url']] = true; }
             $collecte = $rv['etat'] + ['corpus' => count($rv['corpus'])];
         } catch (Throwable $e) { $collecte = ['erreur' => mb_substr($e->getMessage(), 0, 200)]; }
@@ -142,13 +143,35 @@ if ($fMem) {
     $tmp = $fMem . '.' . getmypid() . '.tmp';
     if (@file_put_contents($tmp, json_encode(cfo_vp_memoire_maj($memoire, $aGarder), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false) @rename($tmp, $fMem); else @unlink($tmp);
 }
+//  v37.138 — LES DEUX AUTRES CIRCUITS, chacun ses critères : les annonces (prix DEMANDÉS extraits, jamais des comparables d'office) et les
+//  signaux sociaux (traçables, nommant le lieu ; jamais forcés)
+$annonces = cfo_vp_annonces($articles, $t['lieux']);
+$signaux = cfo_vp_signaux($articles, $t['lieux']);
+//  v37.138 — CE QUI EST NOUVEAU DEPUIS LA PRÉCÉDENTE ANALYSE (base de la collecte : la 1re fois que CE bien a vu chaque article)
+$nouveautes = ['disponible' => false, 'depuis' => null, 'raison' => 'collecte indisponible'];
+if ($rvV && $pdoV) {
+    try {
+        $tous = array_merge($retenus, $candidats, $annonces, $signaux);
+        $prem = vc_premieres_vues($pdoV, $rvV['bien'], array_column($tous, 'url'));
+        $connus = $rvV['depuis'] !== null ? vc_titres_connus($pdoV, $rvV['bien'], $rvV['depuis']) : [];
+        $marquer = function (array $liste) use ($prem, $rvV, $connus): array {
+            return array_map(fn($a) => $a + ['statut' => cfo_vp_statut_nouveaute($a, $prem[$a['url']] ?? null, $rvV['depuis'], $connus)], $liste);
+        };
+        $retenus = $marquer($retenus); $candidats = $marquer($candidats); $annonces = $marquer($annonces); $signaux = $marquer($signaux);
+        $nouveautes = ['disponible' => true, 'depuis' => $rvV['depuis'] !== null ? gmdate('Y-m-d\TH:i:s\Z', $rvV['depuis']) : null, 'raison' => ''];
+    } catch (Throwable $e) { $nouveautes['raison'] = mb_substr($e->getMessage(), 0, 160); }
+}
 //  v37.111 — une source = un site, une page / un groupe précis, ou une famille (réseaux sociaux, forums, annonces)
-foreach ($couverture as $dom => &$c) { $c['retenus'] = cfo_vp_retenus_de($retenus, $c['_req']); unset($c['_req']); }
+$pourCompter = array_merge($retenus, $annonces, $signaux);
+foreach ($couverture as $dom => &$c) { $c['retenus'] = cfo_vp_retenus_de($pourCompter, $c['_req']); unset($c['_req']); }
 unset($c);
 vp_sortie([
     'status' => 'ok',
     'articles' => $retenus,
     'candidats' => $candidats,
+    'annonces' => $annonces,
+    'signaux' => $signaux,
+    'nouveautes' => $nouveautes,
     'memoire' => ['articles' => count($memoire), 'frais' => $frais],
     'collecte' => $collecte,
     'brave' => $braveInfo,
