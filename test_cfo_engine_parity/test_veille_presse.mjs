@@ -370,7 +370,7 @@ try {
     v('  → la fiche mémorisée reste citée', qN.includes('Douar Oulad Belaagid'));
     const bandeau = (await bandeauDe('Terrain Nord')).replace(/\s+/g, ' ');
     v('la carte dit ce qui a été lu : N articles, médias, sources injoignables',
-      new RegExp(lignes.length + ' articles de presse lus avant la réponse — ').test(bandeau) && /Al Marrakchia/.test(bandeau) && /Kech24/.test(bandeau) && /2 sources injoignables/.test(bandeau)
+      new RegExp(lignes.length + ' actualités? retenues? avant la réponse — ').test(bandeau) && /Al Marrakchia/.test(bandeau) && /Kech24/.test(bandeau) && /2 sources injoignables/.test(bandeau)
       && !/mode lent/.test(bandeau), bandeau);
     v('la question nomme les médias locaux restés muets, et comment les cibler',
       qN.includes('Médias locaux sans article retenu ici : Marrakech 7 (marrakech7.com)') && qN.includes('« site:marrakech7.com Ouahat Sidi Brahim »'), (qN.match(/Médias locaux.*/) || [''])[0]);
@@ -391,9 +391,10 @@ try {
     v('v37.111 : la carte détaille aussi les familles — réseaux sociaux (1 retenu par DuckDuckGo), forums, annonces',
       medias.some(m => /^Réseaux sociaux \(facebook\.com, instagram\.com, youtube\.com\) — 1 retenu · Bing \(web\) : aucun article · DuckDuckGo : 1 article$/.test(m))
       && medias.some(m => /^Forums \(/.test(m)) && medias.some(m => /^Annonces immobilières \(avito\.ma/.test(m)), JSON.stringify(medias));
-    v('  → le post Facebook est dans la question, marqué « (réseau social) », et la consigne dit de le recouper',
-      lignes.some(l => /^\[\d+\] Facebook \(pages et groupes publics\) \(réseau social\) · sans date — « Ouahat Sidi Brahim : réunion des ayants droit/.test(l))
-      && qN.includes('un témoignage ou une rumeur à recouper') && qN.includes('une annonce donne un prix DEMANDÉ'), lignes.join('\n'));
+    //  v37.138 : le post Facebook n'est plus une « actualité » numérotée — il est dans les SIGNAUX LOCAUX, non vérifiés, avec son lien
+    v('  → v37.138 : le post Facebook est dans les SIGNAUX LOCAUX (pas parmi les actualités), marqué non vérifié, avec son lien et le niveau de lecture',
+      /\[S1\] (www\.)?facebook\.com · sans date — « Ouahat Sidi Brahim : réunion des ayants droit/.test(qN) && qN.includes('https://www.facebook.com/groups/ouahat/posts/42')
+      && qN.includes('« signal non vérifié »') && qN.includes("ni l'accès au post complet ni sa véracité") && !lignes.some(l => /facebook/i.test(l)), (qN.match(/SIGNAUX LOCAUX[\s\S]{0,400}/) || [''])[0]);
     v('  → les familles ne sont pas citées comme « médias locaux muets »', !/Médias locaux sans article retenu ici : [^\n]*(Forums|Annonces|groupe:)/.test(qN));
     const arts = await page.$$eval('tr [data-mi-article]', els => els.map(e => ({ t: e.innerText, href: e.querySelector('a')?.getAttribute('href') || null })));
     v('la liste des articles lus suit la numérotation [n] de la question', arts.length === lignes.length && arts[0].t.includes(lignes[0].split(' · ')[0].replace('[1] ', '')), arts.length + ' / ' + lignes.length);
@@ -428,6 +429,52 @@ try {
     const qK = await intel('ma_5');
     v('revue de presse en panne : la recherche part quand même, et le dit', /REVUE DE PRESSE LOCALE : indisponible \(panne simulée\)/.test(qK) && qK.includes('<b>Verdict — Terrain Nord'));
     v('  → la carte aussi', /Revue de presse indisponible — panne simulée/.test(await bandeauDe('Terrain Nord')));
+    await ctx.unroute('**/cfo_veille_presse.php');
+    /* ── v37.138 — TROIS CIRCUITS, NOUVEAUTÉS : une revue construite (le serveur réel est vérifié par les suites PHP) ── */
+    const DEP = '2026-11-12T14:54:28Z';
+    const revueV = (statuts) => ({ status: 'ok', lus: 754, requetes: [], couverture: [],
+        nouveautes: { disponible: true, depuis: DEP, raison: '' },
+        articles: [{ titre: 'Ouahat Sidi Brahim : le plan d’aménagement homologué', url: 'https://ledesk.ma/pa-ouahat', source: 'Le Desk', date: '2026-11-12', portee: 'nationale', statut: statuts[0] },
+                   { titre: 'Mondial 2030 : 7,5 milliards pour les accès aux stades', url: 'https://fr.le360.ma/x', source: 'Le360', date: '2026-11-08', portee: 'nationale', zone: true, statut: statuts[1] }],
+        candidats: [],
+        annonces: [{ titre: 'Terrain 3 ha Ouahat Sidi Brahim façade RN9', url: 'https://www.avito.ma/fr/a/1', source: 'Avito', domaine: 'avito.ma', date: '2026-11-01', prix_demande: null, prix_m2: 450,
+                     prix_m2_calcule: false, surface_m2: 30000, lieu: 'Ouahat Sidi Brahim', marrakech: true, type: 'terrain', zonage: 'SHL2', constructibilite: null, titre_foncier: 'titré', acces: ['RN9', 'façade'], statut: statuts[2] },
+                   { titre: 'Villa 800 m² Marrakech Palmeraie', url: 'https://www.avito.ma/fr/a/2', source: 'Avito', domaine: 'avito.ma', date: null, prix_demande: 9500000, prix_m2: null, prix_m2_calcule: false,
+                     surface_m2: 800, lieu: null, marrakech: true, type: 'villa', zonage: null, constructibilite: null, titre_foncier: null, acces: null, statut: statuts[2] },
+                   { titre: 'Terrain Ouahat Sidi Brahim à vendre', url: 'https://www.mubawab.ma/fr/a/3', source: 'Mubawab', domaine: 'mubawab.ma', date: null, prix_demande: null, prix_m2: null, prix_m2_calcule: false,
+                     surface_m2: null, lieu: 'Ouahat Sidi Brahim', marrakech: false, type: 'terrain', zonage: null, constructibilite: null, titre_foncier: null, acces: null, statut: statuts[2] }],
+        signaux: [{ titre: 'Ouahat Sidi Brahim : réunion des ayants droit', extrait: 'bande RN9', url: 'https://www.facebook.com/groups/o/posts/1', plateforme: 'facebook.com', portee: 'reseau', date: '2026-11-10',
+                    niveau: 'titre et extrait (moteur de recherche) — publication complète non lue, véracité non vérifiée', statut: statuts[3] }] });
+    await ctx.route('**/cfo_veille_presse.php', (route) => route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(revueV(['nouvel_evenement', 'mise_a_jour', 'deja_connu', 'nouvel_evenement'])) }));
+    const qV = await intel('ma_5');
+    await page.evaluate(() => document.querySelectorAll('tr [data-mi-annonces], tr [data-mi-signaux]').forEach(d => { d.open = true; }));
+    const ecran = await page.evaluate(() => ({ etapes: document.querySelector('tr [data-mi-etapes]')?.textContent.replace(/\s+/g, ' ').trim() || '',
+        nouv: document.querySelector('tr [data-mi-nouveautes]')?.textContent.replace(/\s+/g, ' ').trim() || '',
+        annonces: [...document.querySelectorAll('tr [data-mi-annonce]')].map(e => ({ c: e.dataset.classe, t: e.textContent.replace(/\s+/g, ' ').trim() })),
+        signaux: [...document.querySelectorAll('tr [data-mi-signal]')].map(e => e.textContent.replace(/\s+/g, ' ').trim()),
+        statuts: [...document.querySelectorAll('tr [data-mi-article] [data-mi-statut]')].map(e => e.dataset.statut) }));
+    v('v37.138 — compteurs PAR ÉTAPE : « 754 résultats lus par les moteurs → 0 actualités candidates → 2 retenues · annonces : 3 lues (1 comparable, 2 indications) · signaux sociaux : 1 gardé »',
+      /754 résultats lus par les moteurs → 0 actualités candidates → 2 retenues · annonces : 3 lues \(1 comparable, 2 indications\) · signaux sociaux : 1 gardé/.test(ecran.etapes), ecran.etapes);
+    v('  → ce qui est NOUVEAU depuis l’analyse précédente : « 2 nouveaux événements · 1 mise à jour · 3 déjà connus » ; chaque actualité porte son statut',
+      /^🆕 Depuis l’analyse du .+ : 2 nouveaux événements · 1 mise à jour · 3 déjà connus$/.test(ecran.nouv) && JSON.stringify(ecran.statuts) === '["nouvel_evenement","mise_a_jour"]', JSON.stringify([ecran.nouv, ecran.statuts]));
+    v('  → annonces : le terrain de 3 ha au lieu du bien, prix et zonage connus = COMPARABLE ; la villa et l’annonce sans surface ni prix = INDICATIONS, avec leurs raisons ; « inconnu » quand l’annonce ne dit pas',
+      ecran.annonces.length === 3 && ecran.annonces[0].c === 'comparable' && /prix demandé : inconnu · au m² : 450 DH/.test(ecran.annonces[0].t)
+      && ecran.annonces[1].c === 'indication' && /bien bâti \(villa\), pas un terrain/.test(ecran.annonces[1].t) && /localisation trop vague/.test(ecran.annonces[1].t)
+      && ecran.annonces[2].c === 'indication' && /surface inconnue/.test(ecran.annonces[2].t) && /prix non indiqué/.test(ecran.annonces[2].t) && /zonage : inconnu/.test(ecran.annonces[2].t), JSON.stringify(ecran.annonces));
+    v('  → le signal Facebook : son lien, sa date, et « lu : titre et extrait … véracité non vérifiée »', ecran.signaux.length === 1 && /2026-11-10 · facebook\.com/.test(ecran.signaux[0]) && /véracité non vérifiée/.test(ecran.signaux[0]), JSON.stringify(ecran.signaux));
+    v('  → la question : NOUVEAUTÉS (marques NOUVEAU / MISE À JOUR / DÉJÀ CONNU, « Rien de nouveau » interdit de reformuler) ; COMPARABLES [A1] et INDICATIONS [I…] ; prix DEMANDÉS ; < 3 comparables : AUCUNE réévaluation',
+      /\[1\] Le Desk \(NOUVEAU\)/.test(qV) && /\[2\] Le360 \(MISE À JOUR\) \(contexte zone\)/.test(qV) && /NOUVEAUTÉS — analyse précédente de ce bien/.test(qV) && /ne présente AUCUN fait ancien comme une nouveauté/.test(qV)
+      && /\[A1\] Avito · 2026-11-01 — « Terrain 3 ha Ouahat Sidi Brahim façade RN9 » — prix demandé : inconnu · au m² : 450 DH\/m²/.test(qV) && /\[I1\] .*non comparable : bien bâti \(villa\)/.test(qV)
+      && /PRIX DEMANDÉS, JAMAIS des prix de vente/.test(qV) && /Moins de 3 comparables solides : AUCUNE réévaluation de la valeur retenue/.test(qV)
+      && /\[S1\] facebook\.com · 2026-11-10 \(NOUVEAU\)/.test(qV) && /3 à 4 ÉVÉNEMENTS distincts au plus/.test(qV), (qV.match(/NOUVEAUTÉS[\s\S]{0,1600}/) || [''])[0]);
+    //  rien de nouveau : dit tel quel
+    await ctx.unroute('**/cfo_veille_presse.php');
+    await ctx.route('**/cfo_veille_presse.php', (route) => route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(revueV(['deja_connu', 'deja_connu', 'deja_connu', 'deja_connu'])) }));
+    const qR2 = await intel('ma_5');
+    const nouv2 = await page.evaluate(() => document.querySelector('tr [data-mi-nouveautes]')?.textContent.replace(/\s+/g, ' ').trim() || '');
+    v('  → rien de nouveau : l’écran dit « Rien de nouveau depuis l’analyse du … (6 déjà connus) », la question impose « Rien de nouveau depuis le … »',
+      /^🕓 Rien de nouveau depuis l’analyse du .+ \(6 déjà connus\)$/.test(nouv2) && /Ici : 0 nouveau\(x\), 0 mise\(s\) à jour, 6 déjà connu\(s\)/.test(qR2) && /écris « Rien de nouveau depuis le /.test(qR2), nouv2);
+    await ctx.unroute('**/cfo_veille_presse.php');
     v('aucune erreur JavaScript dans la page', erreurs.length === 0, erreurs.join(' | '));
   });
 
@@ -468,7 +515,7 @@ try {
         S.marketIntel = Object.assign({}, S.marketIntel, { ma_5: { open: true } }); return S.chargerMarketIntel(S.masterAssets.find(x => x.id === 'ma_5')); }, { ST });
     await page2.waitForTimeout(300);
     const bandeau2 = await page2.$$eval('tr [data-mi-presse]', els => els.map(e => e.closest('td').textContent.replace(/\s+/g, ' ')).find(t => t.includes('Terrain Nord')) || '');
-    v('la carte : les articles lus, et « mode lent : curl absent du serveur »', /articles de presse lus avant la réponse/.test(bandeau2) && /mode lent : curl absent du serveur/.test(bandeau2), bandeau2);
+    v('la carte : les articles lus, et « mode lent : curl absent du serveur »', /actualités? retenues? avant la réponse/.test(bandeau2) && /mode lent : curl absent du serveur/.test(bandeau2), bandeau2);
     await page2.evaluate((ST) => eval(ST).ouvrirSourcesVeille(), ST);
     await page2.waitForSelector('[data-vs-prerequis]', { timeout: 10000 });
     const pre = (await page2.textContent('[data-vs-prerequis]')).replace(/\s+/g, ' ');
@@ -500,9 +547,10 @@ try {
       && /plus de 18 mois vaut au plus 1/.test(qT) && /les autres valent 1 \(doublon\)/.test(qT) && !/3 = nomme le bien, son lieu/.test(qT), qT.split('\n').slice(0, 6).join('\n'));
     v('  → le résultat final ne garde que les notes 2 et 3, les mieux notées d\'abord, chacune avec sa note et sa raison',
       final.length > 0 && final.every(l => /\(pertinence [23]\/3 : (nomme le lieu|projet de la zone)\)/.test(l)) && /pertinence 3\/3/.test(final[0])
-      && qF.includes('VÉRIFIÉS par un premier passage IA'), final.join('\n'));
+      && qF.includes('SÉLECTIONNÉES POUR LEUR PERTINENCE'), final.join('\n'));
     const bt = await page.$$eval('tr [data-mi-tri-ia]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
-    v('  → la carte le dit : « Vérifiés par l’IA : N articles trouvés → M gardés pour CE bien, K écartés »', bt.some(t => new RegExp('Vérifiés par l’IA : ' + cands.length + ' articles trouvés → ' + final.length + ' gardés pour CE bien').test(t)), JSON.stringify(bt));
+    v('  → v37.138 : la carte dit « Sélectionnés pour leur pertinence : N actualités candidates → M retenues pour CE bien, K écartées » (plus « vérifiés par l’IA »)',
+      bt.some(t => new RegExp('Sélectionnés pour leur pertinence : ' + cands.length + ' actualités candidates → ' + final.length + ' retenues pour CE bien').test(t)) && !bt.some(t => /Vérifiés par l’IA/.test(t)), JSON.stringify(bt));
     v('  → chaque article de la liste montre ses étoiles et la raison de l\'IA', await page.$$eval('tr [data-mi-article] [data-mi-pertinence]', els => els.length > 0 && els.every(e => /★★/.test(e.textContent))));
     //  l'IA muette : le tri habituel, et c'est dit
     modeTri = false; questions.length = 0;
@@ -510,7 +558,7 @@ try {
     const qR = await intel('ma_5');
     const bt2 = await page.$$eval('tr [data-mi-tri-ia]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     v('  → IA de tri illisible : le tri habituel s\'applique, la carte le dit (« Vérification par l’IA indisponible »)',
-      bt2.some(t => /Vérification par l’IA indisponible/.test(t)) && qR.split('\n').filter(l => /^\[\d+\] /.test(l)).length > 0 && !qR.includes('VÉRIFIÉS par un premier passage IA'), JSON.stringify(bt2));
+      bt2.some(t => /Sélection par pertinence indisponible/.test(t)) && qR.split('\n').filter(l => /^\[\d+\] /.test(l)).length > 0 && !qR.includes('SÉLECTIONNÉES POUR LEUR PERTINENCE'), JSON.stringify(bt2));
   });
     /* ── v37.137 — « LES RÉSULTATS DES RÉSEAUX SOCIAUX NE SONT PAS LÀ » : DuckDuckGo bloque le serveur ; avec une clé Brave Search,
           Brave le remplace pour les réseaux sociaux, forums et annonces, dans le plafond du mois ── */
@@ -529,13 +577,13 @@ try {
         const r3 = await revue(corpsN, { 'X-Requested-With': 'XMLHttpRequest' }, 'POST', BASE3);
         const d3 = r3.d || {}, brut = JSON.stringify(d3);
         const rs = (d3.couverture || []).find(c => /^Réseaux sociaux/.test(c.nom || '')) || {}, an = (d3.couverture || []).find(c => /^Annonces/.test(c.nom || '')) || {};
-        const urls = (d3.candidats || []).map(x => x.url);
+        const urls = [...(d3.signaux || []), ...(d3.annonces || [])].map(x => x.url);
         v('v37.137 : avec une clé Brave, les réseaux sociaux, forums et annonces passent par Brave Search — plus par DuckDuckGo (bloqué)',
           d3.brave && d3.brave.actif === true && d3.brave.appels === braveRecues.length && braveRecues.length >= 3 && !recues.some(x => x.chemin === '/web/ddg')
           && (rs.canaux || []).some(k => k.canal === 'brave_web') && !(rs.canaux || []).some(k => k.canal === 'ddg'), JSON.stringify({ brave: d3.brave, n: braveRecues.length, rs }));
-        v('  → le post Facebook ET l\'annonce Avito trouvés par Brave arrivent dans les candidats (et la carte les compte)',
+        v('  → le post Facebook (en signaux) ET l\'annonce Avito (en annonces, 180 DH/m² lus) trouvés par Brave arrivent dans leur circuit (et la carte les compte)',
           urls.includes('https://www.facebook.com/groups/ouahat/posts/77') && urls.includes('https://www.avito.ma/fr/marrakech/terrains/terrain_1ha_ouahat_77.htm')
-          && (rs.retenus || 0) >= 1 && (an.retenus || 0) >= 1, JSON.stringify({ urls: urls.filter(u => /facebook|avito/.test(u)), rs: rs.retenus, an: an.retenus }));
+          && (rs.retenus || 0) >= 1 && (an.retenus || 0) >= 1 && ((d3.annonces || [])[0] || {}).prix_m2 === 180, JSON.stringify({ urls: urls.filter(u => /facebook|avito/.test(u)), rs: rs.retenus, an: an.retenus, a0: (d3.annonces || [])[0] }));
         v('  → la clé part en EN-TÊTE vers Brave, et nulle part ailleurs : ni dans la réponse au navigateur, ni dans les requêtes mémorisées',
           braveRecues.every(x => x.cle === CLE) && !brut.includes(CLE) && !fs.readFileSync(dbF).includes(Buffer.from(CLE)), JSON.stringify(braveRecues.slice(0, 2)));
         //  plafond atteint : DuckDuckGo comme avant, et c'est dit
@@ -545,6 +593,13 @@ try {
         const d4 = r4.d || {};
         v('  → plafond du mois atteint (' + (avant + 1) + ' appels) : aucun appel Brave de plus, DuckDuckGo reprend, la raison est dite',
           d4.brave && d4.brave.actif === false && d4.brave.raison === 'plafond du mois atteint' && braveRecues.length === avant && recues.some(x => x.chemin === '/web/ddg'), JSON.stringify(d4.brave));
+        //  v37.138 — ce qui est nouveau depuis la revue précédente, calculé par le VRAI serveur (base de la collecte)
+        const sig4 = (d4.signaux || []).find(x => x.url === 'https://www.facebook.com/groups/ouahat/posts/42') || {}, sig77 = (d4.signaux || []).find(x => x.url === 'https://www.facebook.com/groups/ouahat/posts/77') || {};
+        v('  → v37.138 nouveautés (vrai serveur) : 1re revue = « première analyse » ; 2e revue = date de la 1re, actualités « déjà connu », le post Facebook déjà vu (revenu du corpus) = « déjà connu », un autre post sur la même histoire = « mise à jour »',
+          d3.nouveautes && d3.nouveautes.disponible === true && d3.nouveautes.depuis === null && (d3.articles || []).every(x => x.statut === 'premiere_analyse')
+          && d4.nouveautes && d4.nouveautes.disponible === true && /^\d{4}-\d{2}-\d{2}T/.test(d4.nouveautes.depuis || '') && (d4.articles || []).length > 0 && (d4.articles || []).every(x => x.statut === 'deja_connu')
+          && sig4.statut === 'mise_a_jour' && sig77.statut === 'deja_connu',
+          JSON.stringify({ n3: d3.nouveautes, n4: d4.nouveautes, a4: (d4.articles || []).map(x => x.statut), sig4 }));
     }
 } catch (e) {
     v('scène complète sans exception', false, String(e && e.stack || e));

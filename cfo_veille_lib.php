@@ -411,6 +411,9 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
         array_merge($sujets, cfo_vp_grands_projets($cfg, 'fr'), cfo_vp_grands_projets($cfg, 'ar')))));
     $vus = []; $garde = [];
     foreach ($articles as $a) {
+        //  v37.138 — TROIS CIRCUITS : les annonces et les signaux sociaux ont leurs propres critères (cfo_vp_annonces, cfo_vp_signaux) ;
+        //  ils ne passent plus par la note « projet » des actualités
+        if (in_array($a['portee'] ?? '', CFO_VP_HORS_ACTUALITES, true)) continue;
         if ($a['ts'] !== null && $maintenant - $a['ts'] > $fenetre) continue;
         $txt = cfo_vp_norm($a['titre'] . ' ' . $a['extrait']);
         $nl = count(array_filter($L, fn($l) => mb_strpos($txt, $l) !== false));
@@ -448,7 +451,13 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
     //  milliards autour du Grand Stade n'avait aucune chance. Jusqu'à quota_zone places pour eux (les meilleurs), le reste au lieu ;
     //  une catégorie qui manque laisse ses places à l'autre.
     $max = (int)($cfg['max_articles'] ?? 15);
-    $lieu = array_values(array_filter($garde, fn($a) => !$a['zone'])); $zoneA = array_values(array_filter($garde, fn($a) => $a['zone']));
+    //  v37.138 — LE CONTEXTE GÉNÉRAL PLAFONNÉ EN ÉVÉNEMENTS : au plus 4 histoires distinctes (pas 4 articles du même fait) ; les échos d'une
+    //  histoire de contexte sont écartés. Exception, 2 au plus : une évolution majeure documentée (financement, marché attribué, tracé, travaux)
+    $maxEv = max(1, (int)($cfg['max_evenements_zone'] ?? 4));
+    $zoneU = array_values(array_filter($uniques, fn($a) => $a['zone']));
+    $zoneA = array_slice($zoneU, 0, $maxEv); $extra = 0;
+    foreach (array_slice($zoneU, $maxEv) as $a) if ($extra < 2 && cfo_vp_evolution_majeure($a)) { $a['majeur'] = true; $zoneA[] = $a; $extra++; }
+    $lieu = array_values(array_filter($garde, fn($a) => !$a['zone']));
     $k = min(count($zoneA), max(0, (int)($cfg['quota_zone'] ?? 5)));
     $pris = array_slice($lieu, 0, $max - $k);
     $pris = array_merge($pris, array_slice($zoneA, 0, $max - count($pris)));
@@ -459,6 +468,143 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
     return array_map(function ($a) { unset($a['ts'], $a['specifique']); return $a; }, $pris);
 }
 
+
+/** v37.138 — les portées qui ne sont pas des actualités : chacune son circuit. */
+const CFO_VP_HORS_ACTUALITES = ['annonces', 'reseau', 'forum'];
+
+/** v37.138 — une évolution MAJEURE documentée (l'exception au plafond du contexte) : financement, marché attribué, tracé, démarrage des travaux. */
+function cfo_vp_evolution_majeure(array $a): bool {
+    $t = cfo_vp_norm(($a['titre'] ?? '') . ' ' . ($a['extrait'] ?? ''));
+    foreach (['milliard', 'mmdh', 'millions de dirhams', 'financement', 'enveloppe de', 'marche attribue', 'remporte le marche', 'decroche', 'attribution du marche',
+              'appel d\'offres', 'trace', 'demarrage des travaux', 'lancement des travaux', 'debut des travaux', 'premiere pierre',
+              cfo_vp_norm('مليار'), cfo_vp_norm('مليون درهم'), cfo_vp_norm('صفقة'), cfo_vp_norm('تمويل'), cfo_vp_norm('انطلاق الأشغال'), cfo_vp_norm('انطلاقة أشغال'),
+              cfo_vp_norm('مسار'), cfo_vp_norm('طلب عروض')] as $m)
+        if ($m !== '' && preg_match('/(^|\s)' . preg_quote($m, '/') . '/u', $t)) return true;
+    return false;
+}
+
+/** v37.138 — un nombre écrit à la marocaine (« 1 200 000 », « 1.200.000 », « 1,2 ») → float, ou null. */
+function cfo_vp_nombre(string $n): ?float {
+    $n = trim(str_replace(["\u{00A0}", "\u{202F}"], ' ', $n));
+    if ($n === '') return null;
+    if (preg_match('/^\d{1,3}([ .]\d{3})+$/', $n)) return (float)preg_replace('/[ .]/', '', $n);   // milliers séparés
+    $n = str_replace(' ', '', $n);
+    if (preg_match('/^\d+,\d+$/', $n)) return (float)str_replace(',', '.', $n);                    // décimale à virgule
+    if (preg_match('/^\d+(\.\d+)?$/', $n)) return (float)$n;
+    return null;
+}
+
+/**
+ * v37.138 — LE CIRCUIT ANNONCES. Une annonce n'est PAS un comparable : on en extrait ce qu'elle dit — prix DEMANDÉ (total et/ou au m²),
+ * surface, lieu, date, type, zonage, constructibilité, titre foncier, accès — et ce qu'elle ne dit pas reste null (« inconnu »).
+ * Le prix au m² n'est CALCULÉ (marqué) que si le prix total et la surface sont tous deux écrits. Doublons (même lien, même prix + surface,
+ * même titre) fusionnés. Hors Marrakech et sans lieu du bien : écartée. Le classement comparable / indication se fait côté application
+ * (elle connaît la surface et le zonage du bien). → 15 au plus, celles qui nomment le lieu d'abord.
+ */
+function cfo_vp_annonces(array $articles, array $lieux, ?int $maintenant = null): array {
+    $L = array_values(array_filter(array_map('cfo_vp_norm', $lieux)));
+    $out = []; $vus = [];
+    foreach ($articles as $a) {
+        if (($a['portee'] ?? '') !== 'annonces' || !preg_match('#^https?://#i', (string)($a['url'] ?? ''))) continue;
+        $brut = trim(($a['titre'] ?? '') . ' — ' . ($a['extrait'] ?? ''));
+        $txt = cfo_vp_norm($brut);
+        $lieu = null; foreach ($lieux as $i => $l) if (isset($L[$i]) && $L[$i] !== '' && mb_strpos($txt, $L[$i]) !== false) { $lieu = $l; break; }
+        //  la ville : dans le texte, ou dans la rubrique de l'adresse de l'annonce (« avito.ma/fr/marrakech/terrains/… »)
+        $marrakech = mb_strpos($txt, 'marrakech') !== false || mb_strpos($txt, cfo_vp_norm('مراكش')) !== false
+                  || (bool)preg_match('#/marrakech(?:[/_-]|$)#i', (string)parse_url((string)$a['url'], PHP_URL_PATH));
+        if ($lieu === null && !$marrakech) continue;
+        $reste = $brut;
+        //  prix au m² écrit (« 180 DH/m² », « 1 200 dh le m2 », « 900 درهم للمتر »)
+        $pm2 = null;
+        //  un NOMBRE : milliers séparés par espace ou point (« 1 200 »), ou décimal ; jamais collé à un autre chiffre (« RN9, 180 » ≠ « 9,180 »)
+        $NB = '(?<![\d.,])(\d{1,3}(?:[ .\x{A0}\x{202F}]\d{3})+|\d+(?:[.,]\d+)?)';
+        if (preg_match('/' . $NB . '\s*(?:dh|mad|dirhams?|درهم)\s*(?:\/|par|le|du|لل|في)\s*(?:m²|m2|mètre|metre|متر|م²)/iu', $reste, $m)) {
+            $pm2 = cfo_vp_nombre($m[1]); $reste = str_replace($m[0], ' ', $reste);
+        }
+        //  prix total (« 1,2 MDH », « 2,5 millions de dirhams », « 1 200 000 DH », « مليون درهم »)
+        $total = null;
+        if (preg_match('/(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:mdh|m\s?dh|millions?(?:\s+de)?\s*(?:dh|mad|dirhams?)|مليون\s*درهم)/iu', $reste, $m)) { $x = cfo_vp_nombre($m[1]); $total = $x !== null ? $x * 1e6 : null; }
+        elseif (preg_match('/(?<![\d.,])(\d{1,3}(?:[ .\x{A0}\x{202F}]\d{3})+|\d{5,})\s*(?:dh|mad|dirhams?|درهم)/iu', $reste, $m)) { $x = cfo_vp_nombre($m[1]); $total = ($x !== null && $x >= 10000) ? $x : null; }
+        //  surface (« 1 ha », « 2,5 hectares », « 5 000 m² », « 3 هكتارات », « 800 متر مربع »)
+        $surf = null;
+        if (preg_match('/(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:ha\b|hectares?|هكتار)/iu', $reste, $m)) { $x = cfo_vp_nombre($m[1]); $surf = $x !== null ? $x * 10000 : null; }
+        elseif (preg_match('/(?<![\d.,])(\d{1,3}(?:[ .\x{A0}\x{202F}]\d{3})+|\d+)\s*(?:m²|m2\b|mètres? carrés|metres? carres|متر مربع|م²)/iu', $reste, $m)) $surf = cfo_vp_nombre($m[1]);
+        $calcule = false;
+        if ($pm2 === null && $total !== null && $surf) { $pm2 = round($total / $surf); $calcule = true; }
+        $type = null;
+        foreach (['appartement' => '/appartement|studio|شقة/u', 'villa' => '/\bvilla\b|فيلا/u', 'maison' => '/\bmaison\b|riad|منزل|دار\b/u', 'local' => '/\blocal\b|entrepot|depot|مستودع|محل/u',
+                  'ferme' => '/\bferme\b|exploitation agricole|ضيعة/u', 'terrain' => '/terrain|\blot\b|lotissement|parcelle|أرض|ارض|بقعة|قطعة/u'] as $k => $re)
+            if (preg_match($re, $txt)) { $type = $k; break; }
+        $zonage = null;
+        if (preg_match('/\b(r ?\+ ?\d|shl ?\d|sa ?\d)\b/u', $txt, $m)) $zonage = strtoupper(str_replace(' ', '', $m[1]));
+        elseif (preg_match('/zone (villas?|immeubles?|industrielle|touristique|agricole|logistique)/u', $txt, $m)) $zonage = 'zone ' . $m[1];
+        elseif (preg_match('/\bagricole\b|فلاحي/u', $txt)) $zonage = 'agricole';
+        $constr = preg_match('/non constructible|inconstructible|غير قابل/u', $txt) ? 'non constructible' : (preg_match('/\bconstructible\b|قابل للبناء/u', $txt) ? 'constructible' : null);
+        $tf = preg_match('/non titr|melkia|ملكية/u', $txt) ? 'non titré / melkia' : (preg_match('/\btitre\b|\btitree?\b|titre foncier|محفظ/u', $txt) ? 'titré' : null);
+        $acces = [];
+        if (preg_match('/\b(rn ?\d{1,3}|rr ?\d{1,3})\b/u', $txt, $m)) $acces[] = strtoupper(str_replace(' ', '', $m[1]));
+        if (preg_match('/facade|façade|واجهة/u', $txt)) $acces[] = 'façade';
+        if (preg_match('/route (de [a-z]+|goudronnee|principale)/u', $txt, $m)) $acces[] = 'route ' . $m[1];
+        if (preg_match('/\bpiste\b/u', $txt)) $acces[] = 'piste';
+        //  doublons : même lien, même prix + surface, même titre
+        $cles = [(string)$a['url'], mb_substr(cfo_vp_norm((string)($a['titre'] ?? '')), 0, 60)];
+        if (($total || $pm2) && $surf) $cles[] = 'ps|' . ($total ?: $pm2) . '|' . $surf;
+        $dbl = false; foreach ($cles as $k) if ($k !== '' && isset($vus[$k])) $dbl = true;
+        if ($dbl) continue;
+        foreach ($cles as $k) if ($k !== '') $vus[$k] = true;
+        $out[] = ['titre' => (string)($a['titre'] ?? ''), 'url' => (string)$a['url'], 'source' => (string)($a['source'] ?? ''), 'domaine' => (string)($a['domaine'] ?? ''), 'portee' => 'annonces',
+                  'date' => $a['date'] ?? (isset($a['ts']) && $a['ts'] ? gmdate('Y-m-d', (int)$a['ts']) : null), 'extrait' => (string)($a['extrait'] ?? ''),
+                  'prix_demande' => $total !== null ? (int)round($total) : null, 'prix_m2' => $pm2 !== null ? (int)round($pm2) : null, 'prix_m2_calcule' => $calcule,
+                  'surface_m2' => $surf !== null ? (int)round($surf) : null, 'lieu' => $lieu, 'marrakech' => $marrakech, 'type' => $type, 'zonage' => $zonage,
+                  'constructibilite' => $constr, 'titre_foncier' => $tf, 'acces' => $acces ?: null, 'memoire' => $a['memoire'] ?? null,
+                  'niveau' => 'titre et extrait (moteur de recherche)'];
+    }
+    usort($out, fn($x, $y) => [$y['lieu'] !== null ? 1 : 0, ($y['prix_demande'] || $y['prix_m2']) ? 1 : 0, (string)$y['date']]
+                            <=> [$x['lieu'] !== null ? 1 : 0, ($x['prix_demande'] || $x['prix_m2']) ? 1 : 0, (string)$x['date']]);
+    return array_slice($out, 0, 15);
+}
+
+/**
+ * v37.138 — LE CIRCUIT SIGNAUX SOCIAUX (réseaux sociaux, forums). Gardés SEULEMENT s'ils nomment un lieu du bien et ont une adresse ;
+ * dédupliqués ; le niveau de lecture est dit : un résultat de moteur (titre et extrait) ne prouve ni l'accès au post complet ni sa
+ * véracité. Rien de pertinent : liste vide (leur présence n'est jamais forcée). → 5 au plus, les plus récents d'abord.
+ */
+function cfo_vp_signaux(array $articles, array $lieux, ?int $maintenant = null, int $fenetreJours = 730): array {
+    $now = $maintenant ?? time();
+    $L = array_values(array_filter(array_map('cfo_vp_norm', $lieux)));
+    $out = []; $vus = [];
+    foreach ($articles as $a) {
+        if (!in_array($a['portee'] ?? '', ['reseau', 'forum'], true) || !preg_match('#^https?://#i', (string)($a['url'] ?? ''))) continue;
+        if (!empty($a['ts']) && $now - (int)$a['ts'] > $fenetreJours * 86400) continue;
+        $txt = cfo_vp_norm(($a['titre'] ?? '') . ' ' . ($a['extrait'] ?? ''));
+        $lieu = null; foreach ($lieux as $i => $l) if (isset($L[$i]) && $L[$i] !== '' && mb_strpos($txt, $L[$i]) !== false) { $lieu = $l; break; }
+        if ($lieu === null) continue;
+        $k1 = (string)$a['url']; $k2 = mb_substr(cfo_vp_norm((string)($a['titre'] ?? '')), 0, 60);
+        if (isset($vus[$k1]) || ($k2 !== '' && isset($vus[$k2]))) continue;
+        $vus[$k1] = true; if ($k2 !== '') $vus[$k2] = true;
+        $out[] = ['titre' => (string)($a['titre'] ?? ''), 'extrait' => (string)($a['extrait'] ?? ''), 'url' => (string)$a['url'], 'plateforme' => (string)($a['domaine'] ?? ''),
+                  'source' => (string)($a['source'] ?? ''), 'portee' => (string)$a['portee'], 'date' => $a['date'] ?? (!empty($a['ts']) ? gmdate('Y-m-d', (int)$a['ts']) : null),
+                  'lieu' => $lieu, 'memoire' => $a['memoire'] ?? null,
+                  'niveau' => 'titre et extrait (moteur de recherche) — publication complète non lue, véracité non vérifiée'];
+    }
+    usort($out, fn($x, $y) => (string)$y['date'] <=> (string)$x['date']);
+    return array_slice($out, 0, 5);
+}
+
+/**
+ * v37.138 — CE QUI EST NOUVEAU DEPUIS LA PRÉCÉDENTE ANALYSE. $premiere : 1re fois que CE bien a vu l'article (null : inconnu) ;
+ * $depuis : l'analyse précédente (null : c'est la première) ; $connus : titres vus avant $depuis. → premiere_analyse | deja_connu |
+ * mise_a_jour (nouveau lien, même histoire qu'un article déjà vu) | nouvel_evenement
+ */
+function cfo_vp_statut_nouveaute(array $a, ?int $premiere, ?int $depuis, array $connus): string {
+    if ($depuis === null) return 'premiere_analyse';
+    if ($premiere !== null && $premiere <= $depuis) return 'deja_connu';
+    if ($premiere === null && !empty($a['memoire']) && strtotime($a['memoire'] . ' 23:59:59 UTC') <= $depuis) return 'deja_connu';
+    $mots = function (string $t): array { $o = []; foreach (preg_split('/\s+/u', cfo_vp_norm($t)) as $w) if (mb_strlen($w) >= 4) $o[$w] = true; return $o; };
+    $m = $mots((string)($a['titre'] ?? ''));
+    foreach ($connus as $t) { $v = $mots((string)$t); $u = count($m + $v); if ($u > 0 && count(array_intersect_key($m, $v)) / $u >= 0.5) return 'mise_a_jour'; }
+    return 'nouvel_evenement';
+}
 
 /* ══ v37.41-42 — LES PAGES DES JOURNAUX, LUES EN HTML (AUCUN N'A DE RSS OUVERT) ═ */
 

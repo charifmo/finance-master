@@ -288,6 +288,33 @@ function vc_articles_bien(PDO $pdo, string $bien, ?int $maintenant = null, int $
     return $out;
 }
 
+/** v37.138 — la 1re fois que CE bien a vu chacune de ces adresses (via ses requêtes). → [url => ts] */
+function vc_premieres_vues(PDO $pdo, string $bien, array $urls): array {
+    $urls = array_values(array_unique(array_filter(array_map('strval', $urls))));
+    if (!$urls) return [];
+    $out = [];
+    foreach (array_chunk($urls, 200) as $paquet) {
+        $s = $pdo->prepare('SELECT a.url, MIN(h.premier) AS p FROM veille_articles a JOIN veille_hits h ON h.article_id = a.id
+                            JOIN veille_requete_biens rb ON rb.requete_id = h.requete_id WHERE rb.bien = ? AND a.url IN (' . implode(',', array_fill(0, count($paquet), '?')) . ') GROUP BY a.url');
+        $s->execute(array_merge([$bien], $paquet));
+        foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(string)$r['url']] = (int)$r['p'];
+    }
+    return $out;
+}
+/** v37.138 — les titres que CE bien avait déjà vus avant $depuis (pour reconnaître une « mise à jour » d'une histoire connue). */
+function vc_titres_connus(PDO $pdo, string $bien, int $depuis, int $max = 600): array {
+    $s = $pdo->prepare('SELECT a.titre, MIN(h.premier) AS p FROM veille_articles a JOIN veille_hits h ON h.article_id = a.id
+                        JOIN veille_requete_biens rb ON rb.requete_id = h.requete_id WHERE rb.bien = ? GROUP BY a.id, a.titre HAVING MIN(h.premier) <= ? ORDER BY p DESC LIMIT ' . (int)$max);
+    $s->execute([$bien, $depuis]);
+    return array_map(fn($r) => (string)$r['titre'], $s->fetchAll(PDO::FETCH_ASSOC));
+}
+/** v37.138 — la date de la revue PRÉCÉDENTE de ce bien (lue AVANT que la revue en cours ne la remplace), ou null. */
+function vc_revue_precedente(PDO $pdo, string $bien): ?int {
+    $s = $pdo->prepare('SELECT vu_le FROM veille_biens WHERE bien = ?'); $s->execute([$bien]);
+    $v = $s->fetchColumn();
+    return $v === false || $v === null ? null : (int)$v;
+}
+
 /** L'état de la collecte d'un bien (pour l'écran). */
 function vc_etat_bien(PDO $pdo, string $bien): array {
     $q = fn(string $sql, array $p = []) => (function () use ($pdo, $sql, $p) { $s = $pdo->prepare($sql); $s->execute($p); return $s->fetchColumn(); })();
@@ -295,6 +322,19 @@ function vc_etat_bien(PDO $pdo, string $bien): array {
     $art = (int)$q('SELECT COUNT(DISTINCT h.article_id) FROM veille_hits h JOIN veille_requete_biens rb ON rb.requete_id = h.requete_id WHERE rb.bien = ?', [$bien]);
     $der = $q("SELECT MAX(j.fin) FROM veille_jobs j JOIN veille_requete_biens rb ON rb.requete_id = j.requete_id WHERE rb.bien = ? AND j.statut IN ('ok','vide')", [$bien]);
     return ['requetes' => $req, 'articles' => $art, 'derniere' => $der ? (int)$der : null];
+}
+
+/** v37.138 — chercher dans le corpus : tous les mots exigés (titre, extrait ou adresse ; casse et accents ignorés). → 30 au plus, les plus récents */
+function vc_chercher(PDO $pdo, array $mots, int $max = 30): array {
+    $mots = array_values(array_filter(array_map('cfo_vp_norm', $mots)));
+    if (!$mots) return [];
+    $out = [];
+    foreach ($pdo->query('SELECT url, domaine, titre, extrait, ts, premier FROM veille_articles ORDER BY premier DESC')->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        $t = cfo_vp_norm($a['titre'] . ' ' . ($a['extrait'] ?? '') . ' ' . $a['url'] . ' ' . $a['domaine']);
+        $ok = true; foreach ($mots as $m) if (mb_strpos($t, $m) === false) { $ok = false; break; }
+        if ($ok) { $out[] = $a; if (count($out) >= $max) break; }
+    }
+    return $out;
 }
 
 /** L'état général (commande « etat ») : tâches du jour, corpus, domaines proposés, budget Brave. */
@@ -323,9 +363,13 @@ function vc_etat(PDO $pdo, ?int $maintenant = null): array {
  * $trouves : [indice de $requetes => articles]. → ['corpus' => articles, 'etat' => vc_etat_bien]
  */
 function vc_revue(PDO $pdo, array $lieux, array $sujets, array $requetes, array $trouves, array $cfg, ?int $maintenant = null): array {
+    //  v37.138 : UNE heure pour toute la revue — la date de la revue et la 1re vue de ce qu'elle range sont la même ; sinon, quelques secondes
+    //  d'écart faisaient passer pour « nouveaux » à la revue suivante des articles déjà vus
+    $maintenant = $maintenant ?? time();
     vc_schema($pdo);
     $bien = vc_cle_bien($lieux);
+    $depuis = vc_revue_precedente($pdo, $bien);   // v37.138 : AVANT que vc_memoriser ne remplace la date
     $ids = vc_memoriser($pdo, $bien, $lieux, $sujets, $requetes, $maintenant);
     foreach ($trouves as $i => $arts) if (isset($ids[$i]) && $arts) vc_stocker($pdo, $ids[$i], $arts, $cfg, $maintenant);
-    return ['corpus' => vc_articles_bien($pdo, $bien, $maintenant), 'etat' => vc_etat_bien($pdo, $bien)];
+    return ['corpus' => vc_articles_bien($pdo, $bien, $maintenant), 'etat' => vc_etat_bien($pdo, $bien), 'bien' => $bien, 'depuis' => $depuis];
 }

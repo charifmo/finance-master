@@ -86,6 +86,15 @@ function scenario(PDO $pdo, string $nom, array $cfg, array $lieux, array $sujets
     $autre = vc_revue($pdo, ['Tamansourt'], ['RN9'], cfo_vp_requetes($cfg, ['Tamansourt'], ['RN9']), [], $cfg, $T0 + 5000);
     v('  → un AUTRE bien (Tamansourt) n\'hérite pas du corpus d\'Ouahat Sidi Brahim', !in_array($LE360, array_column($autre['corpus'], 'url'), true), $j(array_column($autre['corpus'], 'url')));
 
+    /* ── 4b. v37.138 — ce qui est nouveau depuis la précédente analyse : la revue d'avant (lue AVANT d'être remplacée), la 1re vue par bien ── */
+    $avant = vc_revue_precedente($pdo, $bien);
+    $prem = vc_premieres_vues($pdo, $bien, [$LE360, 'https://actu-kech-exemple.ma/lotissement-ouahat', 'https://inconnu.ma/x']);
+    $connus = vc_titres_connus($pdo, $bien, $T0 + 4500);
+    $rv3 = vc_revue($pdo, $lieux, $sujets, $R, [], $cfg, $T0 + 9000);
+    v('4b. la revue précédente du bien (T0+5000) est lue AVANT d\'être remplacée ; 1re vue du Le360 = la collecte (T0+4000) ; une adresse inconnue n\'a pas de 1re vue ; les titres vus avant T0+4500 sont connus',
+      $avant === $T0 + 5000 && $rv3['depuis'] === $T0 + 5000 && vc_revue_precedente($pdo, $bien) === $T0 + 9000 && ($prem[$LE360] ?? null) === $T0 + 4000
+      && !isset($prem['https://inconnu.ma/x']) && in_array('Mondial 2030 : 7,5 milliards de dirhams pour les accès aux stades de Benslimane et de Marrakech', $connus, true), $j([$avant, $rv3['depuis'], $prem, count($connus)]));
+
     /* ── 5. Les domaines inconnus sont PROPOSÉS, les connus jamais ── */
     $dom = $pdo->query("SELECT domaine FROM veille_domaines WHERE statut = 'propose'")->fetchAll(PDO::FETCH_COLUMN);
     v('5. « actu-kech-exemple.ma » (inconnu) est proposé comme nouvelle source ; le360.ma (déjà réglé) ne l\'est pas — rien n\'est lu d\'office',
@@ -157,6 +166,11 @@ function scenario(PDO $pdo, string $nom, array $cfg, array $lieux, array $sujets
       $j([$sansCle, $jw, $avecCle, $vusW, $bw]));
     $pdo->exec("DELETE FROM veille_hits WHERE requete_id = " . (int)$idsW[0]); $pdo->exec("DELETE FROM veille_articles WHERE url = 'https://www.facebook.com/groups/ouahat/posts/88'");
     $pdo->exec("DELETE FROM veille_budget"); $pdo->exec("INSERT INTO veille_budget (mois, appels) VALUES ('" . gmdate('Y-m', $T0 + 86400) . "', 2)");
+
+    //  v37.138 — « chercher » : l'article du Desk sur le PLAN DE MOBILITÉ est-il dans le corpus ? (tous les mots exigés, accents ignorés)
+    $ch = vc_chercher($pdo, ['plan de mobilite', 'ledesk']);
+    v('7c. « chercher plan de mobilité ledesk » trouve l\'article du Desk sur le plan de mobilité (accents ignorés) ; « plan de mobilité » + « le360 » ne trouve rien',
+      count($ch) === 1 && str_contains($ch[0]['url'], 'ledesk.ma/encontinu/plan-mobilite-grand-marrakech') && vc_chercher($pdo, ['plan de mobilité', 'le360']) === [], $j($ch));
 
     /* ── 7. L'état (commande « etat ») ── */
     $e = vc_etat($pdo, $T0 + 86400 + 5000);

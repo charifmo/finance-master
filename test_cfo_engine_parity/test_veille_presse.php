@@ -204,6 +204,70 @@ v('en tête : les articles qui nomment le lieu, locaux et récents (FR et AR)',
   array_slice($titres, 0, 2) == ['واحة سيدي إبراهيم: تصميم التهيئة الجديد', "Ouahat Sidi Brahim : le plan d'aménagement adopté"], $j($titres));
 v('le bien nommé, même il y a un an, passe devant la zone seule récente', array_search('Ouahat Sidi Brahim : nouveau lotissement autorisé', $titres, true) < array_search('Marrakech : le contournement de la RN9 lancé', $titres, true), $j($titres));
 
+/* ── v37.138 — TROIS CIRCUITS : annonces (prix DEMANDÉS extraits), signaux sociaux (traçables, jamais forcés), contexte plafonné en événements ── */
+$A = fn($t, $ex = '', $url = null, $jours = 5) => ['titre' => $t, 'extrait' => $ex, 'url' => $url ?? 'https://www.avito.ma/fr/x/' . md5($t . $ex), 'source' => 'Avito', 'domaine' => 'avito.ma',
+    'portee' => 'annonces', 'ts' => $now - $jours * 86400, 'date' => gmdate('Y-m-d', $now - $jours * 86400), 'specifique' => true, 'langue' => 'fr'];
+$an = cfo_vp_annonces([
+    $A('Terrain 1 ha titré à vendre Ouahat Sidi Brahim façade RN9', '180 DH/m², zone SHL2', 'https://www.avito.ma/fr/a/1'),
+    $A('Terrain 1 ha titré à vendre Ouahat Sidi Brahim façade RN9', '180 DH/m², zone SHL2', 'https://www.avito.ma/fr/a/1'),             // même lien
+    $A('Parcelle agricole 2,5 hectares Ouahat Sidi Brahim', 'Prix : 3,5 MDH, non titré (melkia), piste', 'https://www.avito.ma/fr/a/2'),
+    $A('Lot de terrain 5 000 m² Marrakech route de Casablanca', '1 200 000 DH', 'https://www.mubawab.ma/fr/a/3'),
+    $A('Villa 800 m² Marrakech Palmeraie', '9 500 000 DH', 'https://www.avito.ma/fr/a/4'),
+    $A('أرض للبيع 3 هكتارات واحة سيدي ابراهيم', '900 درهم للمتر', 'https://www.avito.ma/ar/a/5'),
+    $A('Terrain à Agadir 2 ha', '500 DH/m²', 'https://www.avito.ma/fr/agadir/a/6'),                                                  // hors marché
+    $A('Terrain 1 ha à vendre Ouahat Sidi Brahim route de Casablanca', '1 ha titré, façade RN9, 210 DH/m².', 'https://www.avito.ma/fr/a/8'),          // « RN9, 180 » ≠ 9,18
+    $A('Parcelle agricole 2,5 ha Ouahat Sidi Brahim - autre portail', 'Prix : 3,5 MDH, melkia', 'https://www.sarouty.ma/fr/a/7'),     // même prix + surface : doublon
+], ['Ouahat Sidi Brahim', 'واحة سيدي ابراهيم'], $now);
+$parU = []; foreach ($an as $x) $parU[basename($x['url'])] = $x;
+v('v37.138 annonces : « 180 DH/m² » sur 1 ha (prix au m² ÉCRIT, total inconnu) ; « 3,5 MDH » sur 2,5 ha → 140 DH/m² CALCULÉ (marqué) ; zonage, titre, accès lus',
+  ($parU['1']['prix_m2'] ?? 0) === 180 && $parU['1']['prix_demande'] === null && $parU['1']['surface_m2'] === 10000 && $parU['1']['prix_m2_calcule'] === false
+  && $parU['1']['zonage'] === 'SHL2' && $parU['1']['titre_foncier'] === 'titré' && in_array('RN9', $parU['1']['acces'] ?? [], true) && in_array('façade', $parU['1']['acces'] ?? [], true)
+  && ($parU['2']['prix_demande'] ?? 0) === 3500000 && $parU['2']['surface_m2'] === 25000 && $parU['2']['prix_m2'] === 140 && $parU['2']['prix_m2_calcule'] === true
+  && $parU['2']['titre_foncier'] === 'non titré / melkia' && $parU['2']['zonage'] === 'agricole' && in_array('piste', $parU['2']['acces'] ?? [], true), $j([$parU['1'] ?? null, $parU['2'] ?? null]));
+v('  → « 5 000 m² · 1 200 000 DH » → 240 DH/m² calculé, lieu INCONNU (Marrakech seulement) ; la villa est typée « villa » ; l\'annonce arabe (3 هكتارات, 900 درهم للمتر) lue',
+  ($parU['3']['surface_m2'] ?? 0) === 5000 && $parU['3']['prix_demande'] === 1200000 && $parU['3']['prix_m2'] === 240 && $parU['3']['lieu'] === null && $parU['3']['marrakech'] === true
+  && ($parU['4']['type'] ?? '') === 'villa' && ($parU['5']['surface_m2'] ?? 0) === 30000 && $parU['5']['prix_m2'] === 900 && $parU['5']['lieu'] === 'واحة سيدي ابراهيم' && $parU['5']['type'] === 'terrain',
+  $j([$parU['3'] ?? null, $parU['4']['type'] ?? null, $parU['5'] ?? null]));
+v('  → « façade RN9, 210 DH/m² » : 210 DH/m² (le 9 de RN9 n\'est pas collé au prix) ; RN9 lue comme accès', ($parU['8']['prix_m2'] ?? 0) === 210 && in_array('RN9', $parU['8']['acces'] ?? [], true) && ($parU['8']['portee'] ?? '') === 'annonces', $j($parU['8'] ?? null));
+v('  → doublons fusionnés (même lien ; même prix + même surface sur un autre portail) ; Agadir écartée ; celles qui nomment le lieu d\'abord ; ce qui manque reste null',
+  count($an) === 6 && !isset($parU['6']) && !isset($parU['7']) && $an[0]['lieu'] !== null && $an[count($an) - 1]['lieu'] === null && $parU['4']['zonage'] === null && $parU['4']['titre_foncier'] === null,
+  $j(array_map(fn($x) => [basename($x['url']), $x['lieu']], $an)));
+$S = fn($t, $ex, $pt, $url, $jours = null) => ['titre' => $t, 'extrait' => $ex, 'url' => $url, 'source' => 'x', 'domaine' => parse_url($url, PHP_URL_HOST), 'portee' => $pt,
+    'ts' => $jours === null ? null : $now - $jours * 86400, 'date' => $jours === null ? null : gmdate('Y-m-d', $now - $jours * 86400), 'specifique' => true, 'langue' => 'fr'];
+$sg = cfo_vp_signaux([
+    $S('Réunion des ayants droit à Ouahat Sidi Brahim', 'bande RN9', 'reseau', 'https://www.facebook.com/groups/o/posts/1', 3),
+    $S('Réunion des ayants droit à Ouahat Sidi Brahim', 'bande RN9', 'reseau', 'https://www.facebook.com/groups/o/posts/1', 3),
+    $S('Les plus belles photos de Marrakech', 'coucher de soleil', 'reseau', 'https://www.instagram.com/p/2', 1),                       // ne nomme pas le lieu
+    $S('Ouahat Sidi Brahim : qui connaît le prix du terrain ?', 'discussion', 'forum', 'https://www.yabiladi.com/forum/3', null),
+    $S('Ouahat Sidi Brahim en 2019', 'vieux', 'reseau', 'https://www.facebook.com/p/4', 1500),                                         // trop vieux
+], ['Ouahat Sidi Brahim'], $now);
+v('  → signaux : gardés seulement s\'ils nomment le lieu, traçables (adresse), dédupliqués, pas trop vieux ; niveau de lecture dit (titre et extrait, véracité non vérifiée)',
+  count($sg) === 2 && $sg[0]['url'] === 'https://www.facebook.com/groups/o/posts/1' && $sg[1]['plateforme'] === 'www.yabiladi.com' && $sg[1]['date'] === null
+  && str_contains($sg[0]['niveau'], 'publication complète non lue'), $j($sg));
+v('  → aucun signal pertinent : liste VIDE (leur présence n\'est jamais forcée)', cfo_vp_signaux([$S('Marrakech by night', '', 'reseau', 'https://www.instagram.com/p/9', 1)], ['Ouahat Sidi Brahim'], $now) === []);
+//  le contexte : 6 ÉVÉNEMENTS distincts de contexte → 4 + l'exception majeure (marché attribué) ; les échos écartés
+$ctx = [
+    $art('Marrakech : le chantier de la LGV démarre près de la Palmeraie', 3),
+    $art('Mondial 2030 : le Grand Stade de Marrakech métamorphosé', 4), $art('Le Grand Stade de Marrakech métamorphosé pour le Mondial 2030', 5),   // écho
+    $art('Marrakech : la rocade nord avance, RN9', 6), $art('Marrakech : le plan de mobilité urbaine durable lancé', 7),
+    $art('Marrakech : nouvel aéroport, extension du terminal pour le Mondial 2030', 8),
+    $art('Mondial 2030 : un groupe marocain décroche le marché des gares Benguerir-Marrakech', 40),
+    $art('Marrakech : la fête des roses du Mondial 2030', 9),
+];
+$sC = cfo_vp_selection($ctx, ['Ouahat Sidi Brahim'], ['Mondial 2030', 'RN9', 'LGV', 'stades', 'plan de mobilité'], ['max_articles' => 20, 'quota_zone' => 20] + $cfg, $now);
+$tC = array_column($sC, 'titre');
+v('  → contexte général : 4 ÉVÉNEMENTS distincts au plus (pas 4 articles du même fait) + l\'exception « décroche le marché » (évolution majeure documentée) ; l\'écho du Grand Stade écarté',
+  count($sC) === 5 && in_array('Mondial 2030 : un groupe marocain décroche le marché des gares Benguerir-Marrakech', $tC, true)
+  && count(array_filter($tC, fn($t) => str_contains($t, 'Grand Stade'))) === 1 && !empty(array_values(array_filter($sC, fn($a) => !empty($a['majeur'])))), $j($tC));
+//  nouveau depuis la précédente analyse
+$dep = $now - 3600;
+$nv = fn($a, $p, $d = null, $c = []) => cfo_vp_statut_nouveaute($a, $p, $d, $c);
+v('  → statuts : première analyse ; vu avant la précédente → « déjà connu » ; nouveau lien d\'une histoire connue → « mise à jour » ; sinon « nouvel événement »',
+  $nv(['titre' => 'x'], null) === 'premiere_analyse' && $nv(['titre' => 'x'], $dep - 60, $dep) === 'deja_connu'
+  && $nv(['titre' => 'Le Grand Stade de Marrakech métamorphosé pour le Mondial 2030'], $dep + 60, $dep, ['Mondial 2030 : le Grand Stade de Marrakech métamorphosé']) === 'mise_a_jour'
+  && $nv(['titre' => 'Ouahat Sidi Brahim : le plan d\'aménagement homologué'], $dep + 60, $dep, ['Mondial 2030 : le Grand Stade de Marrakech métamorphosé']) === 'nouvel_evenement'
+  && $nv(['titre' => 'y', 'memoire' => gmdate('Y-m-d', $dep - 2 * 86400)], null, $dep) === 'deja_connu');
+
 /* ── v37.136 — « LE RÉSULTAT EST NUL » : dates écrites, cartes de Marrakech Alaan, une même histoire, Le360 ── */
 $D = fn($t) => ($x = cfo_vp_date_texte($t, $now)) ? gmdate('Y-m-d', $x[0]) : null;
 v('v37.136 dates écrites : « 4 ديسمبر 2024 », « 14 نونبر 2023 » (mois marocain), « 1er mars 2026 », « 2026-11-04 », « 04/12/2024 » ; « 31/02/2024 » et « 2099 » refusés',
@@ -309,7 +373,12 @@ $bB = cfo_vp_bilan($rs[0], ['http' => 200, 'corps' => $bingWeb], $cfg);
 v('Bing web (RSS) : annonce Mubawab et forum Yabiladi reconnus, datés quand le moteur date', $bB['statut'] === 'ok' && $bB['articles'][0]['source'] === 'Mubawab' && $bB['articles'][0]['portee'] === 'annonces'
   && $bB['articles'][0]['date'] !== null && $bB['articles'][1]['portee'] === 'forum' && $bB['articles'][1]['date'] === null, $j($bB['articles']));
 $sel = cfo_vp_selection(array_merge($aD, $bB['articles']), ['Ouahat Sidi Brahim'], [], $cfg, $now);
-v('  → triés avec la presse : les quatre gardés (requêtes qui exigeaient le lieu)', count($sel) === 4, $j(array_column($sel, 'titre')));
+$anD = cfo_vp_annonces(array_merge($aD, $bB['articles']), ['Ouahat Sidi Brahim'], $now); $sgD = cfo_vp_signaux(array_merge($aD, $bB['articles']), ['Ouahat Sidi Brahim'], $now);
+v('  → v37.138 trois circuits : aucune annonce ni aucun post dans les ACTUALITÉS ; annonces Mubawab (3 ha, titré) et Avito (2 ha, rubrique Marrakech) dans leur circuit ; post Facebook et forum Yabiladi en signaux',
+  $sel === [] && count($anD) === 2 && $anD[0]['source'] === 'Mubawab' && $anD[0]['surface_m2'] === 30000 && $anD[0]['titre_foncier'] === 'titré' && $anD[0]['lieu'] === 'Ouahat Sidi Brahim'
+  && $anD[1]['source'] === 'Avito' && $anD[1]['surface_m2'] === 20000 && $anD[1]['lieu'] === null && $anD[1]['marrakech'] === true
+  && count($sgD) === 2 && in_array('facebook.com', array_column($sgD, 'plateforme'), true) && in_array('yabiladi.com', array_column($sgD, 'plateforme'), true)
+  && str_contains($sgD[0]['niveau'], 'véracité non vérifiée'), $j([array_column($sel, 'titre'), $anD, $sgD]));
 //  combien de retenus par source
 $ret = array_merge($aD, $bB['articles']);
 v('retenus par source : famille « annonces » 2, groupe Facebook 1, Facebook entier 1',
