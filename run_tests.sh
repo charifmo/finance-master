@@ -110,6 +110,7 @@ suite "Garde-mémoire : demandes, entités, recouvrement"        php test_cfo_en
 suite "Mémorisation garantie · Recherche Éclair ciblée"       node test_cfo_engine_parity/test_garde_memoire.mjs
 suite "Revue de presse locale : requêtes, flux, tri"          php test_cfo_engine_parity/test_veille_presse.php
 suite "Presse sans flux ni curl : pages, secours, réseau"   php test_cfo_engine_parity/test_veille_sans_flux.php
+suite "Veille : collecte continue (requêtes rejouées, corpus, Brave, pauses)"   php test_cfo_engine_parity/test_veille_collecte.php
 suite "La presse marrakchie lue avant la réponse"             node test_cfo_engine_parity/test_veille_presse.mjs
 suite "Médias de la veille : saisie, contrôles, superposition" php test_cfo_engine_parity/test_veille_sources.php
 suite "Médias réglables depuis l'écran (vraie base)"         node test_cfo_engine_parity/test_veille_sources.mjs

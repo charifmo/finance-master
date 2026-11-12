@@ -25,6 +25,7 @@ declare(strict_types=1);
  * ============================================================================
  */
 require_once __DIR__ . '/cfo_veille_serveur.php';   // v37.40 : vos réglages (PostgreSQL) + réseau
+if (is_file(__DIR__ . '/cfo_veille_collecte_lib.php')) require_once __DIR__ . '/cfo_veille_collecte_lib.php';   // v37.134 : la collecte continue (absente : revue comme avant)
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -67,10 +68,11 @@ $debut = microtime(true);
 /* ── Avec curl, toutes en parallèle (le délai total est celui de la plus lente) ; sans curl, une à une ── */
 $reponses = cfo_vp_telecharger($requetes, $delai, $budget);
 
-$articles = []; $diag = []; $couverture = [];
+$articles = []; $diag = []; $couverture = []; $trouves = [];
 foreach ($requetes as $i => $r) {
     // v37.42 : un moteur est lu comme sa liste de résultats, une page de journal en HTML — jamais un RSS de journal
     $b = cfo_vp_bilan($r, $reponses[$i], $cfg);
+    $trouves[$i] = $b['articles'];
     array_push($articles, ...$b['articles']); unset($b['articles']);
     $d = ['source' => $r['nom'], 'canal' => $r['canal'], 'libelle' => $r['libelle'], 'q' => $r['q'], 'http' => $reponses[$i]['http']] + $b;
     $diag[] = $d;
@@ -95,7 +97,20 @@ if ($t['lieux']) {
 $frais = count($articles);
 $deja = [];
 foreach ($articles as $a) $deja[(string)$a['url']] = true;
-foreach (cfo_vp_memoire_articles($memoire) as $a) if (!isset($deja[$a['url']])) $articles[] = $a;
+foreach (cfo_vp_memoire_articles($memoire) as $a) if (!isset($deja[$a['url']])) { $articles[] = $a; $deja[$a['url']] = true; }
+//  v37.134 — LA COLLECTE CONTINUE : les requêtes de ce bien sont enregistrées (le cron les rejoue chaque jour, sans limite de 20 s) ;
+//  ce qu'elles ont accumulé jusqu'ici rejoint les candidats. Sans base : la revue fonctionne comme avant.
+$collecte = null;
+if ($t['lieux'] && function_exists('vc_revue')) {
+    $pdoV = vc_pdo($raisonV);
+    if ($pdoV) {
+        try {
+            $rv = vc_revue($pdoV, $t['lieux'], $t['sujets'], $requetes, $trouves, $cfg);
+            foreach ($rv['corpus'] as $a) if (!isset($deja[$a['url']])) { $articles[] = $a; $deja[$a['url']] = true; }
+            $collecte = $rv['etat'] + ['corpus' => count($rv['corpus'])];
+        } catch (Throwable $e) { $collecte = ['erreur' => mb_substr($e->getMessage(), 0, 200)]; }
+    } else $collecte = ['erreur' => (string)$raisonV];
+}
 $retenus = cfo_vp_selection($articles, $t['lieux'], $t['sujets'], $cfg);
 //  v37.123 — « élargir les articles, puis les revérifier avec l'IA » : jusqu'à max_candidats (50), Marrakech sans sujet compris ;
 //  l'appli les fait noter par l'IA et ne garde que ceux qui comptent pour CE bien (repli : « articles », le tri habituel)
@@ -116,6 +131,7 @@ vp_sortie([
     'articles' => $retenus,
     'candidats' => $candidats,
     'memoire' => ['articles' => count($memoire), 'frais' => $frais],
+    'collecte' => $collecte,
     'lus' => count($articles),
     'requetes' => $diag,
     'couverture' => array_values($couverture),
