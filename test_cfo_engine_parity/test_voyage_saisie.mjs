@@ -157,13 +157,32 @@ try {
             const autres = st.apercuFriseOps.ops.map(o => o.t.libelle);
             st.ouvrirApercuFrise(c, L('IA'), null); await Vue.nextTick();
             const iaOps = st.apercuFriseOps.ops.map(o => o.t.libelle);
+            //  v37.133 : cochée dans le Réalisé → une VRAIE opération du journal (modifiable), plus un montant à part
             st.ouvrirApercuFrise(c, L('eau'), null); await Vue.nextTick(); await new Promise(r => setTimeout(r, 50));
             const note = document.querySelector('[data-frise-apercu-realise]')?.textContent.replace(/\s+/g, ' ').trim() || '', engageEau = L('eau').engage;
-            st.fermerApercuFrise(); st.toggleItemPaid(eau, engageEau);
+            const eauOps = st.apercuFriseOps.ops.map(o => [o.t.libelle, o.montant, o.t.source, o.t.categorieId === eau.categorieId]);
+            st.fermerApercuFrise(); st.toggleItemPaid(eau, engageEau); st.calculationTick++; await Vue.nextTick();
+            const apresDecoche = d.transactionsReelles.filter(t => t.source === 'realise').length;
+            //  un ANCIEN montant coché (d'avant la v37.133, sans opération) : l'aperçu le dit, et le bouton en fait une opération
+            const mb = st.moisBudgetaire, k = mb.an + '-' + String(mb.mois).padStart(2, '0');
+            eau.trackerRealise = { ...(eau.trackerRealise || {}), [k]: { paye: false, montantPaye: 70, dateReelle: d.transactionsReelles.length ? undefined : undefined } };
+            st.calculationTick++; await Vue.nextTick();
+            const c2 = st.friseCycle.categories.find(x => x.key === 'factures'), eauL = c2.lignes.find(l => l.nom === 'eau');
+            st.ouvrirApercuFrise(c2, eauL, null); await Vue.nextTick(); await new Promise(r => setTimeout(r, 50));
+            const ancienne = document.querySelector('[data-frise-apercu-realise]')?.textContent.replace(/\s+/g, ' ').trim() || '';
+            document.querySelector('[data-frise-apercu-vers-journal]')?.click(); await Vue.nextTick(); await new Promise(r => setTimeout(r, 50));
+            const converti = { ops: st.apercuFriseOps.ops.map(o => [o.t.libelle, o.montant, o.t.source]), note: !!document.querySelector('[data-frise-apercu-realise]'),
+                               tracker: JSON.stringify((eau.trackerRealise || {})[k] || null), engage: st.friseCycle.categories.find(x => x.key === 'factures').lignes.find(l => l.nom === 'eau').engage };
+            st.fermerApercuFrise();
+            d.transactionsReelles = d.transactionsReelles.filter(t => t.source !== 'realise'); delete eau.trackerRealise;
             d.transactionsReelles = d.transactionsReelles.filter(t => t.id !== 9702 && t.id !== 9703); st.calculationTick++; await Vue.nextTick();
-            return { autres, iaOps, note, engageEau, autresEngage: L('autres') ? L('autres').engage : null }; }, ST);
+            return { autres, iaOps, note, engageEau, eauOps, apresDecoche, ancienne, converti, autresEngage: L('autres') ? L('autres').engage : null }; }, ST);
         v('  → v37.132 : l\u2019aperçu « Autres factures » : seulement « facture inwi » (restée dans Factures) — « Claude » est sous IA, pas aux deux endroits ; « eau » cochée dans le Réalisé : « réglés dans le Réalisé, sans opération »',
-          JSON.stringify(ap.autres) === '["facture inwi"]' && JSON.stringify(ap.iaOps) === '["Claude"]' && ap.engageEau > 0 && /réglés dans le Réalisé/.test(ap.note), JSON.stringify(ap));
+          JSON.stringify(ap.autres) === '["facture inwi"]' && JSON.stringify(ap.iaOps) === '["Claude"]', JSON.stringify(ap));
+        v('  → v37.133 : « eau » cochée dans le Réalisé = une OPÉRATION du journal (« eau », 300 DH, sa catégorie) — modifiable — et plus de montant à part ; décochée : l\u2019opération disparaît',
+          ap.engageEau === 300 && JSON.stringify(ap.eauOps) === '[["eau",300,"realise",true]]' && ap.note === '' && ap.apresDecoche === 0, JSON.stringify(ap));
+        v('  → un ANCIEN montant coché (70 DH, sans opération) : l\u2019aperçu le dit ; « 📝 En faire une opération du journal » → l\u2019opération « eau » 70 DH, plus rien à part, toujours 70 comptés',
+          /70\s?DH réglés dans le Réalisé/.test(ap.ancienne) && JSON.stringify(ap.converti.ops) === '[["eau",70,"realise"]]' && !ap.converti.note && !/montantPaye":70/.test(ap.converti.tracker) && ap.converti.engage === 70, JSON.stringify(ap));
         await page.waitForSelector('[data-cat="factures"] [data-frise-ligne]', { state: 'attached', timeout: 5000 });
         //  ✏️ depuis la frise : la ligne du prévu, ouverte et surlignée
         await page.click('[data-frise-ligne][data-poste="alimentation::555"] [data-frise-vers-prevu]');

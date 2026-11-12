@@ -286,7 +286,9 @@ try {
         const e = await pil();
         v('P2. 🔒 eau : close à 54 — plus rien n\'est attendu : à traiter 6 099, factures 99',
           e.eau.clos === true && e.eau.paye === true && e.eau.regle === 54 && e.reste === 6099 && e.fact === '{"courant":99}', JSON.stringify(e));
-        v('  → l\'état du cycle garde le réglé et dit « cloture »', /"montantPaye":54/.test(e.etatEau) && /"cloture":true/.test(e.etatEau), e.etatEau);
+        //  v37.133 : le réglé d'une facture vit dans le JOURNAL (une opération « eau » de 54 DH, modifiable) ; l'état du cycle dit « cloture »
+        const jEau = await pp.evaluate((ST) => Object.values(eval(ST).donneesAnnuelles).flatMap(d => (d.transactionsReelles || []).filter(t => t.source === 'realise' && t.libelle === 'eau').map(t => t.montant)), ST);
+        v('  → l\'état du cycle dit « cloture » ; les 54 réglés sont une opération du journal (« eau », 54 DH)', /"cloture":true/.test(e.etatEau) && JSON.stringify(jEau) === '[54]', JSON.stringify([e.etatEau, jEau]));
         await ouvrirValide();
         const r = await valide('eau');
         v('  → « Déjà validé » : 🔒 clôturé · 246 libérés, 54 DH, « + ajouter » ouvert',

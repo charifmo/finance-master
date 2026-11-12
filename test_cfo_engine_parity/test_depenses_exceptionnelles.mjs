@@ -272,19 +272,28 @@ try {
             st.friseOuverte = true;
             const avant = await frise();
             st.toggleItemPaid(dep(811), 300);
-            const coche = await frise(), rCoche = realise();
+            const coche = await frise(), rCoche = realise(), jCoche = D.transactionsReelles.filter(t => t.source === 'realise').map(t => [t.libelle, t.montant, t.categorieId]);
             st.ajouterAuRegle(dep(811), 300, '+45');
-            const ajoute = await frise(), rAjoute = realise();
+            const ajoute = await frise(), rAjoute = realise(), jAjoute = D.transactionsReelles.filter(t => t.source === 'realise').map(t => t.montant);
             st.toggleItemPaid(dep(811), 300);   // décocher
-            const decoche = await frise();
+            const decoche = await frise(), jDecoche = D.transactionsReelles.filter(t => t.source === 'realise').length;
             st.friseOuverte = false;
-            return { avant, coche, rCoche, ajoute, rAjoute, decoche };
+            return { avant, coche, rCoche, ajoute, rAjoute, decoche, jCoche, jAjoute, jDecoche };
         }, ST);
         v('K2. « Révision chaudière » cochée dans le Réalisé, sans opération : la frise passe de 0 à 300 / 300 (le chiffre du Réalisé)',
           audit.avant.irr_811 === 0 && audit.coche.irr_811 === 300 && audit.rCoche.irr_811 === 300, JSON.stringify(audit));
         v('  → « + ajouter 45 » dans le Réalisé : 345 des deux côtés ; décochée : 0 ; Cadeau mariage (journal) : 650 partout',
           audit.ajoute.irr_811 === 345 && audit.rAjoute.irr_811 === 345 && audit.decoche.irr_811 === 0 && audit.coche.irr_810 === 650 && audit.rCoche.irr_810 === 650, JSON.stringify(audit));
         v('  → audit : chaque ligne exceptionnelle de la frise = le réglé du Réalisé', Object.keys(audit.ajoute).filter(k => k !== 'irr_autres').length === 2 && Object.keys(audit.ajoute).filter(k => k !== 'irr_autres').every(k => audit.ajoute[k] === audit.rAjoute[k]), JSON.stringify([audit.ajoute, audit.rAjoute]));
+        const frappe = await page.evaluate(async (ST) => { const st = eval(ST), D = st.donneesAnnuelles[2026], dep = D.depensesIrregulieres.find(x => x.id === 811), out = [];
+            for (const v of ['2', '25', '250', '25']) { st.setMontantPayeCycle(dep, v); st.calculationTick++; await Vue.nextTick(); out.push(D.transactionsReelles.filter(t => t.source === 'realise').map(t => t.montant)); }
+            const regle = Math.round(st.getPaidAmount(dep, 300));
+            st.setMontantPayeCycle(dep, ''); st.calculationTick++; await Vue.nextTick();
+            return { out, regle, fin: D.transactionsReelles.filter(t => t.source === 'realise').length }; }, ST);
+        v('  → montant partiel tapé lettre par lettre (2 → 25 → 250 → 25) : UNE opération qui suit (2, 25, 250, 25), pas d\u2019accumulation ; vidé : plus rien',
+          JSON.stringify(frappe.out) === '[[2],[25],[250],[25]]' && frappe.regle === 25 && frappe.fin === 0, JSON.stringify(frappe));
+        v('  → v37.133 : cocher crée l\u2019opération « Révision chaudière » 300 DH dans SA catégorie (journal, modifiable) ; « + 45 » : l\u2019opération passe à 345 (une seule, modifiable) ; décocher la retire',
+          JSON.stringify(audit.jCoche) === '[["Révision chaudière",300,"cat_irr_l_revision_chaudiere"]]' && JSON.stringify(audit.jAjoute) === '[345]' && audit.jDecoche === 0, JSON.stringify([audit.jCoche, audit.jAjoute, audit.jDecoche]));
     });
     await section('L', async () => {
         //  v37.107 — « C'est déjà en saisie et toujours attendu » : une opération rangée dans la catégorie d'une dépense exceptionnelle

@@ -7931,7 +7931,11 @@
                         </div>
                     </div>
                     <p v-if="apercuFrise.auPrevu" data-frise-apercu-auprevu class="rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-2.5 py-1.5 text-[11px] font-bold text-emerald-900">Rien n'a été tapé sur ce morceau : il compte au prévu ({{ formatMAD(apercuFrise.defaut) }}).</p>
-                    <p v-if="apercuFrise.parRealise && apercuFrise.reel > apercuFriseOps.total + 0.5" data-frise-apercu-realise class="rounded-lg bg-violet-50 ring-1 ring-violet-200 px-2.5 py-1.5 text-[11px] font-bold text-violet-900">✅ {{ formatMAD(apercuFrise.reel - apercuFriseOps.total) }} réglés dans le Réalisé (case cochée ou « + ajouter »), sans opération dans le journal — c'est ce qui est compté ici.</p>
+                    <div v-if="apercuFrise.parRealise && apercuFrise.reel > apercuFriseOps.total + 0.5" data-frise-apercu-realise class="rounded-lg bg-violet-50 ring-1 ring-violet-200 px-2.5 py-1.5 text-[11px] font-bold text-violet-900">
+                        <p>✅ {{ formatMAD(apercuFrise.reel - apercuFriseOps.total) }} réglés dans le Réalisé (case cochée ou « + ajouter »), sans opération dans le journal.</p>
+                        <button v-if="apercuFrise.ref" type="button" data-frise-apercu-vers-journal @click="apercuRealiseVersJournal()"
+                                class="mt-1.5 w-full rounded-lg bg-violet-600 hover:bg-violet-700 px-2.5 py-1.5 text-[11px] font-black text-white">📝 En faire une opération du journal (modifiable)</button>
+                    </div>
                     <p v-if="!apercuFriseOps.ops.length" data-frise-apercu-vide class="px-1 py-3 text-xs font-semibold text-slate-500 text-center">Aucune opération dans le journal pour ce poste, {{ apercuFrise.periode }}.</p>
                     <div v-for="o in apercuFriseOps.ops" :key="'fa_' + o.t.id" data-frise-apercu-op :data-tx="o.t.id" :class="['rounded-xl border', journal.ouvert === o.t.id ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200']">
                         <button type="button" data-frise-apercu-ouvrir @click="ouvrirOperation(o.t.id)" class="w-full text-left px-2.5 py-2 flex items-start gap-2">
@@ -9275,8 +9279,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.132 Rangé à un seul endroit";
+                    const CURRENT_VERSION = "37.133 Le Réalisé écrit dans le journal";
                     const CHANGELOG = [
+        { version: "37.133 Le Réalisé écrit dans le journal", date: "2026-11-12", changes: [
+            "📝 « UNE FACTURE QUI FIGURE QUELQUE PART MAIS NON MODIFIABLE : ÇA DOIT ÊTRE DANS LE JOURNAL, ÉDITABLE » — cocher une facture (ligne de « Factures » : eau, tel, internet, IA…) ou une dépense exceptionnelle (Appart Aga, Nejar…) dans le Réalisé crée maintenant une VRAIE opération du journal : son nom, son montant, sa catégorie, son compte, datée dans son cycle. « + ajouter 45 » ou un montant partiel : l'opération suit (une seule, montant exact — taper lettre par lettre ne s'accumule pas). Décocher la retire. Vos propres opérations ne sont jamais touchées ; le pointage d'une ligne de relevé bancaire n'écrit rien (pas de doublon). Le Réalisé ne garde plus de montant à part : tout se voit et se corrige dans le Journal (et dans la frise, ✏️).",
+            "Les montants DÉJÀ cochés avant cette version (ex. « eau : 70 DH, aucune opération ») : l'aperçu de la frise propose « 📝 En faire une opération du journal (modifiable) » — un geste, et c'est une opération comme les autres.",
+            "Les charges fixes, l'épargne et les virements ne changent pas (un relevé bancaire les apporte : pas de doublon).",
+            "PREUVE — test_voyage_saisie P : « eau » cochée → l'opération « eau » 300 DH (sa catégorie), décochée → disparue ; un ancien 70 DH coché → le bouton en fait l'opération « eau » 70 DH, toujours 70 comptés. test_depenses_exceptionnelles K2 : « Révision chaudière » cochée → opération 300 DH dans sa catégorie, « + 45 » → 345, décochée → plus rien ; partiel 2 → 25 → 250 → 25 : une opération qui suit. test_cloture : la clôture à 54 garde l'opération de 54 ; décocher une case réglée en entier la remet à traiter. test_banque : le pointage bancaire ne crée aucun doublon.",
+        ] },
         { version: "37.132 Rangé à un seul endroit", date: "2026-11-12", changes: [
             "🐞 « TOUT EST RÉPERTORIÉ ET NON RÉPERTORIÉ À LA FOIS ! » (frise, bloc Factures) — l'aperçu de « Autres factures (sans ligne) » listait TOUTES les opérations des factures (Claude, Gemini, internet, netflix… 11 opérations, 1 644 DH) alors que la ligne n'en compte que 152 : il prenait la catégorie mère Factures avec toutes ses sous-catégories. Il ne montre plus que les opérations restées dans « Factures » sans sous-catégorie ; Claude reste sous IA, internet sous internet — à un seul endroit.",
             "✅ Une facture (ou dépense exceptionnelle) comptée sans aucune opération (« eau : 70 / 100 », « aucune opération dans le journal ») dit maintenant d'où vient le chiffre : « 70 DH réglés dans le Réalisé (case cochée ou + ajouter), sans opération dans le journal ».",
@@ -19025,15 +19035,73 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         }));
                         return out;
                     });
-                    const regleParJournal = (item, cle) => {
-                        if (!item || !item.categorieId || !_catsLignesPilotage.value.has(item.categorieId)) return 0;
+                    //  v37.133 : le cycle (« AAAA-MM ») dont le journal règle cette ligne
+                    const _cleJournalItem = (item, cle) => {
                         //  v37.107 : une dépense exceptionnelle prévue le jour de paie ou après appartient au cycle SUIVANT (getDepensesCycle)
                         if (String(item.categorieId).startsWith('cat_irr_l_') && Number(item.jourPrevu) >= jourDePaie.value && jourDePaie.value > 1) {
                             let m = Number(item.mois) + 1, a = Number(item.annee);
                             if (m > 12) { m = 1; a++; }
-                            if (m >= 1 && a > 1900) return _txParCategorieCycle.value[item.categorieId + '|' + _cleCycle(m, a)] || 0;
+                            if (m >= 1 && a > 1900) return _cleCycle(m, a);
                         }
-                        return _txParCategorieCycle.value[item.categorieId + '|' + _cycleDe(item, cle)] || 0;
+                        return _cycleDe(item, cle);
+                    };
+                    //  le cycle de paie d'une date (même règle que _txParCategorieCycle)
+                    const _cleCycleDeDate = (iso) => {
+                        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+                        if (!m) return '';
+                        let a = Number(m[1]), mo = Number(m[2]);
+                        if (jourDePaie.value > 1 && Number(m[3]) >= jourDePaie.value) { mo++; if (mo > 12) { mo = 1; a++; } }
+                        return _cleCycle(mo, a);
+                    };
+                    const regleParJournal = (item, cle) => {
+                        if (!item || !item.categorieId || !_catsLignesPilotage.value.has(item.categorieId)) return 0;
+                        return _txParCategorieCycle.value[item.categorieId + '|' + _cleJournalItem(item, cle)] || 0;
+                    };
+                    /*  v37.133 — « UNE FACTURE QUI FIGURE QUELQUE PART MAIS NON MODIFIABLE ! ÇA DOIT ÊTRE DANS LE JOURNAL, ÉDITABLE » :
+                        une facture (ligne de « Factures ») ou une dépense exceptionnelle cochée / « + ajouter » dans le Réalisé devient
+                        une VRAIE opération du journal (sa catégorie, son compte, datée dans son cycle) ; le Réalisé ne garde plus de
+                        montant à part. Les autres lignes (fixes, épargne…) ne changent pas : un relevé bancaire les apporte. */
+                    const _journalisable = (item) => {
+                        if (!item || !item.categorieId || !_catsLignesPilotage.value.has(item.categorieId)) return false;
+                        if (String(item.categorieId).startsWith('cat_irr_l_')) return true;
+                        return Object.values(donneesAnnuelles.value || {}).some(d => d && Object.values(d.chargesVariables || {}).some(cv => cv && cv.categorieId === 'cat_cv_factures'
+                            && (cv.details || []).some(x => x && x.categorieId === item.categorieId)));
+                    };
+                    const _txRealiseAuto = (item, cle) => {
+                        const k = _cleJournalItem(item, cle), out = [];
+                        Object.values(donneesAnnuelles.value || {}).forEach(d => (d && Array.isArray(d.transactionsReelles) ? d.transactionsReelles : []).forEach(t => {
+                            if (t && t.source === 'realise' && t.categorieId === item.categorieId && _cleCycleDeDate(t.date || t.datetime) === k) out.push(t);
+                        }));
+                        return out;
+                    };
+                    //  Le montant RÉGLÉ voulu (coché : le dû ; partiel / « + ajouter » : le montant) → les opérations « Réalisé » de la
+                    //  ligne sont REMPLACÉES pour que journal = ce montant (vos propres opérations ne sont jamais touchées). Montant absolu :
+                    //  la saisie lettre par lettre (« 2 », « 25 », « 250 ») ne s'accumule pas.
+                    const realiseVersJournal = (item, due, cle) => {
+                        if (!_journalisable(item)) return null;
+                        const e = _etatCycle(item, cle);
+                        if (!e) return null;
+                        const voulu = e.paye && !e.montantPaye ? Math.abs(Number(due) || 0) : Math.abs(Number(e.montantPaye) || 0);
+                        const auto = _txRealiseAuto(item, cle), autoTotal = auto.reduce((a, t) => a + Math.abs(Number(t.montant) || 0), 0);
+                        const propres = Math.round((regleParJournal(item, cle) - autoTotal) * 100) / 100;
+                        const m = Math.round((voulu - propres) * 100) / 100;
+                        const vider = () => { const r = Object.assign({}, e); delete r.paye; delete r.montantPaye; delete r.dateReelle; _poserEtatCycle(item, cle, Object.keys(r).length ? r : { paye: false, montantPaye: 0 }); };
+                        if (auto.length === 1 && Math.abs(Math.abs(Number(auto[0].montant) || 0) - m) < 0.005) { vider(); return auto[0].id; }   // déjà juste
+                        //  une date DANS le cycle de la ligne : le jour coché, sinon aujourd'hui, sinon le premier jour du cycle
+                        const k = _cleJournalItem(item, cle), [ka, km] = k.split('-').map(Number), b = _bornesCycle(km, ka);
+                        const date = (auto[0] && auto[0].date) || [e.dateReelle, _aujourdhuiISO(), _ymd(b.debut)].find(x => x && _cleCycleDeDate(x) === k);
+                        if (!date) return null;
+                        auto.forEach(t => { const sx = _seauDeTx(t.id); if (sx) sx.arr.splice(sx.i, 1); });
+                        let id = null;
+                        if (m > 0) {
+                            const c = compteDeLaCategorie(item.categorieId);
+                            id = ajouterTransactionReelle({ datetime: date + 'T12:00', date, mois: Number(date.slice(5, 7)), libelle: String(item.nom || item.label || 'Règlement').trim(),
+                                                            montant: m, categorieId: item.categorieId, categorieSource: 'vous', compteId: c ? c.id : undefined, compteAuto: true, source: 'realise' });
+                        }
+                        calculationTick.value++;
+                        vider();
+                        handleDataChange();
+                        return id;
                     };
 
                     const isItemPaid = (item, dueAmount, cle) => {
@@ -19080,12 +19148,12 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     };
                     //  « + ajouter » d'une ligne déjà validée (ou close) : s'ajoute au réglé, rien ne se
                     //  désactive. « −20 » corrige. Au-delà du dû, la ligne le dit : dépassement.
-                    const ajouterAuRegle = (item, due, valeur, cle) => {
+                    const ajouterAuRegle = (item, due, valeur, cle, journal = true) => {
                         const t = String(valeur == null ? '' : valeur).trim().replace(',', '.').replace('−', '-').replace(/^\+/, '').replace(/\s+/g, '');
                         const v = Number(t);
                         if (!t || !Number.isFinite(v) || v === 0) return;
                         const base = Math.abs(Number(getPaidAmount(item, due, cle)) || 0);
-                        setMontantPayeCycle(item, Math.max(0, Math.round((base + v) * 100) / 100), cle);
+                        setMontantPayeCycle(item, Math.max(0, Math.round((base + v) * 100) / 100), cle, journal);
                     };
 
                     const toggleItemPaid = (item, dueAmount, cle) => {
@@ -19093,7 +19161,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         // de l'item. Le solde réel des comptes n'est JAMAIS muté ici.
                         //  v37.51 : décocher une case CLOSE la rouvre avec ce qui a été réglé.
                         const _e = _etatCycle(item, cle);
-                        if (_e && _e.cloture && Math.abs(Number(_e.montantPaye) || 0) < Math.abs(Number(dueAmount) || 0)) {
+                        //  v37.133 : le réglé compte AUSSI le journal (le Réalisé y écrit maintenant ses montants)
+                        if (_e && _e.cloture && Math.abs(Number(getPaidAmount(item, dueAmount, cle)) || 0) < Math.abs(Number(dueAmount) || 0)) {
                             const rouverte = Object.assign({}, _e);
                             delete rouverte.cloture;
                             _poserEtatCycle(item, cle, rouverte);
@@ -19101,9 +19170,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             return;
                         }
                         const dejaPaye = isItemPaid(item, dueAmount, cle);
+                        //  v37.133 : décocher retire aussi les opérations que le Réalisé avait mises au journal
+                        if (dejaPaye && _journalisable(item)) {
+                            const auto = _txRealiseAuto(item, cle);
+                            auto.forEach(t => { const sx = _seauDeTx(t.id); if (sx) sx.arr.splice(sx.i, 1); });
+                            if (auto.length) calculationTick.value++;
+                        }
                         _poserEtatCycle(item, cle, dejaPaye
                             ? { paye: false, montantPaye: 0 }
                             : { paye: true, montantPaye: Math.abs(Number(dueAmount) || 0), dateReelle: _aujourdhuiISO() });
+                        if (!dejaPaye) realiseVersJournal(item, dueAmount, cle);   // v37.133 : coché → une opération du journal
                         handleDataChange();
                     };
 
@@ -19113,13 +19189,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const e = _etatCycle(item, cle);
                         return e ? Math.abs(Number(e.montantPaye) || 0) : 0;
                     };
-                    const setMontantPayeCycle = (item, valeur, cle) => {
+                    const setMontantPayeCycle = (item, valeur, cle, journal = true) => {
                         const e = _etatCycle(item, cle) || { paye: false };
                         const v = Math.abs(Number(valeur) || 0);
                         _poserEtatCycle(item, cle, Object.assign({}, e, {
                             montantPaye: v,
                             dateReelle: v > 0 ? (e.dateReelle || _aujourdhuiISO()) : e.dateReelle,
                         }));
+                        if (journal) realiseVersJournal(item, v, cle);   // v37.133 : partiel / « + ajouter » → le journal suit (montant absolu)
                         handleDataChange();
                     };
 
@@ -22907,7 +22984,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const a = Number(dep.annee) || mb.an, m = Number(dep.mois), j = Number(dep.jourPrevu) || 0;
                                 const iso = j ? a + '-' + String(m).padStart(2, '0') + '-' + String(Math.min(j, joursDuMoisCal(m, a))).padStart(2, '0') : null;
                                 const seances = iso && iso >= du && iso <= au ? [{ pos: pos(iso), quand: libIso(iso), etat: reel > 0 ? 'paye' : 'prevue' }] : [];
-                                lignesX.push({ cle: 'irr_' + dep.id, nom: String(dep.nom || 'Dépense').trim(), emoji: '⚡', unite: 'cycle', catKey: '__exceptionnel', catId: propre ? dep.categorieId : null,
+                                lignesX.push({ ref: dep, due: prevu, cle: 'irr_' + dep.id, nom: String(dep.nom || 'Dépense').trim(), emoji: '⚡', unite: 'cycle', catKey: '__exceptionnel', catId: propre ? dep.categorieId : null,
                                                du, au, saisi: null, engage: reel, enveloppe: prevu, pct: prevu > 0 ? Math.min(100, Math.round(reel / prevu * 100)) : (reel > 0 ? 100 : 0),
                                                depasse: reel > prevu + 0.5, seances, alerte: null });
                                 if (reel > prevu + 0.5) alertes.push('🔴 ' + String(dep.nom || '').trim() + ' (dépense exceptionnelle) : ' + reel + ' DH pour ' + prevu + ' prévus — dépassement de ' + (reel - prevu) + ' DH');
@@ -22931,7 +23008,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 parts.forEach(p => {
                                     //  v37.128 : le même réglé que le Réalisé (case cochée, « + ajouter » ou journal), sur le même dû
                                     const reel = Math.round(Math.abs(Number(getPaidAmount(p.x, dueDetailDuCycle(p.x, cv, mb.mois, mb.an), _cleCycle(mb.mois, mb.an))) || 0));
-                                    lignesF.push({ cle: cleDetailT0(key, p.x), nom: String(p.x.nom || 'Facture').trim(), emoji: '🧾', unite: 'cycle', catKey: key, catId: p.x.categorieId || null,
+                                    lignesF.push({ ref: p.x, due: dueDetailDuCycle(p.x, cv, mb.mois, mb.an), cle: cleDetailT0(key, p.x), nom: String(p.x.nom || 'Facture').trim(), emoji: '🧾', unite: 'cycle', catKey: key, catId: p.x.categorieId || null,
                                                    du, au, saisi: null, engage: reel, enveloppe: p.part, pct: p.part > 0 ? Math.min(100, Math.round(reel / p.part * 100)) : (reel > 0 ? 100 : 0),
                                                    depasse: reel > p.part + 0.5, seances: [], alerte: null });
                                     if (reel > p.part + 0.5) alertes.push('🔴 ' + String(p.x.nom || '').trim() + ' (facture) : ' + reel + ' DH pour ' + p.part + ' prévus — dépassement de ' + (reel - p.part) + ' DH');
@@ -23021,6 +23098,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                               //  v37.131 — « C'EST QUOI CE RACCOURCI ? ÇA DOIT SE FAIRE ICI » : le tapé se corrige dans l'aperçu
                                               semaine: x && l.cellules ? x.du : null, quinz: !x && Array.isArray(l.quinzaines) && l.quinzaines.length > 0,
                                               autres: /::autres$/.test(String(l.cle || '')),   // v37.132
+                                              ref: l.ref || null, due: l.due || 0,                  // v37.133
                                               //  v37.132 : une facture / dépense exceptionnelle : ce qui est compté au-delà du journal vient du Réalisé (coché, « + ajouter »)
                                               parRealise: !x && !l.cellules && !(Array.isArray(l.quinzaines) && l.quinzaines.length) };
                     };
@@ -23037,6 +23115,13 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         if (t !== '' && !/^\d+(\.\d+)?$/.test(t)) return;
                         saisirSemaineConso(A.semaine, A.cle, t);
                         A.saisi = t === '' ? null : Math.round(Number(t));
+                    };
+                    //  v37.133 : le montant réglé dans le Réalisé de la ligne ouverte → une opération du journal (modifiable)
+                    const apercuRealiseVersJournal = () => {
+                        const A = apercuFrise.value; if (!A || !A.ref) return null;
+                        const mb = moisBudgetaire.value, id = realiseVersJournal(A.ref, A.due, _cleCycle(mb.mois, mb.an));
+                        if (id) { calculationTick.value++; A.reel = Math.round(Math.abs(Number(getPaidAmount(A.ref, A.due, _cleCycle(mb.mois, mb.an))) || 0)); }
+                        return id;
                     };
                     const fermerApercuFrise = () => { apercuFrise.value = null; journal.ouvert = null; journal.brouillon = null; journal.confirmerSuppression = null; };
                     const apercuFriseOps = computed(() => {
@@ -27520,7 +27605,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                                     st.deja++;
                                 } else if (a === 'pointer') {
                                     const t = taches.find(x => x.cle === cible);
-                                    if (t) ajouterAuRegle(t.ref, t.due, Math.abs(l.op.montant), cyclePilotage.value);
+                                    if (t) ajouterAuRegle(t.ref, t.due, Math.abs(l.op.montant), cyclePilotage.value, false);   // v37.133 : la banque pointe, elle n'écrit pas au journal
                                     _enregistrerOp(cap.compteId, l, 'pilotage', { k: cible });
                                     st.pointees++;
                                 } else if (a === 'frais') frais.push(l);
@@ -27766,7 +27851,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, friseQEdit, saisirQuinzaineFrise, apercuQuinzaines, apercuSaisirSemaine, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, friseQEdit, saisirQuinzaineFrise, apercuQuinzaines, apercuSaisirSemaine, apercuRealiseVersJournal, realiseVersJournal, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire
