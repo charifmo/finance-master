@@ -249,16 +249,17 @@ try {
     v('v37.125 : 2ᵉ passage sur le même bien — la mémoire de la veille garde ses candidats (« articles déjà trouvés »), et ils reviennent',
       r.d?.memoire?.articles === 0 && rM.d?.memoire?.articles === urlsA.size && urlsA.size > 0 && (rM.d?.candidats || []).filter(a => urlsA.has(a.url)).length === urlsA.size, JSON.stringify([r.d?.memoire, rM.d?.memoire, urlsA.size]));
     for (const dom of ['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'])
-        v(`requête STRICTE pour ${dom} : site:${dom} ("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim")`,
-          recues.some(x => x.chemin === '/gnews' && x.q === `site:${dom} ("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim")`), JSON.stringify(recues.filter(x => x.q.startsWith('site:')).map(x => x.q)));
+        v(`requête STRICTE pour ${dom} : site:${dom} ("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم" OR "Ouahat Sidi Brahim") — v37.139 : les deux orthographes`,
+          recues.some(x => x.chemin === '/gnews' && x.q === `site:${dom} ("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم" OR "Ouahat Sidi Brahim")`), JSON.stringify(recues.filter(x => x.q.startsWith('site:')).map(x => x.q)));
     v('… et la presse nationale (site:ledesk.ma…)', recues.some(x => x.q.includes('site:ledesk.ma')));
     v('le lieu en arabe, sur Google Actualités en arabe', recues.some(x => x.chemin === '/gnews' && x.hl === 'ar' && x.q.includes('"واحة سيدي ابراهيم"')));
     const SITES = ['www.almarrakchia.net', 'marrakechalaan.com', 'www.kech24.com', 'marrakech7.com'];
-    v('les pages de recherche des sites locaux reçoivent le lieu en arabe', SITES.every(h => recues.some(x => x.hote === h && x.s === 'واحة سيدي ابراهيم')), JSON.stringify(recues.filter(x => x.hote !== '127.0.0.1')));
+    v('les pages de recherche des sites locaux reçoivent le lieu en arabe — v37.139 : dans ses DEUX orthographes (« ابراهيم » et « إبراهيم »)',
+      SITES.every(h => recues.some(x => x.hote === h && x.s === 'واحة سيدي ابراهيم') && recues.some(x => x.hote === h && x.s === 'واحة سيدي إبراهيم')), JSON.stringify(recues.filter(x => x.hote !== '127.0.0.1')));
     v('v37.42 : leurs pages d\'accueil sont lues aussi', SITES.every(h => recues.some(x => x.hote === h && x.chemin === '/' && x.s === null)));
     v('v37.42 : AUCUN journal n\'est interrogé en RSS — pas même l\'ancien réglage « &feed=rss2 » d\'Al Marrakchia', !recues.some(x => x.feed) && recues.some(x => x.hote === 'www.almarrakchia.net'));
     v('v37.42 : Bing Actualités, une requête stricte par média local',
-      ['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'].every(d => recues.some(x => x.chemin === '/bing' && x.q === `site:${d} ("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim")`)));
+      ['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'].every(d => recues.some(x => x.chemin === '/bing' && x.q === `site:${d} ("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم" OR "Ouahat Sidi Brahim")`)));
     v('Al Marrakchia : l\'article sur la bande RN9, titre nettoyé', titres.includes("Ouahat Sidi Brahim : l'Agence urbaine ouvre la bande RN9 à la logistique"), JSON.stringify(titres));
     v('  → une seule fois, même repris par Médias24', titres.filter(t => t.startsWith("Ouahat Sidi Brahim : l'Agence urbaine")).length === 1);
     v('Le Desk, Hespress (arabe) et la page de recherche d\'Al Marrakchia sont lus', titres.some(t => t.startsWith('Grand contournement')) && titres.some(t => t.startsWith('واحة سيدي إبراهيم: الطريق المداري'))
@@ -281,14 +282,14 @@ try {
       && a.url === 'https://www.kech24.com/2026/07/10/tajzi2a/' && a.source === 'Kech24'), JSON.stringify(titres));
     v('Kech24 par sa page d\'accueil : le titre de une qui nomme le lieu, pas le football', titres.includes('واحة سيدي ابراهيم: انطلاق أشغال تثنية الطريق الوطنية رقم 9') && !titres.some(t => t.includes('الكوكب')));
     v('l\'accueil d\'Al Marrakchia (rien sur le lieu) n\'ajoute rien', !titres.some(t => t.includes('أسوار المدينة')));
-    v('la source trop lente est DITE, en clair (Marrakech 7 : pas de réponse en 2 s)', diag.filter(x => x.source === 'Marrakech 7' && x.statut === 'erreur' && x.erreur === 'pas de réponse en 2 s').length === 2,
+    v('la source trop lente est DITE, en clair (Marrakech 7 : pas de réponse en 2 s — ses deux recherches et son accueil)', diag.filter(x => x.source === 'Marrakech 7' && x.statut === 'erreur' && x.erreur === 'pas de réponse en 2 s').length === 3,
       JSON.stringify(diag.filter(x => x.source === 'Marrakech 7')));
-    v('sources injoignables comptées : 2 (recherche et accueil de Marrakech 7)', r.d?.sources_ko === 2, String(r.d?.sources_ko));
+    v('sources injoignables comptées : 3 (deux recherches et accueil de Marrakech 7)', r.d?.sources_ko === 3, String(r.d?.sources_ko));
     v('curl présent : mode parallèle, rien à installer', r.d?.reseau?.mode_reseau === 'parallele' && r.d.reseau.commande === '', JSON.stringify(r.d?.reseau));
     const cv = Object.fromEntries((r.d?.couverture || []).map(c => [c.domaine, c]));
     const porte = (d, canal) => (cv[d]?.canaux || []).find(x => x.canal === canal) || {};
     v('bilan par média local : les quatre, chacun par ses quatre portes', ['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com']
-      .every(d => (cv[d]?.canaux || []).map(x => x.canal).join() === 'moteur,recherche,bing,accueil'), JSON.stringify(r.d?.couverture));
+      .every(d => (cv[d]?.canaux || []).map(x => x.canal).join() === 'moteur,recherche,recherche,bing,accueil'), JSON.stringify(r.d?.couverture));
     v('  → Kech24 : Google 1, page de recherche 2, Bing 1, accueil 2 titres — 5 retenus', porte('kech24.com', 'moteur').n === 1 && porte('kech24.com', 'recherche').n === 2
       && porte('kech24.com', 'recherche').mode === 'page' && porte('kech24.com', 'bing').n === 1 && porte('kech24.com', 'accueil').n === 2 && cv['kech24.com']?.retenus === 5, JSON.stringify(cv['kech24.com']));
     v('  → Marrakech 7 : rien retenu, la cause est dite', cv['marrakech7.com']?.retenus === 0 && porte('marrakech7.com', 'recherche').erreur === 'pas de réponse en 2 s'
@@ -370,7 +371,7 @@ try {
     v('  → la fiche mémorisée reste citée', qN.includes('Douar Oulad Belaagid'));
     const bandeau = (await bandeauDe('Terrain Nord')).replace(/\s+/g, ' ');
     v('la carte dit ce qui a été lu : N articles, médias, sources injoignables',
-      new RegExp(lignes.length + ' actualités? retenues? avant la réponse — ').test(bandeau) && /Al Marrakchia/.test(bandeau) && /Kech24/.test(bandeau) && /2 sources injoignables/.test(bandeau)
+      new RegExp(lignes.length + ' actualités? retenues? avant la réponse — ').test(bandeau) && /Al Marrakchia/.test(bandeau) && /Kech24/.test(bandeau) && /3 sources injoignables/.test(bandeau)
       && !/mode lent/.test(bandeau), bandeau);
     v('la question nomme les médias locaux restés muets, et comment les cibler',
       qN.includes('Médias locaux sans article retenu ici : Marrakech 7 (marrakech7.com)') && qN.includes('« site:marrakech7.com Ouahat Sidi Brahim »'), (qN.match(/Médias locaux.*/) || [''])[0]);
@@ -386,7 +387,7 @@ try {
       liens.some(l => l.t === '🔗 almarrakchia.net' && l.href === 'https://news.google.com/rss/articles/A1') && !liens.some(l => l.t === '🔗 news.google.com'), JSON.stringify(liens));
     const medias = await page.$$eval('tr [data-mi-media]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     v('la carte détaille chaque média local, porte par porte (Google, page de recherche, Bing, accueil)',
-      medias.length === 7 && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
+      medias.length === 7 && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · page de recherche du site \(autre orthographe\) : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
       && medias.some(m => /Marrakech 7 — 0 retenu .*page de recherche du site : échec \(pas de réponse en 2 s\).*page d'accueil : échec \(pas de réponse en 2 s\)/.test(m)), JSON.stringify(medias));
     v('v37.111 : la carte détaille aussi les familles — réseaux sociaux (1 retenu par DuckDuckGo), forums, annonces',
       medias.some(m => /^Réseaux sociaux \(facebook\.com, instagram\.com, youtube\.com\) — 1 retenu · Bing \(web\) : aucun article · DuckDuckGo : 1 article$/.test(m))
