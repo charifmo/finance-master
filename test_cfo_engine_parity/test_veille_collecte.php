@@ -91,6 +91,23 @@ function scenario(PDO $pdo, string $nom, array $cfg, array $lieux, array $sujets
     v('5. « actu-kech-exemple.ma » (inconnu) est proposé comme nouvelle source ; le360.ma (déjà réglé) ne l\'est pas — rien n\'est lu d\'office',
       in_array('actu-kech-exemple.ma', $dom, true) && !in_array('fr.le360.ma', $dom, true) && !in_array('le360.ma', $dom, true), $j($dom));
 
+    //  v37.135 — « sport.le360.ma / mobile.telquel.ma proposés alors que le360.ma et telquel.ma sont déjà mes sources »
+    $connus = vc_domaines_connus($cfg);
+    v('5b. les variantes d\u2019une source réglée sont connues (sport.le360.ma, mobile.telquel.ma, www.ledesk.ma) ; « notle360.ma » et un vrai nouveau domaine ne le sont pas',
+      vc_domaine_connu('sport.le360.ma', $connus) && vc_domaine_connu('mobile.telquel.ma', $connus) && vc_domaine_connu('www.ledesk.ma', $connus) && vc_domaine_connu('le360.ma', $connus)
+      && !vc_domaine_connu('notle360.ma', $connus) && !vc_domaine_connu('actu-kech-exemple.ma', $connus), $j(array_slice(array_keys($connus), 0, 5)));
+    $pdo->prepare("INSERT INTO veille_domaines (domaine, vu, premier, dernier, exemple) VALUES (?, 19, ?, ?, 'x')")->execute(['sport.le360.ma', $T0, $T0]);
+    $pdo->prepare("INSERT INTO veille_domaines (domaine, vu, premier, dernier, exemple) VALUES (?, 5, ?, ?, 'x')")->execute(['notle360.ma', $T0, $T0]);
+    $retires = vc_domaines_nettoyer($pdo, $cfg);
+    $reste = $pdo->query("SELECT domaine FROM veille_domaines WHERE statut = 'propose'")->fetchAll(PDO::FETCH_COLUMN);
+    v('  → le ménage retire les variantes déjà proposées (sport.le360.ma), garde les vrais nouveaux (actu-kech-exemple.ma, notle360.ma)',
+      $retires === 1 && !in_array('sport.le360.ma', $reste, true) && in_array('actu-kech-exemple.ma', $reste, true) && in_array('notle360.ma', $reste, true), $j([$retires, $reste]));
+    $pdo->exec("DELETE FROM veille_domaines WHERE domaine = 'notle360.ma'");
+    vc_stocker($pdo, 1, [['titre' => 'Mondial 2030 : le stade', 'url' => 'https://news.google.com/rss/articles/XYZ?oc=5', 'domaine' => 'sport.le360.ma', 'source' => 'Le360 Sport', 'portee' => 'nationale', 'langue' => 'fr']], $cfg, $T0 + 5000);
+    v('  → un article de « sport.le360.ma » rangé ensuite ne le fait plus proposer', !in_array('sport.le360.ma', $pdo->query("SELECT domaine FROM veille_domaines")->fetchAll(PDO::FETCH_COLUMN), true));
+    $pdo->exec("DELETE FROM veille_hits WHERE article_id IN (SELECT id FROM veille_articles WHERE url = 'https://news.google.com/rss/articles/XYZ?oc=5')");
+    $pdo->exec("DELETE FROM veille_articles WHERE url = 'https://news.google.com/rss/articles/XYZ?oc=5'");
+
     /* ── 6. Le lendemain : les requêtes reviennent (sauf celle en pause), Brave avec une clé, dans son plafond ── */
     //  (les deux biens — Ouahat Sidi Brahim et Tamansourt — sont collectés ; la requête en pause attend)
     $tot = (int)$pdo->query('SELECT COUNT(*) FROM veille_requetes')->fetchColumn();

@@ -113,6 +113,24 @@ function vc_domaines_connus(array $cfg): array {
     return $k;
 }
 
+/** v37.135 : un domaine est « connu » s'il est une source réglée OU l'une de ses variantes (sport.le360.ma, mobile.telquel.ma, www…). */
+function vc_domaine_connu(string $d, array $connus): bool {
+    $d = strtolower(trim($d));
+    if ($d === '') return true;
+    if (isset($connus[$d])) return true;
+    foreach ($connus as $k => $_) if (str_ends_with($d, '.' . $k)) return true;   // frontière de point : « notle360.ma » n'est pas « le360.ma »
+    return false;
+}
+
+/** v37.135 : retire des propositions les domaines devenus connus (variantes déjà proposées avant ce correctif). → nombre retiré */
+function vc_domaines_nettoyer(PDO $pdo, array $cfg): int {
+    $connus = vc_domaines_connus($cfg); $n = 0;
+    $del = $pdo->prepare('DELETE FROM veille_domaines WHERE domaine = ?');
+    foreach ($pdo->query("SELECT domaine FROM veille_domaines WHERE statut = 'propose'")->fetchAll(PDO::FETCH_COLUMN) as $d)
+        if (vc_domaine_connu((string)$d, $connus)) { $del->execute([$d]); $n += $del->rowCount(); }
+    return $n;
+}
+
 /** Range des articles (format de cfo_vp_bilan) dans le corpus, rattachés à une requête. → nombre d'articles */
 function vc_stocker(PDO $pdo, int $requeteId, array $articles, array $cfg, ?int $maintenant = null): int {
     $now = $maintenant ?? time(); $connus = vc_domaines_connus($cfg); $n = 0;
@@ -135,8 +153,7 @@ function vc_stocker(PDO $pdo, int $requeteId, array $articles, array $cfg, ?int 
                       ':ts' => isset($a['ts']) && $a['ts'] ? (int)$a['ts'] : null, ':sp' => !empty($a['specifique']) ? 1 : 0, ':n' => $now]);
         $sel->execute([$url]); $aid = (int)$sel->fetchColumn();
         $hit->execute([$aid, $requeteId, $now, $now]);
-        $racine = (string)preg_replace('/^(www|m|fr|ar)\./', '', $d);
-        if ($d !== '' && !isset($connus[$d]) && !isset($connus[$racine])) $dom->execute([$d, $now, $now, $url]);
+        if (!vc_domaine_connu($d, $connus)) $dom->execute([$d, $now, $now, $url]);
         $n++;
     }
     return $n;
