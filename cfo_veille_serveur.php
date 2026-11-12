@@ -128,7 +128,35 @@ function cfo_vp_telecharger(array $requetes, int $delai, int $budget = 20): arra
 }
 
 /** v37.42 : les en-têtes d'une requête — une page de journal est demandée comme le ferait un navigateur. */
+/**
+ * v37.137 — LA CLÉ BRAVE SEARCH, lue au moment de l'appel (jamais copiée dans une requête mémorisée ni renvoyée au navigateur) :
+ * db_config.php (« brave_api_key », « brave_max_appels_mois »), sinon l'environnement, sinon /etc/fm-veille.env (install_veille.sh).
+ * → ['cle' => …, 'max_mois' => …] ou null
+ */
+function cfo_vp_brave_config(): ?array {
+    static $c = false;
+    if ($c !== false) return $c;
+    $dbc = is_file(__DIR__ . '/db_config.php') ? (include __DIR__ . '/db_config.php') : [];
+    $dbc = is_array($dbc) ? $dbc : [];
+    $env = [];
+    $f = getenv('FM_VEILLE_ENV') ?: '/etc/fm-veille.env';
+    if (is_readable($f)) foreach (file($f, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $l)
+        if (preg_match('/^\s*([A-Z_]+)=(.*)$/', $l, $m)) $env[$m[1]] = trim(stripslashes(trim($m[2])), "'\"");
+    $cle = (string)($dbc['brave_api_key'] ?? (getenv('BRAVE_API_KEY') ?: ($env['BRAVE_API_KEY'] ?? '')));
+    $max = (int)($dbc['brave_max_appels_mois'] ?? (getenv('BRAVE_MAX_APPELS_MOIS') ?: ($env['BRAVE_MAX_APPELS_MOIS'] ?? 1000)));
+    return $c = (preg_match('/^[A-Za-z0-9_\-]{10,200}$/', $cle) ? ['cle' => $cle, 'max_mois' => max(0, $max)] : null);
+}
+/** v37.137 — le moteur « web » Brave (réseaux sociaux, forums, annonces), à la place de DuckDuckGo qui bloque les serveurs. */
+function cfo_vp_moteur_brave(): array {
+    return ['id' => 'brave_web', 'nom' => 'Brave Search', 'langue' => '*', 'role' => 'web', 'format' => 'brave_json',
+            'gabarit' => getenv('FM_BRAVE_GABARIT') ?: 'https://api.search.brave.com/res/v1/web/search?count=20&q={q}'];   // FM_BRAVE_GABARIT : tests
+}
+
 function cfo_vp_entetes(array $r): array {
+    if (($r['format'] ?? '') === 'brave_json') {
+        $b = cfo_vp_brave_config();
+        return ['Accept: application/json', 'User-Agent: FinanceMasterVeille/1.0'] + ($b ? [2 => 'X-Subscription-Token: ' . $b['cle']] : []);
+    }
     return ($r['type'] ?? '') === 'page'
         ? ['User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 FinanceMaster-Veille/1.0',
            'Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.5', 'Accept-Language: ar,fr;q=0.9,en;q=0.5']

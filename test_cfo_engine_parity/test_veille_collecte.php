@@ -133,10 +133,35 @@ function scenario(PDO $pdo, string $nom, array $cfg, array $lieux, array $sujets
     $attente = (int)$pdo->query("SELECT COUNT(*) FROM veille_jobs WHERE statut = 'attente'")->fetchColumn();
     v('  → les Brave hors plafond restent EN ATTENTE (pas perdues, pas appelées)', $attente === $nBrave - 2, (string)$attente);
 
+    /* ── 7b. v37.137 : le plafond se réserve d'un bloc, en entiers (SQLite comparait un calcul à du texte : toujours « vrai ») ── */
+    $pdo->exec('DELETE FROM veille_budget');
+    $r1 = vc_reserver_brave($pdo, 3, 5, $T0); $r2 = vc_reserver_brave($pdo, 3, 5, $T0); $r3 = vc_reserver_brave($pdo, 2, 5, $T0); $r4 = vc_reserver_brave($pdo, 1, 5, $T0);
+    $tot = (int)$pdo->query('SELECT appels FROM veille_budget')->fetchColumn();
+    v('7b. plafond 5 : réserver 3 → oui ; encore 3 → NON (6 > 5) ; 2 → oui (5) ; 1 → non ; compteur 5', $r1 && !$r2 && $r3 && !$r4 && $tot === 5, $j([$r1, $r2, $r3, $r4, $tot]));
+    //  une requête web Brave (réseaux sociaux) mémorisée par la revue : rejouée par le cron DANS le plafond, jamais sans clé
+    $reqW = ['type' => 'moteur', 'canal' => 'brave_web', 'nom' => 'Brave Search', 'libelle' => 'réseaux sociaux', 'q' => '(site:facebook.com) "Ouahat Sidi Brahim"', 'langue' => '*',
+             'specifique' => true, 'format' => 'brave_json', 'url' => 'https://api.search.brave.com/res/v1/web/search?count=20&q=x'];
+    $idsW = vc_memoriser($pdo, vc_cle_bien($lieux), $lieux, $sujets, [$reqW], $T0 + 3 * 86400);
+    $pdo->exec('DELETE FROM veille_budget'); $pdo->exec("UPDATE veille_jobs SET statut = 'fait' WHERE statut = 'attente'");
+    $sansCle = vc_planifier($pdo, false, $T0 + 3 * 86400 + 60);
+    $jw = (int)$pdo->query('SELECT COUNT(*) FROM veille_jobs WHERE requete_id = ' . (int)$idsW[0])->fetchColumn();
+    $avecCle = vc_planifier($pdo, true, $T0 + 3 * 86400 + 120);
+    $pdo->exec("UPDATE veille_jobs SET statut = 'fait' WHERE statut = 'attente' AND requete_id <> " . (int)$idsW[0]);
+    $vusW = [];
+    $fauxW = function (array $reqs, int $d, int $b) use (&$vusW) { $o = []; foreach ($reqs as $i => $r) { $vusW[] = $r['format'] ?? '';
+        $o[$i] = ['http' => 200, 'erreur' => '', 'corps' => json_encode(['web' => ['results' => [['title' => 'Ouahat Sidi Brahim : réunion des ayants droit', 'url' => 'https://www.facebook.com/groups/ouahat/posts/88', 'description' => 'RN9']]]])]; } return $o; };
+    $bw = vc_collecter($pdo, $cfg, ['lot' => 10, 'maintenant' => $T0 + 3 * 86400 + 200, 'telecharger' => $fauxW, 'brave' => ['cle' => 'K', 'max_mois' => 10]]);
+    $fb = (int)$pdo->query("SELECT COUNT(*) FROM veille_articles WHERE url = 'https://www.facebook.com/groups/ouahat/posts/88'")->fetchColumn();
+    v('  → la requête « réseaux sociaux » de Brave : pas planifiée sans clé ; avec clé, rejouée, comptée dans le plafond (1 appel), le post Facebook rangé',
+      $jw === 0 && $avecCle >= 1 && $vusW === ['brave_json'] && $bw['brave_appels'] === 1 && (int)$pdo->query('SELECT appels FROM veille_budget')->fetchColumn() === 1 && $fb === 1,
+      $j([$sansCle, $jw, $avecCle, $vusW, $bw]));
+    $pdo->exec("DELETE FROM veille_hits WHERE requete_id = " . (int)$idsW[0]); $pdo->exec("DELETE FROM veille_articles WHERE url = 'https://www.facebook.com/groups/ouahat/posts/88'");
+    $pdo->exec("DELETE FROM veille_budget"); $pdo->exec("INSERT INTO veille_budget (mois, appels) VALUES ('" . gmdate('Y-m', $T0 + 86400) . "', 2)");
+
     /* ── 7. L'état (commande « etat ») ── */
     $e = vc_etat($pdo, $T0 + 86400 + 5000);
     v('7. « etat » : biens, requêtes, en pause, tâches du jour, corpus, domaines proposés, appels Brave du mois',
-      $e['biens'] === 2 && $e['en_pause'] === 0 && $e['articles'] === 4 && $e['brave_appels_mois'] === 2 && in_array('actu-kech-exemple.ma', array_column($e['domaines_proposes'], 'domaine'), true), $j($e));
+      $e['dernier_passage_cron'] !== null && $e['taches_traitees'] > 0 && $e['biens'] === 2 && $e['en_pause'] === 0 && $e['articles'] === 4 && $e['brave_appels_mois'] === 2 && in_array('actu-kech-exemple.ma', array_column($e['domaines_proposes'], 'domaine'), true), $j($e));
 }
 
 $lite = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);

@@ -44,6 +44,18 @@ function vc_pdo(?string &$raison = null): ?PDO {
     return cfo_vp_pdo($raison);
 }
 
+/** v37.137 : réserve $n appels Brave dans le plafond du mois (AVANT l'appel). → true si réservé, false si le plafond ne le permet pas. */
+function vc_reserver_brave(PDO $pdo, int $n, int $max, ?int $maintenant = null): bool {
+    if ($n <= 0) return true;
+    $mois = gmdate('Y-m', $maintenant ?? time());
+    $pdo->prepare('INSERT INTO veille_budget (mois, appels) VALUES (?, 0) ON CONFLICT DO NOTHING')->execute([$mois]);
+    //  les nombres liés en ENTIERS : en texte, SQLite juge « appels + '3' <= '4' » toujours vrai (un calcul comparé à un texte)
+    $s = $pdo->prepare('UPDATE veille_budget SET appels = appels + :n WHERE mois = :m AND appels + :n2 <= :max');
+    $s->bindValue(':n', $n, PDO::PARAM_INT); $s->bindValue(':n2', $n, PDO::PARAM_INT); $s->bindValue(':m', $mois); $s->bindValue(':max', $max, PDO::PARAM_INT);
+    $s->execute();
+    return $s->rowCount() > 0;
+}
+
 /** La clé d'un bien : ses lieux normalisés (la même que la mémoire de la veille). */
 function vc_cle_bien(array $lieux): string { return substr(sha1(implode('|', array_map('cfo_vp_norm', $lieux))), 0, 20); }
 
@@ -169,7 +181,7 @@ function vc_planifier(PDO $pdo, bool $braveActif, ?int $maintenant = null): int 
     $n = 0;
     foreach ($rows as $r) {
         $req = json_decode((string)$r['req'], true) ?: [];
-        if (($req['type'] ?? '') === 'brave' && !$braveActif) continue;
+        if ((($req['type'] ?? '') === 'brave' || ($req['format'] ?? '') === 'brave_json') && !$braveActif) continue;
         $ins->execute([(int)$r['id'], $jour]); $n += $ins->rowCount();
     }
     return $n;
@@ -187,26 +199,7 @@ function vc_brave_http(string $q, string $langue, array $brave): array {
     return ['http' => $http, 'corps' => $corps === false ? '' : (string)$corps, 'erreur' => $err];
 }
 /** La réponse JSON de Brave → articles (format de cfo_vp_bilan). null si ce n'est pas une réponse de recherche. */
-function vc_lire_brave(string $corps, array $req, array $cfg): ?array {
-    $j = json_decode($corps, true);
-    if (!is_array($j)) return null;
-    $res = $j['web']['results'] ?? ($j['results'] ?? null);
-    if (!is_array($res)) return null;
-    $out = [];
-    foreach ($res as $x) {
-        $url = (string)($x['url'] ?? ''); $titre = trim(html_entity_decode(strip_tags((string)($x['title'] ?? '')), ENT_QUOTES, 'UTF-8'));
-        if ($titre === '' || !preg_match('#^https?://#i', $url)) continue;
-        $hote = (string)parse_url($url, PHP_URL_HOST);
-        $media = cfo_vp_media($cfg, $hote, (string)parse_url($url, PHP_URL_PATH));
-        //  la date de la PAGE selon Brave (page_age), jamais la date de collecte
-        $ts = !empty($x['page_age']) ? (strtotime((string)$x['page_age']) ?: null) : null;
-        $ex = trim((string)preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags((string)($x['description'] ?? '')), ENT_QUOTES, 'UTF-8')));
-        $out[] = ['titre' => $titre, 'url' => $url, 'source' => $media['nom'] ?? (string)($x['profile']['name'] ?? $hote),
-                  'domaine' => (string)preg_replace('/^www\./', '', strtolower($hote)), 'portee' => $media['portee'] ?? 'autre', 'ts' => $ts, 'date' => $ts ? gmdate('Y-m-d', $ts) : null,
-                  'extrait' => mb_strlen($ex) > 280 ? rtrim(mb_substr($ex, 0, 277)) . '…' : $ex, 'specifique' => !empty($req['specifique']), 'langue' => $req['langue'] ?? 'fr'];
-    }
-    return $out;
-}
+function vc_lire_brave(string $corps, array $req, array $cfg): ?array { return cfo_vp_lire_brave($corps, $req, $cfg); }
 
 /**
  * Un passage du cron : prend jusqu'à $o['lot'] tâches en attente, les télécharge, range les articles.
@@ -232,6 +225,18 @@ function vc_collecter(PDO $pdo, array $cfg, array $o = []): array {
         $req->execute([$now, $statut, in_array($statut, ['ok', 'vide'], true) ? 1 : 0, in_array($statut, ['ok', 'vide'], true) ? 0 : 1, $bloque ? $now + VC_PAUSE_BLOCAGE : 0, (int)$j['requete_id']]);
         $bilan['statuts'][$statut] = ($bilan['statuts'][$statut] ?? 0) + 1;
     };
+    //  v37.137 : les requêtes web Brave (réseaux sociaux, forums, annonces) comptent aussi dans le plafond du mois
+    $webB = array_values(array_filter($web, fn($j) => ($j['r']['format'] ?? '') === 'brave_json'));
+    if ($webB) {
+        $ok = $brave && !empty($brave['cle']) && vc_reserver_brave($pdo, count($webB), (int)($brave['max_mois'] ?? 1000), $now);
+        if (!$ok) {
+            $ids = array_map(fn($j) => (int)$j['id'], $webB);
+            if (!$brave || empty($brave['cle'])) foreach ($webB as $j) $finir($j, 'saute', 0, 'pas de clé Brave');
+            else { $pdo->exec("UPDATE veille_jobs SET statut = 'attente', debut = NULL WHERE id IN (" . implode(',', $ids) . ")");
+                   $bilan['statuts']['budget'] = ($bilan['statuts']['budget'] ?? 0) + count($webB); }
+            $web = array_values(array_filter($web, fn($j) => ($j['r']['format'] ?? '') !== 'brave_json'));
+        } else $bilan['brave_appels'] += count($webB);
+    }
     if ($web) {
         $reps = $telecharger(array_map(fn($j) => $j['r'], $web), $delai, $delai + 10);
         foreach ($web as $i => $j) {
@@ -248,8 +253,8 @@ function vc_collecter(PDO $pdo, array $cfg, array $o = []): array {
         if (!$brave || empty($brave['cle'])) { $finir($j, 'saute', 0, 'pas de clé Brave'); continue; }
         $mois = gmdate('Y-m', $now); $max = max(0, (int)($brave['max_mois'] ?? 1000));
         $pdo->prepare('INSERT INTO veille_budget (mois, appels) VALUES (?, 0) ON CONFLICT DO NOTHING')->execute([$mois]);
-        $s = $pdo->prepare('UPDATE veille_budget SET appels = appels + 1 WHERE mois = ? AND appels < ?');   // réservé AVANT l'appel
-        $s->execute([$mois, $max]);
+        $s = $pdo->prepare('UPDATE veille_budget SET appels = appels + 1 WHERE mois = :m AND appels < :max');   // réservé AVANT l'appel (entier lié en entier)
+        $s->bindValue(':m', $mois); $s->bindValue(':max', $max, PDO::PARAM_INT); $s->execute();
         if ($s->rowCount() < 1) { $pdo->prepare("UPDATE veille_jobs SET statut = 'attente', debut = NULL WHERE id = ?")->execute([(int)$j['id']]);
                                    $bilan['statuts']['budget'] = ($bilan['statuts']['budget'] ?? 0) + 1; continue; }
         $bilan['brave_appels']++;
@@ -307,6 +312,9 @@ function vc_etat(PDO $pdo, ?int $maintenant = null): array {
         'articles_24h' => (int)$col('SELECT COUNT(*) FROM veille_articles WHERE premier >= ' . (int)($now - 86400)),
         'domaines_proposes' => $pdo->query("SELECT domaine, vu, exemple FROM veille_domaines WHERE statut = 'propose' ORDER BY vu DESC, domaine LIMIT 15")->fetchAll(PDO::FETCH_ASSOC),
         'brave_appels_mois' => (int)($col("SELECT appels FROM veille_budget WHERE mois = '" . gmdate('Y-m', $now) . "'") ?: 0),
+        //  v37.137 : la preuve que le cron tourne SANS l'appli — l'heure de la dernière tâche traitée, et combien au total
+        'dernier_passage_cron' => ($dp = $col("SELECT MAX(fin) FROM veille_jobs WHERE statut NOT IN ('attente', 'encours')")) ? gmdate('Y-m-d H:i', (int)$dp) . ' UTC' : null,
+        'taches_traitees' => (int)$col("SELECT COUNT(*) FROM veille_jobs WHERE statut NOT IN ('attente', 'encours')"),
     ];
 }
 

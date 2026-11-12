@@ -647,6 +647,7 @@ function cfo_vp_lire_html_brut(string $html, array $req, array $cfg, string $url
  */
 function cfo_vp_lire_reponse(string $corps, array $req, array $cfg): array {
     if (($req['format'] ?? '') === 'html_ddg') { $d = cfo_vp_lire_ddg($corps, $req, $cfg); return ['mode' => $d === null ? null : 'moteur', 'articles' => $d]; }
+    if (($req['format'] ?? '') === 'brave_json') { $d = cfo_vp_lire_brave($corps, $req, $cfg); return ['mode' => $d === null ? null : 'moteur', 'articles' => $d]; }
     if (($req['type'] ?? '') === 'page') {
         if (cfo_vp_est_flux($corps)) return ['mode' => null, 'articles' => null, 'raison' => 'flux'];
         $h = cfo_vp_lire_html($corps, $req, $cfg, (string)($req['url'] ?? ''));
@@ -654,6 +655,31 @@ function cfo_vp_lire_reponse(string $corps, array $req, array $cfg): array {
     }
     $rss = cfo_vp_lire_rss($corps, $req, $cfg);
     return ['mode' => $rss === null ? null : 'moteur', 'articles' => $rss];
+}
+
+/**
+ * v37.137 — la réponse JSON de Brave Search (API officielle) → articles. null si ce n'est pas une réponse de recherche.
+ * La date est celle de la PAGE selon Brave (page_age), jamais la date de collecte.
+ */
+function cfo_vp_lire_brave(string $corps, array $req, array $cfg): ?array {
+    $j = json_decode($corps, true);
+    if (!is_array($j)) return null;
+    $res = $j['web']['results'] ?? ($j['results'] ?? null);
+    if (!is_array($res)) return null;
+    $out = [];
+    foreach ($res as $x) {
+        if (!is_array($x)) continue;
+        $url = (string)($x['url'] ?? ''); $titre = trim(html_entity_decode(strip_tags((string)($x['title'] ?? '')), ENT_QUOTES, 'UTF-8'));
+        if ($titre === '' || !preg_match('#^https?://#i', $url)) continue;
+        $hote = (string)parse_url($url, PHP_URL_HOST);
+        $media = cfo_vp_media($cfg, $hote, (string)parse_url($url, PHP_URL_PATH));
+        $ts = !empty($x['page_age']) ? (strtotime((string)$x['page_age']) ?: null) : null;
+        $ex = trim((string)preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags((string)($x['description'] ?? '')), ENT_QUOTES, 'UTF-8')));
+        $out[] = ['titre' => $titre, 'url' => $url, 'source' => $media['nom'] ?? (string)($x['profile']['name'] ?? $hote),
+                  'domaine' => (string)preg_replace('/^www\./', '', strtolower($hote)), 'portee' => $media['portee'] ?? 'autre', 'ts' => $ts, 'date' => $ts ? gmdate('Y-m-d', $ts) : null,
+                  'extrait' => mb_strlen($ex) > 280 ? rtrim(mb_substr($ex, 0, 277)) . '…' : $ex, 'specifique' => !empty($req['specifique']), 'langue' => $req['langue'] ?? 'fr'];
+    }
+    return $out;
 }
 
 /**

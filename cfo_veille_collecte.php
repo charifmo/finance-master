@@ -30,9 +30,7 @@ if (!$pdo) { fwrite(STDERR, "base indisponible : $raison\n"); exit(1); }
 vc_schema($pdo);
 vc_domaines_nettoyer($pdo, $cfg);   // v37.135 : plus de variantes de sources connues dans les propositions
 
-$dbc = is_file(__DIR__ . '/db_config.php') ? (include __DIR__ . '/db_config.php') : [];
-$cle = is_array($dbc) ? (string)($dbc['brave_api_key'] ?? (getenv('BRAVE_API_KEY') ?: '')) : (string)(getenv('BRAVE_API_KEY') ?: '');
-$brave = $cle !== '' ? ['cle' => $cle, 'max_mois' => (int)((is_array($dbc) ? ($dbc['brave_max_appels_mois'] ?? null) : null) ?? (getenv('BRAVE_MAX_APPELS_MOIS') ?: 1000))] : null;
+$brave = cfo_vp_brave_config();   // v37.137 : db_config.php, l'environnement ou /etc/fm-veille.env — la même lecture que la revue
 
 $cmd = $argv[1] ?? 'tout';
 $horo = gmdate('Y-m-d H:i:s');
