@@ -421,14 +421,29 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
         $cle = mb_substr(cfo_vp_norm($a['titre']), 0, 70);
         if (isset($vus[$cle]) || isset($vus[$a['url']])) continue;
         $vus[$cle] = $vus[$a['url']] = true;
-        $age = $a['ts'] !== null ? ($maintenant - $a['ts']) / 86400 : 9999;
-        $a['score'] = 5 * $nl + $ns + ($a['portee'] === 'locale' ? 2 : 0) + ($age <= 90 ? 2 : ($age <= 365 ? 1 : 0));
+        $age = $a['ts'] !== null ? ($maintenant - $a['ts']) / 86400 : null;
+        //  v37.136 — « LE RÉSULTAT EST NUL » : un terrain de proximité de 2023, SANS DATE LUE, passait devant le Mondial 2030. Récent +2 (90 j)
+        //  / +1 (1 an), sans date −1 (les dates écrites dans les pages sont maintenant lues : au-delà de la fenêtre, écarté) ; le bonus
+        //  « presse locale » ne vaut que pour un article qui nomme le lieu (sinon Le360 perdait face aux échos locaux du même sujet)
+        $a['score'] = 5 * $nl + $ns + ($a['portee'] === 'locale' && ($nl || $a['specifique']) ? 2 : 0)
+                    + ($age === null ? -1 : ($age <= 90 ? 2 : ($age <= 365 ? 1 : 0)));
         //  v37.121 : un article qui ne nomme pas le lieu mais parle d'un catalyseur de la zone (Grand Stade, LGV…) — dit « zone »
         $a['zone'] = !$nl && !$a['specifique'];
         $garde[] = $a;
     }
     $ordre = fn($x, $y) => [$y['score'], $y['ts'] ?? 0] <=> [$x['score'], $x['ts'] ?? 0];
     usort($garde, $ordre);
+    //  v37.136 — UNE MÊME HISTOIRE, UNE PLACE (deux de plus au plus, en fin de liste) : dix articles « Grand Stade · Mondial 2030 » prenaient
+    //  dix places sur vingt. Même histoire = titres qui partagent plus de la moitié de leurs mots significatifs.
+    $mots = function (string $t): array { $o = []; foreach (preg_split('/\s+/u', cfo_vp_norm($t)) as $w) if (mb_strlen($w) >= 4) $o[$w] = true; return $o; };
+    $uniques = []; $echos = []; $vusM = [];
+    foreach ($garde as $a) {
+        $m = $mots($a['titre']); $echo = false;
+        foreach ($vusM as $v) { $inter = count(array_intersect_key($m, $v)); $union = count($m + $v);
+            if ($union > 0 && $inter / $union >= 0.5) { $echo = true; break; } }
+        if ($echo) $echos[] = $a; else { $uniques[] = $a; $vusM[] = $m; }
+    }
+    $garde = array_merge($uniques, $echos);
     //  v37.121 — des places GARDÉES pour la zone : les articles qui nomment le lieu prenaient les 15 places, un chantier à 7,5
     //  milliards autour du Grand Stade n'avait aucune chance. Jusqu'à quota_zone places pour eux (les meilleurs), le reste au lieu ;
     //  une catégorie qui manque laisse ses places à l'autre.
@@ -437,7 +452,10 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
     $k = min(count($zoneA), max(0, (int)($cfg['quota_zone'] ?? 5)));
     $pris = array_slice($lieu, 0, $max - $k);
     $pris = array_merge($pris, array_slice($zoneA, 0, $max - count($pris)));
-    usort($pris, $ordre);
+    //  v37.136 : les échos d'une même histoire viennent APRÈS les histoires différentes (l'ordre de $garde), pas mêlés par le score
+    $rang = []; foreach ($garde as $i => $a) $rang[$a['url']] = $i;
+    $echoU = []; foreach ($echos as $a) $echoU[$a['url']] = true;
+    usort($pris, fn($x, $y) => [isset($echoU[$x['url']]) ? 1 : 0, $y['score'], $y['ts'] ?? 0] <=> [isset($echoU[$y['url']]) ? 1 : 0, $x['score'], $x['ts'] ?? 0]);
     return array_map(function ($a) { unset($a['ts'], $a['specifique']); return $a; }, $pris);
 }
 
@@ -500,6 +518,17 @@ function cfo_vp_lire_html(string $html, array $req, array $cfg, string $urlPage)
     $items = []; $vus = [];
     $prendre = function ($a, $bloc, bool $dansArticle) use (&$items, &$vus, $xp, $req, $cfg, $urlPage, $pageDeResultats, $propre) {
         $titre = $propre($a->textContent);
+        //  v37.136 — un lien qui englobe toute la carte (« 4 ديسمبر 2024بالفيديو.. titre…résumé… ») : le titre est SON intertitre,
+        //  sinon son premier bloc qui n'est pas une date ; le résumé, son paragraphe ; la date, celle écrite dedans
+        $carte = $titre;
+        $hA = $xp->query('.//h1|.//h2|.//h3|.//h4', $a)->item(0);
+        if ($hA && mb_strlen($propre($hA->textContent)) >= 15) $titre = $propre($hA->textContent);
+        elseif (mb_strlen($titre) > 120) {
+            foreach ($xp->query('./*', $a) as $ch) { $x = $propre($ch->textContent); $dx = cfo_vp_date_texte($x);
+                if (mb_strlen($x) >= 15 && !($dx && strlen($x) - $dx[2] < 8)) { $titre = $x; break; } }
+        }
+        $dt = cfo_vp_date_texte($titre);
+        if ($dt && $dt[1] === 0) $titre = $propre(ltrim(substr($titre, $dt[2]), " \t-–—|·:"));   // la date collée devant le titre
         if ($titre === '' && $bloc) { $h = $xp->query('.//h1|.//h2|.//h3|.//h4', $bloc)->item(0); $titre = $h ? $propre($h->textContent) : ''; }
         $it = cfo_vp_article_page($a->getAttribute('href'), $titre, $req, $cfg, $urlPage);
         if ($it === null || isset($vus[$it['url']])) return;
@@ -510,6 +539,9 @@ function cfo_vp_lire_html(string $html, array $req, array $cfg, string $urlPage)
             if ($t) $ts = strtotime($t->getAttribute('datetime') ?: $propre($t->textContent)) ?: null;
             foreach ($xp->query('.//p', $bloc) as $p) { $x = $propre($p->textContent); if (mb_strlen($x) >= 30 && $x !== $it['titre']) { $extrait = $x; break; } }
         }
+        foreach ($xp->query('.//p', $a) as $p) { if ($extrait !== '') break; $x = $propre($p->textContent); if (mb_strlen($x) >= 30 && $x !== $it['titre']) $extrait = $x; }
+        //  v37.136 : pas de <time> — la date écrite dans la carte (sinon dans un petit bloc voisin) ; une page d'accueil mêle d'autres dates : pas le grand bloc
+        if ($ts === null) { $d = cfo_vp_date_texte($carte) ?? ($bloc && mb_strlen($bloc->textContent) < 600 ? cfo_vp_date_texte($propre($bloc->textContent)) : null); if ($d) $ts = $d[0]; }
         $items[] = array_merge($it, ['ts' => $ts, 'date' => $ts ? gmdate('Y-m-d', $ts) : null,
                                      'extrait' => mb_strlen($extrait) > 280 ? rtrim(mb_substr($extrait, 0, 277)) . '…' : $extrait,
                                      'specifique' => $dansArticle && $pageDeResultats]);
@@ -530,6 +562,33 @@ function cfo_vp_lire_html(string $html, array $req, array $cfg, string $urlPage)
             $prendre($a, $a->parentNode instanceof DOMElement ? $a->parentNode : null, false);
     }
     return array_slice($items, 0, $accueil ? 40 : 20);
+}
+
+/**
+ * v37.136 — UNE DATE ÉCRITE DANS LE TEXTE, quand la page n'a pas de <time> : « 4 ديسمبر 2024 », « 4 décembre 2024 »,
+ * « 2024-12-04 », « 04/12/2024 ». → [ts (midi UTC), position, longueur] ou null. Mois marocains et orientaux.
+ */
+function cfo_vp_date_texte(string $t, ?int $maintenant = null): ?array {
+    static $mois = null;
+    if ($mois === null) {
+        $mois = [];
+        foreach ([1 => ['يناير', 'janvier'], 2 => ['فبراير', 'février', 'fevrier'], 3 => ['مارس', 'mars'], 4 => ['أبريل', 'ابريل', 'إبريل', 'avril'],
+                  5 => ['ماي', 'مايو', 'mai'], 6 => ['يونيو', 'يونيه', 'juin'], 7 => ['يوليوز', 'يوليو', 'juillet'], 8 => ['غشت', 'أغسطس', 'اغسطس', 'août', 'aout'],
+                  9 => ['شتنبر', 'سبتمبر', 'septembre'], 10 => ['أكتوبر', 'اكتوبر', 'octobre'], 11 => ['نونبر', 'نوفمبر', 'novembre'], 12 => ['دجنبر', 'ديسمبر', 'décembre', 'decembre']] as $m => $noms)
+            foreach ($noms as $n) $mois[mb_strtolower($n)] = $m;
+    }
+    $an = (int)gmdate('Y', $maintenant ?? time());
+    $ok = fn(int $y, int $m, int $d) => $y >= 2000 && $y <= $an + 1 && checkdate($m, $d, $y);
+    $alt = implode('|', array_map(fn($n) => preg_quote($n, '/'), array_keys($mois)));
+    if (preg_match('/(?<!\d)(\d{1,2})(?:er)?\s*(' . $alt . ')\s*,?\s*(\d{4})(?!\d)/iu', $t, $m, PREG_OFFSET_CAPTURE)) {
+        $d = (int)$m[1][0]; $mo = $mois[mb_strtolower($m[2][0])] ?? 0; $y = (int)$m[3][0];
+        if ($mo && $ok($y, $mo, $d)) return [gmmktime(12, 0, 0, $mo, $d, $y), $m[0][1], strlen($m[0][0])];
+    }
+    if (preg_match('/(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/', $t, $m, PREG_OFFSET_CAPTURE) && $ok((int)$m[1][0], (int)$m[2][0], (int)$m[3][0]))
+        return [gmmktime(12, 0, 0, (int)$m[2][0], (int)$m[3][0], (int)$m[1][0]), $m[0][1], strlen($m[0][0])];
+    if (preg_match('/(?<!\d)(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})(?!\d)/', $t, $m, PREG_OFFSET_CAPTURE) && $ok((int)$m[3][0], (int)$m[2][0], (int)$m[1][0]))
+        return [gmmktime(12, 0, 0, (int)$m[2][0], (int)$m[1][0], (int)$m[3][0]), $m[0][1], strlen($m[0][0])];
+    return null;
 }
 
 /** v37.42 : un lien lu sur une page du journal → l'article (titre, lien absolu, média), ou null. */
