@@ -60,6 +60,25 @@ if ($reseau['mode_reseau'] === 'impossible') vp_sortie(['status' => 'error', 'er
 
 $t = cfo_vp_valider($corps);
 if (!$t['lieux'] && !$t['sujets']) vp_sortie(['status' => 'error', 'error' => 'TERMES_VIDES', 'message' => 'Aucun lieu ni sujet exploitable.'], 400);
+//  v37.137 — « LES RÉSULTATS DES RÉSEAUX SOCIAUX NE SONT PAS LÀ » : DuckDuckGo bloque l'adresse du serveur (page de consentement), Bing (web)
+//  ne rend rien. Avec une clé Brave Search (API officielle), Brave REMPLACE DuckDuckGo pour les réseaux sociaux, forums et annonces —
+//  dans le plafond d'appels du mois (réservé AVANT l'appel ; plafond atteint : DuckDuckGo comme avant).
+$brave = function_exists('cfo_vp_brave_config') ? cfo_vp_brave_config() : null;
+$braveInfo = ['actif' => false, 'appels' => 0, 'raison' => $brave ? '' : 'pas de clé'];
+if ($brave) {
+    $cfgB = $cfg; $cfgB['moteurs'] = array_values(array_filter($cfg['moteurs'] ?? [], fn($m) => ($m['format'] ?? '') !== 'html_ddg'));
+    $cfgB['moteurs'][] = cfo_vp_moteur_brave();
+    $reqB = cfo_vp_requetes($cfgB, $t['lieux'], $t['sujets']);
+    $nB = count(array_filter($reqB, fn($r) => ($r['format'] ?? '') === 'brave_json'));
+    $pdoB = function_exists('vc_pdo') ? vc_pdo() : null;
+    $okB = false;
+    if ($nB > 0 && $pdoB) {
+        try { vc_schema($pdoB); $okB = vc_reserver_brave($pdoB, $nB, (int)$brave['max_mois']); }
+        catch (Throwable $e) { $braveInfo['raison'] = 'budget illisible : ' . mb_substr($e->getMessage(), 0, 120); }
+    } elseif ($nB > 0) $braveInfo['raison'] = 'base indisponible (le plafond ne peut pas être compté)';
+    if ($okB) { $cfg = $cfgB; $braveInfo = ['actif' => true, 'appels' => $nB, 'raison' => '']; }
+    elseif ($nB > 0 && $braveInfo['raison'] === '') $braveInfo['raison'] = 'plafond du mois atteint';
+}
 $requetes = cfo_vp_requetes($cfg, $t['lieux'], $t['sujets']);
 $delai = max(2, min(20, (int)($cfg['delai_s'] ?? 8)));
 $budget = max(5, min(25, (int)($cfg['budget_s'] ?? 20)));
@@ -132,6 +151,7 @@ vp_sortie([
     'candidats' => $candidats,
     'memoire' => ['articles' => count($memoire), 'frais' => $frais],
     'collecte' => $collecte,
+    'brave' => $braveInfo,
     'lus' => count($articles),
     'requetes' => $diag,
     'couverture' => array_values($couverture),

@@ -110,6 +110,7 @@ const ACCUEIL_ALAAN = `<!DOCTYPE html><html lang="ar"><head><title>مراكش ا
 <article><h2><a href="https://marrakechalaan.com/2026/10/04/oasis-eau/">واحة سيدي ابراهيم: انطلاق أشغال قنوات الماء في الدواوير</a></h2><time datetime="2026-10-04">4 أكتوبر</time></article>
 </body></html>`;
 const recues = [];
+const braveRecues = [];
 const presse = http.createServer(async (req, res) => {
     // v37.42 : ce serveur est aussi le PROXY HTTP de PHP — les sites (www.kech24.com…) y arrivent par leur nom
     const u = new URL(req.url, 'http://127.0.0.1'); const q = u.searchParams.get('q') || u.searchParams.get('s') || '';
@@ -129,6 +130,16 @@ const presse = http.createServer(async (req, res) => {
           + '<a class="result__snippet">Les propriétaires de la bande RN9 se réunissent samedi au douar Oulad Belaagid.</a></div></div></body></html>'
         : '<html><body><div class="no-results">No results.</div></body></html>');
     if (u.pathname === '/web/bing_web') return envoyer([]);
+    //  v37.137 — Brave Search (API officielle, JSON) : un post Facebook et une annonce Avito ; la clé arrive en en-tête
+    if (u.pathname === '/brave') {
+        braveRecues.push({ q, cle: req.headers['x-subscription-token'] || '' });
+        const r = [];
+        if (q.includes('site:facebook.com') && q.includes('Ouahat Sidi Brahim')) r.push({ title: 'Ouahat Sidi Brahim : les ayants droit de la bande RN9 se réunissent', url: 'https://www.facebook.com/groups/ouahat/posts/77',
+            description: 'Réunion samedi au douar Oulad Belaagid sur le tracé du contournement.', page_age: '2026-10-02T09:00:00' });
+        if (q.includes('site:avito.ma') && q.includes('Ouahat Sidi Brahim')) r.push({ title: 'Terrain 1 ha à vendre Ouahat Sidi Brahim route de Casablanca', url: 'https://www.avito.ma/fr/marrakech/terrains/terrain_1ha_ouahat_77.htm',
+            description: '1 ha titré, façade RN9, 180 DH/m².', page_age: '2026-09-20T09:00:00' });
+        res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ web: { results: r } }));
+    }
     if (u.pathname === '/gnews') {
         // v37.41 : une requête STRICTE par média local
         if (q.startsWith('site:almarrakchia.net ') && q.includes('Ouahat Sidi Brahim')) return envoyer([ART.agence, ART.piege, ART.js]);
@@ -207,6 +218,7 @@ await attendrePort(port);
 const port2 = await portLibre();
 const srv2 = spawn(php, ['-d', 'disable_functions=curl_init,curl_multi_init,simplexml_load_string', '-S', '127.0.0.1:' + port2, '-t', doc], { stdio: 'ignore', env: ENV });
 await attendrePort(port2);
+let srv3 = null;
 const BASE = `http://127.0.0.1:${port}/finance/`;
 const BASE2 = `http://127.0.0.1:${port2}/finance/`;
 const revue = async (corps, entetes = { 'X-Requested-With': 'XMLHttpRequest' }, methode = 'POST', base = BASE) => {
@@ -500,10 +512,44 @@ try {
     v('  → IA de tri illisible : le tri habituel s\'applique, la carte le dit (« Vérification par l’IA indisponible »)',
       bt2.some(t => /Vérification par l’IA indisponible/.test(t)) && qR.split('\n').filter(l => /^\[\d+\] /.test(l)).length > 0 && !qR.includes('VÉRIFIÉS par un premier passage IA'), JSON.stringify(bt2));
   });
+    /* ── v37.137 — « LES RÉSULTATS DES RÉSEAUX SOCIAUX NE SONT PAS LÀ » : DuckDuckGo bloque le serveur ; avec une clé Brave Search,
+          Brave le remplace pour les réseaux sociaux, forums et annonces, dans le plafond du mois ── */
+    {
+        const CLE = 'CLE_brave-TEST-123456';
+        const envF = path.join(doc, 'fm-veille.env'), dbF = path.join(doc, 'veille.sqlite');
+        const ecrireEnv = (max) => fs.writeFileSync(envF, 'BRAVE_API_KEY=' + CLE + '\nBRAVE_MAX_APPELS_MOIS=' + max + '\n');
+        ecrireEnv(50);
+        const port3 = await portLibre();
+        srv3 = spawn(php, ['-S', '127.0.0.1:' + port3, '-t', doc], { stdio: 'ignore',
+            env: { ...ENV, FM_VEILLE_ENV: envF, FM_VEILLE_DSN: 'sqlite:' + dbF, FM_BRAVE_GABARIT: `http://127.0.0.1:${pPresse}/brave?q={q}` } });
+        await attendrePort(port3);
+        const BASE3 = `http://127.0.0.1:${port3}/finance/`;
+        const corpsN = { action: 'revue', lieux: ['Ouahat Sidi Brahim', 'واحة سيدي ابراهيم'], sujets: ['RN9'] };
+        recues.length = 0; braveRecues.length = 0;
+        const r3 = await revue(corpsN, { 'X-Requested-With': 'XMLHttpRequest' }, 'POST', BASE3);
+        const d3 = r3.d || {}, brut = JSON.stringify(d3);
+        const rs = (d3.couverture || []).find(c => /^Réseaux sociaux/.test(c.nom || '')) || {}, an = (d3.couverture || []).find(c => /^Annonces/.test(c.nom || '')) || {};
+        const urls = (d3.candidats || []).map(x => x.url);
+        v('v37.137 : avec une clé Brave, les réseaux sociaux, forums et annonces passent par Brave Search — plus par DuckDuckGo (bloqué)',
+          d3.brave && d3.brave.actif === true && d3.brave.appels === braveRecues.length && braveRecues.length >= 3 && !recues.some(x => x.chemin === '/web/ddg')
+          && (rs.canaux || []).some(k => k.canal === 'brave_web') && !(rs.canaux || []).some(k => k.canal === 'ddg'), JSON.stringify({ brave: d3.brave, n: braveRecues.length, rs }));
+        v('  → le post Facebook ET l\'annonce Avito trouvés par Brave arrivent dans les candidats (et la carte les compte)',
+          urls.includes('https://www.facebook.com/groups/ouahat/posts/77') && urls.includes('https://www.avito.ma/fr/marrakech/terrains/terrain_1ha_ouahat_77.htm')
+          && (rs.retenus || 0) >= 1 && (an.retenus || 0) >= 1, JSON.stringify({ urls: urls.filter(u => /facebook|avito/.test(u)), rs: rs.retenus, an: an.retenus }));
+        v('  → la clé part en EN-TÊTE vers Brave, et nulle part ailleurs : ni dans la réponse au navigateur, ni dans les requêtes mémorisées',
+          braveRecues.every(x => x.cle === CLE) && !brut.includes(CLE) && !fs.readFileSync(dbF).includes(Buffer.from(CLE)), JSON.stringify(braveRecues.slice(0, 2)));
+        //  plafond atteint : DuckDuckGo comme avant, et c'est dit
+        ecrireEnv(braveRecues.length + 1);
+        recues.length = 0; const avant = braveRecues.length;
+        const r4 = await revue(corpsN, { 'X-Requested-With': 'XMLHttpRequest' }, 'POST', BASE3);
+        const d4 = r4.d || {};
+        v('  → plafond du mois atteint (' + (avant + 1) + ' appels) : aucun appel Brave de plus, DuckDuckGo reprend, la raison est dite',
+          d4.brave && d4.brave.actif === false && d4.brave.raison === 'plafond du mois atteint' && braveRecues.length === avant && recues.some(x => x.chemin === '/web/ddg'), JSON.stringify(d4.brave));
+    }
 } catch (e) {
     v('scène complète sans exception', false, String(e && e.stack || e));
 } finally {
     if (browser) await browser.close().catch(() => {});
-    srv.kill(); srv2.kill(); presse.close();
+    srv.kill(); srv2.kill(); if (srv3) srv3.kill(); presse.close();
 }
 fin();
