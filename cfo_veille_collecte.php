@@ -28,6 +28,7 @@ $raison = null;
 $pdo = vc_pdo($raison);
 if (!$pdo) { fwrite(STDERR, "base indisponible : $raison\n"); exit(1); }
 vc_schema($pdo);
+vc_domaines_nettoyer($pdo, $cfg);   // v37.135 : plus de variantes de sources connues dans les propositions
 
 $dbc = is_file(__DIR__ . '/db_config.php') ? (include __DIR__ . '/db_config.php') : [];
 $cle = is_array($dbc) ? (string)($dbc['brave_api_key'] ?? (getenv('BRAVE_API_KEY') ?: '')) : (string)(getenv('BRAVE_API_KEY') ?: '');

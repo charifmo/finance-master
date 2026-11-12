@@ -313,7 +313,7 @@ try {
           '<p><b>Source : Recherche Internet.</b></p><p><b>Verdict — Terrain Nord (Ouahat Sidi Brahim)</b> : hausse probable, portée par l\'ouverture de la bande RN9 à la logistique [1].</p>'
           + '<b>Ce qui bouge autour de la parcelle</b><ul><li>14/09/2026 — bande RN9 ouverte à la logistique — ↑ — [1]</li><li>02/07/2026 — tracé du grand contournement le long de la parcelle — ↑ — [3]</li></ul>'
           + '<b>Prix comparables</b> : aucun comparable fiable trouvé.<b>À faire</b><ul><li>Demander la note de renseignements à l\'Agence urbaine.</li></ul>'
-          + '<b>Sources</b> : [1] Al Marrakchia, 14/09/2026 · [3] Le Desk, 02/07/2026, https://ledesk.ma/encontinu/contournement-marrakech.<br>Requêtes utilisées : « واحة سيدي ابراهيم تصميم التهيئة » · « Ouahat Sidi Brahim SDAU Le Desk »' }) });
+          + '<b>Sources</b> : [1] Al Marrakchia, 14/09/2026, https://news.google.com/rss/articles/A1 · [3] Le Desk, 02/07/2026, https://ledesk.ma/encontinu/contournement-marrakech.<br>Requêtes utilisées : « واحة سيدي ابراهيم تصميم التهيئة » · « Ouahat Sidi Brahim SDAU Le Desk »' }) });
   });
   const page = await ctx.newPage();
   const erreurs = []; page.on('pageerror', e => erreurs.push(String(e)));
@@ -369,6 +369,9 @@ try {
     v('les sources de la réponse sont CLIQUABLES : l\'adresse en clair → « 🔗 ledesk.ma », le renvoi [1] → l\'article 1 lu ; ouverts à part, sans fuite',
       liens.some(l => l.t === '🔗 ledesk.ma' && l.href === 'https://ledesk.ma/encontinu/contournement-marrakech') && liens.some(l => l.t === '[1]' && l.href === art1)
       && liens.every(l => l.cible === '_blank' && /noopener/.test(l.rel) && /^https?:\/\//.test(l.href)), JSON.stringify({ liens, art1 }));
+    //  v37.136 — un lien Google Actualités porte le nom du JOURNAL, pas « news.google.com »
+    v('  → v37.136 : l\'adresse Google Actualités d\'un article lu s\'affiche « 🔗 almarrakchia.net » (son journal), pas « 🔗 news.google.com »',
+      liens.some(l => l.t === '🔗 almarrakchia.net' && l.href === 'https://news.google.com/rss/articles/A1') && !liens.some(l => l.t === '🔗 news.google.com'), JSON.stringify(liens));
     const medias = await page.$$eval('tr [data-mi-media]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     v('la carte détaille chaque média local, porte par porte (Google, page de recherche, Bing, accueil)',
       medias.length === 7 && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
@@ -479,6 +482,10 @@ try {
     const final = qF.split('\n').filter(l => /^\[\d+\] /.test(l));
     v('T. un premier passage IA reçoit les candidats ÉLARGIS (plus que les articles d\'avant), numérotés, avec la fiche du bien, et doit répondre en JSON',
       cands.length > final.length && cands.some(l => /LGV/.test(l)) && /RÉPONDS UNIQUEMENT par ce JSON/.test(qT) && /Douar Oulad Belaagid/.test(qT) && questions.indexOf(qT) < questions.indexOf(qF), JSON.stringify([cands.length, final.length]));
+    //  v37.136 — « le résultat est nul » : un terrain de proximité de 2023 qui cite la commune recevait 3/3
+    v('  → v37.136 : la consigne de tri est stricte — la date du jour ; 3 = un PROJET qui touche la valeur foncière ; citer la commune sans enjeu = 1 ; plus de 18 mois ≤ 1 ; doublons = 1',
+      /^AUJOURD'HUI : \d{4}-\d{2}-\d{2}\.$/m.test(qT) && /3 = un PROJET ou une DÉCISION/.test(qT) && /1 = cite le lieu ou la commune SANS enjeu foncier/.test(qT)
+      && /plus de 18 mois vaut au plus 1/.test(qT) && /les autres valent 1 \(doublon\)/.test(qT) && !/3 = nomme le bien, son lieu/.test(qT), qT.split('\n').slice(0, 6).join('\n'));
     v('  → le résultat final ne garde que les notes 2 et 3, les mieux notées d\'abord, chacune avec sa note et sa raison',
       final.length > 0 && final.every(l => /\(pertinence [23]\/3 : (nomme le lieu|projet de la zone)\)/.test(l)) && /pertinence 3\/3/.test(final[0])
       && qF.includes('VÉRIFIÉS par un premier passage IA'), final.join('\n'));

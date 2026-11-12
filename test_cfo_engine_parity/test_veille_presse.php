@@ -203,6 +203,41 @@ v('une requête qui exigeait le lieu garde son article même si le titre ne le n
 v('en tête : les articles qui nomment le lieu, locaux et récents (FR et AR)',
   array_slice($titres, 0, 2) == ['واحة سيدي إبراهيم: تصميم التهيئة الجديد', "Ouahat Sidi Brahim : le plan d'aménagement adopté"], $j($titres));
 v('le bien nommé, même il y a un an, passe devant la zone seule récente', array_search('Ouahat Sidi Brahim : nouveau lotissement autorisé', $titres, true) < array_search('Marrakech : le contournement de la RN9 lancé', $titres, true), $j($titres));
+
+/* ── v37.136 — « LE RÉSULTAT EST NUL » : dates écrites, cartes de Marrakech Alaan, une même histoire, Le360 ── */
+$D = fn($t) => ($x = cfo_vp_date_texte($t, $now)) ? gmdate('Y-m-d', $x[0]) : null;
+v('v37.136 dates écrites : « 4 ديسمبر 2024 », « 14 نونبر 2023 » (mois marocain), « 1er mars 2026 », « 2026-11-04 », « 04/12/2024 » ; « 31/02/2024 » et « 2099 » refusés',
+  $D('4 ديسمبر 2024بالفيديو.. شميس') === '2024-12-04' && $D('14 نونبر 2023 الشقيق') === '2023-11-14' && $D('Publié le 1er mars 2026') === '2026-03-01'
+  && $D('maj 2026-11-04') === '2026-11-04' && $D('le 04/12/2024') === '2024-12-04' && $D('31/02/2024') === null && $D('4 ديسمبر 2099') === null,
+  $j([$D('4 ديسمبر 2024بالفيديو.. شميس'), $D('14 نونبر 2023 الشقيق'), $D('Publié le 1er mars 2026'), $D('maj 2026-11-04'), $D('le 04/12/2024'), $D('31/02/2024'), $D('4 ديسمبر 2099')]));
+$reqMA = ['type' => 'page', 'canal' => 'recherche', 'nom' => 'Marrakech Alaan', 'domaine' => 'marrakechalaan.com', 'q' => 'واحة سيدي ابراهيم', 'langue' => 'ar', 'url' => 'https://www.marrakechalaan.com/?s=x'];
+$cartes = '<html><body><div class="resultats">'
+  . '<a href="https://www.marrakechalaan.com/article-577251"><span class="date">4 ديسمبر 2024</span><h3>بالفيديو.. شميس يثمن زيارة كاتب الدولة لورش قرية الحرفيين بواحة سيدي ابراهيم</h3><p>تفقد كاتب الدولة المكلف بالصناعة التقليدية صباح اليوم ورش بناء قرية الحرفيين بواحة سيدي ابراهيم.</p></a>'
+  . '<a href="https://www.marrakechalaan.com/article-557506"><div>2 يوليو 2024</div><div>الشقيق رئيس واحة سيدي ابراهيم يعطي انطلاقة اشغال انجاز ملاعب القرب ببلعكيد</div><div>اعلن محمد الشقيق رئيس جماعة واحة سيدي ابراهيم عن انطلاقة أشغال انجاز ملاعب القرب بمنطقة بلعكيد بحضور اللجنة التقنية.</div></a>'
+  . '<a href="https://www.marrakechalaan.com/article-600001">5 نوفمبر 2026قنطرة جديدة بواحة سيدي ابراهيم لمواكبة القطار فائق السرعة</a>'
+  . '</div></body></html>';
+$C = cfo_vp_lire_html($cartes, $reqMA, $cfg, $reqMA['url']) ?? [];
+$par = []; foreach ($C as $c) $par[basename($c['url'])] = $c;
+v('  → une carte « date + intertitre + résumé » : le titre est l\'intertitre, la date (4 déc. 2024) est lue, le résumé est le paragraphe',
+  isset($par['article-577251']) && str_starts_with($par['article-577251']['titre'], 'بالفيديو.. شميس') && $par['article-577251']['date'] === '2024-12-04'
+  && str_starts_with($par['article-577251']['extrait'], 'تفقد كاتب الدولة'), $j($C));
+v('  → une carte en blocs sans intertitre : le titre est le bloc qui n\'est pas la date (2 juil. 2024), pas date+titre+résumé collés',
+  isset($par['article-557506']) && str_starts_with($par['article-557506']['titre'], 'الشقيق رئيس') && !str_contains($par['article-557506']['titre'], 'اعلن') && $par['article-557506']['date'] === '2024-07-02', $j($par['article-557506'] ?? null));
+v('  → un lien « 5 نوفمبر 2026قنطرة… » : la date est retirée du titre, et lue (5 nov. 2026)',
+  isset($par['article-600001']) && str_starts_with($par['article-600001']['titre'], 'قنطرة جديدة') && $par['article-600001']['date'] === '2026-11-05', $j($par['article-600001'] ?? null));
+//  dix échos locaux du même sujet (Grand Stade · Mondial 2030) et l'article du Le360 (presse nationale) : il garde sa place
+//  (titres variés, comme les vrais : « un stade métamorphosé », « se refait une beauté », « prêt pour »… — même histoire)
+$echos = []; foreach (['Grand Stade de Marrakech : un stade métamorphosé pour le Mondial 2030', 'Marrakech : le Grand Stade se refait une beauté pour le Mondial 2030',
+                       'Mondial 2030 : le Grand Stade de Marrakech se refait une beauté', 'Le Grand Stade de Marrakech métamorphosé pour le Mondial 2030',
+                       'Marrakech : le Grand Stade prêt pour le Mondial 2030', 'Mondial 2030 : Marrakech et son Grand Stade se préparent'] as $k => $t)
+    $echos[] = $art($t, $k + 1, 'locale', false, "https://kech24.com/gs-$k");
+$le360 = $art('Mondial 2030 : 7,5 milliards de dirhams pour les accès aux stades de Benslimane et de Marrakech', 40, 'nationale', false, 'https://fr.le360.ma/sports/mondial-2030-75-milliards');
+$mob = $art('Marrakech : le plan de mobilité urbaine durable du Grand Marrakech lancé', 12, 'nationale', false, 'https://ledesk.ma/plan-mobilite');
+$sZ = cfo_vp_selection(array_merge($echos, [$le360, $mob, $art('Ouahat Sidi Brahim : le plan d\'aménagement adopté', 20, 'locale')]), ['Ouahat Sidi Brahim'], ['Mondial 2030', 'stades'], ['max_articles' => 5, 'quota_zone' => 4] + $cfg, $now);
+$tZ = array_column($sZ, 'url');
+v('  → six échos « Grand Stade » (titres variés) ne prennent plus toutes les places : l\'article du Le360 (7,5 MMDH, accès aux stades) et le plan de mobilité du Desk sont retenus',
+  in_array('https://fr.le360.ma/sports/mondial-2030-75-milliards', $tZ, true) && in_array('https://ledesk.ma/plan-mobilite', $tZ, true)
+  && count(array_filter($tZ, fn($u) => str_contains($u, 'kech24.com/gs-'))) <= 2, $j(array_column($sZ, 'titre')));
 v('plafond max_articles respecté', count(cfo_vp_selection(array_map(fn($i) => $art("Ouahat Sidi Brahim $i", $i), range(1, 40)), ['Ouahat Sidi Brahim'], [], $cfg, $now)) === (int)$cfg['max_articles']);
 
 /* ── 5. v37.111 : réseaux sociaux, forums, annonces — les moteurs du web ── */
