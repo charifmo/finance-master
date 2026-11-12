@@ -128,7 +128,7 @@ const doc = fs.mkdtempSync(path.join(os.tmpdir(), 'sources-'));
 const F = path.join(doc, 'finance');
 fs.mkdirSync(F);
 fs.writeFileSync(path.join(F, 'index.html'), html);
-for (const f of ['save_data.php', 'cfo_veille_presse.php', 'cfo_veille_lib.php', 'cfo_veille_serveur.php', 'cfo_veille_sources.php'])
+for (const f of ['save_data.php', 'cfo_veille_presse.php', 'cfo_veille_lib.php', 'cfo_veille_serveur.php', 'cfo_veille_sources.php', 'cfo_veille_collecte_lib.php'])
     if (fs.existsSync(path.join(RACINE, f))) fs.copyFileSync(path.join(RACINE, f), path.join(F, f));   // absents sur une version antérieure
 fs.writeFileSync(path.join(F, 'finance_data.json'), JSON.stringify(fx));
 // Les VRAIES sources d'origine ; Google redirigé vers la presse simulée. Les flux d'origine sont
