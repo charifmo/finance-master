@@ -95,6 +95,18 @@ function scenario(PDO $pdo, string $nom, array $cfg, array $lieux, array $sujets
       $avant === $T0 + 5000 && $rv3['depuis'] === $T0 + 5000 && vc_revue_precedente($pdo, $bien) === $T0 + 9000 && ($prem[$LE360] ?? null) === $T0 + 4000
       && !isset($prem['https://inconnu.ma/x']) && in_array('Mondial 2030 : 7,5 milliards de dirhams pour les accès aux stades de Benslimane et de Marrakech', $connus, true), $j([$avant, $rv3['depuis'], $prem, count($connus)]));
 
+    /* ── 4c. v37.139 — les pages des journaux locaux relues toutes les 3 heures ; les moteurs une fois par jour ── */
+    $J = $T0 + 10 * 86400;   // un jour neuf
+    vc_revue($pdo, $lieux, $sujets, $R, [], $cfg, $J + 9 * 3600);   // le bien est revu (il reste collecté)
+    //  (toutes les pages des biens collectés : Ouahat Sidi Brahim et Tamansourt)
+    $pages = (int)$pdo->query("SELECT COUNT(*) FROM veille_requetes WHERE req LIKE '%\"type\":\"page\"%'")->fetchColumn();
+    $p1 = vc_planifier($pdo, false, $J + 10 * 3600);                  // 10 h
+    $p2 = vc_planifier($pdo, false, $J + 11 * 3600);                  // 11 h : même tranche de 3 h
+    $p3 = vc_planifier($pdo, false, $J + 13 * 3600 + 1800);           // 13 h 30 : nouvelle tranche
+    v('4c. 10 h : toutes les requêtes ; 11 h : rien (même tranche) ; 13 h 30 : seulement les ' . $pages . ' pages des journaux (recherche, accueil) des deux biens — les moteurs attendent demain',
+      $p1 > $pages && $p2 === 0 && $p3 === $pages, $j([$p1, $p2, $p3, $pages]));
+    $pdo->exec("UPDATE veille_jobs SET statut = 'fait' WHERE statut = 'attente'");
+
     /* ── 5. Les domaines inconnus sont PROPOSÉS, les connus jamais ── */
     $dom = $pdo->query("SELECT domaine FROM veille_domaines WHERE statut = 'propose'")->fetchAll(PDO::FETCH_COLUMN);
     v('5. « actu-kech-exemple.ma » (inconnu) est proposé comme nouvelle source ; le360.ma (déjà réglé) ne l\'est pas — rien n\'est lu d\'office',

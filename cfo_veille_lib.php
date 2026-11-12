@@ -181,7 +181,12 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
             'ar' => array_slice(array_values(array_filter($sujets, fn($s) => cfo_vp_arabe($s))), 0, 8)];
     $parLangue = ['fr' => [], 'ar' => []];
     foreach ($lieux as $l) $parLangue[cfo_vp_arabe($l) ? 'ar' : 'fr'][] = $l;
-    $tousLieux = array_merge(array_slice($parLangue['ar'], 0, 2), array_slice($parLangue['fr'], 0, 2));
+    //  v37.139 — « IL N'A PAS TROUVÉ CET ARTICLE » (Marrakech Alaan, 12 nov. : « …لجماعة واحة سيدي إبراهيم ») : on cherchait seulement
+    //  « ابراهيم » (sans hamza) ; une recherche de site ou une phrase exacte ne confond pas les deux. Chaque lieu arabe est cherché
+    //  aussi dans son autre orthographe, juste après lui.
+    //  (chaque lieu garde sa place : ses orthographes s'ajoutent À CÔTÉ de lui, elles ne poussent pas dehors un autre lieu)
+    $ortho = fn(string $l): array => array_values(array_unique(array_merge([$l], cfo_vp_orthographes_ar($l))));
+    $tousLieux = array_values(array_unique(array_merge(...array_map($ortho, array_slice($parLangue['ar'], 0, 2)), ...[array_slice($parLangue['fr'], 0, 2)])));
     $langue = fn(array $s) => ($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr';
     $media = fn(array $s) => ['domaine' => $s['domaine'], 'media' => $s['nom']];
     $moteur = function (string $lg, string $q, bool $specifique, string $libelle, array $plus = []) use ($moteurs): ?array {
@@ -207,11 +212,13 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
         $lg = $langue($s);
         $l = ($parLangue[$lg] ?: $parLangue[$lg === 'ar' ? 'fr' : 'ar'])[0] ?? null;
         if ($l === null) continue;
-        $pages[] = ['type' => 'page', 'canal' => 'recherche', 'nom' => $s['nom'], 'libelle' => 'recherche du site', 'q' => $l, 'langue' => $lg,
-                    'specifique' => true, 'url' => cfo_vp_url(cfo_vp_sans_flux($s['flux']), $l)] + $media($s);
+        //  v37.139 : la recherche du site, dans CHAQUE orthographe du premier lieu (« ابراهيم » ET « إبراهيم »)
+        foreach (array_slice($ortho($l), 0, 2) as $k => $lx)
+            $pages[] = ['type' => 'page', 'canal' => 'recherche', 'nom' => $s['nom'], 'libelle' => 'recherche du site' . ($k ? ' (autre orthographe)' : ''), 'q' => $lx, 'langue' => $lg,
+                        'specifique' => true, 'url' => cfo_vp_url(cfo_vp_sans_flux($s['flux']), $lx)] + $media($s);
     }
     foreach (['fr', 'ar'] as $lg) foreach (array_slice($parLangue[$lg], 0, 2) as $i => $l) {
-        $g = cfo_vp_guillemets($l);
+        $g = cfo_vp_ou($ortho($l));   // v37.139 : « (ابراهيم OR إبراهيم) » pour un lieu arabe à deux orthographes
         $theme[] = $moteur($lg, trim($g . ' ' . cfo_vp_ou($suj[$lg])), true, $suj[$lg] ? 'lieu + urbanisme' : 'lieu');
         if ($i === 0) foreach ($paquetsNat($lg) as $paquet) $theme[] = $moteur($lg, $g . ' ' . $paquet, true, 'presse nationale');
     }
@@ -469,6 +476,21 @@ function cfo_vp_selection(array $articles, array $lieux, array $sujets, array $c
 }
 
 
+/**
+ * v37.139 — LES AUTRES ORTHOGRAPHES ARABES d'un lieu : la hamza des prénoms qui forment les noms de lieux (« ابراهيم » / « إبراهيم »,
+ * « اسماعيل » / « إسماعيل », « ادريس » / « إدريس », « احمد » / « أحمد »…), dans les deux sens. → les variantes (sans l'original)
+ */
+function cfo_vp_orthographes_ar(string $l): array {
+    static $paires = [['ابراهيم', 'إبراهيم'], ['اسماعيل', 'إسماعيل'], ['ادريس', 'إدريس'], ['احمد', 'أحمد'], ['امين', 'أمين'], ['ايت', 'آيت'], ['اولاد', 'أولاد'], ['اكادير', 'أكادير']];
+    $out = [];
+    foreach ($paires as [$sans, $avec]) {
+        $re = fn($w) => '/(?<![\p{L}])' . preg_quote($w, '/') . '(?![\p{L}])/u';
+        if (preg_match($re($sans), $l)) $out[] = preg_replace($re($sans), $avec, $l);
+        elseif (preg_match($re($avec), $l)) $out[] = preg_replace($re($avec), $sans, $l);
+    }
+    return array_values(array_unique(array_filter($out, fn($v) => $v !== $l)));
+}
+
 /** v37.138 — les portées qui ne sont pas des actualités : chacune son circuit. */
 const CFO_VP_HORS_ACTUALITES = ['annonces', 'reseau', 'forum'];
 
@@ -654,7 +676,7 @@ function cfo_vp_lire_html(string $html, array $req, array $cfg, string $urlPage)
     foreach ($xp->query('//title|//h1|//input[@name="s" or @type="search" or @name="q"]/@value') as $n) $signal .= ' ' . $n->textContent;
     $pageDeResultats = $terme !== '' && mb_strpos(cfo_vp_norm($signal), $terme) !== false;
     $bruit = '//script|//style|//noscript|//nav|//form|//iframe|//header[not(ancestor::article)]|//footer[not(ancestor::article)]'
-           . '|//*[contains(@class,"menu") or contains(@id,"menu") or contains(@class,"breadcrumb") or contains(@class,"ticker")'
+           . '|//*[contains(@class,"menu") or contains(@id,"menu") or contains(@class,"breadcrumb")' . ($accueil ? '' : ' or contains(@class,"ticker")')   // v37.139 : à l'accueil, le bandeau des dernières nouvelles est lu
            . ' or contains(@class,"footer") or contains(@id,"footer")'
            . ($accueil ? ']' : ' or contains(@class,"sidebar") or contains(@id,"sidebar") or contains(@class,"widget") or contains(@class,"related")'
                              . ' or contains(@class,"popular") or contains(@class,"trending")]|//aside');
@@ -701,6 +723,12 @@ function cfo_vp_lire_html(string $html, array $req, array $cfg, string $urlPage)
     if (!$items || $accueil) foreach ($xp->query('//h1//a[@href]|//h2//a[@href]|//h3//a[@href]|//h4//a[@href]') as $a) {
         $bloc = $a; for ($k = 0; $k < 3 && $bloc->parentNode instanceof DOMElement && $bloc->parentNode->nodeName !== 'body'; $k++) $bloc = $bloc->parentNode;
         $prendre($a, $bloc, false);
+    }
+    //  v37.139 — à l'accueil, les blocs « dernières nouvelles » (bandeau défilant, « breaking », « latest », « آخر الأخبار ») : c'est là
+    //  que paraissent les articles du jour, souvent sans titre h1-h4 ni <article>
+    if ($accueil) foreach ($xp->query('//*[contains(@class,"ticker") or contains(@class,"breaking") or contains(@class,"latest") or contains(@class,"recent")'
+                                      . ' or contains(@id,"ticker") or contains(@id,"breaking") or contains(@id,"latest")]//a[@href]') as $a) {
+        if (mb_strlen($propre($a->textContent)) >= 25 && cfo_vp_lien_article($a->getAttribute('href'))) $prendre($a, null, false);
     }
     // v37.42 : ni <article>, ni titres h1-h4 (thèmes maison) — les liens qui ont l'allure d'un article
     if (!$items) foreach ($xp->query('//a[@href]') as $a) {
@@ -870,7 +898,8 @@ function cfo_vp_est_flux(string $corps): bool {
 
 /** Le nom d'une porte, pour l'écran : le moteur, ou la page du journal. */
 function cfo_vp_nom_canal(array $r): string {
-    return ['recherche' => 'page de recherche du site', 'accueil' => "page d'accueil"][$r['canal'] ?? ''] ?? (string)($r['nom'] ?? '');
+    $n = ['recherche' => 'page de recherche du site', 'accueil' => "page d'accueil"][$r['canal'] ?? ''] ?? (string)($r['nom'] ?? '');
+    return str_contains((string)($r['libelle'] ?? ''), 'autre orthographe') ? $n . ' (autre orthographe)' : $n;   // v37.139
 }
 
 /** v37.111 — les articles retenus qui viennent d'une source (une page précise, un site, ou une famille : réseaux sociaux…). */

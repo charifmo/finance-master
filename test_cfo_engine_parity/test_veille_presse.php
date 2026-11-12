@@ -43,17 +43,19 @@ $R = cfo_vp_requetes($cfg, $lieux, $sujets);
 $qs = array_column($R, 'q');
 $locales = '(site:almarrakchia.net OR site:marrakechalaan.com OR site:kech24.com OR site:marrakech7.com)';
 // v37.41 : une requête STRICTE par média local, avec les lieux des deux langues
-$strict = fn($dom) => 'site:' . $dom . ' ("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim" OR "Oulad Belaagid")';
+//  v37.139 : le lieu arabe dans ses DEUX orthographes (« ابراهيم » / « إبراهيم »)
+$strict = fn($dom) => 'site:' . $dom . ' ("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم" OR "Ouahat Sidi Brahim" OR "Oulad Belaagid")';
 foreach (['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'] as $dom)
     v("requête stricte pour $dom : site:$dom (lieux AR OR FR), Google en arabe",
       (bool)array_filter($R, fn($r) => $r['q'] === $strict($dom) && str_contains($r['url'], 'hl=ar') && $r['domaine'] === $dom && $r['specifique']), $j($qs));
-v('plus de OR groupé des sites locaux pour un lieu (les petits médias y étaient noyés)', !in_array('"Ouahat Sidi Brahim" ' . $locales, $qs, true) && !in_array('"واحة سيدي ابراهيم" ' . $locales, $qs, true));
+v('plus de OR groupé des sites locaux pour un lieu (les petits médias y étaient noyés)', !in_array('"Ouahat Sidi Brahim" ' . $locales, $qs, true) && !in_array('("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم") ' . $locales, $qs, true));
 v('le lieu avec les sujets fonciers (RN9, SDAU, plan d\'aménagement…)', in_array('"Ouahat Sidi Brahim" (RN9 OR SDAU OR "plan d\'aménagement" OR "Grand Stade")', $qs, true));
 v('la presse nationale (Le Desk, Médias24, Hespress…)', (bool)array_filter($qs, fn($q) => str_starts_with($q, '"Ouahat Sidi Brahim" (site:ledesk.ma OR site:medias24.com')));
-v('le lieu en ARABE, sur Google Actualités en arabe', (bool)array_filter($R, fn($r) => str_starts_with($r['q'], '"واحة سيدي ابراهيم"') && str_contains($r['url'], 'hl=ar')));
-v('les sujets en arabe vont avec le lieu en arabe', in_array('"واحة سيدي ابراهيم" ("الطريق الوطنية رقم 9" OR "المخطط المديري" OR "تصميم التهيئة")', $qs, true));
+v('le lieu en ARABE, sur Google Actualités en arabe', (bool)array_filter($R, fn($r) => str_starts_with($r['q'], '("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم")') && str_contains($r['url'], 'hl=ar')));
+v('les sujets en arabe vont avec le lieu en arabe', in_array('("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم") ("الطريق الوطنية رقم 9" OR "المخطط المديري" OR "تصميم التهيئة")', $qs, true));
 v('la recherche des sites locaux reçoit le lieu dans LEUR langue (arabe), lue comme une PAGE',
-  count(array_filter($R, fn($r) => $r['canal'] === 'recherche' && $r['type'] === 'page' && $r['q'] === 'واحة سيدي ابراهيم')) === 4, $j(array_values(array_filter($R, fn($r) => $r['canal'] === 'recherche'))));
+  count(array_filter($R, fn($r) => $r['canal'] === 'recherche' && $r['type'] === 'page' && $r['q'] === 'واحة سيدي ابراهيم')) === 4
+  && count(array_filter($R, fn($r) => $r['canal'] === 'recherche' && $r['type'] === 'page' && $r['q'] === 'واحة سيدي إبراهيم')) === 4, $j(array_values(array_filter($R, fn($r) => $r['canal'] === 'recherche'))));
 v('la zone : Marrakech + sujets, presse locale', in_array('Marrakech (RN9 OR SDAU OR "plan d\'aménagement" OR "Grand Stade") ' . $locales, $qs, true));
 v('au plus ' . CFO_VP_MAX_REQUETES . ' requêtes', count($R) <= CFO_VP_MAX_REQUETES && count($R) >= 10, (string)count($R));
 $gabarits = array_merge(array_column($cfg['moteurs'], 'gabarit'), array_map('cfo_vp_sans_flux', array_filter(array_column($cfg['sources'], 'flux'))));
@@ -69,7 +71,7 @@ v('les requêtes « lieu » exigent le lieu exact (spécifiques) ; la zone et le
 $portes = [];
 foreach ($R as $r) if (!empty($r['domaine'])) $portes[$r['domaine']][] = $r['canal'];
 foreach (['almarrakchia.net', 'marrakechalaan.com', 'kech24.com', 'marrakech7.com'] as $dom)
-    v("$dom : Google (site:), sa page de recherche, Bing (site:), sa page d'accueil", ($portes[$dom] ?? []) === ['moteur', 'recherche', 'bing', 'accueil'], $j($portes[$dom] ?? null));
+    v("$dom : Google (site:), sa page de recherche (dans les deux orthographes du lieu), Bing (site:), sa page d'accueil", ($portes[$dom] ?? []) === ['moteur', 'recherche', 'recherche', 'bing', 'accueil'], $j($portes[$dom] ?? null));
 $bing = array_values(array_filter($R, fn($r) => $r['canal'] === 'bing'));
 v('Bing Actualités : même requête stricte, sur son gabarit RSS de RÉSULTATS', count($bing) === 4 && $bing[2]['q'] === $strict('kech24.com')
   && str_starts_with($bing[2]['url'], 'https://www.bing.com/news/search?q=site%3Akech24.com%20') && $bing[2]['type'] === 'moteur' && $bing[2]['specifique'], $j($bing[2] ?? null));
@@ -204,6 +206,27 @@ v('en tête : les articles qui nomment le lieu, locaux et récents (FR et AR)',
   array_slice($titres, 0, 2) == ['واحة سيدي إبراهيم: تصميم التهيئة الجديد', "Ouahat Sidi Brahim : le plan d'aménagement adopté"], $j($titres));
 v('le bien nommé, même il y a un an, passe devant la zone seule récente', array_search('Ouahat Sidi Brahim : nouveau lotissement autorisé', $titres, true) < array_search('Marrakech : le contournement de la RN9 lancé', $titres, true), $j($titres));
 
+/* ── v37.139 — « IL N'A PAS TROUVÉ CET ARTICLE » (Marrakech Alaan, 12 nov. 2026 : « …لجماعة واحة سيدي إبراهيم ») ── */
+v('v37.139 orthographes : « واحة سيدي ابراهيم » ↔ « واحة سيدي إبراهيم » (dans les deux sens) ; « الويدان » n\'en a pas',
+  cfo_vp_orthographes_ar('واحة سيدي ابراهيم') === ['واحة سيدي إبراهيم'] && cfo_vp_orthographes_ar('واحة سيدي إبراهيم') === ['واحة سيدي ابراهيم'] && cfo_vp_orthographes_ar('الويدان') === [],
+  $j([cfo_vp_orthographes_ar('واحة سيدي ابراهيم'), cfo_vp_orthographes_ar('الويدان')]));
+$R2 = cfo_vp_requetes($cfg, ['Ouahat Sidi Brahim', 'واحة سيدي ابراهيم', 'الويدان'], ['RN9']);
+$st2 = array_values(array_filter($R2, fn($r) => ($r['libelle'] ?? '') === 'site:marrakechalaan.com' && ($r['canal'] ?? '') === 'moteur'))[0]['q'] ?? '';
+$rc2 = array_values(array_filter($R2, fn($r) => ($r['canal'] ?? '') === 'recherche' && ($r['domaine'] ?? '') === 'marrakechalaan.com'));
+v('  → Marrakech Alaan : sa page de recherche dans les DEUX orthographes ; Google (site:) avec les deux ; le 2ᵉ lieu arabe (الويدان) garde sa place',
+  count($rc2) === 2 && $rc2[0]['q'] === 'واحة سيدي ابراهيم' && $rc2[1]['q'] === 'واحة سيدي إبراهيم' && str_contains($rc2[1]['url'], rawurlencode('واحة سيدي إبراهيم'))
+  && str_contains($st2, '"واحة سيدي إبراهيم"') && str_contains($st2, 'الويدان') && count($R2) <= CFO_VP_MAX_REQUETES, $j([$st2, array_column($rc2, 'q'), count($R2)]));
+//  la page d'accueil : le bandeau des dernières nouvelles (« ticker ») est LU — l'article du jour y était
+$reqAcc = ['type' => 'page', 'canal' => 'accueil', 'nom' => 'Marrakech Alaan', 'domaine' => 'marrakechalaan.com', 'q' => '', 'langue' => 'ar', 'url' => 'https://www.marrakechalaan.com/'];
+$acc = '<html><body><nav class="menu"><a href="https://www.marrakechalaan.com/category/a">اخبار جهة مراكش اليوم وغدا</a></nav>'
+     . '<div class="news-ticker"><a href="https://www.marrakechalaan.com/article-700001">المصادقة على مشاريع طرقية مهيكلة بمحيط الملعب الكبير لمراكش خلال دورة استثنائية لجماعة واحة سيدي إبراهيم</a></div>'
+     . '<main><h2><a href="https://www.marrakechalaan.com/article-699990">حملة نظافة واسعة بحي المسيرة بمراكش هذا الأسبوع</a></h2></main></body></html>';
+$A2 = cfo_vp_lire_html($acc, $reqAcc, $cfg, $reqAcc['url']) ?? [];
+$sel2 = cfo_vp_selection($A2, ['واحة سيدي ابراهيم'], ['الملعب الكبير'], $cfg, $now);
+v('  → la page d\'accueil : l\'article du bandeau « dernières nouvelles » est lu, et le tri le garde (« إبراهيم » reconnaît « ابراهيم ») ; le menu reste ignoré',
+  in_array('https://www.marrakechalaan.com/article-700001', array_column($A2, 'url'), true) && !in_array('https://www.marrakechalaan.com/category/a', array_column($A2, 'url'), true)
+  && in_array('https://www.marrakechalaan.com/article-700001', array_column($sel2, 'url'), true), $j([array_column($A2, 'url'), array_column($sel2, 'url')]));
+
 /* ── v37.138 — TROIS CIRCUITS : annonces (prix DEMANDÉS extraits), signaux sociaux (traçables, jamais forcés), contexte plafonné en événements ── */
 $A = fn($t, $ex = '', $url = null, $jours = 5) => ['titre' => $t, 'extrait' => $ex, 'url' => $url ?? 'https://www.avito.ma/fr/x/' . md5($t . $ex), 'source' => 'Avito', 'domaine' => 'avito.ma',
     'portee' => 'annonces', 'ts' => $now - $jours * 86400, 'date' => gmdate('Y-m-d', $now - $jours * 86400), 'specifique' => true, 'langue' => 'fr'];
@@ -305,7 +328,7 @@ v('  → six échos « Grand Stade » (titres variés) ne prennent plus toutes l
 v('plafond max_articles respecté', count(cfo_vp_selection(array_map(fn($i) => $art("Ouahat Sidi Brahim $i", $i), range(1, 40)), ['Ouahat Sidi Brahim'], [], $cfg, $now)) === (int)$cfg['max_articles']);
 
 /* ── 5. v37.111 : réseaux sociaux, forums, annonces — les moteurs du web ── */
-$ouL = '("واحة سيدي ابراهيم" OR "Ouahat Sidi Brahim" OR "Oulad Belaagid")';
+$ouL = '("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم" OR "Ouahat Sidi Brahim" OR "Oulad Belaagid")';
 $web = array_values(array_filter($R, fn($r) => !empty($r['groupe'])));
 $parGroupe = []; foreach ($web as $r) $parGroupe[$r['groupe']][] = $r['canal'];
 v('réseaux sociaux, forums, annonces : chacun cherché par Bing (web) ET DuckDuckGo',
@@ -321,7 +344,7 @@ $nat = array_values(array_filter($R, fn($r) => $r['libelle'] === 'presse nationa
 $fr = array_values(array_filter($nat, fn($r) => $r['langue'] === 'fr')); $ar = array_values(array_filter($nat, fn($r) => $r['langue'] === 'ar'));
 v('presse nationale par paquets de 10 sites au plus, chacun avec le lieu dans SA langue (hespress avec le lieu arabe, ledesk avec le lieu français)',
   $fr && $ar && !array_filter($nat, fn($r) => substr_count($r['q'], 'site:') > 10) && str_contains($ar[0]['q'], 'site:hespress.com') && !str_contains($fr[0]['q'] . ($fr[1]['q'] ?? ''), 'hespress')
-  && str_starts_with($ar[0]['q'], '"واحة سيدي ابراهيم"') && !str_contains(implode(' ', array_column($ar, 'q')), 'ledesk'), $j(array_column($nat, 'q')));
+  && str_starts_with($ar[0]['q'], '("واحة سيدي ابراهيم" OR "واحة سيدي إبراهيم")') && !str_contains(implode(' ', array_column($ar, 'q')), 'ledesk'), $j(array_column($nat, 'q')));
 v('chaque source nationale est interrogée (aucune perdue par les paquets)', count(array_filter($cfg['sources'], fn($x) => $x['portee'] === 'nationale' && !str_contains(implode(' ', array_column($nat, 'q')), 'site:' . $x['domaine']))) === 0);
 //  une page / un groupe précis
 $cfgG = $cfg; $cfgG['sources'][] = ['nom' => 'Groupe Ouahat', 'domaine' => 'facebook.com', 'chemin' => 'groups/123456', 'portee' => 'reseau', 'langue' => 'ar'];

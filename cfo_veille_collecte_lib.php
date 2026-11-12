@@ -32,6 +32,7 @@ const VC_LOT = 8;                 // requêtes par passage du cron (toutes les 1
 const VC_JOURS_ACTIF = 60;        // un bien non revu depuis 60 jours n'est plus collecté
 const VC_PAUSE_BLOCAGE = 86400;   // 403 / 429 : la requête attend 24 h
 const VC_MAX_CORPUS = 300;        // articles du corpus rendus à la revue d'un bien
+const VC_HEURES_PAGES = 3;        // v37.139 : les pages des journaux locaux, relues toutes les 3 heures
 
 /** La base de la collecte : FM_VEILLE_DSN (tests) sinon la base PostgreSQL de l'appli. */
 function vc_pdo(?string &$raison = null): ?PDO {
@@ -182,7 +183,10 @@ function vc_planifier(PDO $pdo, bool $braveActif, ?int $maintenant = null): int 
     foreach ($rows as $r) {
         $req = json_decode((string)$r['req'], true) ?: [];
         if ((($req['type'] ?? '') === 'brave' || ($req['format'] ?? '') === 'brave_json') && !$braveActif) continue;
-        $ins->execute([(int)$r['id'], $jour]); $n += $ins->rowCount();
+        //  v37.139 — un article du jour d'un journal local (Marrakech Alaan, 12 nov.) attendait le lendemain : les pages des journaux
+        //  (leur recherche, leur accueil) sont relues toutes les 3 heures ; les moteurs, une fois par jour
+        $cle = ($req['type'] ?? '') === 'page' ? $jour . ' ' . str_pad((string)(intdiv((int)gmdate('G', $now), VC_HEURES_PAGES) * VC_HEURES_PAGES), 2, '0', STR_PAD_LEFT) . 'h' : $jour;
+        $ins->execute([(int)$r['id'], $cle]); $n += $ins->rowCount();
     }
     return $n;
 }
@@ -342,7 +346,7 @@ function vc_etat(PDO $pdo, ?int $maintenant = null): array {
     $now = $maintenant ?? time(); $jour = gmdate('Y-m-d', $now);
     $col = fn(string $sql) => $pdo->query($sql)->fetchColumn();
     $jobs = [];
-    foreach ($pdo->query("SELECT statut, COUNT(*) AS n FROM veille_jobs WHERE jour = '" . $jour . "' GROUP BY statut")->fetchAll(PDO::FETCH_ASSOC) as $r) $jobs[$r['statut']] = (int)$r['n'];
+    foreach ($pdo->query("SELECT statut, COUNT(*) AS n FROM veille_jobs WHERE jour LIKE '" . $jour . "%' GROUP BY statut")->fetchAll(PDO::FETCH_ASSOC) as $r) $jobs[$r['statut']] = (int)$r['n'];
     return [
         'biens' => (int)$col('SELECT COUNT(*) FROM veille_biens'),
         'requetes' => (int)$col('SELECT COUNT(*) FROM veille_requetes'),
