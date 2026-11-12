@@ -145,6 +145,25 @@ try {
         v('  → la frise montre aussi les FACTURES : une ligne par facture (élec, tel, internet, eau, netflix, IA, chatgpt), réglé / prévu ; l\'opération restée dans « Factures » : « Autres factures »',
           !!fa && /Factures/.test(fa.label) && ['elect', 'tel', 'internet', 'eau', 'netflix', 'IA', 'chatgpt'].every(n => noms.includes(n)) && fa.budget === 1647
           && (fa.lignes.find(l => /^Autres factures/.test(l[0])) || [])[2] === 99 && fa.engage === 99, JSON.stringify(fa));
+        //  v37.132 — « tout est répertorié et non répertorié à la fois » : l'aperçu de « Autres factures » ne montre QUE ce qui est resté
+        //  dans « Factures » (pas l'opération rangée dans IA) ; une facture cochée dans le Réalisé, sans opération, le dit
+        const ap = await page.evaluate(async (ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026], fv = d.chargesVariables.factures, ia = fv.details.find(x => x.nom === 'IA'), eau = fv.details.find(x => x.nom === 'eau');
+            d.transactionsReelles.push({ id: 9702, datetime: '2026-10-12T10:00', date: '2026-10-12', mois: 10, libelle: 'facture inwi', montant: 99, categorieId: 'cat_cv_factures', compteId: 1, source: 'manuel', categorieSource: 'vous' },
+                                       { id: 9703, datetime: '2026-10-13T10:00', date: '2026-10-13', mois: 10, libelle: 'Claude', montant: 120, categorieId: ia.categorieId, compteId: 1, source: 'manuel', categorieSource: 'vous' });
+            st.toggleItemPaid(eau, st.dueDetailDuCycle ? st.dueDetailDuCycle(eau, fv) : Number(eau.montant));
+            st.calculationTick++; await Vue.nextTick();
+            const c = st.friseCycle.categories.find(x => x.key === 'factures'), L = (n) => c.lignes.find(l => l.nom === n || (n === 'autres' && /^Autres factures/.test(l.nom)));
+            st.ouvrirApercuFrise(c, L('autres'), null); await Vue.nextTick();
+            const autres = st.apercuFriseOps.ops.map(o => o.t.libelle);
+            st.ouvrirApercuFrise(c, L('IA'), null); await Vue.nextTick();
+            const iaOps = st.apercuFriseOps.ops.map(o => o.t.libelle);
+            st.ouvrirApercuFrise(c, L('eau'), null); await Vue.nextTick(); await new Promise(r => setTimeout(r, 50));
+            const note = document.querySelector('[data-frise-apercu-realise]')?.textContent.replace(/\s+/g, ' ').trim() || '', engageEau = L('eau').engage;
+            st.fermerApercuFrise(); st.toggleItemPaid(eau, engageEau);
+            d.transactionsReelles = d.transactionsReelles.filter(t => t.id !== 9702 && t.id !== 9703); st.calculationTick++; await Vue.nextTick();
+            return { autres, iaOps, note, engageEau, autresEngage: L('autres') ? L('autres').engage : null }; }, ST);
+        v('  → v37.132 : l\u2019aperçu « Autres factures » : seulement « facture inwi » (restée dans Factures) — « Claude » est sous IA, pas aux deux endroits ; « eau » cochée dans le Réalisé : « réglés dans le Réalisé, sans opération »',
+          JSON.stringify(ap.autres) === '["facture inwi"]' && JSON.stringify(ap.iaOps) === '["Claude"]' && ap.engageEau > 0 && /réglés dans le Réalisé/.test(ap.note), JSON.stringify(ap));
         await page.waitForSelector('[data-cat="factures"] [data-frise-ligne]', { state: 'attached', timeout: 5000 });
         //  ✏️ depuis la frise : la ligne du prévu, ouverte et surlignée
         await page.click('[data-frise-ligne][data-poste="alimentation::555"] [data-frise-vers-prevu]');

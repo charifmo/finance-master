@@ -7931,6 +7931,7 @@
                         </div>
                     </div>
                     <p v-if="apercuFrise.auPrevu" data-frise-apercu-auprevu class="rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-2.5 py-1.5 text-[11px] font-bold text-emerald-900">Rien n'a été tapé sur ce morceau : il compte au prévu ({{ formatMAD(apercuFrise.defaut) }}).</p>
+                    <p v-if="apercuFrise.parRealise && apercuFrise.reel > apercuFriseOps.total + 0.5" data-frise-apercu-realise class="rounded-lg bg-violet-50 ring-1 ring-violet-200 px-2.5 py-1.5 text-[11px] font-bold text-violet-900">✅ {{ formatMAD(apercuFrise.reel - apercuFriseOps.total) }} réglés dans le Réalisé (case cochée ou « + ajouter »), sans opération dans le journal — c'est ce qui est compté ici.</p>
                     <p v-if="!apercuFriseOps.ops.length" data-frise-apercu-vide class="px-1 py-3 text-xs font-semibold text-slate-500 text-center">Aucune opération dans le journal pour ce poste, {{ apercuFrise.periode }}.</p>
                     <div v-for="o in apercuFriseOps.ops" :key="'fa_' + o.t.id" data-frise-apercu-op :data-tx="o.t.id" :class="['rounded-xl border', journal.ouvert === o.t.id ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200']">
                         <button type="button" data-frise-apercu-ouvrir @click="ouvrirOperation(o.t.id)" class="w-full text-left px-2.5 py-2 flex items-start gap-2">
@@ -9274,8 +9275,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.131 Le cycle en deux parts";
+                    const CURRENT_VERSION = "37.132 Rangé à un seul endroit";
                     const CHANGELOG = [
+        { version: "37.132 Rangé à un seul endroit", date: "2026-11-12", changes: [
+            "🐞 « TOUT EST RÉPERTORIÉ ET NON RÉPERTORIÉ À LA FOIS ! » (frise, bloc Factures) — l'aperçu de « Autres factures (sans ligne) » listait TOUTES les opérations des factures (Claude, Gemini, internet, netflix… 11 opérations, 1 644 DH) alors que la ligne n'en compte que 152 : il prenait la catégorie mère Factures avec toutes ses sous-catégories. Il ne montre plus que les opérations restées dans « Factures » sans sous-catégorie ; Claude reste sous IA, internet sous internet — à un seul endroit.",
+            "✅ Une facture (ou dépense exceptionnelle) comptée sans aucune opération (« eau : 70 / 100 », « aucune opération dans le journal ») dit maintenant d'où vient le chiffre : « 70 DH réglés dans le Réalisé (case cochée ou + ajouter), sans opération dans le journal ».",
+            "PREUVE — test_voyage_saisie P : « facture inwi » (restée dans Factures) + « Claude » (rangée dans IA) → l'aperçu « Autres factures » ne montre que « facture inwi », celui d'IA que « Claude » ; « eau » cochée dans le Réalisé → la note.",
+        ] },
         { version: "37.131 Le cycle en deux parts", date: "2026-11-11", changes: [
             "➗ « TOUT LE CYCLE DOIT ÊTRE DIVISÉ SUR 2 ET JE RENTRE CHAQUE PARTIE » — un poste « / 15 j » couvre ≈ 2,2 séances par cycle (Psy 452 → enveloppe 999) : chaque partie vaut maintenant l'ENVELOPPE ÷ 2 (≈ 500), plus le prix d'une séance (452) — taper 500 dans la 1ʳᵉ partie n'est plus un faux dépassement. La coupure tombe au milieu des semaines (27 oct. → 8 nov. | 9 → 26 nov.) au lieu de 20 jours puis 11. Météo et frise.",
             "✍️ « C'EST QUOI CE RACCOURCI ? ÇA DOIT SE FAIRE ICI » — l'aperçu d'une case de la frise ne renvoie plus vers la Météo : le montant tapé d'un morceau se corrige sur place ; l'aperçu d'un poste « / 15 j » montre « le cycle en 2 parties », chacune sa part, sa case de saisie et son ✓.",
@@ -23013,7 +23019,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                               periode: du === au ? 'le ' + _libJourFrise(du) : 'du ' + _libJourFrise(du) + ' au ' + _libJourFrise(au), parCycle: !x,
                                               reel: x ? x.reel : l.engage, prevu: x ? x.prevu : l.enveloppe, saisi: x ? x.saisi : (l.saisi || null), auPrevu: x ? x.auPrevu : false, defaut: x ? x.defaut : 0,
                                               //  v37.131 — « C'EST QUOI CE RACCOURCI ? ÇA DOIT SE FAIRE ICI » : le tapé se corrige dans l'aperçu
-                                              semaine: x && l.cellules ? x.du : null, quinz: !x && Array.isArray(l.quinzaines) && l.quinzaines.length > 0 };
+                                              semaine: x && l.cellules ? x.du : null, quinz: !x && Array.isArray(l.quinzaines) && l.quinzaines.length > 0,
+                                              autres: /::autres$/.test(String(l.cle || '')),   // v37.132
+                                              //  v37.132 : une facture / dépense exceptionnelle : ce qui est compté au-delà du journal vient du Réalisé (coché, « + ajouter »)
+                                              parRealise: !x && !l.cellules && !(Array.isArray(l.quinzaines) && l.quinzaines.length) };
                     };
                     //  v37.131 : les moitiés du poste ouvert, à jour (relues dans la frise à chaque saisie)
                     const apercuQuinzaines = computed(() => {
@@ -23050,6 +23059,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const dt = String(t.date || '').slice(0, 10);
                                 if (!t || !dt || dt < A.du || dt > A.au) return;
                                 if (exc) { if (!A.catId || t.categorieId !== A.catId) return; }
+                                //  v37.132 — « TOUT EST RÉPERTORIÉ ET NON RÉPERTORIÉ À LA FOIS » : la ligne « Autres (sans ligne) » ne montre QUE
+                                //  les opérations restées dans la catégorie mère (pas celles déjà rangées dans IA, internet, netflix…)
+                                else if (A.autres) { if (t.categorieId !== mere) return; }
                                 else { if (carte[t.categorieId] !== A.catKey) return; if (parPoste && t.categorieId !== A.catId) return; }
                                 const heure = String(t.datetime || '').slice(11, 16);
                                 ops.push({ t, quand: _libJourFrise(dt) + (heure && heure !== '12:00' ? ' · ' + heure : ''), montant: Number(t.montant) || 0,
