@@ -15,7 +15,56 @@ function sante_etat_defaut(): array {
                      'region_score2' => 'moderate', 'pas_objectif' => 10000, 'seances_machines_semaine' => 2, 'terrain' => [], 'suivi' => ''],
         'objectifs' => ['poids_kg' => null, 'tg_gl' => 1.50, 'apob_gl' => 1.00, 'vitd_ngml' => 35],
         'bilans' => [], 'poids' => [], 'journal' => new stdClass(), 'supplements' => [], 'protocole' => [], 'plans' => new stdClass(),
+        'compo' => [], 'seances' => [],
     ];
+}
+
+/**
+ * v1.26 — LA COMPOSITION CORPORELLE (une mesure par jour) : chaque valeur dans ses bornes, sinon retirée ; une ligne sans
+ * aucune valeur de composition est retirée. Unités : kg, %, kcal ; graisse viscérale en niveau.
+ */
+const SANTE_COMPO = ['kg' => [20, 400], 'graisse_pct' => [2, 75], 'graisse_kg' => [1, 250], 'muscle_kg' => [5, 150], 'masse_maigre_kg' => [15, 250],
+                     'muscle_total_kg' => [10, 250], 'eau_kg' => [10, 150], 'bmr_kcal' => [500, 5000], 'graisse_viscerale' => [1, 60]];
+function sante_norm_compo($x): ?array {
+    if (!is_array($x) || !sante_date_ok($x['date'] ?? null)) return null;
+    $o = ['date' => $x['date']];
+    foreach (SANTE_COMPO as $k => [$a, $b]) { $v = sante_num($x[$k] ?? null); if ($v !== null && $v >= $a && $v <= $b) $o[$k] = round($v, 1); }
+    if (count(array_diff_key($o, ['date' => 1, 'kg' => 1])) === 0) return null;
+    $o['source'] = mb_substr((string)($x['source'] ?? 'samsung'), 0, 30);
+    return $o;
+}
+/**
+ * v1.26 — UNE SÉANCE (export Samsung Health ou synchro) : identifiant, date, heure, nom, durée, et ce qui est connu
+ * (distance, kcal, FC, vitesse, pas, dénivelé, VO₂ max, zones de FC, temps par km), chacun dans ses bornes.
+ */
+function sante_norm_seance($x): ?array {
+    if (!is_array($x) || !sante_date_ok($x['date'] ?? null)) return null;
+    $id = (string)($x['id'] ?? '');
+    if (!preg_match('/^[A-Za-z0-9_.:-]{1,64}$/', $id)) return null;
+    $duree = sante_num($x['duree_s'] ?? null);
+    if ($duree === null || $duree < 60 || $duree > 86400) return null;
+    $o = ['id' => $id, 'date' => $x['date'], 'heure' => preg_match('/^\d{2}:\d{2}$/', (string)($x['heure'] ?? '')) ? $x['heure'] : null,
+          'nom' => mb_substr(trim(strip_tags((string)($x['nom'] ?? 'Séance'))), 0, 40) ?: 'Séance', 'duree_s' => (int)round($duree)];
+    $t = sante_num($x['type'] ?? null); if ($t !== null) $o['type'] = (int)$t;
+    foreach (['distance_m' => [1, 500000, 0], 'kcal' => [1, 10000, 0], 'fc_moy' => [30, 230, 0], 'fc_max' => [30, 240, 0], 'fc_min' => [25, 230, 0], 'vitesse_kmh' => [0.1, 120, 1],
+              'vitesse_max_kmh' => [0.1, 150, 1], 'denivele_m' => [0, 10000, 0], 'pas' => [1, 200000, 0], 'vo2max' => [10, 90, 1], 'fc_max_ref' => [100, 240, 0]] as $k => [$a, $b, $dec]) {
+        $v = sante_num($x[$k] ?? null); if ($v !== null && $v >= $a && $v <= $b) $o[$k] = $dec ? round($v, $dec) : (int)round($v);
+    }
+    if (is_array($x['zones_s'] ?? null) && count($x['zones_s']) === 5) {
+        $z = array_map(fn($v) => max(0, min(86400, (int)round((float)$v))), array_values($x['zones_s']));
+        if (array_sum($z) > 0) $o['zones_s'] = $z;
+    }
+    if (is_array($x['par_km'] ?? null)) {
+        $k = [];
+        foreach (array_slice(array_values($x['par_km']), 0, 200) as $p) {
+            if (!is_array($p) || ($km = sante_num($p['km'] ?? null)) === null || $km <= 0 || $km > 1 || ($d = sante_num($p['duree_s'] ?? null)) === null || $d <= 0 || $d > 86400) continue;
+            $fc = sante_num($p['fc'] ?? null);
+            $k[] = ['km' => round($km, 3), 'duree_s' => (int)round($d), 'fc' => $fc !== null && $fc >= 30 && $fc <= 240 ? (int)round($fc) : null];
+        }
+        if ($k) $o['par_km'] = $k;
+    }
+    $o['source'] = mb_substr((string)($x['source'] ?? 'samsung'), 0, 30);
+    return $o;
 }
 function sante_date_ok($d): bool { return is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && checkdate((int)substr($d, 5, 2), (int)substr($d, 8, 2), (int)substr($d, 0, 4)); }
 function sante_uid(): string { return bin2hex(random_bytes(6)); }
@@ -175,6 +224,14 @@ function sante_normaliser($e): array {
     foreach ((array)($e['poids'] ?? []) as $x) if (is_array($x) && sante_date_ok($x['date'] ?? null) && ($kg = sante_num($x['kg'] ?? null)) !== null && $kg > 20 && $kg < 400)
         $o['poids'][] = ['date' => $x['date'], 'kg' => $kg, 'source' => mb_substr((string)($x['source'] ?? 'saisie'), 0, 30)];
     usort($o['poids'], fn($a, $b) => strcmp($a['date'], $b['date']));
+    //  v1.26 — composition corporelle (une par jour, la dernière lue l'emporte) et séances (une par identifiant)
+    $cp = [];
+    foreach ((array)($e['compo'] ?? []) as $x) if ($c = sante_norm_compo($x)) $cp[$c['date']] = $c;
+    ksort($cp); $o['compo'] = array_values($cp);
+    $se = [];
+    foreach ((array)($e['seances'] ?? []) as $x) if ($s = sante_norm_seance($x)) $se[$s['id']] = $s;
+    usort($se, fn($a, $b) => strcmp($a['date'] . ($a['heure'] ?? ''), $b['date'] . ($b['heure'] ?? '')));
+    $o['seances'] = array_values($se);
     $j = [];
     foreach ((array)($e['journal'] ?? []) as $date => $jour) {
         if (!sante_date_ok($date) || !is_array($jour)) continue;

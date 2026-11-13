@@ -37,13 +37,14 @@ const fichiers = {
         [['2026-10-31 22:00:00.000', '2026-11-01 05:30:00.000', 'UTC+0100', '450', '', ''], ['2026-11-01 22:00:00.000', '2026-11-02 01:00:00.000', 'UTC+0100', '180', 'C1', ''], ['2026-11-02 01:30:00.000', '2026-11-02 05:00:00.000', 'UTC+0100', '210', 'C1', ''],
          ['2026-11-02 13:00:00.000', '2026-11-02 13:40:00.000', 'UTC+0100', '40', '', '62']]),
     [`${R}com.samsung.shealth.sleep_combined.${TC}.csv`]: csv('com.samsung.shealth.sleep_combined', ['start_time', 'end_time', 'time_offset', 'sleep_duration'], [['2026-11-01 22:00:00.000', '2026-11-02 05:00:00.000', 'UTC+0100', '390']]),
-    //  inutiles : ignorés sans être lus
+    //  v1.26 — une séance sans durée ni fin : écartée (et son « count » de 99 999 ne pollue pas les pas du jour)
     [`${R}com.samsung.shealth.exercise.${TC}.csv`]: csv('com.samsung.shealth.exercise', ['com.samsung.health.exercise.count', 'com.samsung.health.exercise.calorie', 'com.samsung.health.exercise.start_time'], [['99999', '9999', '2026-11-01 07:00:00.000']]),
+    //  inutiles : ignorés sans être lus
     [`${R}jsons/com.samsung.shealth.tracker.heart_rate/a/abc.binning_data.json`]: '[{"heart_rate":200,"start_time":1}]',
     [`${R}files/com.samsung.shealth.food_image/photo.jpg`]: 'JPEG',
 };
 const tous = Object.entries(fichiers).map(([nom, texte]) => ({ nom, texte }));
-v('A. noms : les CSV utiles sont reconnus ; exercice, détails jsons et photos ne sont pas lus', tous.filter(f => S.estUtile(f.nom)).length === 7 && !S.estUtile(`${R}com.samsung.shealth.exercise.${TC}.csv`) && tous.every(f => S.estExportSamsung(f.nom)));
+v('A. noms : les CSV utiles sont reconnus (séances comprises, v1.26) ; détails jsons inutiles et photos ne sont pas lus', tous.filter(f => S.estUtile(f.nom)).length === 8 && S.estUtile(`${R}com.samsung.shealth.exercise.${TC}.csv`) && tous.every(f => S.estExportSamsung(f.nom)));
 const r = S.extraire(tous.filter(f => S.estUtile(f.nom)), { decalageMin: 60 });
 const j1 = r.jours['2026-11-01'] || {}, j2 = r.jours['2026-11-02'] || {};
 v('B. pas : la ligne COMBINÉE de Samsung (9 050), pas la montre (9 100) ni le téléphone ; vieux day_time en ms lu', j1.pas === 9050 && j2.pas === 7000, r.jours);
@@ -71,7 +72,7 @@ for out,m in ((sys.argv[2],zipfile.ZIP_DEFLATED),(sys.argv[3],zipfile.ZIP_STORED
     z.close()`, src, zip, zip0]);
 const lus = await S.lireZip(fs.readFileSync(zip), S.estUtile), lus0 = await S.lireZip(fs.readFileSync(zip0), S.estUtile);
 const rz = S.extraire(lus, { decalageMin: 60 });
-v('D. .zip du dossier : seuls les 7 CSV utiles sont décompressés, même résultat qu\'avec le dossier ouvert', lus.length === 7 && JSON.stringify(rz.jours) === JSON.stringify(r.jours) && lus0.length === 7, lus.map(f => f.nom));
+v('D. .zip du dossier : seuls les 8 CSV utiles sont décompressés, même résultat qu\'avec le dossier ouvert', lus.length === 8 && JSON.stringify(rz.jours) === JSON.stringify(r.jours) && lus0.length === 8, lus.map(f => f.nom));
 let erreur = ''; try { await S.lireZip(Buffer.from('pas un zip'), S.estUtile); } catch (e) { erreur = e.message; }
 v('  → un fichier qui n\'est pas un .zip : message clair', /pas un \.zip/.test(erreur), erreur);
 //  zip64 : plus de 65 535 entrées (un export complet avec jsons/ peut les dépasser)
@@ -83,8 +84,93 @@ for k,t in d.items(): z.writestr(k,t)
 for i in range(65600): z.writestr('samsunghealth_testeur_${TC}/jsons/x/%d.json'%i,'')
 z.close()`, src, zip64]);
 const lus64 = await S.lireZip(fs.readFileSync(zip64), S.estUtile);
-v('  → zip64 (65 600 fichiers de détail) : les 7 CSV utiles retrouvés', lus64.length === 7, lus64.length);
+v('  → zip64 (65 600 fichiers de détail) : les 8 CSV utiles retrouvés', lus64.length === 8, lus64.length);
 fs.rmSync(tmp, { recursive: true, force: true });
+/* ── v1.26 — « JE VEUX TOUT CE QUE SAMSUNG A, AVEC L'HISTORIQUE » : composition corporelle, séances détaillées, VO₂ max (décor FICTIF) ── */
+const TC2 = '20261113091500', R2 = `samsunghealth_testeur_${TC2}/`;
+const live = []; const t0 = Date.UTC(2026, 10, 13, 6, 22);
+//  44 min de marche à ~4,8 km/h (1,33 m/s), une mesure toutes les 10 s : distance CUMULÉE, FC qui monte de 95 à 125
+for (let s = 0; s <= 2640; s += 10) live.push({ start_time: t0 + s * 1000, heart_rate: Math.round(95 + 30 * Math.min(1, s / 600)), speed: 1.33, distance: Math.round(s * 1.33) });
+const f2 = {
+    //  la table des pesées porte aussi la composition (montre BIA) ; une 2e mesure du même jour, plus tardive, l'emporte
+    [`${R2}com.samsung.health.weight.${TC2}.csv`]: csv('com.samsung.health.weight', ['start_time', 'time_offset', 'weight', 'body_fat', 'body_fat_mass', 'skeletal_muscle_mass', 'fat_free_mass', 'total_body_water', 'basal_metabolic_rate', 'vfa_level'],
+        [['2026-01-10 06:00:00.000', 'UTC+0100', '103.1', '33.0', '34.0', '37.9', '69.1', '50.6', '2010', '14'],
+         ['2026-11-12 06:00:00.000', 'UTC+0100', '110.9', '35.0', '38.8', '39.5', '72.1', '52.8', '2085', '16'], ['2026-11-12 07:30:00.000', 'UTC+0100', '110.5', '34.8', '38.5', '39.6', '72.0', '52.7', '2083', '16'],
+         ['2026-11-11 06:00:00.000', 'UTC+0100', '111.0', '', '', '', '', '', '', '']]),
+    [`${R2}com.samsung.shealth.exercise.${TC2}.csv`]: csv('com.samsung.shealth.exercise',
+        ['com.samsung.health.exercise.start_time', 'com.samsung.health.exercise.end_time', 'com.samsung.health.exercise.time_offset', 'com.samsung.health.exercise.exercise_type',
+         'com.samsung.health.exercise.duration', 'com.samsung.health.exercise.distance', 'com.samsung.health.exercise.calorie', 'com.samsung.health.exercise.mean_heart_rate',
+         'com.samsung.health.exercise.max_heart_rate', 'com.samsung.health.exercise.mean_speed', 'com.samsung.health.exercise.altitude_gain', 'com.samsung.health.exercise.count',
+         'com.samsung.health.exercise.count_type', 'com.samsung.health.exercise.vo2_max', 'com.samsung.health.exercise.datauuid', 'com.samsung.health.exercise.live_data'],
+        [['2026-11-13 06:22:00.000', '2026-11-13 07:06:09.000', 'UTC+0100', '1001', '2649000', '3510', '351', '110', '125', '1.33', '8', '4636', '30001', '35.4', 'abc-123', 'abc-123.com.samsung.health.exercise.live_data.json'],
+         ['2025-03-02 17:00:00.000', '2025-03-02 17:30:00.000', 'UTC+0100', '1002', '1800000', '4000', '300', '140', '165', '2.2', '', '', '', '', 'old-1', '']]),
+    [`${R2}jsons/com.samsung.shealth.exercise/a/abc-123.com.samsung.health.exercise.live_data.json`]: JSON.stringify(live),
+    [`${R2}com.samsung.shealth.vo2_max.${TC2}.csv`]: csv('com.samsung.shealth.vo2_max', ['start_time', 'time_offset', 'vo2_max'], [['2026-10-01 08:00:00.000', 'UTC+0100', '34.9']]),
+};
+const t2 = Object.entries(f2).map(([nom, texte]) => ({ nom, texte }));
+v('F. noms : la composition (pesées), les séances, le VO₂ max et le DÉTAIL d\'une séance (live_data) sont reconnus', t2.filter(f => S.estUtile(f.nom) || S.estLiveData(f.nom)).length === 4
+  && S.estLiveData(`${R2}jsons/com.samsung.shealth.exercise/a/abc-123.com.samsung.health.exercise.live_data.json`) && !S.estLiveData(`${R2}jsons/com.samsung.shealth.tracker.heart_rate/a/x.binning_data.json`));
+const r3 = S.extraire(t2, { decalageMin: 60, fcMax: 176 });
+const c12 = r3.compo.find(x => x.date === '2026-11-12') || {};
+v('  → composition corporelle : graisse % et kg, muscle squelettique, masse maigre, eau, métabolisme de base, graisse viscérale — la DERNIÈRE mesure du jour',
+  c12.kg === 110.5 && c12.graisse_pct === 34.8 && c12.graisse_kg === 38.5 && c12.muscle_kg === 39.6 && c12.masse_maigre_kg === 72 && c12.eau_kg === 52.7 && c12.bmr_kcal === 2083 && c12.graisse_viscerale === 16, c12);
+v('  → TOUT l\'historique : la mesure de janvier gardée ; une pesée sans composition ne crée pas de ligne de composition', r3.compo.length === 2 && r3.compo[0].date === '2026-01-10' && !r3.compo.some(x => x.date === '2026-11-11'), r3.compo.map(x => x.date));
+const m = r3.seances.find(x => x.id === 'abc-123') || {};
+v('  → la séance de marche : nom, date et heure LOCALES, 44 min 9 s, 3,51 km, 351 kcal, FC 110 / 125, 4,8 km/h, 8 m de dénivelé, 4 636 pas, VO₂ max 35,4',
+  m.nom === 'Marche' && m.date === '2026-11-13' && m.heure === '07:22' && m.duree_s === 2649 && m.distance_m === 3510 && m.kcal === 351 && m.fc_moy === 110 && m.fc_max === 125
+  && m.vitesse_kmh === 4.8 && m.denivele_m === 8 && m.pas === 4636 && m.vo2max === 35.4, m);
+const zs = m.zones_s || [];
+v('  → zones de FC calculées sur le détail (FC max 176) : < 60 %, 60-70 %, 70-80 %… ; leur total = la durée du détail',
+  zs.length === 5 && Math.abs(zs.reduce((s, x) => s + x, 0) - 2641) <= 2 && zs[0] > 0 && zs[1] > zs[0] && zs[3] === 0 && zs[4] === 0 && m.fc_max_ref === 176, zs);
+const pk = m.par_km || [];
+v('  → temps par km : 3 km complets (~12 min 30 s chacun) puis le reste (0,51 km), chacun avec sa FC moyenne',
+  pk.length === 4 && pk.slice(0, 3).every(k => k.km === 1 && Math.abs(k.duree_s - 752) <= 2 && k.fc >= 95) && Math.abs(pk[3].km - 0.511) < 0.01 && pk[3].fc === 125, pk);
+const o1 = r3.seances.find(x => x.id === 'old-1') || {};
+v('  → une course de mars 2025 sans détail : gardée (historique), sans zones ni temps par km inventés', o1.nom === 'Course' && o1.date === '2025-03-02' && !o1.zones_s && !o1.par_km && o1.vitesse_kmh === 7.9, o1);
+v('  → VO₂ max par jour : sa table (34,9 le 01/10) et celui de la séance (35,4 le 13/11)', JSON.stringify(r3.vo2) === JSON.stringify([{ date: '2026-10-01', vo2max: 34.9 }, { date: '2026-11-13', vo2max: 35.4 }]), r3.vo2);
+const r4 = S.extraire(t2, { decalageMin: 60 });
+v('  → sans FC max connue (profil sans date de naissance) : pas de zones inventées ; les temps par km restent', !(r4.seances.find(x => x.id === 'abc-123') || {}).zones_s && ((r4.seances.find(x => x.id === 'abc-123') || {}).par_km || []).length === 4);
+v('  → distance du détail PAR INTERVALLE (non cumulée) : mêmes temps par km', (() => { const inc = live.map((p, i) => ({ ...p, distance: i ? p.distance - live[i - 1].distance : 0 }));
+  const d = S.detailSeance(JSON.stringify(inc), t0, 176); return (d.par_km || []).length === 4 && Math.abs(d.par_km[0].duree_s - 752) <= 2; })());
+v('  → un code inconnu est dit tel quel, jamais deviné', S.nomSeance(99999, '') === 'Séance (type 99999)' && S.nomSeance(1001, '') === 'Marche' && S.nomSeance(0, 'Padel') === 'Padel');
+
+/* ── v1.26 — « LES FICHIERS SAMSUNG SONT DISPERSÉS DANS DES DOSSIERS ET SOUS-DOSSIERS » : l'import doit marcher du premier coup,
+      quelle que soit la version de l'export (Samsung ne publie pas son format) ── */
+const R3 = 'Samsung Health/samsunghealth_testeur_20250101/';
+//  (a) un ancien export : le détail de séance dans files/…, COMPRESSÉ en gzip, sans clé « distance » mais avec le TRACÉ (location_data)
+const liveSans = live.map(({ start_time, heart_rate }) => ({ start_time, heart_rate }));
+const lat0 = 31.6295, lon0 = -7.9811, parSec = 1.33 / 111320;   // ~1,33 m/s vers le nord
+const trace = live.filter((_, i) => i % 3 === 0).map(p => ({ start_time: p.start_time, latitude: lat0 + (p.start_time - t0) / 1000 * parSec, longitude: lon0, altitude: 470 }));
+const tmp3 = fs.mkdtempSync(path.join(os.tmpdir(), 'samsung3-')), src3 = path.join(tmp3, 'f.json'), zip3 = path.join(tmp3, 'ancien.zip');
+fs.writeFileSync(src3, JSON.stringify({
+    [`${R3}com.samsung.shealth.exercise.20250101.csv`]: f2[`${R2}com.samsung.shealth.exercise.${TC2}.csv`].replace(/abc-123\.com\.samsung\.health\.exercise\.live_data\.json/, '1'),   // ancien : live_data = 1
+    [`${R3}files/com.samsung.shealth.exercise/abc-123.com.samsung.health.exercise.live_data.json`]: JSON.stringify(liveSans),
+    [`${R3}files/com.samsung.shealth.exercise/abc-123.com.samsung.health.exercise.location_data.json`]: JSON.stringify(trace),
+    [`${R3}sous/dossier/profond/com.samsung.health.weight.20250101.csv`]: f2[`${R2}com.samsung.health.weight.${TC2}.csv`],
+    [`${R3}files/com.samsung.shealth.food_image/x.jpg`]: 'JPEG',
+}));
+execFileSync('python3', ['-c', `import zipfile,json,sys,gzip
+d=json.load(open(sys.argv[1],encoding='utf-8'))
+z=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED)
+for k,t in d.items():
+    b=t.encode('utf-8')
+    if 'live_data' in k or 'location_data' in k: b=gzip.compress(b)
+    z.writestr(k,b)
+z.close()`, src3, zip3]);
+const lus3 = await S.lireZip(fs.readFileSync(zip3), (nom) => S.estUtile(nom) || S.estLiveData(nom));
+const r5 = S.extraire(lus3, { decalageMin: 60, fcMax: 176 });
+const m5 = r5.seances.find(x => x.id === 'abc-123') || {};
+v('G. ancien export en .zip : CSV dans des sous-dossiers profonds, détail de séance dans files/ et COMPRESSÉ (gzip) — tout est retrouvé',
+  lus3.length === 4 && !lus3.some(x => /\.jpg$/.test(x.nom)) && r5.compo.length === 2 && (m5.zones_s || []).length === 5, lus3.map(x => x.nom.slice(R3.length)));
+v('  → pas de clé « distance » dans le détail : les temps par km viennent du TRACÉ GPS (location_data), à quelques secondes près',
+  (m5.par_km || []).length === 4 && m5.par_km.slice(0, 3).every(k => Math.abs(k.duree_s - 752) <= 8), m5.par_km);
+const dV = S.detailSeance(JSON.stringify(live.map(({ start_time, heart_rate, speed }) => ({ start_time, heart_rate, speed }))), t0, 176);
+v('  → ni distance ni tracé, seulement la vitesse : intégrée dans le temps (3 km + le reste)', (dV.par_km || []).length === 4 && Math.abs(dV.par_km[0].duree_s - 752) <= 10, dV.par_km);
+const dR = S.detailSeance(JSON.stringify(liveSans), t0, 176);
+v('  → seulement la FC : des zones, mais AUCUN temps par km inventé', (dR.zones_s || []).length === 5 && !dR.par_km);
+v('  → un détail gzip lu à part (dossier ouvert) : décompressé', await S.texteDe(execFileSync('python3', ['-c', 'import gzip,sys;sys.stdout.buffer.write(gzip.compress(b"[1,2]"))'])) === '[1,2]' && await S.texteDe(Buffer.from('[3]')) === '[3]');
+fs.rmSync(tmp3, { recursive: true, force: true });
+
 v('E. CSV : guillemets, virgules et retours à la ligne dans un champ', JSON.stringify(S.csvLignes('a,b\n"x, ""y""\nz",2\n')) === JSON.stringify([['a', 'b'], ['x, "y"\nz', '2']]));
 v('  → décalages « UTC+0100 », « UTC+05:30 », « UTC-5 », « GMT »', S.decalage('UTC+0100') === 60 && S.decalage('UTC+05:30') === 330 && S.decalage('UTC-5') === -300 && S.decalage('GMT') === 0);
 console.log(ko === 0 ? `\n  ✅ TOUT PASSE — ${n} contrôles` : `\n  ❌ ${ko} contrôle(s) en échec sur ${n}`);

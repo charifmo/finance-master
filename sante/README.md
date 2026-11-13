@@ -116,6 +116,21 @@ sont lus : `tracker.pedometer_day_summary` (pas : la ligne **combinée** de Sams
 une nuit en morceaux comptée une fois). Secours : sans CSV de pas, le détail par 10 min de `jsons/`. Le journal reprend
 la dernière année ; les pesées, tout l'historique. Un CSV « maison » (colonne `date` + `steps` / `weight`…) reste accepté.
 
+## L'export Samsung Health complet : composition, séances, historique (v1.26)
+La synchro automatique (Health Connect) ne transmet ni le muscle squelettique, ni le détail des séances, ni l'historique ancien.
+L'**export Samsung Health** (Samsung Health › Paramètres › Télécharger les données personnelles) les contient : on choisit le
+**dossier** `samsunghealth_…` (ou son `.zip`) dans l'onglet Samsung & Poids, et tout est lu d'un coup, où que soient les fichiers :
+- **composition corporelle** (table des pesées ou `body_composition`) : poids, % et kg de graisse, muscle squelettique, masse maigre,
+  eau, métabolisme de base, graisse viscérale — vues Jours / Semaines / Mois avec moyenne, min, max ;
+- **séances** (`com.samsung.shealth.exercise`) : type, durée, distance, vitesse, FC moyenne et max, calories, pas, dénivelé, VO₂ max ;
+  à partir du détail `<uuid>…live_data.json` (et du tracé `…location_data.json`) : **zones de FC** (en % de la FC max = 220 − âge du
+  profil) et **temps par km** ;
+- **tout l'historique** (10 ans au plus).
+
+Samsung ne publie pas le format de l'export : il est rétro-documenté, et la lecture est tolérante — CSV à n'importe quelle profondeur,
+détail de séance sous `jsons/` ou `files/`, compressé en gzip ou non, distance tirée de la clé `distance`, sinon du tracé GPS, sinon
+de la vitesse ; sans aucune des trois, pas de temps par km (rien n'est inventé). Un code de séance inconnu est affiché tel quel.
+
 ## Synchro automatique depuis le téléphone (v1.5)
 
 Une page web ne peut pas lire Samsung Health (Android ne donne pas accès aux fichiers ni à Health Connect aux sites).
