@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.27"></script>
-    <script src="sante_import.js?v=1.27"></script>
-    <script src="sante_samsung.js?v=1.27"></script>
-    <script src="sante_protocole.js?v=1.27"></script>
+    <script src="sante_calculs.js?v=1.28"></script>
+    <script src="sante_import.js?v=1.28"></script>
+    <script src="sante_samsung.js?v=1.28"></script>
+    <script src="sante_protocole.js?v=1.28"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -841,9 +841,12 @@
                         <div class="flex flex-col sm:flex-row gap-2">
                             <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white font-black cursor-pointer hover:bg-emerald-700" :class="enCours ? 'opacity-60 pointer-events-none' : ''" data-bouton-csv>📲 Importer l’export (.zip ou fichiers)
                                 <input type="file" multiple accept=".zip,application/zip,.csv,text/csv,.json" data-import-csv @change="importerCsv($event)" class="sr-only"></label>
-                            <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-emerald-600 text-emerald-800 font-black cursor-pointer hover:bg-emerald-50" :class="enCours ? 'opacity-60 pointer-events-none' : ''" data-bouton-dossier>📁 Choisir le dossier entier
-                                <input type="file" webkitdirectory multiple data-import-dossier-samsung @change="importerCsv($event)" class="sr-only"></label>
+                            <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-emerald-600 text-emerald-800 font-black cursor-pointer hover:bg-emerald-50" :class="enCours ? 'opacity-60 pointer-events-none' : ''" data-bouton-dossier>📁 Choisir le dossier entier{{ surTelephone ? ' (ordinateur)' : '' }}
+                                <input type="file" webkitdirectory multiple data-import-dossier-samsung @click="avantChoixDossier($event)" @change="importerCsv($event)" class="sr-only"></label>
                         </div>
+                        <!-- v1.27 — sur le téléphone, le dossier entier (plus de 60 000 fichiers) fait fermer l'onglet par Chrome AVANT que l'appli ne reçoive quoi que ce soit : le .zip -->
+                        <p v-if="surTelephone" data-conseil-zip class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-bold text-amber-900">📱 Sur le téléphone, importez le <b>.zip</b> (un seul fichier) : le dossier entier compte plus de 60 000 fichiers et Chrome ferme la page en les préparant. Mes fichiers › appui long sur <code>samsunghealth_…</code> › ⋮ › <b>Compresser</b>, puis « 📲 Importer l’export ».</p>
+                        <p v-if="importInterrompu" data-import-interrompu class="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs font-bold text-rose-900">⚠️ {{ importInterrompu }}</p>
                         <p class="text-[11px] text-slate-500 text-center">Sur l’ordinateur : glissez ici le dossier <code>samsunghealth_…</code> ou son .zip. L’appli prend ce qu’il faut (pas, calories actives, poids, fréquence cardiaque, sommeil) et ignore le reste (photos, détails minute par minute).</p>
                     </div>
                     <p v-if="messageCsv" class="text-sm font-bold" :class="/^❌/.test(messageCsv) ? 'text-rose-700' : /^⏳/.test(messageCsv) ? 'text-slate-500' : 'text-emerald-800'" data-message-csv>{{ messageCsv }}</p>
@@ -856,7 +859,7 @@
                             <li>Ici, touchez <b>« 📲 Importer l’export »</b> et choisissez ce <b>.zip</b>. C’est tout : pas besoin d’ouvrir les sous-dossiers <code>files</code> et <code>jsons</code>.</li>
                         </ol>
                         <p class="mt-2 text-slate-600">Sans compresser : ouvrez le dossier <code>samsunghealth_…</code> dans le sélecteur, <b>Tout sélectionner</b> (les fichiers <code>.csv</code> sont à sa racine, à côté de <code>files</code> et <code>jsons</code>), puis validez. Ou « 📁 Choisir le dossier entier » si votre téléphone le propose.</p>
-                        <p class="mt-1 text-slate-600">Réimporter un export plus récent met les jours à jour sans rien dupliquer. Le journal reprend la dernière année ; les pesées, tout l’historique.</p>
+                        <p class="mt-1 text-slate-600">Réimporter un export plus récent met les jours à jour sans rien dupliquer. Tout l’historique est repris (10 ans au plus) : pas, sommeil, pesées, composition corporelle, séances.</p>
                         <p class="mt-1 text-slate-500">Autre application ou tableur : un CSV avec une colonne <code>date</code> (AAAA-MM-JJ) et au choix <code>steps</code> / <code>pas</code>, <code>active_calorie</code> / <code>kcal</code>, <code>weight</code> / <code>poids</code>, <code>resting_heart_rate</code>, <code>sleep_minutes</code>.</p>
                     </details>
                     </div>
@@ -972,7 +975,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.27';
+        const VERSION = '1.28';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1423,8 +1426,27 @@ createApp({
         const UN_AN = 366, enCours = ref(false);
         const HISTORIQUE_JOURS = 10 * 366;   // v1.26 : TOUT l'historique de l'export (10 ans au plus), plus seulement la dernière année
         const lireDansZip = (nom) => SanteSamsung.estUtile(nom) || SanteSamsung.estLiveData(nom);   // v1.26 : + le détail des séances
+        //  v1.27 — LA PAGE BLANCHE : sur le téléphone, Chrome prépare les 62 000 fichiers du dossier et ferme l'onglet, AVANT que l'appli ne
+        //  reçoive quoi que ce soit ; au retour, la page se recharge et rien ne le disait. Une marque est posée au moment d'ouvrir le
+        //  sélecteur (et pendant la lecture) ; retrouvée au chargement, elle est expliquée, avec la solution (le .zip).
+        const surTelephone = typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        const MARQUE_IMPORT = 'sante_import_samsung';
+        const marquer = (etape) => { try { if (etape) localStorage.setItem(MARQUE_IMPORT, JSON.stringify({ etape, t: Date.now() })); else localStorage.removeItem(MARQUE_IMPORT); } catch (e) { /* stockage indisponible */ } };
+        const importInterrompu = ref('');
+        try {
+            const m = JSON.parse(localStorage.getItem(MARQUE_IMPORT) || 'null');
+            if (m && Date.now() - m.t < 30 * 60000) importInterrompu.value = m.etape === 'choix'
+                ? 'L’import précédent n’a pas abouti : le navigateur a fermé la page pendant qu’il préparait les fichiers du dossier (trop nombreux pour le téléphone). Importez plutôt le .zip du dossier (Mes fichiers › Compresser).'
+                : 'L’import précédent s’est interrompu pendant la lecture (le navigateur a manqué de mémoire). Réessayez avec le .zip, en fermant les autres onglets.';
+            localStorage.removeItem(MARQUE_IMPORT);
+        } catch (e) { /* stockage indisponible */ }
+        const avantChoixDossier = (ev) => {
+            if (surTelephone && !confirm('Sur le téléphone, le dossier entier (plus de 60 000 fichiers) fait souvent fermer la page par Chrome.\n\nConseillé : compresser le dossier en .zip (Mes fichiers › appui long › Compresser), puis « 📲 Importer l’export ».\n\nEssayer quand même avec le dossier ?')) { ev.preventDefault(); return; }
+            marquer('choix');
+        };
         const importerSamsung = async (liste) => {
-            const fichiers = Array.from(liste || []); if (!fichiers.length || enCours.value) return;
+            const fichiers = Array.from(liste || []); if (!fichiers.length || enCours.value) { marquer(null); return; }
+            marquer('lecture'); importInterrompu.value = '';
             enCours.value = true; messageCsv.value = '⏳ Lecture de ' + (fichiers.length > 1 ? fichiers.length + ' fichiers' : '« ' + fichiers[0].name + ' »') + '…';
             try {
                 //  v1.27 — « ÇA SE BLOQUE APRÈS AVOIR IMPORTÉ LE DOSSIER EN ENTIER » : chaque fichier est lu À SON TOUR, les gros CSV en flux,
@@ -1488,7 +1510,7 @@ createApp({
                     + (!jours.size && !r.pesees.length && !erreurs.length ? ' Aucun fichier Samsung Health utile : choisissez le .zip du dossier samsunghealth_… (voir l’aide ci-dessous).' : '')
                     + (erreurs.length ? ' ⚠️ ' + erreurs.join(' ; ') : '');
             } catch (e) { messageCsv.value = '❌ ' + (e.message || e); }
-            finally { enCours.value = false; }
+            finally { enCours.value = false; marquer(null); }
         };
         //  v1.5 — SYNCHRO AUTOMATIQUE (HC Webhook → sync_samsung.php) : le jeton créé ici, l'adresse et les en-têtes prêts à coller
         const configAuto = reactive({ jeton: '', utilisateur: '', motDePasse: '', message: '', copie: '' });
@@ -2143,7 +2165,7 @@ createApp({
         };
         onMounted(charger);
         onMounted(() => { setTimeout(verifierVersion, 2500); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { verifierVersion(); rechargerEtat(); } }); });
-        return { PERIODES_COMPO, MESURES_COMPO, MESURES_COMPO_DETAIL, compoVue, serieCompo, derniereCompo, seancesVue, typesSeances, seancesListe, dernierVo2, niveauVo2, ZONES_FC, pctZone, bornesZone, dureeLisible, allure, fmt2, fmt1,   // v1.26
+        return { PERIODES_COMPO, MESURES_COMPO, MESURES_COMPO_DETAIL, compoVue, serieCompo, derniereCompo, seancesVue, typesSeances, seancesListe, dernierVo2, niveauVo2, ZONES_FC, pctZone, bornesZone, dureeLisible, allure, fmt2, fmt1, surTelephone, avantChoixDossier, importInterrompu,   // v1.26-1.27
             VERSION, ONGLETS, menuOuvert, erreurSauvegarde, sauver, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
                  fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, saisie, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
