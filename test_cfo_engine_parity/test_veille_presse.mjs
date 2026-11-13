@@ -164,7 +164,7 @@ fx.soldesInitiaux.anneeActuelle = Y;
 const terrain = (id, name, extra) => ({ id, name, type: 'Terrain Nu', isProductive: false, value: 11200000, revenue: 0, taux_credit: 0, annees_total: 0, annees_restantes: 0,
     val_pessimiste: 0, val_optimiste: 0, quotePart: '35%', apport_personnel: 0, montant_credit: 0, valeur_actuelle: 0, ...extra });
 fx.masterAssets = [
-    terrain('ma_5', 'Terrain Nord (Ouahat Sidi Brahim)', { surface_totale: 70000, zonage_actuel: 'SHL2' }),
+    terrain('ma_5', 'Terrain Nord (Ouahat Sidi Brahim)', { surface_totale: 70000, zonage_actuel: 'SHL2', prix_m2: 160 }),
     terrain('ma_6', 'Terrain Est (Al Ouidane)', { value: 1260000, surface_totale: 10500, zonage_actuel: 'Agricole' }),
 ];
 // La fiche réelle de l'Actif Nord (Supervision IA, 09/10/2026), sans les noms des co-indivisaires.
@@ -468,13 +468,59 @@ try {
       && /\[A1\] Avito · 2026-11-01 — « Terrain 3 ha Ouahat Sidi Brahim façade RN9 » — prix demandé : inconnu · au m² : 450 DH\/m²/.test(qV) && /\[I1\] .*non comparable : bien bâti \(villa\)/.test(qV)
       && /PRIX DEMANDÉS, JAMAIS des prix de vente/.test(qV) && /Moins de 3 comparables solides : AUCUNE réévaluation de la valeur retenue/.test(qV)
       && /\[S1\] facebook\.com · 2026-11-10 \(NOUVEAU\)/.test(qV) && /3 à 4 ÉVÉNEMENTS distincts au plus/.test(qV), (qV.match(/NOUVEAUTÉS[\s\S]{0,1600}/) || [''])[0]);
+    /* ── v37.140 — LA CALIBRATION FONCIÈRE : calculée par l'application, la décision avant les articles ── */
+    const calib = () => page.evaluate(() => { const c = document.querySelector('tr [data-calib]'); const t = (s) => c && c.querySelector(s) ? c.querySelector(s).textContent.replace(/\s+/g, ' ').trim() : null;
+        return c && { valeur: t('[data-calib-valeur]'), statut: t('[data-calib-statut]'), confiance: t('[data-calib-confiance]'), nb: t('[data-calib-nb]'), date: t('[data-calib-date]'), evo: t('[data-calib-evolution]'),
+                      nonCal: t('[data-calib-non-calibree]'), fourchette: t('[data-calib-fourchette]'), graphe: !!c.querySelector('[data-calib-graphe] canvas'),
+                      avantArticles: !!(c.compareDocumentPosition(document.querySelector('tr .cfo-html')) & Node.DOCUMENT_POSITION_FOLLOWING),
+                      lignes: [...c.querySelectorAll('[data-calib-obs]')].map(e => ({ c: e.dataset.classe, cat: e.dataset.categorie, o: e.dataset.origine, t: e.textContent.replace(/\s+/g, ' ').trim() })) }; });
+    const c0 = await calib();
+    v('v37.140 — bandeau de calibration EN TÊTE (avant l’analyse) : 160 DH/m² · « hypothèse utilisateur — non validée par comparables » · confiance faible · 1 comparable · jamais calibrée',
+      !!c0 && c0.avantArticles && c0.valeur === '160 DH/m²' && c0.statut === 'hypothèse utilisateur — non validée par comparables' && c0.confiance === 'faible' && /^1 dont 0 fiable/.test(c0.nb) && c0.date === 'jamais'
+      && /plan d’aménagement homologué/.test(c0.evo || ''), JSON.stringify(c0));
+    v('  → « Projection non calibrée : données insuffisantes. La valeur de 160 DH/m² reste une hypothèse conservée, non une estimation calculée. » ; pas de fourchette',
+      c0.nonCal === 'Projection non calibrée : données insuffisantes. La valeur de 160 DH/m² reste une hypothèse conservée, non une estimation calculée.' && c0.fourchette === null, JSON.stringify(c0));
+    v('  → prix observés : l’annonce comparable en tête, les 2 indications ensuite ; « prix demandé » ; le nuage surface / prix au m² dessiné',
+      c0.lignes.length === 3 && c0.lignes[0].c === 'comparable' && c0.lignes.every(l => l.cat === 'annonce' && l.o === 'veille') && c0.lignes.slice(1).every(l => l.c === 'indication')
+      && /prix demandé/.test(c0.lignes[1].t) && c0.graphe, JSON.stringify(c0.lignes));
+    v('  → la question au CFO porte le STATUT calculé (hypothèse, 1 comparable, confiance faible, aucune fourchette) et INTERDIT « solide », « ancrée »',
+      /STATUT DE LA VALEUR \(calculé par l'application — tu ne le recalcules pas, tu ne le contredis pas\) : valeur retenue 160 DH\/m² · statut : hypothèse utilisateur — non validée par comparables · comparables valides : 1 · confiance : faible · aucune fourchette/.test(qV)
+      && /INTERDIT : « solide », « solidement », « ancrée »/.test(qV), (qV.match(/STATUT DE LA VALEUR[\s\S]{0,500}/) || [''])[0]);
+    //  garder l'annonce, ajouter deux transactions, une référence de zonage différent ; une saisie sans prix est refusée
+    await page.click('tr [data-calib-obs][data-classe="comparable"] [data-calib-garder]'); await page.waitForTimeout(150);
+    await page.evaluate(() => { document.querySelector('tr [data-calib-saisie]').open = true; }); await page.waitForTimeout(100);
+    const saisir = async (cat, surf, total, m2, zon) => {
+        await page.selectOption('tr [data-calib-f-categorie]', cat); await page.fill('tr [data-calib-f-source]', 'Notaire'); await page.fill('tr [data-calib-f-localisation]', 'Ouahat Sidi Brahim');
+        await page.fill('tr [data-calib-f-zonage]', zon); await page.fill('tr [data-calib-f-surface]', surf ? String(surf) : ''); await page.fill('tr [data-calib-f-total]', total ? String(total) : ''); await page.fill('tr [data-calib-f-m2]', m2 ? String(m2) : '');
+        await page.click('tr [data-calib-f-ajouter]'); await page.waitForTimeout(150); };
+    await saisir('transaction', 60000, null, null, 'SHL2');
+    const err = await page.evaluate(() => document.querySelector('tr [data-calib-f-erreur]')?.textContent.trim() || '');
+    await saisir('transaction', 50000, null, 300, 'SHL2'); await saisir('agence', 80000, 20000000, null, 'SHL2'); await saisir('administrative', 60000, null, 90, 'agricole');
+    const c1 = await calib();
+    const obs1 = await page.evaluate((ST) => JSON.parse(JSON.stringify((eval(ST).masterAssets.find(x => x.id === 'ma_5').calibration || {}).observations || [])), ST);
+    v('  → une saisie sans prix est REFUSÉE (dit) ; l’annonce gardée + 2 saisies (300 DH/m² ; 20 MDH / 8 ha = 250 calculé) : 3 comparables dont 2 fiables, confiance « moyen »',
+      err === 'il faut un prix au m², ou un prix total et une surface' && obs1.length === 4 && obs1[0].url === 'https://www.avito.ma/fr/a/1' && /^3 dont 2 fiables/.test(c1.nb) && c1.confiance === 'moyen' && c1.nonCal === null, JSON.stringify([err, c1, obs1.length]));
+    v('  → fourchette 250 – 450 DH/m² (médiane 300), PAS indicative ; la référence agricole (zonage différent) est à part et n’entre pas dans la fourchette',
+      /^Fourchette des comparables : 250 – 450 DH\/m² \(médiane 300\)/.test(c1.fourchette || '') && c1.lignes.filter(l => l.c === 'zonage_different').length === 1 && /zonage différent/.test(c1.lignes.find(l => l.c === 'zonage_different').t), JSON.stringify(c1));
+    await page.click('tr [data-calib-valider]'); await page.waitForTimeout(150);
+    const c2 = await calib(), pm2 = await page.evaluate((ST) => eval(ST).masterAssets.find(x => x.id === 'ma_5').prix_m2, ST);
+    if (CAPTURES) { const b = await page.evaluate(() => { const el = document.querySelector('tr [data-calib]'); el.scrollIntoView({ block: 'start' }); const r = el.getBoundingClientRect(); return { x: Math.max(0, r.x - 4), y: Math.max(0, r.y - 4), width: r.width + 8, height: r.height + 8 }; });
+        await page.setViewportSize({ width: 1400, height: Math.ceil(b.y + b.height + 40) }); await page.waitForTimeout(400);
+        const b2 = await page.evaluate(() => { const r = document.querySelector('tr [data-calib]').getBoundingClientRect(); return { x: Math.max(0, r.x - 4), y: Math.max(0, r.y - 4), width: r.width + 8, height: r.height + 8 }; });
+        await page.screenshot({ path: path.join(CAPTURES, 'calibration.png'), clip: b2 }); await page.setViewportSize({ width: 1400, height: 900 }); }
+    v('  → « Valider cette calibration » : statut « validée par vous le … (3 comparables) », date posée — et la valeur retenue NE CHANGE PAS (160)',
+      /^validée par vous le .+ \(3 comparables\)$/.test(c2.statut) && c2.date !== 'jamais' && pm2 === 160 && c2.valeur === '160 DH/m²', JSON.stringify([c2.statut, c2.date, pm2]));
     //  rien de nouveau : dit tel quel
     await ctx.unroute('**/cfo_veille_presse.php');
-    await ctx.route('**/cfo_veille_presse.php', (route) => route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(revueV(['deja_connu', 'deja_connu', 'deja_connu', 'deja_connu'])) }));
+    await ctx.route('**/cfo_veille_presse.php', (route) => route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(revueV(['deja_connu', 'ancien_decouvert', 'deja_connu', 'deja_connu'])) }));
     const qR2 = await intel('ma_5');
     const nouv2 = await page.evaluate(() => document.querySelector('tr [data-mi-nouveautes]')?.textContent.replace(/\s+/g, ' ').trim() || '');
-    v('  → rien de nouveau : l’écran dit « Rien de nouveau depuis l’analyse du … (6 déjà connus) », la question impose « Rien de nouveau depuis le … »',
-      /^🕓 Rien de nouveau depuis l’analyse du .+ \(6 déjà connus\)$/.test(nouv2) && /Ici : 0 nouveau\(x\), 0 mise\(s\) à jour, 6 déjà connu\(s\)/.test(qR2) && /écris « Rien de nouveau depuis le /.test(qR2), nouv2);
+    v('  → rien de nouveau : l’écran dit « Rien de nouveau depuis l’analyse du … (5 déjà connus · 1 ancien découvert récemment) », la question impose « Rien de nouveau depuis le … »',
+      /^🕓 Rien de nouveau depuis l’analyse du .+ \(5 déjà connus · 1 ancien découvert récemment\)$/.test(nouv2) && /Ici : 0 nouveau\(x\), 0 mise\(s\) à jour, 5 déjà connu\(s\)/.test(qR2) && /écris « Rien de nouveau depuis le /.test(qR2), nouv2);
+    const anc = await page.evaluate(() => [...document.querySelectorAll('tr [data-mi-article] [data-mi-statut]')].map(e => [e.dataset.statut, e.textContent.trim()]));
+    v('  → v37.140 : l’article ancien découvert récemment porte « ancien, découvert récemment », la question le marque et interdit de le ranger sous « Nouveau »',
+      anc.some(([k, t]) => k === 'ancien_decouvert' && t === 'ancien, découvert récemment') && /\[2\] Le360 \(ANCIEN, DÉCOUVERT RÉCEMMENT\)/.test(qR2) && /JAMAIS sous « Nouveau »/.test(qR2), JSON.stringify(anc));
+    v('  → une fois validée, la question dit « statut : validée par vous le … » et ne porte plus l’interdit « hypothèse »', /statut : validée par vous le .+ \(3 comparables\) · comparables valides : 3/.test(qR2) && !/INTERDIT : « solide »/.test(qR2), (qR2.match(/STATUT DE LA VALEUR.{0,300}/) || [''])[0]);
     await ctx.unroute('**/cfo_veille_presse.php');
     v('aucune erreur JavaScript dans la page', erreurs.length === 0, erreurs.join(' | '));
   });

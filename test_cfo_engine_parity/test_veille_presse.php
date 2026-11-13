@@ -290,6 +290,9 @@ v('  → statuts : première analyse ; vu avant la précédente → « déjà co
   && $nv(['titre' => 'Le Grand Stade de Marrakech métamorphosé pour le Mondial 2030'], $dep + 60, $dep, ['Mondial 2030 : le Grand Stade de Marrakech métamorphosé']) === 'mise_a_jour'
   && $nv(['titre' => 'Ouahat Sidi Brahim : le plan d\'aménagement homologué'], $dep + 60, $dep, ['Mondial 2030 : le Grand Stade de Marrakech métamorphosé']) === 'nouvel_evenement'
   && $nv(['titre' => 'y', 'memoire' => gmdate('Y-m-d', $dep - 2 * 86400)], null, $dep) === 'deja_connu');
+v('  → v37.140 : un article de février 2025 découvert seulement maintenant = « ancien, découvert récemment », pas « nouvel événement » ; daté d\'hier = nouveau',
+  $nv(['titre' => 'Visite de chantier au Grand Stade', 'date' => gmdate('Y-m-d', $dep - 280 * 86400)], $dep + 60, $dep) === 'ancien_decouvert'
+  && $nv(['titre' => 'Visite de chantier au Grand Stade', 'date' => gmdate('Y-m-d', $dep - 86400)], $dep + 60, $dep) === 'nouvel_evenement');
 
 /* ── v37.136 — « LE RÉSULTAT EST NUL » : dates écrites, cartes de Marrakech Alaan, une même histoire, Le360 ── */
 $D = fn($t) => ($x = cfo_vp_date_texte($t, $now)) ? gmdate('Y-m-d', $x[0]) : null;

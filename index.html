@@ -2389,14 +2389,76 @@
                                                                 <button @click="rafraichirMarketIntel(asset)" class="mt-2 text-[10px] font-black uppercase tracking-widest bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition-colors">Réessayer</button>
                                                             </div>
                                                         </div>
-                                                        <!-- Réponse (HTML assaini) -->
-                                                        <div v-else class="cfo-html text-sm text-slate-800 leading-relaxed" v-html="mi.html"></div>
+                                                        <!-- v37.140 — LA CALIBRATION FONCIÈRE (calculée par l'application) : d'abord la décision, ensuite les preuves -->
+                                                        <template v-else>
+                                                        <template v-for="cv in [calibrationVue(asset, mi.contexte && mi.contexte.presse)]" :key="'cv' + asset.id">
+                                                        <section data-calib class="mb-4 rounded-2xl bg-white ring-1 ring-slate-200 p-3 md:p-4 space-y-3">
+                                                            <div data-calib-bandeau class="grid grid-cols-2 md:grid-cols-6 gap-2 text-[11px]">
+                                                                <div class="rounded-xl bg-slate-50 p-2"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Valeur retenue</p><p data-calib-valeur class="font-black text-slate-900 text-sm">{{ cv.valeur ? cv.valeur.toLocaleString('fr-FR') + ' DH/m²' : 'non renseignée' }}</p></div>
+                                                                <div class="rounded-xl p-2 col-span-2" :class="cv.valide ? 'bg-emerald-50' : 'bg-amber-50'"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Statut</p><p data-calib-statut :class="['font-bold', cv.valide ? 'text-emerald-800' : 'text-amber-800']">{{ cv.statut }}</p></div>
+                                                                <div class="rounded-xl bg-slate-50 p-2"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Confiance</p><p data-calib-confiance :class="['font-black', cv.confiance === 'élevé' ? 'text-emerald-700' : (cv.confiance === 'moyen' ? 'text-sky-700' : 'text-rose-700')]">{{ cv.confiance }}</p></div>
+                                                                <div class="rounded-xl bg-slate-50 p-2"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Comparables valides</p><p data-calib-nb class="font-black text-slate-900">{{ cv.nb }}<span class="text-slate-400 font-bold"> dont {{ cv.nbFiables }} fiable{{ cv.nbFiables > 1 ? 's' : '' }}</span></p></div>
+                                                                <div class="rounded-xl bg-slate-50 p-2"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Calibration</p><p data-calib-date class="font-bold text-slate-700">{{ cv.date ? new Date(cv.date).toLocaleDateString('fr-FR') : 'jamais' }}</p></div>
+                                                                <div class="rounded-xl bg-slate-50 p-2 col-span-2 md:col-span-6"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Dernière évolution importante</p><p data-calib-evolution dir="auto" class="font-semibold text-slate-700 truncate">{{ cv.evolution || 'aucune dans cette revue' }}</p></div>
+                                                            </div>
+                                                            <p v-if="cv.nonCalibree" data-calib-non-calibree class="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-black text-amber-900">{{ cv.nonCalibree }}</p>
+                                                            <p v-if="cv.fourchette" data-calib-fourchette class="rounded-xl ring-1 px-3 py-2 text-xs font-bold" :class="cv.fourchette.indicative ? 'bg-amber-50 ring-amber-200 text-amber-900' : 'bg-emerald-50 ring-emerald-200 text-emerald-900'">
+                                                                {{ cv.fourchette.indicative ? 'Fourchette INDICATIVE — annonces seulement, prix demandés (jamais une valeur de marché)' : 'Fourchette des comparables' }} : {{ cv.fourchette.min.toLocaleString('fr-FR') }} – {{ cv.fourchette.max.toLocaleString('fr-FR') }} DH/m² (médiane {{ cv.fourchette.mediane.toLocaleString('fr-FR') }})
+                                                                <button type="button" data-calib-valider @click="validerCalibration(asset, cv)" class="ml-2 px-2 py-0.5 rounded-lg bg-slate-800 text-white text-[10px] font-black">Valider cette calibration</button>
+                                                                <span class="block text-[10px] font-semibold opacity-80">Valider date et fige ce que vous avez vu ; la valeur retenue ne change pas toute seule.</span>
+                                                            </p>
+                                                            <!-- les prix observés : comparables, zonage différent, indications — chacun avec sa catégorie de source -->
+                                                            <div class="overflow-x-auto">
+                                                                <table data-calib-table class="w-full text-[11px]">
+                                                                    <thead><tr class="text-left text-[9px] uppercase tracking-widest text-slate-400"><th class="p-1">Source</th><th class="p-1">Localisation</th><th class="p-1 text-right">Surface</th><th class="p-1 text-right">Prix</th><th class="p-1 text-right">DH/m²</th><th class="p-1">Zonage</th><th class="p-1">Comparabilité</th><th class="p-1">Date</th><th></th></tr></thead>
+                                                                    <tbody>
+                                                                        <tr v-for="o in [...cv.comparables, ...cv.zonageDifferent, ...cv.indications]" :key="o.id" data-calib-obs :data-classe="o.classe" :data-categorie="o.categorie" :data-origine="o.origine" class="border-t border-slate-100 align-top">
+                                                                            <td class="p-1"><span :class="['px-1 rounded text-[9px] font-black uppercase', o.categorie === 'annonce' ? 'bg-amber-100 text-amber-800' : (o.categorie === 'signal' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-800')]">{{ CALIB_CATEGORIES[o.categorie] }}</span>
+                                                                                <a v-if="o.url" :href="o.url" target="_blank" rel="noopener noreferrer nofollow" dir="auto" class="block text-sky-700 hover:underline truncate max-w-[14rem]">{{ o.titre || o.source || o.url }}</a><span v-else class="block">{{ o.source || '—' }}</span></td>
+                                                                            <td class="p-1" dir="auto">{{ o.localisation || 'inconnue' }}</td>
+                                                                            <td class="p-1 text-right tabular-nums">{{ o.surface_m2 ? Math.round(o.surface_m2).toLocaleString('fr-FR') + ' m²' : 'inconnue' }}</td>
+                                                                            <td class="p-1 text-right tabular-nums">{{ o.prix_total ? Math.round(o.prix_total).toLocaleString('fr-FR') + ' DH' : 'inconnu' }}<span v-if="o.categorie === 'annonce'" class="block text-[9px] text-amber-700 font-bold">prix demandé</span></td>
+                                                                            <td class="p-1 text-right tabular-nums font-bold">{{ o.prixM2 ? o.prixM2.toLocaleString('fr-FR') : 'inconnu' }}<span v-if="o.prixM2 && o.calcule" class="block text-[9px] text-slate-400">calculé</span></td>
+                                                                            <td class="p-1">{{ o.zonage || 'inconnu' }}</td>
+                                                                            <td class="p-1"><span :class="['font-black', o.classe === 'comparable' ? 'text-emerald-700' : (o.classe === 'zonage_different' ? 'text-violet-700' : 'text-slate-500')]">{{ o.classe === 'comparable' ? 'comparable' : (o.classe === 'zonage_different' ? 'zonage différent' : 'indication') }}</span><span v-if="o.raisons && o.raisons.length" class="block text-[9px] text-slate-400">{{ o.raisons.join(' · ') }}</span></td>
+                                                                            <td class="p-1 whitespace-nowrap">{{ o.date || 'inconnue' }}</td>
+                                                                            <td class="p-1 whitespace-nowrap">
+                                                                                <button v-if="o.origine === 'veille'" type="button" data-calib-garder @click="garderAnnonceCalib(asset, o)" class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-black" title="Garder cette annonce dans les prix observés de ce bien">📌 Garder</button>
+                                                                                <button v-else type="button" data-calib-retirer @click="retirerObservationCalib(asset, o.id)" class="px-1.5 py-0.5 rounded text-[10px] font-black text-rose-600 hover:bg-rose-50" title="Retirer">✕</button>
+                                                                            </td>
+                                                                        </tr>
+                                                                        <tr v-if="!cv.toutes.length"><td colspan="9" class="p-2 text-center text-slate-400 font-bold">Aucun prix observé pour l’instant.</td></tr>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                            <div v-if="cv.toutes.some(o => o.surface_m2 && o.prixM2) || cv.valeur" data-calib-graphe class="h-56 relative"><base-chart :config="calibChart(asset, cv)"></base-chart></div>
+                                                            <details data-calib-saisie class="rounded-xl ring-1 ring-slate-200 p-2" :open="uiOuvert('intel.calibSaisie', false)" @toggle="uiFixer('intel.calibSaisie', $event.target.open); calibSaisie.assetId = asset.id">
+                                                                <summary class="cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-500">➕ Ajouter un prix observé (transaction, agence, référence…)</summary>
+                                                                <div class="mt-2 grid grid-cols-2 md:grid-cols-5 gap-2 text-[11px]">
+                                                                    <label class="flex flex-col">Catégorie<select v-model="calibSaisie.categorie" data-calib-f-categorie class="border rounded px-1 py-0.5"><option v-for="(lib, k) in CALIB_CATEGORIES" :key="k" :value="k">{{ lib }}</option></select></label>
+                                                                    <label class="flex flex-col">Source<input v-model="calibSaisie.source" data-calib-f-source class="border rounded px-1 py-0.5" placeholder="notaire, agence…"></label>
+                                                                    <label class="flex flex-col">Localisation<input v-model="calibSaisie.localisation" data-calib-f-localisation class="border rounded px-1 py-0.5"></label>
+                                                                    <label class="flex items-center gap-1 mt-4"><input type="checkbox" v-model="calibSaisie.memeZone" data-calib-f-zone> même zone que le bien</label>
+                                                                    <label class="flex flex-col">Zonage<input v-model="calibSaisie.zonage" data-calib-f-zonage class="border rounded px-1 py-0.5" placeholder="SHL2, agricole…"></label>
+                                                                    <label class="flex flex-col">Surface (m²)<input type="number" min="0" v-model.number="calibSaisie.surface_m2" data-calib-f-surface class="border rounded px-1 py-0.5"></label>
+                                                                    <label class="flex flex-col">Prix total (DH)<input type="number" min="0" v-model.number="calibSaisie.prix_total" data-calib-f-total class="border rounded px-1 py-0.5"></label>
+                                                                    <label class="flex flex-col">ou prix au m² (DH)<input type="number" min="0" v-model.number="calibSaisie.prix_m2" data-calib-f-m2 class="border rounded px-1 py-0.5"></label>
+                                                                    <label class="flex flex-col">Date<input type="date" v-model="calibSaisie.date" data-calib-f-date class="border rounded px-1 py-0.5"></label>
+                                                                    <label class="flex flex-col">Lien (facultatif)<input v-model="calibSaisie.url" data-calib-f-url class="border rounded px-1 py-0.5" placeholder="https://…"></label>
+                                                                </div>
+                                                                <p v-if="calibSaisie.erreur && calibSaisie.assetId === asset.id" data-calib-f-erreur class="mt-1 text-[11px] font-bold text-rose-700">{{ calibSaisie.erreur }}</p>
+                                                                <button type="button" data-calib-f-ajouter @click="ajouterObservationCalib(asset)" class="mt-2 px-3 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black uppercase">Ajouter</button>
+                                                            </details>
+                                                        </section>
+                                                        </template>
+                                                        <div class="cfo-html text-sm text-slate-800 leading-relaxed" v-html="mi.html"></div>
+                                                        </template>
                                                         <!-- v37.39 : les articles que l'IA a reçus, numérotés comme ses renvois [n] -->
                                                         <details v-if="mi.html && !mi.loading && mi.contexte && mi.contexte.presse && mi.contexte.presse.articles.length" data-mi-articles :open="uiOuvert('intel.articles', true)" @toggle="uiFixer('intel.articles', $event.target.open)" class="mt-3 pt-2 border-t border-slate-200">
                                                             <summary class="text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer select-none">📰 Actualités retenues avant la réponse ({{ mi.contexte.presse.articles.length }})</summary>
                                                             <ol class="mt-2 space-y-1 text-[11px] text-slate-700 list-decimal pl-5">
                                                                 <li v-for="(ar, k) in mi.contexte.presse.articles" :key="k" data-mi-article>
-                                                                    <span v-if="ar.statut && ar.statut !== 'premiere_analyse'" data-mi-statut :data-statut="ar.statut" :class="['mr-1 px-1 rounded text-[9px] font-black uppercase', ar.statut === 'nouvel_evenement' ? 'bg-violet-600 text-white' : (ar.statut === 'mise_a_jour' ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-500')]">{{ ar.statut === 'nouvel_evenement' ? 'nouveau' : (ar.statut === 'mise_a_jour' ? 'mise à jour' : 'déjà connu') }}</span>
+                                                                    <span v-if="ar.statut && ar.statut !== 'premiere_analyse'" data-mi-statut :data-statut="ar.statut" :class="['mr-1 px-1 rounded text-[9px] font-black uppercase', ar.statut === 'nouvel_evenement' ? 'bg-violet-600 text-white' : (ar.statut === 'mise_a_jour' ? 'bg-sky-100 text-sky-800' : (ar.statut === 'ancien_decouvert' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-500'))]">{{ ar.statut === 'nouvel_evenement' ? 'nouveau' : (ar.statut === 'mise_a_jour' ? 'mise à jour' : (ar.statut === 'ancien_decouvert' ? 'ancien, découvert récemment' : 'déjà connu')) }}</span>
                                                                     <span class="font-bold text-slate-500">{{ ar.date || 'sans date' }} · {{ ar.source }}</span> —
                                                                     <a v-if="ar.lien" :href="ar.lien" target="_blank" rel="noopener noreferrer nofollow" dir="auto" class="text-sky-700 hover:underline">{{ ar.titre }}</a>
                                                                     <span v-else dir="auto">{{ ar.titre }}</span>
@@ -9306,8 +9368,15 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.139 L'article du jour";
+                    const CURRENT_VERSION = "37.140 La calibration foncière";
                     const CHANGELOG = [
+        { version: "37.140 La calibration foncière", date: "2026-11-13", changes: [
+            "📐 INTELLIGENCE MARCHÉ DEVIENT UN OUTIL DE CALIBRATION (étape 1) — la décision d'abord, les articles ensuite (ils deviennent les preuves). En tête : la valeur retenue, son STATUT (« hypothèse utilisateur — non validée par comparables » tant que vous n'avez rien validé), le niveau de confiance, le nombre de comparables valides (dont fiables), la date de calibration et la dernière évolution importante. Moins de 3 comparables : « Projection non calibrée : données insuffisantes. La valeur de … DH/m² reste une hypothèse conservée, non une estimation calculée. »",
+            "🏷️ PRIX OBSERVÉS : un tableau (source, localisation, surface, prix, DH/m², zonage, comparabilité, date) qui sépare transactions réelles, estimations d'agence, références administratives, annonces (toujours « prix demandé ») et signaux de marché ; les annonces de la veille s'y ajoutent, « 📌 Garder » les conserve pour ce bien ; « ➕ Ajouter un prix observé » pour ce que vous savez (notaire, agence, référence). Un nuage surface / prix au m² (échelle log) avec votre terrain et la zone de comparabilité (surface ÷4 à ×4).",
+            "📏 RÈGLES, calculées par l'application (le CFO explique, il ne calcule pas) : moins de 3 comparables réellement proches → aucune estimation ; annonces seulement → fourchette INDICATIVE, jamais une valeur de marché ; zonage différent → à part, jamais mélangé ; « Valider cette calibration » date et fige ce que vous avez vu, sans jamais changer la valeur retenue toute seule. Le CFO reçoit ce statut et ne peut plus écrire « solidement ancrée » d'une hypothèse non validée ; un projet annoncé est un impact potentiel, un budget multi-villes n'est pas attribué à Marrakech.",
+            "🕓 « NOUVEAU : 2025-02-05 — visite de chantier… » : un article ancien qu'on vient seulement de découvrir est maintenant « ancien, découvert récemment », jamais « nouvel événement ».",
+            "PREUVE — test_veille_presse.mjs (110) : bandeau non calibré, phrase exacte, tableau et nuage, statut transmis au CFO avec l'interdit ; annonce gardée, saisie sans prix refusée, 2 saisies → 3 comparables dont 2 fiables, confiance « moyen », fourchette 250–450 (médiane 300) non indicative, référence agricole à part ; validation sans changement de valeur ; « ancien, découvert récemment » à l'écran et dans la question. test_veille_presse.php (124) : statut ancien_decouvert.",
+        ] },
         { version: "37.139 L'article du jour", date: "2026-11-12", changes: [
             "🔎 « TOUT ÇA ET IL N'A PAS TROUVÉ CET ARTICLE ! » (Marrakech Alaan, 12 nov. 2026 : « المصادقة على مشاريع طرقية مهيكلة بمحيط الملعب الكبير لمراكش خلال دورة استثنائية لجماعة واحة سيدي إبراهيم ») — trois trous bouchés : (1) L'ORTHOGRAPHE : toutes les recherches en arabe écrivaient « ابراهيم » (sans hamza), l'article « إبراهيم » ; une recherche de site ou une phrase exacte ne confond pas les deux. Chaque lieu arabe est maintenant cherché dans ses deux orthographes (Google, Bing, et la page de recherche de chaque journal local), sans pousser dehors un autre lieu ; (2) LA FRAÎCHEUR : la collecte ne relisait chaque source qu'une fois par jour ; les pages des journaux locaux (leur recherche, leur accueil) sont maintenant relues toutes les 3 heures — un article du jour entre dans le corpus le jour même ; les moteurs restent une fois par jour ; (3) LES DERNIÈRES NOUVELLES : sur la page d'accueil d'un journal, le bandeau défilant et les blocs « dernières nouvelles » étaient ignorés — c'est souvent là que paraît l'article du jour : ils sont lus.",
             "PREUVE — test_veille_presse.php (123) : orthographes dans les deux sens, page de recherche de Marrakech Alaan dans les deux orthographes, 2ᵉ lieu arabe conservé, l'article du bandeau de l'accueil lu et gardé par le tri (« إبراهيم » reconnaît « ابراهيم ») ; test_veille_collecte (22, SQLite et PostgreSQL 16) : à 10 h toutes les requêtes, à 11 h rien, à 13 h 30 seulement les pages des journaux.",
@@ -14934,7 +15003,7 @@
                         }
                     };
 
-                    const STATUT_S = { nouvel_evenement: ' (NOUVEAU)', mise_a_jour: ' (MISE À JOUR)', deja_connu: ' (DÉJÀ CONNU)' };
+                    const STATUT_S = { nouvel_evenement: ' (NOUVEAU)', mise_a_jour: ' (MISE À JOUR)', deja_connu: ' (DÉJÀ CONNU)', ancien_decouvert: ' (ANCIEN, DÉCOUVERT RÉCEMMENT)' };
                     const _questionMarketIntel = (asset, fiches, memoireOk, presse) => {
                         const a = asset || {}, L = [];
                         const nf = (n) => Math.round(Number(n) || 0).toLocaleString('fr-FR');
@@ -14982,7 +15051,7 @@
                             if (p.ia && p.ia.ok) L.push("Ces actualités ont été SÉLECTIONNÉES POUR LEUR PERTINENCE : " + p.ia.lus + " candidates, " + p.ia.gardes + " gardées (pertinence 2 ou 3 / 3 pour CE bien), "
                                  + "les mieux notés d'abord ; la note et sa raison suivent chaque titre. OBLIGATOIRE (v37.125) : CHAQUE article noté 3/3 apparaît dans « Ce qui bouge », "
                                  + "avec sa date et son numéro [n] — aucun ne manque ; les 2/3 y figurent dès qu'ils parlent d'un chantier, d'un budget ou d'une date.");
-                            const STATUT = { nouvel_evenement: ' (NOUVEAU)', mise_a_jour: ' (MISE À JOUR)', deja_connu: ' (DÉJÀ CONNU)' };
+                            const STATUT = { nouvel_evenement: ' (NOUVEAU)', mise_a_jour: ' (MISE À JOUR)', deja_connu: ' (DÉJÀ CONNU)', ancien_decouvert: ' (ANCIEN, DÉCOUVERT RÉCEMMENT)' };
                             p.articles.forEach((x, i) => L.push('[' + (i + 1) + '] ' + x.source + (STATUT[x.statut] || '') + (MARQUE[x.portee] || '') + (x.zone ? ' (contexte zone)' : '') + (x.majeur ? ' (évolution majeure)' : '') + (x.memoire ? ' (déjà trouvé le ' + x.memoire + ')' : '') + (x.pertinence != null ? ' (pertinence ' + x.pertinence + '/3' + (x.raisonIA ? ' : ' + x.raisonIA : '') + ')' : '') + ' · ' + (x.date || 'sans date') + ' — « ' + x.titre + ' »'
                                 + (x.extrait ? ' — ' + x.extrait : '') + (x.lien ? ' — ' + x.lien : '')));
                         } else if (p.ok) {
@@ -14992,13 +15061,22 @@
                             L.push("REVUE DE PRESSE LOCALE : indisponible (" + p.erreur + "). Cherche toi-même dans la presse locale (Al Marrakchia, Marrakech Alaan, "
                                  + "Kech24, Le Desk, Médias24, Hespress).");
                         }
+                        //  v37.140 — LE STATUT DE LA VALEUR, calculé par l'application : le CFO explique, il ne calcule pas et ne contredit pas
+                        const cv = calibrationVue(a, p);
+                        L.push('', "STATUT DE LA VALEUR (calculé par l'application — tu ne le recalcules pas, tu ne le contredis pas) : valeur retenue "
+                             + (cv.valeur ? cv.valeur.toLocaleString('fr-FR') + ' DH/m²' : 'non renseignée') + " · statut : " + cv.statut + " · comparables valides : " + cv.nb
+                             + " · confiance : " + cv.confiance + " · " + (cv.fourchette ? (cv.fourchette.indicative ? 'fourchette INDICATIVE (prix demandés) : ' : 'fourchette : ') + cv.fourchette.min + ' – ' + cv.fourchette.max + ' DH/m² (médiane ' + cv.fourchette.mediane + ')' : 'aucune fourchette (moins de 3 comparables)') + ".");
+                        if (!cv.valide) L.push("La valeur retenue est une HYPOTHÈSE DE L'UTILISATEUR, non validée : dis-le dans le verdict. INTERDIT : « solide », « solidement », « ancrée », « confirmée », "
+                             + "« valorisation robuste » ou tout mot qui la présente comme établie. Un projet seulement annoncé est un impact POTENTIEL, pas acquis ; un budget couvrant plusieurs villes "
+                             + "n'est jamais attribué en entier à Marrakech ; un événement général sans lien avec la parcelle est du contexte, pas un facteur de prix.");
                         //  v37.138 — CE QUI EST NOUVEAU DEPUIS LA PRÉCÉDENTE ANALYSE : jamais d'anciens faits reformulés comme des nouveautés
                         const nv = p.nouveautes || {};
                         if (p.ok && nv.disponible && nv.depuis) {
                             const tous = [...(p.articles || []), ...(p.annonces || []), ...(p.signaux || [])];
                             const cpt = (k) => tous.filter(x => x.statut === k).length;
                             L.push('', "NOUVEAUTÉS — analyse précédente de ce bien : " + new Date(nv.depuis).toLocaleString('fr-FR') + ". Marques : (NOUVEAU) = vu pour la première fois depuis, "
-                                 + "(MISE À JOUR) = nouveau lien sur une histoire déjà connue, (DÉJÀ CONNU) = déjà lu à l'analyse précédente. Ici : " + cpt('nouvel_evenement') + " nouveau(x), "
+                                 + "(MISE À JOUR) = nouveau lien sur une histoire déjà connue, (DÉJÀ CONNU) = déjà lu à l'analyse précédente, (ANCIEN, DÉCOUVERT RÉCEMMENT) = daté de bien avant, "
+                                 + "vu seulement maintenant : JAMAIS sous « Nouveau » (range-le sous « Déjà connu », avec sa vraie date). Ici : " + cpt('nouvel_evenement') + " nouveau(x), "
                                  + cpt('mise_a_jour') + " mise(s) à jour, " + cpt('deja_connu') + " déjà connu(s). Dans « Ce qui bouge », sépare « Nouveau », « Mise à jour » et « Déjà connu ». "
                                  + "S'il n'y a ni NOUVEAU ni MISE À JOUR, écris « Rien de nouveau depuis le " + new Date(nv.depuis).toLocaleDateString('fr-FR') + " » et ne présente AUCUN fait ancien comme une nouveauté.");
                         } else if (p.ok && nv.disponible) L.push('', "NOUVEAUTÉS : c'est la première analyse de ce bien enregistrée — rien à comparer.");
@@ -15040,7 +15118,7 @@
                             + "« prix m² terrain [zonage] [commune] [année] ». INTERDIT : une requête générique "
                             + "(« prix villa », « prix immobilier Maroc ») qui ignore la superficie, le zonage ou la localisation.",
                             "4. RÉPONDS DANS CE FORMAT, ET RIEN D'AUTRE — en HTML, 250 mots au plus hors sources :",
-                            "   <p><b>Verdict — " + (a.name || "l'actif") + "</b> : une phrase — la valeur de CE bien bouge-t-elle, dans quel sens, et pourquoi.</p>",
+                            "   <p><b>Verdict — " + (a.name || "l'actif") + "</b> : une phrase — les FAITS qui peuvent faire bouger la valeur de CE bien, dans quel sens, en reprenant le STATUT DE LA VALEUR ci-dessus (hypothèse non validée ⇒ dis-le).</p>",
                             "   <b>Ce qui bouge autour de la parcelle</b> : 4 puces au plus, chacune « date — fait — impact ↑ / ↓ / = sur CE bien — [n] », rangées sous « Nouveau », "
                             + "« Mise à jour », « Déjà connu » (une rubrique vide est omise ; rien de nouveau : « Rien de nouveau depuis le … ») ; le contexte général : 3 à 4 ÉVÉNEMENTS distincts au plus, jamais le même fait deux fois.",
                             "   <b>Prix comparables</b> : seulement les annonces marquées COMPARABLES [A…] (prix DEMANDÉS, en DH/m², avec la source) ; les INDICATIONS [I…] en une phrase au plus ; "
@@ -15117,6 +15195,113 @@
                         if (open && !cur.html && !cur.loading) chargerMarketIntel(asset);
                     };
                     const rafraichirMarketIntel = (asset) => chargerMarketIntel(asset);
+                    /* ═══ v37.140 — LA CALIBRATION FONCIÈRE (étape 1 : bandeau, prix observés, règles) ════════════════════════════
+                       Déterministe et traçable : l'application calcule, le CFO explique. Règles :
+                       • moins de 3 comparables réellement proches → aucune nouvelle estimation ;
+                       • comparables seulement en annonces → fourchette INDICATIVE (prix demandés), jamais une valeur de marché ;
+                       • zonage différent → affiché à part, jamais mélangé ;
+                       • rien ne modifie la valeur de référence sans validation de l'utilisateur (et la validation ne la change pas). */
+                    const CALIB_CATEGORIES = { transaction: 'Transaction réelle', agence: 'Estimation d’agence', administrative: 'Référence administrative',
+                                               annonce: 'Annonce — prix demandé', signal: 'Signal de marché' };
+                    const CALIB_FIABLES = ['transaction', 'agence', 'administrative'];
+                    const _comparabiliteObs = (o, asset) => {
+                        const a = asset || {}, r = [];
+                        if (o.categorie === 'signal') return { classe: 'indication', raisons: ['simple signal de marché'] };
+                        if (o.type && o.type !== 'terrain' && o.type !== 'ferme') r.push('bien bâti (' + o.type + '), pas un terrain');
+                        if (!o.memeZone) r.push(o.localisation ? 'localisation différente ou trop vague (' + o.localisation + ')' : 'localisation inconnue');
+                        const sb = Number(a.surface_totale) || 0, so = Number(o.surface_m2) || 0;
+                        if (!so) r.push('surface inconnue');
+                        else if (sb > 0 && (so < sb / 4 || so > sb * 4)) r.push('taille trop différente');
+                        if (!(o.prixM2 > 0)) r.push('prix au m² inconnu');
+                        const zb = _famZonage(a.zonage_actuel), zo = _famZonage(o.zonage);
+                        if (!r.length && zb && zo && zb !== zo) return { classe: 'zonage_different', raisons: ['zonage différent (' + o.zonage + ' / ' + a.zonage_actuel + ') : affiché à part, jamais mélangé'] };
+                        return { classe: r.length ? 'indication' : 'comparable', raisons: r };
+                    };
+                    const _mediane = (v) => { const t = [...v].sort((x, y) => x - y), m = Math.floor(t.length / 2); return t.length % 2 ? t[m] : Math.round((t[m - 1] + t[m]) / 2); };
+                    const calibrationVue = (asset, presse) => {
+                        const a = asset || {}, cal = (a.calibration && typeof a.calibration === 'object') ? a.calibration : {};
+                        const gardees = Array.isArray(cal.observations) ? cal.observations : [];
+                        const dejaUrl = new Set(gardees.map(o => o.url).filter(Boolean));
+                        const veille = ((presse && presse.annonces) || []).filter(x => x.lien && !dejaUrl.has(x.lien)).map(x => ({
+                            id: 'v_' + x.lien, origine: 'veille', categorie: 'annonce', titre: x.titre, source: x.source || x.domaine, url: x.lien,
+                            localisation: x.lieu || (x.marrakech ? 'Marrakech (vague)' : ''), memeZone: !!x.lieu, surface_m2: x.surface_m2, prix_total: x.prix_demande,
+                            prix_m2: x.prix_m2, prix_m2_calcule: !!x.prix_m2_calcule, zonage: x.zonage, date: x.date, type: x.type, _annonce: x }));
+                        const toutes = [...gardees.map(o => ({ ...o, origine: 'saisie' })), ...veille].map(o => {
+                            const prixM2 = Number(o.prix_m2) > 0 ? Math.round(Number(o.prix_m2)) : (Number(o.prix_total) > 0 && Number(o.surface_m2) > 0 ? Math.round(o.prix_total / o.surface_m2) : null);
+                            const x = { ...o, prixM2, calcule: !(Number(o.prix_m2) > 0) && prixM2 !== null ? true : !!o.prix_m2_calcule };
+                            return { ...x, ..._comparabiliteObs(x, a) };
+                        });
+                        const comps = toutes.filter(o => o.classe === 'comparable'), fiables = comps.filter(o => CALIB_FIABLES.includes(o.categorie));
+                        const nb = comps.length, val = Number(a.prix_m2) || 0;
+                        const prix = comps.map(o => o.prixM2);
+                        const fourchette = nb >= 3 ? { min: Math.min(...prix), mediane: _mediane(prix), max: Math.max(...prix), indicative: !fiables.length } : null;
+                        const confiance = nb < 3 ? 'faible' : (fiables.length >= 3 ? 'élevé' : (fiables.length >= 1 ? 'moyen' : 'faible'));
+                        const v = cal.validation || null;
+                        const statut = v ? 'validée par vous le ' + new Date(v.date).toLocaleDateString('fr-FR') + ' (' + v.nb + ' comparables)' : 'hypothèse utilisateur — non validée par comparables';
+                        const arts = (presse && presse.articles) || [];
+                        //  important : noté 3/3, évolution majeure, ou — sélection par pertinence indisponible — un article qui nomme le bien (pas le contexte général)
+                        const imp = (x) => x.pertinence === 3 || x.majeur || (x.pertinence == null && !x.zone);
+                        const evo = arts.find(x => x.statut === 'nouvel_evenement' && imp(x)) || arts.find(x => x.statut === 'mise_a_jour' && imp(x))
+                                 || [...arts].filter(x => x.date && imp(x)).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0] || null;
+                        return { valeur: val, statut, valide: !!v, confiance, nb, nbFiables: fiables.length, fourchette, toutes,
+                                 comparables: comps, zonageDifferent: toutes.filter(o => o.classe === 'zonage_different'), indications: toutes.filter(o => o.classe === 'indication'),
+                                 date: v ? v.date : null, evolution: evo ? (evo.date || 'sans date') + ' — ' + evo.titre : null,
+                                 nonCalibree: nb < 3 ? 'Projection non calibrée : données insuffisantes. La valeur de ' + (val ? val.toLocaleString('fr-FR') + ' DH/m²' : '(non renseignée)')
+                                                     + ' reste une hypothèse conservée, non une estimation calculée.' : null };
+                    };
+                    const _calibDe = (asset) => {
+                        if (!asset.calibration || typeof asset.calibration !== 'object') asset.calibration = {};
+                        if (!Array.isArray(asset.calibration.observations)) asset.calibration.observations = [];
+                        return asset.calibration;
+                    };
+                    const garderAnnonceCalib = (asset, o) => {
+                        const cal = _calibDe(asset);
+                        if (cal.observations.some(x => x.url === o.url)) return;
+                        cal.observations.push({ id: 'o' + Date.now() + Math.random().toString(36).slice(2, 6), categorie: 'annonce', titre: o.titre || '', source: o.source || '', url: o.url,
+                            localisation: o.localisation || '', memeZone: !!o.memeZone, surface_m2: Number(o.surface_m2) || null, prix_total: Number(o.prix_total) || null,
+                            prix_m2: Number(o.prix_m2) || null, prix_m2_calcule: !!o.prix_m2_calcule, zonage: o.zonage || '', date: o.date || '', type: o.type || '', capture: new Date().toISOString().slice(0, 10) });
+                        handleDataChange();
+                    };
+                    const calibSaisie = reactive({ assetId: null, categorie: 'transaction', source: '', localisation: '', memeZone: true, surface_m2: null, prix_total: null, prix_m2: null, zonage: '', date: '', url: '', erreur: '' });
+                    const ajouterObservationCalib = (asset) => {
+                        const f = calibSaisie;
+                        f.erreur = '';
+                        if (!CALIB_CATEGORIES[f.categorie]) { f.erreur = 'catégorie inconnue'; return false; }
+                        if (!(Number(f.prix_m2) > 0) && !(Number(f.prix_total) > 0 && Number(f.surface_m2) > 0)) { f.erreur = 'il faut un prix au m², ou un prix total et une surface'; return false; }
+                        if (f.url && !/^https?:\/\//i.test(f.url)) { f.erreur = 'le lien doit commencer par http(s)://'; return false; }
+                        _calibDe(asset).observations.push({ id: 'o' + Date.now() + Math.random().toString(36).slice(2, 6), categorie: f.categorie, titre: '', source: String(f.source || '').trim(), url: f.url || '',
+                            localisation: String(f.localisation || '').trim(), memeZone: !!f.memeZone, surface_m2: Number(f.surface_m2) || null, prix_total: Number(f.prix_total) || null,
+                            prix_m2: Number(f.prix_m2) || null, zonage: String(f.zonage || '').trim(), date: f.date || '', type: 'terrain', capture: new Date().toISOString().slice(0, 10) });
+                        Object.assign(f, { source: '', localisation: '', surface_m2: null, prix_total: null, prix_m2: null, zonage: '', date: '', url: '' });
+                        handleDataChange();
+                        return true;
+                    };
+                    const retirerObservationCalib = (asset, id) => { const cal = _calibDe(asset); cal.observations = cal.observations.filter(o => o.id !== id); handleDataChange(); };
+                    //  la validation NE CHANGE PAS la valeur de référence : elle date et fige ce que vous avez vu (≥ 3 comparables exigés)
+                    const validerCalibration = (asset, vue) => {
+                        if (!vue || vue.nb < 3 || !vue.fourchette) return false;
+                        _calibDe(asset).validation = { date: new Date().toISOString(), nb: vue.nb, nbFiables: vue.nbFiables, confiance: vue.confiance, prixRetenu: vue.valeur,
+                                                       min: vue.fourchette.min, mediane: vue.fourchette.mediane, max: vue.fourchette.max, indicative: vue.fourchette.indicative };
+                        handleDataChange();
+                        return true;
+                    };
+                    const COULEURS_CALIB = { transaction: '#059669', agence: '#2563eb', administrative: '#7c3aed', annonce: '#f59e0b', signal: '#94a3b8' };
+                    const calibChart = (asset, vue) => {
+                        const a = asset || {}, sb = Number(a.surface_totale) || 0;
+                        const pts = vue.toutes.filter(o => Number(o.surface_m2) > 0 && o.prixM2 > 0);
+                        //  l'échelle suit les comparables (et zonage différent) et la valeur du bien — une villa à 11 875 DH/m² (simple indication) n'écrase pas le reste
+                        const utiles = pts.filter(o => o.classe !== 'indication');
+                        const yMax = Math.max(Number(a.prix_m2) || 0, ...(utiles.length ? utiles : pts).map(o => o.prixM2), 100) * 1.3;
+                        const ds = Object.keys(CALIB_CATEGORIES).map(k => ({ type: 'scatter', label: CALIB_CATEGORIES[k], backgroundColor: COULEURS_CALIB[k],
+                            pointRadius: pts.filter(o => o.categorie === k).map(o => o.classe === 'comparable' ? 6 : 3),
+                            data: pts.filter(o => o.categorie === k).map(o => ({ x: Number(o.surface_m2), y: o.prixM2 })) })).filter(d => d.data.length);
+                        if (sb > 0 && Number(a.prix_m2) > 0) ds.push({ type: 'scatter', label: 'Votre terrain (valeur retenue)', backgroundColor: '#dc2626', pointStyle: 'rectRot', pointRadius: 9, data: [{ x: sb, y: Number(a.prix_m2) }] });
+                        if (sb > 0) [sb / 4, sb * 4].forEach((x, i) => ds.push({ type: 'line', label: i ? 'Zone de comparabilité (surface ÷4 à ×4)' : '', borderColor: '#64748b', borderDash: [5, 4], borderWidth: 1, pointRadius: 0,
+                                                                              data: [{ x, y: 0 }, { x, y: yMax }] }));
+                        return { type: 'scatter', data: { datasets: ds }, options: { responsive: true, maintainAspectRatio: false, animation: false,
+                            plugins: { legend: { labels: { filter: (it) => !!it.text, boxWidth: 10, font: { size: 10 } } } },
+                            scales: { x: { type: 'logarithmic', title: { display: true, text: 'Surface (m², échelle log)' } }, y: { min: 0, max: Math.round(yMax), title: { display: true, text: 'DH/m²' } } } } };
+                    };
                     //  v37.138 — la ligne « ce qui est nouveau depuis l'analyse précédente » (jamais d'ancien présenté comme neuf)
                     const texteNouveautes = (p) => {
                         const nv = (p && p.nouveautes) || {};
@@ -15124,9 +15309,10 @@
                         if (!nv.depuis) return '🕓 Première analyse enregistrée pour ce bien — rien à comparer';
                         const tous = [...(p.articles || []), ...(p.annonces || []), ...(p.signaux || [])];
                         const n = (k) => tous.filter(x => x.statut === k).length, quand = new Date(nv.depuis).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-                        if (!n('nouvel_evenement') && !n('mise_a_jour')) return '🕓 Rien de nouveau depuis l’analyse du ' + quand + ' (' + n('deja_connu') + ' déjà connu' + (n('deja_connu') > 1 ? 's' : '') + ')';
+                        const anc = n('ancien_decouvert') ? ' · ' + n('ancien_decouvert') + ' ancien' + (n('ancien_decouvert') > 1 ? 's' : '') + ' découvert' + (n('ancien_decouvert') > 1 ? 's' : '') + ' récemment' : '';
+                        if (!n('nouvel_evenement') && !n('mise_a_jour')) return '🕓 Rien de nouveau depuis l’analyse du ' + quand + ' (' + n('deja_connu') + ' déjà connu' + (n('deja_connu') > 1 ? 's' : '') + anc + ')';
                         return '🆕 Depuis l’analyse du ' + quand + ' : ' + n('nouvel_evenement') + (n('nouvel_evenement') > 1 ? ' nouveaux événements' : ' nouvel événement')
-                             + ' · ' + n('mise_a_jour') + ' mise' + (n('mise_a_jour') > 1 ? 's' : '') + ' à jour · ' + n('deja_connu') + ' déjà connu' + (n('deja_connu') > 1 ? 's' : '');
+                             + ' · ' + n('mise_a_jour') + ' mise' + (n('mise_a_jour') > 1 ? 's' : '') + ' à jour · ' + n('deja_connu') + ' déjà connu' + (n('deja_connu') > 1 ? 's' : '') + anc;
                     };
 
                     // ── v37.40 : LES MÉDIAS DE LA REVUE DE PRESSE, DEPUIS L'ÉCRAN ────────
@@ -27947,6 +28133,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         creditParams, creditRestantCalcule, moisEcoulesCredit, moisPayesEffectifs,
                         detteBancaire, globalDetteBancaire,
                         marketIntel, toggleMarketIntel, chargerMarketIntel, rafraichirMarketIntel, texteNouveautes,
+                        calibrationVue, garderAnnonceCalib, calibSaisie, ajouterObservationCalib, retirerObservationCalib, validerCalibration, calibChart, CALIB_CATEGORIES,
                         veilleSources, ouvrirSourcesVeille, fermerSourcesVeille, nouvelleSourceVeille, modifierSourceVeille, annulerSourceVeille,
                         validerSourceVeille, basculerSourceVeille, supprimerSourceVeille, restaurerSourceVeille, reinitialiserSourcesVeille, testerSourceVeille, VS_PORTEES_WEB, cleSourceVeille,
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
