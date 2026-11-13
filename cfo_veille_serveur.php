@@ -63,7 +63,7 @@ function cfo_vp_ecrire_perso(PDO $pdo, ?array $perso): void {
  * La configuration EFFECTIVE : la liste d'origine, à laquelle s'appliquent vos
  * réglages. ['cfg' => …, 'supprimees' => […], 'stockage' => postgres|indisponible, 'raison' => …]
  */
-function cfo_vp_config(): ?array {
+function cfo_vp_config(bool $avecProposees = true, ?string $bien = null): ?array {
     $def = cfo_vp_defauts();
     if (!$def) return null;
     $raison = null; $perso = null; $stockage = 'indisponible';
@@ -74,7 +74,17 @@ function cfo_vp_config(): ?array {
     }
     $f = cfo_vp_fusion($def['sources'] ?? [], $perso);
     $cfg = $def; $cfg['sources'] = $f['sources'];
-    return ['cfg' => $cfg, 'supprimees' => $f['supprimees'], 'stockage' => $stockage, 'raison' => $raison, 'maj' => $perso['maj'] ?? null];
+    //  v37.142 — LES SOURCES PROPOSÉES QUE VOUS AVEZ ACCEPTÉES rejoignent la collecte (jamais celles seulement proposées). La liste
+    //  des médias (écran « 📰 Sources ») les lit sans elles ($avecProposees = false) : les enregistrer ne les y recopie pas.
+    $actives = 0;
+    if ($avecProposees && is_file(__DIR__ . '/cfo_veille_collecte_lib.php')) {
+        try {
+            require_once __DIR__ . '/cfo_veille_collecte_lib.php';
+            $pdoV = function_exists('vd_sources_actives') ? vc_pdo() : null;
+            if ($pdoV) { $act = vd_sources_actives($pdoV, $bien); $actives = count($act); $cfg['sources'] = vd_fusionner_actives($cfg['sources'], $act); }
+        } catch (Throwable $e) { $raison = ($raison ? $raison . ' ; ' : '') . 'sources proposées illisibles : ' . $e->getMessage(); }
+    }
+    return ['cfg' => $cfg, 'supprimees' => $f['supprimees'], 'stockage' => $stockage, 'raison' => $raison, 'maj' => $perso['maj'] ?? null, 'proposees_actives' => $actives];
 }
 
 /** La cause d'un échec réseau, en clair. */

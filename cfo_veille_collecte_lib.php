@@ -79,6 +79,7 @@ function vc_schema(PDO $pdo): void {
             premier BIGINT NOT NULL, dernier BIGINT NOT NULL, exemple TEXT)",
         "CREATE TABLE IF NOT EXISTS veille_budget (mois TEXT PRIMARY KEY, appels INTEGER NOT NULL DEFAULT 0)",
     ] as $sql) $pdo->exec($sql);
+    if (function_exists('vd_schema')) vd_schema($pdo);   // v37.142 : les sources proposées (migration idempotente)
 }
 
 /** Une requête Brave tirée d'une requête « moteur » : sans l'opérateur when: (propre à Google). */
@@ -185,7 +186,10 @@ function vc_planifier(PDO $pdo, bool $braveActif, ?int $maintenant = null): int 
         if ((($req['type'] ?? '') === 'brave' || ($req['format'] ?? '') === 'brave_json') && !$braveActif) continue;
         //  v37.139 — un article du jour d'un journal local (Marrakech Alaan, 12 nov.) attendait le lendemain : les pages des journaux
         //  (leur recherche, leur accueil) sont relues toutes les 3 heures ; les moteurs, une fois par jour
-        $cle = ($req['type'] ?? '') === 'page' ? $jour . ' ' . str_pad((string)(intdiv((int)gmdate('G', $now), VC_HEURES_PAGES) * VC_HEURES_PAGES), 2, '0', STR_PAD_LEFT) . 'h' : $jour;
+        //  v37.142 — la fréquence choisie pour une source proposée acceptée : « à la demande » n'est jamais rejouée par le cron
+        $freq = (string)($req['frequence'] ?? '');
+        if ($freq === 'demande') continue;
+        $cle = ((($req['type'] ?? '') === 'page' && $freq !== 'quotidienne') || $freq === '3h') ? $jour . ' ' . str_pad((string)(intdiv((int)gmdate('G', $now), VC_HEURES_PAGES) * VC_HEURES_PAGES), 2, '0', STR_PAD_LEFT) . 'h' : $jour;
         $ins->execute([(int)$r['id'], $cle]); $n += $ins->rowCount();
     }
     return $n;
@@ -354,6 +358,9 @@ function vc_etat(PDO $pdo, ?int $maintenant = null): array {
         'jobs_du_jour' => $jobs,
         'articles' => (int)$col('SELECT COUNT(*) FROM veille_articles'),
         'articles_24h' => (int)$col('SELECT COUNT(*) FROM veille_articles WHERE premier >= ' . (int)($now - 86400)),
+        //  v37.142 : les sources proposées (« Sources proposées » dans Intelligence Marché ; commande « propositions »)
+        'sources_proposees' => function_exists('vd_schema') ? (int)$col("SELECT COUNT(*) FROM veille_sources_decouvertes WHERE statut = 'proposed' AND exclusion IS NULL") : null,
+        'sources_acceptees' => function_exists('vd_schema') ? (int)$col("SELECT COUNT(*) FROM veille_sources_decouvertes WHERE statut IN ('accepted', 'one_time')") : null,
         'domaines_proposes' => $pdo->query("SELECT domaine, vu, exemple FROM veille_domaines WHERE statut = 'propose' ORDER BY vu DESC, domaine LIMIT 15")->fetchAll(PDO::FETCH_ASSOC),
         'brave_appels_mois' => (int)($col("SELECT appels FROM veille_budget WHERE mois = '" . gmdate('Y-m', $now) . "'") ?: 0),
         //  v37.137 : la preuve que le cron tourne SANS l'appli — l'heure de la dernière tâche traitée, et combien au total
@@ -375,5 +382,10 @@ function vc_revue(PDO $pdo, array $lieux, array $sujets, array $requetes, array 
     $depuis = vc_revue_precedente($pdo, $bien);   // v37.138 : AVANT que vc_memoriser ne remplace la date
     $ids = vc_memoriser($pdo, $bien, $lieux, $sujets, $requetes, $maintenant);
     foreach ($trouves as $i => $arts) if (isset($ids[$i]) && $arts) vc_stocker($pdo, $ids[$i], $arts, $cfg, $maintenant);
+    //  v37.142 : les sources proposées se mettent à jour (jamais activées d'office) ; une erreur ici ne coûte pas la revue
+    if (function_exists('vd_mettre_a_jour')) { try { vd_mettre_a_jour($pdo, $cfg, $maintenant); } catch (Throwable $e) { error_log('veille : sources proposées — ' . $e->getMessage()); } }
     return ['corpus' => vc_articles_bien($pdo, $bien, $maintenant), 'etat' => vc_etat_bien($pdo, $bien), 'bien' => $bien, 'depuis' => $depuis];
 }
+
+//  v37.142 — les sources proposées (normalisation, agrégation, décisions) : rangées à part, chargées avec la collecte
+if (is_file(__DIR__ . '/cfo_veille_decouvertes_lib.php')) require_once __DIR__ . '/cfo_veille_decouvertes_lib.php';

@@ -193,7 +193,8 @@ const doc = fs.mkdtempSync(path.join(os.tmpdir(), 'veille-'));
 const F = path.join(doc, 'finance');
 fs.mkdirSync(F);
 fs.writeFileSync(path.join(F, 'index.html'), html);
-for (const f of ['save_data.php', 'cfo_veille_presse.php', 'cfo_veille_lib.php', 'cfo_veille_serveur.php', 'cfo_veille_sources.php', 'cfo_veille_collecte_lib.php'])
+for (const f of ['save_data.php', 'cfo_veille_presse.php', 'cfo_veille_lib.php', 'cfo_veille_serveur.php', 'cfo_veille_sources.php', 'cfo_veille_collecte_lib.php',
+                 'cfo_veille_decouvertes.php', 'cfo_veille_decouvertes_lib.php', 'cfo_veille_domaines.php', 'veille_psl.dat'])
     if (fs.existsSync(path.join(RACINE, f))) fs.copyFileSync(path.join(RACINE, f), path.join(F, f));   // absents sur une version antérieure
 fs.writeFileSync(path.join(F, 'finance_data.json'), JSON.stringify(fx));
 // Les VRAIES sources, redirigées vers la presse simulée
@@ -648,7 +649,64 @@ try {
           && d4.nouveautes && d4.nouveautes.disponible === true && /^\d{4}-\d{2}-\d{2}T/.test(d4.nouveautes.depuis || '') && (d4.articles || []).length > 0 && (d4.articles || []).every(x => x.statut === 'deja_connu')
           && sig4.statut === 'mise_a_jour' && sig77.statut === 'deja_connu',
           JSON.stringify({ n3: d3.nouveautes, n4: d4.nouveautes, a4: (d4.articles || []).map(x => x.statut), sig4 }));
+        //  v37.142 — LES SOURCES PROPOSÉES, à l'écran (vrai serveur, base SQLite de la collecte) : rien d'activé d'office, vous décidez
+        const dx = async (corps) => { const r = await fetch(BASE3 + 'cfo_veille_decouvertes.php', corps ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(corps) } : {});
+                                      const t = await r.text(); let d = null; try { d = JSON.parse(t); } catch (_) {} return { code: r.status, d, t }; };
+        const g0 = await dx(null);
+        console.log('    (propositions trouvées par la collecte : ' + (g0.d?.propositions || []).map(p => p.cle + ' ' + p.score).join(', ') + ')');
+        v('v37.142 : après deux revues, la collecte PROPOSE des sources, sans en activer aucune', g0.code === 200 && (g0.d?.propositions || []).length >= 1 && (g0.d?.suivies || []).length === 0, g0.t.slice(0, 400));
+        const page3 = await ctx.newPage();   // un 2e onglet : en arrière-plan, requestAnimationFrame ne tourne pas → attentes par sondage (polling)
+        const erreurs3 = []; page3.on('pageerror', e => erreurs3.push(String(e)));
+        await page3.bringToFront();   // au premier plan : requestAnimationFrame tourne (attentes fiables sous charge)
+        await page3.goto(BASE3, { waitUntil: 'load' });
+        await page3.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__ && a.__vue_app__._instance && Array.isArray(a.__vue_app__._instance.setupState.masterAssets); }, null, { timeout: 30000 });
+        await page3.evaluate((ST) => { const S = eval(ST); S.activeTab = 'wealth'; S.showCfoModal = false; S.marketIntel = { ma_5: { open: true } }; return S.chargerMarketIntel(S.masterAssets.find(x => x.id === 'ma_5')); }, ST);
+        await page3.waitForSelector('[data-sp] summary', { timeout: 20000, polling: 100 });
+        await page3.click('[data-sp] summary');
+        await page3.waitForFunction((ST) => (eval(ST).srcProp.charge || eval(ST).srcProp.erreur) && !eval(ST).srcProp.chargement, ST, { timeout: 20000, polling: 100 });
+        v('  → la section « Sources proposées » se charge à l\'ouverture (Intelligence Marché)', await page3.evaluate((ST) => eval(ST).srcProp.charge, ST), await page3.evaluate((ST) => eval(ST).srcProp.erreur, ST));
+        //  l'ajout manuel, depuis l'écran : une page Facebook (signal) rattachée au bien
+        await page3.click('[data-sp-ajout] summary');
+        await page3.fill('[data-sp-a-url]', 'https://m.facebook.com/ouahat.actualites/posts/12?fbclid=X');
+        await page3.fill('[data-sp-a-nom]', 'Ouahat actualités');
+        await page3.selectOption('[data-sp-a-type]', 'reseau'); await page3.selectOption('[data-sp-a-langue]', 'ar'); await page3.selectOption('[data-sp-a-confiance]', 'faible');
+        await page3.click('[data-sp-a-ajouter]');
+        await page3.waitForFunction((ST) => { const S = eval(ST).srcProp; return S.suivies.some(p => p.cle === 'facebook.com/ouahat.actualites') || S.erreur; }, ST, { timeout: 20000, polling: 100 });
+        const sv = await page3.$eval('[data-sp-suivie][data-cle="facebook.com/ouahat.actualites"]', e => e.textContent.replace(/\s+/g, ' ')).catch(() => '');
+        v('  → l\'ajout manuel depuis l\'écran : adresse normalisée (m. et fbclid retirés), acceptée, marquée « signal public indexé, non vérifié »',
+          /Ouahat actualités/.test(sv) && /acceptée/.test(sv) && /signal public indexé, non vérifié/.test(sv), sv + ' | ' + await page3.evaluate((ST) => eval(ST).srcProp.erreur, ST));
+        await page3.fill('[data-sp-a-url]', 'https://facebook.com/ouahat.actualites');
+        await page3.click('[data-sp-a-ajouter]');
+        await page3.waitForFunction((ST) => !!eval(ST).srcProp.erreur, ST, { timeout: 20000, polling: 100 });
+        v('  → la même page ajoutée une 2e fois : doublon SIGNALÉ, rien d\'écrasé', /existe déjà/.test(await page3.textContent('[data-sp-erreur]')));
+        const prop = (g0.d?.propositions || [])[0];
+        if (prop) {
+            await page3.waitForSelector(`[data-sp-ligne][data-cle="${prop.cle}"]`, { timeout: 20000 });
+            const li = (await page3.textContent(`[data-sp-ligne][data-cle="${prop.cle}"]`)).replace(/\s+/g, ' ');
+            v('  → une proposition de la collecte : score, type, apparitions, requêtes, jours, exemple cliquable, raisons, normalisation ; boutons Accepter / Ignorer / Une fois / Exemples / Modifier',
+              li.includes(String(prop.score)) && /apparition/.test(li) && /requête/.test(li) && /Pourquoi :/.test(li) && /Accepter/.test(li) && /Ignorer/.test(li) && /Surveiller une fois/.test(li)
+              && /Voir les exemples/.test(li) && /Modifier avant acceptation/.test(li)
+              && await page3.$eval(`[data-sp-ligne][data-cle="${prop.cle}"] [data-sp-exemple] a`, a => /^https?:/.test(a.href)), li);
+            await page3.click(`[data-sp-filtre="forum"]`);
+            const nForum = (await page3.$$('[data-sp-ligne]')).length;
+            await page3.click(`[data-sp-filtre="toutes"]`);
+            v('  → les filtres : « forums » n\'en garde que les forums, « toutes » les rend', nForum === (g0.d.propositions || []).filter(p => p.type === 'forum').length && (await page3.$$('[data-sp-ligne]')).length === g0.d.propositions.length);
+            await page3.click(`[data-sp-ligne][data-cle="${prop.cle}"] [data-sp-voir]`);
+            await page3.waitForSelector(`[data-sp-ligne][data-cle="${prop.cle}"] [data-sp-exemples] a`, { timeout: 20000 });
+            v('  → « Voir les exemples » liste les articles de la source', (await page3.$$(`[data-sp-ligne][data-cle="${prop.cle}"] [data-sp-exemples] a`)).length >= 1);
+            await page3.click(`[data-sp-ligne][data-cle="${prop.cle}"] [data-sp-accepter]`);
+            await page3.waitForFunction((cle) => !!document.querySelector(`[data-sp-suivie][data-cle="${cle}"]`), prop.cle, { timeout: 20000, polling: 100 });
+            const apres = await dx({ action: 'exemples', cle: prop.cle });
+            v('  → « Accepter » : la source rejoint les sources acceptées, la décision est historisée (origine « utilisateur »)',
+              (apres.d?.historique || [])[0]?.nouveau === 'accepted' && (apres.d?.historique || [])[0]?.origine === 'utilisateur', apres.t.slice(0, 300));
+            const r5 = await revue(corpsN, { 'X-Requested-With': 'XMLHttpRequest' }, 'POST', BASE3);
+            v('  → au cycle suivant, la revue l\'interroge (son domaine apparaît dans la couverture)', (r5.d?.couverture || []).some(c => String(c.domaine || '').includes(prop.page ? prop.registrable + '/' + prop.page : prop.domaine) || String(c.nom || '').includes(prop.domaine)),
+              JSON.stringify((r5.d?.couverture || []).map(c => c.domaine)));
+        }
+        v('  → aucune erreur JavaScript (sources proposées)', erreurs3.length === 0, erreurs3.join(' | '));
+        await page3.close();
     }
+
 } catch (e) {
     v('scène complète sans exception', false, String(e && e.stack || e));
 } finally {
