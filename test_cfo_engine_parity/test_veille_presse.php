@@ -284,6 +284,25 @@ $sg = cfo_vp_signaux([
 v('  → signaux : gardés seulement s\'ils nomment le lieu, traçables (adresse), dédupliqués, pas trop vieux ; niveau de lecture dit (titre et extrait, véracité non vérifiée)',
   count($sg) === 2 && $sg[0]['url'] === 'https://www.facebook.com/groups/o/posts/1' && $sg[1]['plateforme'] === 'www.yabiladi.com' && $sg[1]['date'] === null
   && str_contains($sg[0]['niveau'], 'publication complète non lue'), $j($sg));
+//  v37.143 — « RÉSULTAT FAIBLE, PAS DE RÉSEAUX SOCIAUX » : la vraie collecte du VPS (13 nov.) — la page de la commune, sa page « à propos »,
+//  ses « mentions » et des profils, tous sans date, prenaient les 5 places ; les publications (une vidéo du président sur les projets, le bilan) restaient dehors
+$fb = 'https://www.facebook.com/communeouahatsidibrahim/';
+$sgV = cfo_vp_signaux([
+    $S('Commune Ouahat Sidi Brahim - الصفحة الرسمية لجماعة واحة سيدي ابراهيم | Facebook', '', 'reseau', $fb),
+    $S('‎Commune Ouahat Sidi Brahim - الصفحة الرسمية لجماعة واحة ...', '', 'reseau', $fb . 'mentions/'),
+    $S('‎Commune Ouahat Sidi Brahim - الصفحة الرسمية لجماعة واحة ...', '', 'reseau', 'https://m.facebook.com/communeouahatsidibrahim/about/'),
+    $S('بلعكيد واحة سيدي ابراهيم | Facebook', '', 'reseau', 'https://www.facebook.com/people/x/100084456229664'),
+    $S('بلعكيد منبر واحة سيدي ابراهيم | Marrakesh | Facebook', '', 'reseau', 'https://www.facebook.com/belaaguid1/'),
+    $S('🎉 حصيلة العمل لجماعة واحة سيدي ابراهيم سنة 2024/2023 - أبرز ...', '', 'reseau', $fb . 'videos/-bilan/1144478094061362/'),
+    $S('محمد الشقيق رئيس جماعة واحة سيدي ابراهيم يتحدث عن المشاريع ...', '', 'reseau', $fb . 'videos/projets/388722719612499/'),
+    $S('Commune Ouahat Sidi Brahim - الصفحة الرسمية لجماعة ...', 'دورة استثنائية', 'reseau', $fb . 'posts/1890007871160671/'),
+], ['Ouahat Sidi Brahim', 'واحة سيدي ابراهيم'], $now);
+v('  → v37.143 : les PUBLICATIONS (vidéos, posts) d\'abord ; la page, « à propos », « mentions », les profils ne sont pas des signaux ; ce qui parle de projets passe devant',
+  count($sgV) === 3 && !array_filter($sgV, fn($x) => preg_match('#/(about|mentions)/$|/people/|belaaguid1/$|communeouahatsidibrahim/$#', $x['url']))
+  && str_contains($sgV[0]['url'], '388722719612499'), $j(array_map(fn($x) => [$x['url'], $x['poids']], $sgV)));
+v('  → une publication Instagram, une vidéo YouTube, un statut X : gardés ; un profil Instagram, une chaîne : non',
+  cfo_vp_signal_publication('https://www.instagram.com/p/Cx1/', 'a') && cfo_vp_signal_publication('https://www.youtube.com/watch?v=1', 'a') && cfo_vp_signal_publication('https://x.com/a/status/1', 'a')
+  && !cfo_vp_signal_publication('https://www.instagram.com/kech24/', 'a') && !cfo_vp_signal_publication('https://www.youtube.com/@kech24', 'a'));
 v('  → aucun signal pertinent : liste VIDE (leur présence n\'est jamais forcée)', cfo_vp_signaux([$S('Marrakech by night', '', 'reseau', 'https://www.instagram.com/p/9', 1)], ['Ouahat Sidi Brahim'], $now) === []);
 //  le contexte : 6 ÉVÉNEMENTS distincts de contexte → 4 + l'exception majeure (marché attribué) ; les échos écartés
 $ctx = [
