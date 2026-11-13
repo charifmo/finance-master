@@ -136,7 +136,7 @@ const presse = http.createServer(async (req, res) => {
         const r = [];
         if (q.includes('site:facebook.com') && q.includes('Ouahat Sidi Brahim')) r.push({ title: 'Ouahat Sidi Brahim : les ayants droit de la bande RN9 se réunissent', url: 'https://www.facebook.com/groups/ouahat/posts/77',
             description: 'Réunion samedi au douar Oulad Belaagid sur le tracé du contournement.', page_age: '2026-10-02T09:00:00' });
-        if (q.includes('site:avito.ma') && q.includes('Ouahat Sidi Brahim')) r.push({ title: 'Terrain 1 ha à vendre Ouahat Sidi Brahim route de Casablanca', url: 'https://www.avito.ma/fr/marrakech/terrains/terrain_1ha_ouahat_77.htm',
+        if (q.includes('site:avito.ma') && q.includes('Ouahat Sidi Brahim')) r.push({ title: 'Terrain 1 ha à vendre Ouahat Sidi Brahim route de Casablanca', url: 'https://www.avito.ma/fr/marrakech/terrains/terrain_1ha_ouahat_54433277.htm',
             description: '1 ha titré, façade RN9, 180 DH/m².', page_age: '2026-09-20T09:00:00' });
         res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ web: { results: r } }));
     }
@@ -387,7 +387,7 @@ try {
       liens.some(l => l.t === '🔗 almarrakchia.net' && l.href === 'https://news.google.com/rss/articles/A1') && !liens.some(l => l.t === '🔗 news.google.com'), JSON.stringify(liens));
     const medias = await page.$$eval('tr [data-mi-media]', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     v('la carte détaille chaque média local, porte par porte (Google, page de recherche, Bing, accueil)',
-      medias.length === 7 && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · page de recherche du site \(autre orthographe\) : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
+      medias.length === 8 && medias.some(m => /^Commune Ouahat Sidi Brahim \(page Facebook officielle\) — /.test(m)) && medias.some(m => /Kech24 — 5 retenus · Google Actualités \(AR\) : 1 article · page de recherche du site : 2 résultats \(page lue, sans RSS\) · page de recherche du site \(autre orthographe\) : 2 résultats \(page lue, sans RSS\) · Bing Actualités : 1 article · page d'accueil : 2 titres lus à la une/.test(m))
       && medias.some(m => /Marrakech 7 — 0 retenu .*page de recherche du site : échec \(pas de réponse en 2 s\).*page d'accueil : échec \(pas de réponse en 2 s\)/.test(m)), JSON.stringify(medias));
     v('v37.111 : la carte détaille aussi les familles — réseaux sociaux (1 retenu par DuckDuckGo), forums, annonces',
       medias.some(m => /^Réseaux sociaux \(facebook\.com, instagram\.com, youtube\.com\) — 1 retenu · Bing \(web\) : aucun article · DuckDuckGo : 1 article$/.test(m))
@@ -472,11 +472,12 @@ try {
     const calib = () => page.evaluate(() => { const c = document.querySelector('tr [data-calib]'); const t = (s) => c && c.querySelector(s) ? c.querySelector(s).textContent.replace(/\s+/g, ' ').trim() : null;
         return c && { valeur: t('[data-calib-valeur]'), statut: t('[data-calib-statut]'), confiance: t('[data-calib-confiance]'), nb: t('[data-calib-nb]'), date: t('[data-calib-date]'), evo: t('[data-calib-evolution]'),
                       nonCal: t('[data-calib-non-calibree]'), fourchette: t('[data-calib-fourchette]'), graphe: !!c.querySelector('[data-calib-graphe] canvas'),
-                      avantArticles: !!(c.compareDocumentPosition(document.querySelector('tr .cfo-html')) & Node.DOCUMENT_POSITION_FOLLOWING),
+                      apresAnalyse: !!(c.compareDocumentPosition(document.querySelector('tr .cfo-html')) & Node.DOCUMENT_POSITION_PRECEDING)
+                                    && !!(c.compareDocumentPosition(document.querySelector('tr [data-mi-articles]')) & Node.DOCUMENT_POSITION_FOLLOWING),
                       lignes: [...c.querySelectorAll('[data-calib-obs]')].map(e => ({ c: e.dataset.classe, cat: e.dataset.categorie, o: e.dataset.origine, t: e.textContent.replace(/\s+/g, ' ').trim() })) }; });
     const c0 = await calib();
-    v('v37.140 — bandeau de calibration EN TÊTE (avant l’analyse) : 160 DH/m² · « hypothèse utilisateur — non validée par comparables » · confiance faible · 1 comparable · jamais calibrée',
-      !!c0 && c0.avantArticles && c0.valeur === '160 DH/m²' && c0.statut === 'hypothèse utilisateur — non validée par comparables' && c0.confiance === 'faible' && /^1 dont 0 fiable/.test(c0.nb) && c0.date === 'jamais'
+    v('v37.140/141 — bandeau de calibration APRÈS l’analyse (et avant la liste des articles) : 160 DH/m² · « hypothèse utilisateur — non validée par comparables » · confiance faible · 1 comparable · jamais calibrée',
+      !!c0 && c0.apresAnalyse && c0.valeur === '160 DH/m²' && c0.statut === 'hypothèse utilisateur — non validée par comparables' && c0.confiance === 'faible' && /^1 dont 0 fiable/.test(c0.nb) && c0.date === 'jamais'
       && /plan d’aménagement homologué/.test(c0.evo || ''), JSON.stringify(c0));
     v('  → « Projection non calibrée : données insuffisantes. La valeur de 160 DH/m² reste une hypothèse conservée, non une estimation calculée. » ; pas de fourchette',
       c0.nonCal === 'Projection non calibrée : données insuffisantes. La valeur de 160 DH/m² reste une hypothèse conservée, non une estimation calculée.' && c0.fourchette === null, JSON.stringify(c0));
@@ -629,7 +630,7 @@ try {
           d3.brave && d3.brave.actif === true && d3.brave.appels === braveRecues.length && braveRecues.length >= 3 && !recues.some(x => x.chemin === '/web/ddg')
           && (rs.canaux || []).some(k => k.canal === 'brave_web') && !(rs.canaux || []).some(k => k.canal === 'ddg'), JSON.stringify({ brave: d3.brave, n: braveRecues.length, rs }));
         v('  → le post Facebook (en signaux) ET l\'annonce Avito (en annonces, 180 DH/m² lus) trouvés par Brave arrivent dans leur circuit (et la carte les compte)',
-          urls.includes('https://www.facebook.com/groups/ouahat/posts/77') && urls.includes('https://www.avito.ma/fr/marrakech/terrains/terrain_1ha_ouahat_77.htm')
+          urls.includes('https://www.facebook.com/groups/ouahat/posts/77') && urls.includes('https://www.avito.ma/fr/marrakech/terrains/terrain_1ha_ouahat_54433277.htm')
           && (rs.retenus || 0) >= 1 && (an.retenus || 0) >= 1 && ((d3.annonces || [])[0] || {}).prix_m2 === 180, JSON.stringify({ urls: urls.filter(u => /facebook|avito/.test(u)), rs: rs.retenus, an: an.retenus, a0: (d3.annonces || [])[0] }));
         v('  → la clé part en EN-TÊTE vers Brave, et nulle part ailleurs : ni dans la réponse au navigateur, ni dans les requêtes mémorisées',
           braveRecues.every(x => x.cle === CLE) && !brut.includes(CLE) && !fs.readFileSync(dbF).includes(Buffer.from(CLE)), JSON.stringify(braveRecues.slice(0, 2)));
