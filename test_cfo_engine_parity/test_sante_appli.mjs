@@ -811,6 +811,23 @@ z.close()`, src, zip]);
         }, { ST, R });
         v('  → v1.27 dossier ENTIER (2 000 photos + FC de 300 000 lignes) : la page dit où elle en est (« ⏳ … fichier(s) … »), va au bout, les jours de FC rangés',
           progres.some(t => /⏳ \d+ fichier\(s\) Samsung lu\(s\) sur 2001 parcourus/.test(t)) && /jour\(s\) importé\(s\)/.test(fin.msg) && /2000 fichier\(s\) sans utilité/.test(fin.msg) && fin.jours >= 300, [fin, progres.slice(0, 4)]);
+        //  v1.27 — la page blanche du téléphone : Chrome ferme l'onglet en préparant les 62 721 fichiers du dossier ; au rechargement, c'est expliqué
+        v('  → v1.27 : un import réussi efface sa marque (aucun faux avertissement)', await pu.evaluate(() => localStorage.getItem('sante_import_samsung')) === null && !(await pu.$('[data-import-interrompu]')));
+        await pu.evaluate(() => localStorage.setItem('sante_import_samsung', JSON.stringify({ etape: 'choix', t: Date.now() })));
+        await pu.reload({ waitUntil: 'load' }); await pu.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__; });
+        await pu.click('[data-onglet="poids"]'); await pu.evaluate(() => { const d = document.querySelector('[data-sans-appli]'); if (d) d.open = true; });
+        const intr = await pu.textContent('[data-import-interrompu]').catch(() => '');
+        v('  → la page rechargée après une fermeture pendant le choix du dossier : « le navigateur a fermé la page… importez plutôt le .zip », marque effacée',
+          /fermé la page/.test(intr) && /\.zip/.test(intr) && await pu.evaluate(() => localStorage.getItem('sante_import_samsung')) === null, intr);
+        const tel = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+        await tel.route('https://unpkg.com/**', r => r.fulfill({ body: fs.readFileSync(vueJs), contentType: 'text/javascript' }));
+        await tel.route('https://cdn.jsdelivr.net/npm/chart.js', r => r.fulfill({ body: fs.readFileSync(chartJs), contentType: 'text/javascript' }));
+        await tel.route('https://cdn.tailwindcss.com/**', r => r.fulfill({ body: '', contentType: 'text/javascript' }));
+        const pt = await tel.newPage(); await pt.goto(pu.url(), { waitUntil: 'load' }); await pt.waitForFunction(() => { const a = document.querySelector('#app'); return a && a.__vue_app__; });
+        await pt.evaluate(() => { const d = document.querySelector('[data-sans-appli]'); if (d) d.open = true; });
+        v('  → sur le téléphone : le conseil « importez le .zip (un seul fichier) » et le bouton dossier marqué « (ordinateur) »',
+          /importez le \.zip/.test(await pt.textContent('[data-conseil-zip]').catch(() => '')) && /\(ordinateur\)/.test(await pt.textContent('[data-bouton-dossier]')));
+        await tel.close();
         v('  → aucune erreur JavaScript (composition et séances)', erreursU.length === 0, erreursU.join(' | '));
         await pu.close();
     });
