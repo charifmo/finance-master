@@ -171,6 +171,43 @@ v('  → seulement la FC : des zones, mais AUCUN temps par km inventé', (dR.zon
 v('  → un détail gzip lu à part (dossier ouvert) : décompressé', await S.texteDe(execFileSync('python3', ['-c', 'import gzip,sys;sys.stdout.buffer.write(gzip.compress(b"[1,2]"))'])) === '[1,2]' && await S.texteDe(Buffer.from('[3]')) === '[3]');
 fs.rmSync(tmp3, { recursive: true, force: true });
 
+/* ── v1.27 — « ÇA SE BLOQUE APRÈS AVOIR IMPORTÉ LE DOSSIER EN ENTIER » : lecture pas à pas, en flux, jamais tout en mémoire ── */
+const decoupe = (t, tailles) => { const out = []; let i = 0, k = 0; while (i < t.length) { const n = tailles[k++ % tailles.length]; out.push(t.slice(i, i + n)); i += n; } return out; };
+const csvPiege = '﻿com.samsung.x,1,3\nа,b,c,\n"x, ""y""\nz",2,3,\r\nsimple,4,5,\n"",,"fin"\n';
+const attendu = JSON.stringify(S.csvLignes(csvPiege));
+const parMorceaux = [[1], [2, 3], [5], [7, 1, 13], [1000]].map(t => { const l = []; const p = S.analyseurCsv(x => l.push(x)); decoupe(csvPiege, t).forEach(m => p.morceau(m)); p.fin(); return JSON.stringify(l); });
+v('H. analyseur PAR MORCEAUX : guillemets, virgules et retours à la ligne dans un champ, CRLF, BOM — même résultat, quel que soit le découpage',
+  parMorceaux.every(x => x === attendu), [attendu, parMorceaux]);
+//  un gros CSV de FC (500 000 lignes, ~28 Mo) lu en FLUX par morceaux de 64 Ko : mêmes moyennes que la lecture d'un bloc
+const lignesFc = ['com.samsung.shealth.tracker.heart_rate,6313005,500000', 'com.samsung.health.heart_rate.start_time,com.samsung.health.heart_rate.time_offset,com.samsung.health.heart_rate.heart_rate,'];
+for (let i = 0; i < 500000; i++) { const ms = Date.UTC(2024, 0, 1) + i * 600000; lignesFc.push(new Date(ms).toISOString().replace('T', ' ').replace('Z', '') + ',UTC+0100,' + (60 + (i % 40)) + ','); }
+const grosCsv = lignesFc.join('\n') + '\n', nomFc = `${R}com.samsung.shealth.tracker.heart_rate.${TC}.csv`;
+const octets = new TextEncoder().encode(grosCsv);
+const flux = new ReadableStream({ start(c) { for (let i = 0; i < octets.length; i += 65536) c.enqueue(octets.subarray(i, i + 65536)); c.close(); } });
+const tF = Date.now(), exF = S.creerExtracteur({ decalageMin: 60 }); await exF.ajouterFlux(nomFc, flux); const rF = exF.resultat(), dureeF = Date.now() - tF;
+const rB = S.extraire([{ nom: nomFc, texte: grosCsv }], { decalageMin: 60 });
+v(`  → un CSV de FC de ${(octets.length / 1e6).toFixed(0)} Mo lu en flux (morceaux de 64 Ko) : ${Object.keys(rF.jours).length} jours, mêmes moyennes qu'en un bloc (${dureeF} ms)`,
+  rF.lus.fc === 500000 && JSON.stringify(rF.jours) === JSON.stringify(rB.jours) && Object.keys(rF.jours).length >= 3470, [rF.lus, Object.keys(rF.jours).length]);
+//  l'ordre des fichiers n'importe plus : les pas (combinée) avant la table des appareils, la séance avant son détail
+const ordreInverse = S.extraire([...tous].reverse().filter(f => S.estUtile(f.nom)), { decalageMin: 60 });
+const sInv = S.extraire([...t2].reverse(), { decalageMin: 60, fcMax: 176 });
+v('  → l\'ordre des fichiers n\'importe pas : pas de la ligne combinée et détail de séance retrouvés même dans l\'ordre inverse',
+  JSON.stringify(ordreInverse.jours) === JSON.stringify(r.jours) && JSON.stringify(sInv.seances) === JSON.stringify(r3.seances));
+//  le .zip PARCOURU sans être chargé : depuis un Blob (un File du navigateur), entrée par entrée, en flux
+const zipB = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'samsung4-')), 'e.zip');
+fs.writeFileSync(zipB + '.json', JSON.stringify({ ...fichiers, [nomFc]: grosCsv }));
+execFileSync('python3', ['-c', `import zipfile,json,sys
+d=json.load(open(sys.argv[1],encoding='utf-8'))
+z=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED)
+for k,t in d.items(): z.writestr(k,t)
+z.close()`, zipB + '.json', zipB]);
+const exZ = S.creerExtracteur({ decalageMin: 60 }); let nZ = 0;
+await S.parcourirZip(new Blob([fs.readFileSync(zipB)]), S.estUtile, async (nom, fl) => { nZ++; await exZ.ajouterFlux(nom, fl); });
+const rZ = exZ.resultat();
+v('  → .zip parcouru en flux depuis un Blob (comme un fichier choisi sur le téléphone) : 8 CSV, la FC des 500 000 lignes, les pas du 01/11',
+  nZ === 8 && rZ.lus.fc >= 500000 && rZ.jours['2026-11-01'] && rZ.jours['2026-11-01'].pas === 9050, [nZ, rZ.lus]);
+fs.rmSync(path.dirname(zipB), { recursive: true, force: true });
+
 v('E. CSV : guillemets, virgules et retours à la ligne dans un champ', JSON.stringify(S.csvLignes('a,b\n"x, ""y""\nz",2\n')) === JSON.stringify([['a', 'b'], ['x, "y"\nz', '2']]));
 v('  → décalages « UTC+0100 », « UTC+05:30 », « UTC-5 », « GMT »', S.decalage('UTC+0100') === 60 && S.decalage('UTC+05:30') === 330 && S.decalage('UTC-5') === -300 && S.decalage('GMT') === 0);
 console.log(ko === 0 ? `\n  ✅ TOUT PASSE — ${n} contrôles` : `\n  ❌ ${ko} contrôle(s) en échec sur ${n}`);

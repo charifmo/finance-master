@@ -104,145 +104,180 @@
     const dateDuJour = (s) => { const v = String(s || '').trim(); if (/^\d{12,13}$/.test(v)) return new Date(Number(v)).toISOString().slice(0, 10); return /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null; };
 
     /**
-     * fichiers : [{ nom, texte }] (CSV de l'export, et éventuellement les JSON de jsons/…pedometer_day_summary/)
-     * options.decalageMin : décalage horaire du navigateur (minutes), pour les rares dates sans time_offset
-     * → { jours: { 'AAAA-MM-JJ': { pas, kcal_actives, fc_moy, sommeil_min, poids } }, pesees: [{date, kg}], lus: {type: n lignes}, sources: {...} }
+     * v1.27 — L'EXTRACTEUR PAS À PAS. « ÇA SE BLOQUE APRÈS AVOIR IMPORTÉ LE DOSSIER EN ENTIER » : tout l'export était chargé en
+     * mémoire d'un coup (la fréquence cardiaque de plusieurs années pèse des centaines de Mo) et l'onglet du téléphone mourait.
+     * Désormais chaque fichier est lu À SON TOUR, ligne par ligne (en flux pour les gros CSV), réduit aussitôt à ce que l'appli
+     * garde (un total par jour, une mesure, une séance), puis oublié. Les CSV peuvent arriver dans n'importe quel ordre :
+     * ce qui dépend d'un autre fichier (la ligne « combinée » des pas, le détail d'une séance) est résolu à la fin.
+     * options.decalageMin : décalage horaire (minutes) pour les rares dates sans time_offset ; options.fcMax : FC max (zones).
      */
-    function extraire(fichiers, options) {
+    function creerExtracteur(options) {
         const defaut = options && Number.isFinite(options.decalageMin) ? options.decalageMin : 0;
-        const parType = {};
-        (fichiers || []).forEach(f => { const t = typeDuNom(f.nom); if (t && UTILES[t]) (parType[UTILES[t]] = parType[UTILES[t]] || []).push(f); });
-        const lus = {}, jours = {}, pesees = {}, sources = {};
-        const jour = (d) => jours[d] || (jours[d] = {});
-        const chaque = (cle, fn) => (parType[cle] || []).forEach(f => { const t = table(f.texte); lus[cle] = (lus[cle] || 0) + t.lignes.length; fn(t); });
-
-        //  appareils : quelle deviceuuid est la ligne « combinée » (device_group 0)
-        const combines = new Set();
-        chaque('appareils', (t) => { const u = t.col('deviceuuid'), g = t.col('device_group'); t.lignes.forEach(r => { if (u >= 0 && g >= 0 && String(r[g]).trim() === '0') combines.add(r[u]); }); });
-
-        //  pas : pedometer_day_summary (combinée > plus grande) ; à défaut step_daily_trend (source -2 > plus grande), puis activity.day_summary
-        const meilleurs = (cle, colPas, prefere) => {
-            const best = {};
-            chaque(cle, (t) => {
-                const iD = t.col('day_time'), iP = t.col(colPas), iK = t.col('calorie');
-                t.lignes.forEach(r => {
-                    const d = dateDuJour(r[iD]), p = num(r[iP]); if (!d || p === null) return;
-                    const cleTri = [prefere(t, r) ? 1 : 0, p];
-                    if (!best[d] || cleTri[0] > best[d].k[0] || (cleTri[0] === best[d].k[0] && cleTri[1] > best[d].k[1])) best[d] = { k: cleTri, pas: p, kcal: iK >= 0 ? num(r[iK]) : null };
-                });
-            });
-            return best;
-        };
-        const pasPed = meilleurs('pas', 'step_count', (t, r) => { const u = t.col('deviceuuid'), s = t.col('source_info'); return (u >= 0 && combines.has(r[u])) || (s >= 0 && String(r[s]).trim() !== ''); });
-        const pasTend = meilleurs('pas_tendance', 'count', (t, r) => { const s = t.col('source_type'); return s >= 0 && String(r[s]).trim() === '-2'; });
-        const pasAct = meilleurs('activite_jour', 'step_count', () => false);
-        [[pasAct, 'activity.day_summary'], [pasTend, 'step_daily_trend'], [pasPed, 'pedometer_day_summary']].forEach(([b, src]) => Object.entries(b).forEach(([d, x]) => { jour(d).pas = Math.round(x.pas); sources.pas = src; if (x.kcal !== null && src === 'pedometer_day_summary') jour(d)._kcalMarche = x.kcal; }));
-
-        //  kcal actives : calories_burned.details (active_calorie, la plus grande du jour) ; à défaut, les kcal de marche du podomètre
-        const kcal = {};
-        chaque('calories', (t) => { const iD = t.col('day_time'), iA = t.col('active_calorie'); t.lignes.forEach(r => { const d = dateDuJour(r[iD]), a = num(r[iA]); if (d && a !== null && (kcal[d] === undefined || a > kcal[d])) kcal[d] = a; }); });
-        Object.entries(jours).forEach(([d, j]) => { if (j._kcalMarche !== undefined && kcal[d] === undefined) j.kcal_actives = Math.round(j._kcalMarche); delete j._kcalMarche; });
-        Object.entries(kcal).forEach(([d, a]) => { jour(d).kcal_actives = Math.round(a); sources.kcal_actives = 'calories_burned.details'; });
-
-        //  poids : start_time (UTC) + time_offset → jour local ; la dernière pesée du jour
-        chaque('poids', (t) => {
-            const iS = t.col('start_time'), iO = t.col('time_offset'), iW = t.col('weight');
-            t.lignes.forEach(r => { const kg = num(r[iW]), d = dateLocale(r[iS], iO >= 0 ? decalage(r[iO]) : null, defaut), ms = msDe(r[iS]); if (!d || kg === null || kg < 20 || kg > 400) return; if (!pesees[d] || ms >= pesees[d].ms) pesees[d] = { ms, kg: Math.round(kg * 10) / 10 }; });
-        });
-        Object.entries(pesees).forEach(([d, p]) => { jour(d).poids = p.kg; });
-
-        //  fréquence cardiaque : moyenne du jour (lectures horaires et ponctuelles ; 0 = capteur pas prêt, écarté)
-        const fc = {};
-        chaque('fc', (t) => { const iS = t.col('start_time'), iO = t.col('time_offset'), iH = t.col('heart_rate'); t.lignes.forEach(r => { const h = num(r[iH]), d = dateLocale(r[iS], iO >= 0 ? decalage(r[iO]) : null, defaut); if (!d || !h || h < 25 || h > 230) return; const a = fc[d] || (fc[d] = [0, 0]); a[0] += h; a[1]++; }); });
-        Object.entries(fc).forEach(([d, a]) => { jour(d).fc_moy = Math.round(a[0] / a[1]); });
-
-        //  sommeil : par jour de RÉVEIL (date locale de end_time) ; sleep_duration si présent, sinon fin − début ;
-        //  une nuit en plusieurs morceaux figure aussi dans sleep_combined : on prend la combinée, pas les morceaux ; siestes écartées
-        const sommeil = {};
-        const ajouterSommeil = (t, ignorer) => {
-            const iS = t.col('start_time'), iE = t.col('end_time'), iO = t.col('time_offset'), iD = t.col('sleep_duration');
-            t.lignes.forEach(r => {
-                if (ignorer(r)) return;
-                const dec = iO >= 0 ? decalage(r[iO]) : null, d = dateLocale(r[iE], dec, defaut); if (!d) return;
-                let min = iD >= 0 ? num(r[iD]) : null;
-                if (!min) { const a = msDe(r[iS]), b = msDe(r[iE]); min = a !== null && b !== null && b > a ? (b - a) / 60000 : null; }
-                if (min && min > 0 && min < 24 * 60) sommeil[d] = (sommeil[d] || 0) + min;
-            });
-        };
-        chaque('sommeil', (t) => { const iC = t.col('combined_id'), iN = t.col('nap_score'); ajouterSommeil(t, (r) => (iC >= 0 && String(r[iC]).trim() !== '') || (iN >= 0 && num(r[iN]) > 0)); });
-        chaque('sommeil_combine', (t) => ajouterSommeil(t, () => false));
-        Object.entries(sommeil).forEach(([d, m]) => { jour(d).sommeil_min = Math.round(m); });
-
-        //  secours : pas de CSV de pas, mais le détail par 10 min (jsons/…pedometer_day_summary/) → somme par jour, max entre fichiers
-        if (!Object.values(jours).some(j => j.pas !== undefined)) {
-            const parJour = {};
-            (fichiers || []).filter(f => estBinningPas(f.nom)).forEach(f => {
-                let items; try { items = JSON.parse(f.texte); } catch (e) { return; }
-                if (!Array.isArray(items)) return;
-                const somme = {};
-                items.forEach(it => { const ms = num(it && it.start_time), p = num(it && (it.mStepCount ?? it.step_count)); if (ms === null || p === null) return; const d = new Date(ms + 60000 * defaut).toISOString().slice(0, 10); somme[d] = (somme[d] || 0) + p; });
-                Object.entries(somme).forEach(([d, p]) => { if (!parJour[d] || p > parJour[d]) parJour[d] = p; });
-                lus.detail_pas = (lus.detail_pas || 0) + 1;
-            });
-            Object.entries(parJour).forEach(([d, p]) => { jour(d).pas = Math.round(p); sources.pas = 'jsons (détail 10 min)'; });
-        }
-        //  v1.26 — LA COMPOSITION CORPORELLE : dans la table des pesées (montre, balance connectée) ou dans body_composition ;
-        //  la dernière mesure du jour qui porte au moins une valeur de composition
-        const compo = {};
+        const fcMax = options && Number.isFinite(options.fcMax) && options.fcMax > 100 ? options.fcMax : null;
+        const lus = {}, sources = {}, combines = new Set();
+        const pasL = { pas: [], pas_tendance: [], activite_jour: [] };
+        const kcal = {}, pesees = {}, fc = {}, sommeil = {}, compo = {}, vo2 = {}, seances = {}, live = {}, loc = {}, binning = {};
         const COMPO = [['graisse_pct', 'body_fat', 2, 75], ['graisse_kg', 'body_fat_mass', 1, 250], ['muscle_kg', 'skeletal_muscle_mass', 5, 150], ['masse_maigre_kg', 'fat_free_mass', 15, 250],
                        ['muscle_total_kg', 'muscle_mass', 10, 250], ['eau_kg', 'total_body_water', 10, 150], ['bmr_kcal', 'basal_metabolic_rate', 500, 5000], ['graisse_viscerale', 'vfa_level', 1, 60]];
-        const lireCompo = (t) => {
-            const iS = t.col('start_time'), iO = t.col('time_offset'), iW = t.col('weight'), cols = COMPO.map(([k, c, a, b]) => [k, t.col(c), a, b]);
-            if (!cols.some(([, i]) => i >= 0)) return;
-            t.lignes.forEach(r => {
-                const d = dateLocale(r[iS], iO >= 0 ? decalage(r[iO]) : null, defaut), ms = msDe(r[iS]); if (!d) return;
+        const noterVo2 = (d, v, ms) => { if (d && v !== null && v >= 10 && v <= 90 && (!vo2[d] || ms >= vo2[d].ms)) vo2[d] = { ms, v: Math.round(v * 10) / 10 }; };
+        const loc_ = (r, iS, iO) => dateLocale(r[iS], iO >= 0 ? decalage(r[iO]) : null, defaut);
+
+        //  pour chaque type : (col) => (ligne) => void — col(nom) trouve aussi « com.samsung.health.weight.weight »
+        const TRAITER = {
+            appareils: (c) => { const u = c('deviceuuid'), g = c('device_group'); return (r) => { if (u >= 0 && g >= 0 && String(r[g]).trim() === '0') combines.add(r[u]); }; },
+            pas: (c) => pasLigne('pas', c, 'step_count', (r) => { const u = c('deviceuuid'), s = c('source_info'); return { uuid: u >= 0 ? r[u] : '', src: s >= 0 && String(r[s]).trim() !== '' }; }),
+            pas_tendance: (c) => pasLigne('pas_tendance', c, 'count', (r) => { const s = c('source_type'); return { pref: s >= 0 && String(r[s]).trim() === '-2' }; }),
+            activite_jour: (c) => pasLigne('activite_jour', c, 'step_count', () => ({})),
+            calories: (c) => { const iD = c('day_time'), iA = c('active_calorie'); return (r) => { const d = dateDuJour(r[iD]), a = num(r[iA]); if (d && a !== null && (kcal[d] === undefined || a > kcal[d])) kcal[d] = a; }; },
+            poids: (c) => {
+                const iS = c('start_time'), iO = c('time_offset'), iW = c('weight'), compoL = ligneCompo(c);
+                return (r) => { const kg = num(r[iW]), d = loc_(r, iS, iO), ms = msDe(r[iS]); compoL(r);
+                                if (!d || kg === null || kg < 20 || kg > 400) return; if (!pesees[d] || ms >= pesees[d].ms) pesees[d] = { ms, kg: Math.round(kg * 10) / 10 }; };
+            },
+            compo: (c) => ligneCompo(c),
+            fc: (c) => { const iS = c('start_time'), iO = c('time_offset'), iH = c('heart_rate'); return (r) => { const h = num(r[iH]), d = loc_(r, iS, iO); if (!d || !h || h < 25 || h > 230) return; const a = fc[d] || (fc[d] = [0, 0]); a[0] += h; a[1]++; }; },
+            sommeil: (c) => { const iC = c('combined_id'), iN = c('nap_score'); return ligneSommeil(c, (r) => (iC >= 0 && String(r[iC]).trim() !== '') || (iN >= 0 && num(r[iN]) > 0)); },
+            sommeil_combine: (c) => ligneSommeil(c, () => false),
+            vo2: (c) => { const iS = c('start_time'), iO = c('time_offset'), iV = [c('vo2_max'), c('vo2max'), c('value')].find(i => i >= 0) ?? -1; return (r) => noterVo2(loc_(r, iS, iO), iV >= 0 ? num(r[iV]) : null, msDe(r[iS])); },
+            seances: (c) => {
+                const iS = c('start_time'), iE = c('end_time'), iO = c('time_offset'), iT = c('exercise_type'), iDu = c('duration'), iDi = c('distance'), iK = c('calorie'),
+                      iFm = c('mean_heart_rate'), iFx = c('max_heart_rate'), iFn = c('min_heart_rate'), iVm = c('mean_speed'), iVx = c('max_speed'), iAg = c('altitude_gain'),
+                      iN = c('count'), iNt = c('count_type'), iU = c('datauuid'), iL = c('live_data'), iV = [c('vo2_max'), c('vo2max')].find(i => i >= 0) ?? -1, iTi = [c('title'), c('custom_type')].find(i => i >= 0) ?? -1;
+                return (r) => {
+                    const dec = iO >= 0 ? decalage(r[iO]) : null, d = dateLocale(r[iS], dec, defaut), debut = msDe(r[iS]); if (!d || debut === null) return;
+                    const fin = iE >= 0 ? msDe(r[iE]) : null;
+                    let duree = iDu >= 0 ? num(r[iDu]) : null; duree = duree !== null && duree > 0 ? duree / 1000 : (fin && fin > debut ? (fin - debut) / 1000 : null);
+                    if (!duree || duree < 60 || duree > 24 * 3600) return;
+                    const type = iT >= 0 ? num(r[iT]) : null, uuid = iU >= 0 ? String(r[iU] || '').trim() : '';
+                    const s = { id: uuid || 'S' + debut, date: d, heure: new Date(debut + 60000 * (dec ?? defaut)).toISOString().slice(11, 16), type, nom: nomSeance(type, iTi >= 0 ? r[iTi] : ''), duree_s: Math.round(duree) };
+                    const pose = (k, i, f = 1, a = 0, b = Infinity, dec1 = 0) => { const v = i >= 0 ? num(r[i]) : null; if (v !== null && v * f >= a && v * f <= b) s[k] = dec1 ? Math.round(v * f * 10 ** dec1) / 10 ** dec1 : Math.round(v * f); };
+                    pose('distance_m', iDi, 1, 1, 500000); pose('kcal', iK, 1, 1, 10000); pose('fc_moy', iFm, 1, 30, 230); pose('fc_max', iFx, 1, 30, 240); pose('fc_min', iFn, 1, 25, 230);
+                    pose('vitesse_kmh', iVm, 3.6, 0.1, 120, 1); pose('vitesse_max_kmh', iVx, 3.6, 0.1, 150, 1); pose('denivele_m', iAg, 1, 0, 10000);
+                    if (iN >= 0 && (iNt < 0 || /^(30001|0|1)?$/.test(String(r[iNt]).trim()))) pose('pas', iN, 1, 1, 200000);   // count_type 30001 = pas
+                    if (iV >= 0) { const v = num(r[iV]); if (v !== null && v >= 10 && v <= 90) { s.vo2max = Math.round(v * 10) / 10; noterVo2(d, v, debut); } }
+                    s._cle = uuid.toLowerCase() || (iL >= 0 ? String(r[iL] || '').split('.')[0].toLowerCase() : ''); s._debut = debut;
+                    if (s.distance_m && !s.vitesse_kmh) s.vitesse_kmh = Math.round(s.distance_m / s.duree_s * 36) / 10;
+                    seances[s.id] = s;
+                };
+            },
+        };
+        function pasLigne(cle, c, colPas, extra) {
+            const iD = c('day_time'), iP = c(colPas), iK = c('calorie');
+            return (r) => { const d = dateDuJour(r[iD]), p = num(r[iP]); if (!d || p === null) return; pasL[cle].push({ d, p, kcal: iK >= 0 ? num(r[iK]) : null, ...extra(r) }); };
+        }
+        function ligneCompo(c) {
+            const iS = c('start_time'), iO = c('time_offset'), iW = c('weight'), cols = COMPO.map(([k, n, a, b]) => [k, c(n), a, b]);
+            if (!cols.some(([, i]) => i >= 0)) return () => {};
+            return (r) => {
+                const d = loc_(r, iS, iO), ms = msDe(r[iS]); if (!d) return;
                 const m = {}; cols.forEach(([k, i, a, b]) => { const v = i >= 0 ? num(r[i]) : null; if (v !== null && v >= a && v <= b) m[k] = Math.round(v * 10) / 10; });
                 if (!Object.keys(m).length) return;
                 const kg = iW >= 0 ? num(r[iW]) : null; if (kg !== null && kg >= 20 && kg <= 400) m.kg = Math.round(kg * 10) / 10;
                 if (!compo[d] || ms >= compo[d].ms) compo[d] = { ms, ...m };
-            });
+            };
+        }
+        function ligneSommeil(c, ignorer) {
+            const iS = c('start_time'), iE = c('end_time'), iO = c('time_offset'), iD = c('sleep_duration');
+            return (r) => {
+                if (ignorer(r)) return;
+                const d = dateLocale(r[iE], iO >= 0 ? decalage(r[iO]) : null, defaut); if (!d) return;
+                let min = iD >= 0 ? num(r[iD]) : null;
+                if (!min) { const a = msDe(r[iS]), b = msDe(r[iE]); min = a !== null && b !== null && b > a ? (b - a) / 60000 : null; }
+                if (min && min > 0 && min < 24 * 60) sommeil[d] = (sommeil[d] || 0) + min;
+            };
+        }
+        //  un CSV, ligne après ligne : la 1re (« com.samsung…,version,n ») est sautée, la suivante est l'en-tête
+        function lecteurCsv(cle) {
+            let etape = 0, tete = null, f = null;
+            return (ligne) => {
+                if (etape === 0) { etape = 1; if (/^com\.samsung\./i.test(ligne[0] || '') && ligne.length <= 4) return; }
+                if (etape === 1) { tete = ligne.map(h => h.trim()); const col = (nom) => { let i = tete.indexOf(nom); if (i < 0) i = tete.findIndex(h => h.endsWith('.' + nom)); return i; }; f = TRAITER[cle](col); etape = 2; return; }
+                lus[cle] = (lus[cle] || 0) + 1; f(ligne);
+            };
+        }
+        const cleDe = (nom) => { const t = typeDuNom(nom); return t && UTILES[t] ? UTILES[t] : null; };
+        const petitFichier = (nom, texte) => {
+            const n = String(nom || '').replace(/\\/g, '/'); let m;
+            if ((m = RE_LIVE.exec(n))) { live[m[1].toLowerCase()] = texte; return true; }
+            if ((m = RE_LOC.exec(n))) { loc[m[1].toLowerCase()] = texte; return true; }
+            if (estBinningPas(n)) {
+                let items; try { items = JSON.parse(texte); } catch (e) { return true; }
+                if (!Array.isArray(items)) return true;
+                const somme = {};
+                items.forEach(it => { const ms = num(it && it.start_time), p = num(it && (it.mStepCount ?? it.step_count)); if (ms === null || p === null) return; const d = new Date(ms + 60000 * defaut).toISOString().slice(0, 10); somme[d] = (somme[d] || 0) + p; });
+                Object.entries(somme).forEach(([d, p]) => { if (!binning[d] || p > binning[d]) binning[d] = p; });
+                lus.detail_pas = (lus.detail_pas || 0) + 1;
+                return true;
+            }
+            return false;
         };
-        chaque('poids', lireCompo);
-        chaque('compo', lireCompo);
+        return {
+            /** un fichier déjà en texte (petit fichier, ou tests) */
+            ajouterTexte(nom, texte) {
+                if (petitFichier(nom, texte)) return;
+                const cle = cleDe(nom); if (!cle) return;
+                const l = lecteurCsv(cle); csvLignes(texte).forEach(l);
+            },
+            /** un gros CSV lu en FLUX (ReadableStream d'octets) : jamais entier en mémoire. → nombre de lignes */
+            async ajouterFlux(nom, flux) {
+                const cle = cleDe(nom); if (!cle) { if (estLiveData(nom) || estBinningPas(nom)) this.ajouterTexte(nom, await texteDe(new Uint8Array(await new Response(flux).arrayBuffer()))); return; }
+                const l = lecteurCsv(cle), p = analyseurCsv(l), dec = new TextDecoder(), lecteur = flux.getReader();
+                for (;;) { const { done, value } = await lecteur.read(); if (done) break; p.morceau(dec.decode(value, { stream: true })); }
+                p.morceau(dec.decode()); p.fin();
+            },
+            resultat() {
+                const jours = {}, jour = (d) => jours[d] || (jours[d] = {});
+                //  pas : pedometer_day_summary (combinée > plus grande) ; à défaut step_daily_trend (source -2 > plus grande), puis activity.day_summary
+                const meilleurs = (rows, prefere) => { const best = {}; rows.forEach(x => { const k = [prefere(x) ? 1 : 0, x.p]; if (!best[x.d] || k[0] > best[x.d].k[0] || (k[0] === best[x.d].k[0] && k[1] > best[x.d].k[1])) best[x.d] = { k, pas: x.p, kcal: x.kcal }; }); return best; };
+                const pasPed = meilleurs(pasL.pas, (x) => combines.has(x.uuid) || x.src), pasTend = meilleurs(pasL.pas_tendance, (x) => x.pref), pasAct = meilleurs(pasL.activite_jour, () => false);
+                [[pasAct, 'activity.day_summary'], [pasTend, 'step_daily_trend'], [pasPed, 'pedometer_day_summary']].forEach(([b, src]) => Object.entries(b).forEach(([d, x]) => { jour(d).pas = Math.round(x.pas); sources.pas = src; if (x.kcal !== null && src === 'pedometer_day_summary') jour(d)._kcalMarche = x.kcal; }));
+                Object.entries(jours).forEach(([d, j]) => { if (j._kcalMarche !== undefined && kcal[d] === undefined) j.kcal_actives = Math.round(j._kcalMarche); delete j._kcalMarche; });
+                Object.entries(kcal).forEach(([d, a]) => { jour(d).kcal_actives = Math.round(a); sources.kcal_actives = 'calories_burned.details'; });
+                Object.entries(pesees).forEach(([d, p]) => { jour(d).poids = p.kg; });
+                Object.entries(fc).forEach(([d, a]) => { jour(d).fc_moy = Math.round(a[0] / a[1]); });
+                Object.entries(sommeil).forEach(([d, m]) => { jour(d).sommeil_min = Math.round(m); });
+                //  secours : aucun CSV de pas, mais le détail par 10 min (jsons/…pedometer_day_summary/)
+                if (!Object.values(jours).some(j => j.pas !== undefined)) Object.entries(binning).forEach(([d, p]) => { jour(d).pas = Math.round(p); sources.pas = 'jsons (détail 10 min)'; });
+                const ss = Object.values(seances).map(s => { const { _cle, _debut, ...x } = s; if (live[_cle] || loc[_cle]) Object.assign(x, detailSeance(live[_cle] || '[]', _debut, fcMax, loc[_cle])); return x; });
+                return { jours, pesees: Object.entries(pesees).map(([date, p]) => ({ date, kg: p.kg })).sort((a, b) => a.date < b.date ? -1 : 1), lus, sources,
+                         compo: Object.entries(compo).map(([date, x]) => { const { ms, ...m } = x; return { date, ...m }; }).sort((a, b) => a.date < b.date ? -1 : 1),
+                         vo2: Object.entries(vo2).map(([date, x]) => ({ date, vo2max: x.v })).sort((a, b) => a.date < b.date ? -1 : 1),
+                         seances: ss.sort((a, b) => (a.date + a.heure) < (b.date + b.heure) ? -1 : 1) };
+            },
+        };
+    }
 
-        //  v1.26 — LE VO₂ MAX : sa table (s'il y en a une) et celui de chaque séance
-        const vo2 = {};
-        const noterVo2 = (d, v, ms) => { if (d && v !== null && v >= 10 && v <= 90 && (!vo2[d] || ms >= vo2[d].ms)) vo2[d] = { ms, v: Math.round(v * 10) / 10 }; };
-        chaque('vo2', (t) => { const iS = t.col('start_time'), iO = t.col('time_offset'), iV = [t.col('vo2_max'), t.col('vo2max'), t.col('value')].find(i => i >= 0) ?? -1;
-            t.lignes.forEach(r => noterVo2(dateLocale(r[iS], iO >= 0 ? decalage(r[iO]) : null, defaut), iV >= 0 ? num(r[iV]) : null, msDe(r[iS]))); });
+    /**
+     * v1.27 — un analyseur CSV PAR MORCEAUX : on découpe aux fins de ligne qui ne sont pas entre guillemets (nombre pair de guillemets
+     * depuis le début de l'enregistrement) ; une ligne sans guillemet est découpée aux virgules (rapide sur des centaines de Mo), une
+     * ligne avec guillemets passe par csvLignes. ligne(champs) est appelée pour chaque enregistrement non vide.
+     */
+    function analyseurCsv(ligne) {
+        let buf = '', scan = 0, q = 0, debut = true;
+        const traiter = (rec) => { if (rec.endsWith('\r')) rec = rec.slice(0, -1); if (rec.indexOf('"') < 0) { const l = rec.split(','); if (l.some(x => x !== '')) ligne(l); } else csvLignes(rec).forEach(ligne); };
+        return {
+            morceau(t) {
+                if (debut) { t = t.replace(/^\ufeff/, ''); debut = false; }
+                buf += t;
+                let rs = 0;
+                for (;;) {
+                    const nl = buf.indexOf('\n', scan);
+                    if (nl < 0) { for (let k = buf.indexOf('"', scan); k >= 0; k = buf.indexOf('"', k + 1)) q++; scan = buf.length; break; }
+                    for (let k = buf.indexOf('"', scan); k >= 0 && k < nl; k = buf.indexOf('"', k + 1)) q++;
+                    scan = nl + 1;
+                    if (q % 2 === 0) { traiter(buf.slice(rs, nl)); rs = nl + 1; q = 0; }
+                }
+                if (rs) { buf = buf.slice(rs); scan -= rs; }
+            },
+            fin() { if (buf !== '') traiter(buf); buf = ''; scan = 0; q = 0; },
+        };
+    }
 
-        //  v1.26 — LES SÉANCES : une ligne par séance ; le détail (live_data) donne les zones de FC et les temps par km
-        const live = {}, loc = {};
-        (fichiers || []).forEach(f => { const n = String(f.nom || '').replace(/\\/g, '/'); let m = RE_LIVE.exec(n); if (m) live[m[1].toLowerCase()] = f.texte; else if ((m = RE_LOC.exec(n))) loc[m[1].toLowerCase()] = f.texte; });
-        const fcMax = options && Number.isFinite(options.fcMax) && options.fcMax > 100 ? options.fcMax : null;
-        const seances = {};
-        chaque('seances', (t) => {
-            const c = (n) => t.col(n);
-            const iS = c('start_time'), iE = c('end_time'), iO = c('time_offset'), iT = c('exercise_type'), iDu = c('duration'), iDi = c('distance'), iK = c('calorie'),
-                  iFm = c('mean_heart_rate'), iFx = c('max_heart_rate'), iFn = c('min_heart_rate'), iVm = c('mean_speed'), iVx = c('max_speed'), iAg = c('altitude_gain'),
-                  iN = c('count'), iNt = c('count_type'), iU = c('datauuid'), iL = c('live_data'), iV = [c('vo2_max'), c('vo2max')].find(i => i >= 0) ?? -1, iTi = [c('title'), c('custom_type')].find(i => i >= 0) ?? -1;
-            t.lignes.forEach(r => {
-                const dec = iO >= 0 ? decalage(r[iO]) : null, d = dateLocale(r[iS], dec, defaut), debut = msDe(r[iS]); if (!d || debut === null) return;
-                const fin = iE >= 0 ? msDe(r[iE]) : null;
-                let duree = iDu >= 0 ? num(r[iDu]) : null; duree = duree !== null && duree > 0 ? duree / 1000 : (fin && fin > debut ? (fin - debut) / 1000 : null);
-                if (!duree || duree < 60 || duree > 24 * 3600) return;
-                const type = iT >= 0 ? num(r[iT]) : null, uuid = iU >= 0 ? String(r[iU] || '').trim() : '';
-                const s = { id: uuid || 'S' + debut, date: d, heure: new Date(debut + 60000 * (dec ?? defaut)).toISOString().slice(11, 16), type, nom: nomSeance(type, iTi >= 0 ? r[iTi] : ''), duree_s: Math.round(duree) };
-                const pose = (k, i, f = 1, a = 0, b = Infinity, dec1 = 0) => { const v = i >= 0 ? num(r[i]) : null; if (v !== null && v * f >= a && v * f <= b) s[k] = dec1 ? Math.round(v * f * 10 ** dec1) / 10 ** dec1 : Math.round(v * f); };
-                pose('distance_m', iDi, 1, 1, 500000); pose('kcal', iK, 1, 1, 10000); pose('fc_moy', iFm, 1, 30, 230); pose('fc_max', iFx, 1, 30, 240); pose('fc_min', iFn, 1, 25, 230);
-                pose('vitesse_kmh', iVm, 3.6, 0.1, 120, 1); pose('vitesse_max_kmh', iVx, 3.6, 0.1, 150, 1); pose('denivele_m', iAg, 1, 0, 10000);
-                if (iN >= 0 && (iNt < 0 || /^(30001|0|1)?$/.test(String(r[iNt]).trim()))) pose('pas', iN, 1, 1, 200000);   // count_type 30001 = pas
-                if (iV >= 0) { const v = num(r[iV]); if (v !== null && v >= 10 && v <= 90) { s.vo2max = Math.round(v * 10) / 10; noterVo2(d, v, debut); } }
-                const cle = uuid.toLowerCase() || (iL >= 0 ? String(r[iL] || '').split('.')[0].toLowerCase() : '');
-                if (live[cle] || loc[cle]) Object.assign(s, detailSeance(live[cle] || '[]', debut, fcMax, loc[cle]));
-                if (s.distance_m && !s.vitesse_kmh) s.vitesse_kmh = Math.round(s.distance_m / s.duree_s * 36) / 10;
-                seances[s.id] = s;
-            });
-        });
-        return { jours, pesees: Object.entries(pesees).map(([date, p]) => ({ date, kg: p.kg })).sort((a, b) => a.date < b.date ? -1 : 1), lus, sources,
-                 compo: Object.entries(compo).map(([date, x]) => { const { ms, ...m } = x; return { date, ...m }; }).sort((a, b) => a.date < b.date ? -1 : 1),
-                 vo2: Object.entries(vo2).map(([date, x]) => ({ date, vo2max: x.v })).sort((a, b) => a.date < b.date ? -1 : 1),
-                 seances: Object.values(seances).sort((a, b) => (a.date + a.heure) < (b.date + b.heure) ? -1 : 1) };
+    /** Compatibilité : tout l'export déjà en texte (tests, petits envois). Même résultat que l'extracteur pas à pas. */
+    function extraire(fichiers, options) {
+        const ex = creerExtracteur(options);
+        (fichiers || []).forEach(f => ex.ajouterTexte(f.nom, f.texte));
+        return ex.resultat();
     }
 
     //  v1.26 — le nom d'une séance d'après son code Samsung (codes publiés du SDK Samsung Health) ; inconnu : on le dit, on ne devine pas
@@ -307,48 +342,56 @@
     }
 
     /**
-     * Ouvre un .zip (le dossier de l'export compressé) sans bibliothèque : répertoire central + DecompressionStream
-     * (« deflate-raw »). Zip64 pris en charge (exports de plus de 65 535 fichiers). garder(nom) choisit quoi décompresser.
-     * → [{ nom, texte }]
+     * v1.27 — PARCOURIR un .zip SANS LE CHARGER : seuls la fin du fichier et le répertoire central sont lus ; chaque entrée retenue
+     * par garder(nom) est rendue en FLUX (ReadableStream d'octets, décompressé par DecompressionStream « deflate-raw »).
+     * Zip64 pris en charge (exports de plus de 65 535 fichiers). source : Blob / File, ou ArrayBuffer / Uint8Array.
+     * traiter(nom, flux) est attendu entrée après entrée (une seule en mémoire à la fois).
      */
-    async function lireZip(octets, garder) {
-        const buf = octets instanceof ArrayBuffer ? octets : octets.buffer.slice(octets.byteOffset, octets.byteOffset + octets.byteLength);
-        const dv = new DataView(buf), n8 = (o) => Number(dv.getBigUint64(o, true));
+    async function parcourirZip(source, garder, traiter) {
+        const blob = source instanceof Blob ? source : new Blob([source instanceof ArrayBuffer ? new Uint8Array(source) : source]);
+        const lire = async (a, b) => new DataView(await blob.slice(a, b).arrayBuffer());
+        const taille = blob.size, debutQueue = Math.max(0, taille - 65557), queue = await lire(debutQueue, taille);
         let e = -1;
-        for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+        for (let i = queue.byteLength - 22; i >= 0; i--) if (queue.getUint32(i, true) === 0x06054b50) { e = i; break; }
         if (e < 0) throw new Error('ce fichier n’est pas un .zip lisible');
-        let total = dv.getUint16(e + 10, true), cd = dv.getUint32(e + 16, true);
-        if ((total === 0xffff || cd === 0xffffffff) && e >= 20 && dv.getUint32(e - 20, true) === 0x07064b50) {
-            const z = n8(e - 20 + 8);
-            if (dv.getUint32(z, true) === 0x06064b50) { total = n8(z + 32); cd = n8(z + 48); }
+        let total = queue.getUint16(e + 10, true), cdTaille = queue.getUint32(e + 12, true), cd = queue.getUint32(e + 16, true);
+        if ((total === 0xffff || cd === 0xffffffff || cdTaille === 0xffffffff) && e >= 20 && queue.getUint32(e - 20, true) === 0x07064b50) {
+            const z = Number(queue.getBigUint64(e - 20 + 8, true)), r = await lire(z, z + 56);
+            if (r.getUint32(0, true) === 0x06064b50) { total = Number(r.getBigUint64(32, true)); cdTaille = Number(r.getBigUint64(40, true)); cd = Number(r.getBigUint64(48, true)); }
         }
-        const dec = new TextDecoder(), sortie = [];
-        let o = cd;
-        for (let k = 0; k < total && o + 46 <= buf.byteLength; k++) {
-            if (dv.getUint32(o, true) !== 0x02014b50) break;
-            const methode = dv.getUint16(o + 10, true), lnom = dv.getUint16(o + 28, true), lext = dv.getUint16(o + 30, true), lcom = dv.getUint16(o + 32, true);
-            let taille = dv.getUint32(o + 20, true), local = dv.getUint32(o + 42, true);
-            const nom = dec.decode(new Uint8Array(buf, o + 46, lnom));
-            if (taille === 0xffffffff || local === 0xffffffff) {          // champ supplémentaire zip64 (0x0001)
+        const rep = await lire(cd, cd + cdTaille), dec = new TextDecoder();
+        const entrees = [];
+        let o = 0;
+        for (let k = 0; k < total && o + 46 <= rep.byteLength; k++) {
+            if (rep.getUint32(o, true) !== 0x02014b50) break;
+            const methode = rep.getUint16(o + 10, true), lnom = rep.getUint16(o + 28, true), lext = rep.getUint16(o + 30, true), lcom = rep.getUint16(o + 32, true);
+            let tailleC = rep.getUint32(o + 20, true), local = rep.getUint32(o + 42, true);
+            const nom = dec.decode(new Uint8Array(rep.buffer, rep.byteOffset + o + 46, lnom));
+            if (tailleC === 0xffffffff || local === 0xffffffff) {          // champ supplémentaire zip64 (0x0001)
                 let x = o + 46 + lnom; const fin = x + lext;
                 while (x + 4 <= fin) {
-                    const id = dv.getUint16(x, true), l = dv.getUint16(x + 2, true);
-                    if (id === 0x0001) { let y = x + 4; if (dv.getUint32(o + 24, true) === 0xffffffff) y += 8; if (taille === 0xffffffff) { taille = n8(y); y += 8; } if (local === 0xffffffff) local = n8(y); break; }
+                    const id = rep.getUint16(x, true), l = rep.getUint16(x + 2, true);
+                    if (id === 0x0001) { let y = x + 4; if (rep.getUint32(o + 24, true) === 0xffffffff) y += 8; if (tailleC === 0xffffffff) { tailleC = Number(rep.getBigUint64(y, true)); y += 8; } if (local === 0xffffffff) local = Number(rep.getBigUint64(y, true)); break; }
                     x += 4 + l;
                 }
             }
             o += 46 + lnom + lext + lcom;
-            if (nom.endsWith('/') || !garder(nom)) continue;
-            const ln = dv.getUint16(local + 26, true), le = dv.getUint16(local + 28, true);
-            const brut = new Uint8Array(buf, local + 30 + ln + le, taille);
-            let contenu;
-            if (methode === 0) contenu = brut;
-            else if (methode === 8) contenu = new Uint8Array(await new Response(new Blob([brut]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
-            else continue;
-            sortie.push({ nom, texte: estLiveData(nom) ? await texteDe(contenu) : dec.decode(contenu) });   // v1.26 : détail de séance gzip
+            if (!nom.endsWith('/') && (methode === 0 || methode === 8) && garder(nom)) entrees.push({ nom, methode, tailleC, local });
         }
+        for (const x of entrees) {
+            const h = await lire(x.local, x.local + 30), ln = h.getUint16(26, true), le = h.getUint16(28, true);
+            const brut = blob.slice(x.local + 30 + ln + le, x.local + 30 + ln + le + x.tailleC).stream();
+            await traiter(x.nom, x.methode === 8 ? brut.pipeThrough(new DecompressionStream('deflate-raw')) : brut);
+        }
+        return entrees.length;
+    }
+
+    /** Compatibilité : les entrées retenues, en texte (le détail de séance gzip décompressé). → [{ nom, texte }] */
+    async function lireZip(octets, garder) {
+        const sortie = [];
+        await parcourirZip(octets, garder, async (nom, flux) => { const u = new Uint8Array(await new Response(flux).arrayBuffer()); sortie.push({ nom, texte: estLiveData(nom) ? await texteDe(u) : new TextDecoder().decode(u) }); });
         return sortie;
     }
 
-    return { UTILES, typeDuNom, estUtile, estBinningPas, estLiveData, texteDe, estExportSamsung, csvLignes, table, decalage, dateLocale, extraire, lireZip, detailSeance, nomSeance };
+    return { UTILES, typeDuNom, estUtile, estBinningPas, estLiveData, texteDe, estExportSamsung, csvLignes, table, decalage, dateLocale, extraire, creerExtracteur, analyseurCsv, parcourirZip, lireZip, detailSeance, nomSeance };
 });

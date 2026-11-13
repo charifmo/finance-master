@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.26"></script>
-    <script src="sante_import.js?v=1.26"></script>
-    <script src="sante_samsung.js?v=1.26"></script>
-    <script src="sante_protocole.js?v=1.26"></script>
+    <script src="sante_calculs.js?v=1.27"></script>
+    <script src="sante_import.js?v=1.27"></script>
+    <script src="sante_samsung.js?v=1.27"></script>
+    <script src="sante_protocole.js?v=1.27"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -972,7 +972,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.26';
+        const VERSION = '1.27';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -1427,28 +1427,37 @@ createApp({
             const fichiers = Array.from(liste || []); if (!fichiers.length || enCours.value) return;
             enCours.value = true; messageCsv.value = '⏳ Lecture de ' + (fichiers.length > 1 ? fichiers.length + ' fichiers' : '« ' + fichiers[0].name + ' »') + '…';
             try {
-                const utiles = [], details = [], generiques = [], erreurs = []; let ignores = 0;
+                //  v1.27 — « ÇA SE BLOQUE APRÈS AVOIR IMPORTÉ LE DOSSIER EN ENTIER » : chaque fichier est lu À SON TOUR, les gros CSV en flux,
+                //  le .zip sans être chargé ; ce qui est utile est gardé, le reste oublié aussitôt. La page souffle entre deux fichiers
+                //  (le téléphone reste réactif) et dit où elle en est.
+                const fcMax = age.value ? 220 - age.value : undefined;   // v1.26 : FC max (zones des séances) = 220 − âge ; inconnue : pas de zones
+                const ex = SanteSamsung.creerExtracteur({ decalageMin: -new Date().getTimezoneOffset(), fcMax });
+                const details = [], generiques = [], erreurs = []; let ignores = 0, lus = 0, pasCsv = false, vus = 0;
+                const souffler = async (force) => { if (force || ++vus % 25 === 0) { messageCsv.value = '⏳ ' + lus + ' fichier(s) Samsung lu(s)' + (fichiers.length > 1 ? ' sur ' + fichiers.length + ' parcourus' : '') + '…'; await new Promise(r => setTimeout(r, 0)); } };
+                const lireUn = async (nom, flux) => {
+                    if (SanteSamsung.estUtile(nom)) { if (/pedometer_day_summary|step_daily_trend|activity\.day_summary/.test(nom)) pasCsv = true; await ex.ajouterFlux(nom, flux); }
+                    else ex.ajouterTexte(nom, await SanteSamsung.texteDe(new Uint8Array(await new Response(flux).arrayBuffer())));   // détail de séance (gzip ou non), petit
+                    lus++; await souffler(lus % 5 === 0);
+                };
                 for (const f of fichiers) {
                     const nom = f._chemin || f.webkitRelativePath || f.name;
                     if (/\.zip$/i.test(f.name) || /zip/i.test(f.type || '')) {
                         try {
-                            const buf = await f.arrayBuffer();
-                            const u = await SanteSamsung.lireZip(buf, lireDansZip); utiles.push(...u);
-                            if (!u.some(x => /pedometer_day_summary|step_daily_trend|activity\.day_summary/.test(x.nom))) details.push(...await SanteSamsung.lireZip(buf, SanteSamsung.estBinningPas));
-                            if (!u.length) erreurs.push('« ' + f.name + ' » : aucun fichier Samsung Health utile dedans');
+                            const n = await SanteSamsung.parcourirZip(f, lireDansZip, lireUn);
+                            if (!pasCsv) await SanteSamsung.parcourirZip(f, SanteSamsung.estBinningPas, async (nomB, flux) => { if (details.length < 4000) { details.push(nomB); ex.ajouterTexte(nomB, await new Response(flux).text()); } });
+                            if (!n) erreurs.push('« ' + f.name + ' » : aucun fichier Samsung Health utile dedans');
                         } catch (e) { erreurs.push('« ' + f.name + ' » : ' + (e.message || e)); }
                     }
-                    else if (SanteSamsung.estLiveData(nom)) utiles.push({ nom, texte: await SanteSamsung.texteDe(await f.arrayBuffer()) });   // v1.26 : détail de séance, gzip ou non
-                    else if (lireDansZip(nom)) utiles.push({ nom, texte: await f.text() });
+                    else if (lireDansZip(nom)) { try { await lireUn(nom, f.stream()); } catch (e) { erreurs.push(f.name + ' : ' + (e.message || e)); } }
                     else if (SanteSamsung.estBinningPas(nom)) details.push(f);
                     else if (/\.csv$/i.test(f.name) && !SanteSamsung.estExportSamsung(nom)) generiques.push(f);
                     else ignores++;
+                    await souffler(false);
                 }
-                if (!utiles.some(x => /pedometer_day_summary|step_daily_trend|activity\.day_summary/.test(x.nom)))
-                    for (let i = 0; i < details.length && i < 4000; i++) if (details[i] instanceof Blob) details[i] = { nom: details[i]._chemin || details[i].webkitRelativePath || details[i].name, texte: await details[i].text() };
-                //  v1.26 : la FC max (pour les zones des séances) : 220 − âge, d'après la date de naissance du profil ; inconnue : pas de zones
-                const fcMax = age.value ? 220 - age.value : undefined;
-                const r = SanteSamsung.extraire(utiles.concat(details.filter(x => !(x instanceof Blob))), { decalageMin: -new Date().getTimezoneOffset(), fcMax });
+                //  secours : aucun CSV de pas, mais le détail par 10 min (jsons/…pedometer_day_summary/), 4 000 fichiers au plus
+                if (!pasCsv) for (let i = 0; i < details.length && i < 4000; i++) if (details[i] instanceof Blob) { ex.ajouterTexte(details[i]._chemin || details[i].webkitRelativePath || details[i].name, await details[i].text()); if (i % 50 === 0) await souffler(true); }
+                messageCsv.value = '⏳ Calcul des séances et des totaux…'; await new Promise(r => setTimeout(r, 0));
+                const r = ex.resultat();
                 const limite = Cref.value.decaler(aujourdhui(), -HISTORIQUE_JOURS), jours = new Set(), compte = { pas: 0, kcal_actives: 0, fc_moy: 0, sommeil_min: 0 };
                 Object.entries(r.jours).forEach(([d, x]) => {
                     if (d < limite || d > aujourdhui()) return;
@@ -1470,7 +1479,7 @@ createApp({
                 const fc = {};
                 for (const f of generiques) { if (!appliquerCsvGenerique(await f.text(), jours, fc)) erreurs.push(f.name + ' : colonne de date introuvable'); }
                 etat.poids.sort((a, b) => a.date < b.date ? -1 : 1);
-                const lusSamsung = utiles.length + details.filter(x => !(x instanceof Blob)).length, nbFichiers = lusSamsung + generiques.length;
+                const lusSamsung = lus + (pasCsv ? 0 : Math.min(details.length, 4000)), nbFichiers = lusSamsung + generiques.length;
                 const detail = [compte.pas && compte.pas + ' j de pas', compte.kcal_actives && compte.kcal_actives + ' j de calories', compte.fc_moy && compte.fc_moy + ' j de FC', compte.sommeil_min && compte.sommeil_min + ' nuits', r.pesees.length && r.pesees.length + ' pesée(s)',
                                 (r.compo || []).length && r.compo.length + ' mesure(s) de composition', (r.seances || []).length && r.seances.length + ' séance(s)', (r.vo2 || []).length && r.vo2.length + ' VO₂ max'].filter(Boolean).join(' · ');
                 messageCsv.value = (!jours.size && !r.pesees.length ? '❌ ' : '') + jours.size + ' jour(s) importé(s)' + (nbFichiers > 1 ? ' depuis ' + nbFichiers + ' fichiers' : '') + '.'

@@ -131,6 +131,10 @@ Samsung ne publie pas le format de l'export : il est rétro-documenté, et la le
 détail de séance sous `jsons/` ou `files/`, compressé en gzip ou non, distance tirée de la clé `distance`, sinon du tracé GPS, sinon
 de la vitesse ; sans aucune des trois, pas de temps par km (rien n'est inventé). Un code de séance inconnu est affiché tel quel.
 
+**v1.27 — un export de plusieurs années sans bloquer le téléphone** : chaque fichier est lu à son tour, les gros CSV (la fréquence
+cardiaque pèse des centaines de Mo) en flux par morceaux, le `.zip` parcouru sans être chargé ; seul ce que l'appli garde (un total
+par jour, une mesure, une séance) reste en mémoire. La page affiche sa progression (« ⏳ N fichier(s) Samsung lu(s) sur M parcourus »).
+
 ## Synchro automatique depuis le téléphone (v1.5)
 
 Une page web ne peut pas lire Samsung Health (Android ne donne pas accès aux fichiers ni à Health Connect aux sites).
