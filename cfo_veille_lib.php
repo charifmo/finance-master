@@ -616,12 +616,16 @@ function cfo_vp_signaux(array $articles, array $lieux, ?int $maintenant = null, 
 /**
  * v37.138 — CE QUI EST NOUVEAU DEPUIS LA PRÉCÉDENTE ANALYSE. $premiere : 1re fois que CE bien a vu l'article (null : inconnu) ;
  * $depuis : l'analyse précédente (null : c'est la première) ; $connus : titres vus avant $depuis. → premiere_analyse | deja_connu |
- * mise_a_jour (nouveau lien, même histoire qu'un article déjà vu) | nouvel_evenement
+ * ancien_decouvert (v37.140 : daté bien avant, vu seulement maintenant) | mise_a_jour (nouveau lien, même histoire) | nouvel_evenement
  */
 function cfo_vp_statut_nouveaute(array $a, ?int $premiere, ?int $depuis, array $connus): string {
     if ($depuis === null) return 'premiere_analyse';
     if ($premiere !== null && $premiere <= $depuis) return 'deja_connu';
     if ($premiere === null && !empty($a['memoire']) && strtotime($a['memoire'] . ' 23:59:59 UTC') <= $depuis) return 'deja_connu';
+    //  v37.140 — « NOUVEAU : 2025-02-05 — visite de chantier… » : un article ANCIEN qu'on vient seulement de découvrir n'est pas un nouvel
+    //  événement. Daté de plus de 30 jours avant l'analyse précédente : « ancien, découvert récemment »
+    $d = !empty($a['date']) ? strtotime((string)$a['date'] . ' 12:00:00 UTC') : false;
+    if ($d && $d < $depuis - 30 * 86400) return 'ancien_decouvert';
     $mots = function (string $t): array { $o = []; foreach (preg_split('/\s+/u', cfo_vp_norm($t)) as $w) if (mb_strlen($w) >= 4) $o[$w] = true; return $o; };
     $m = $mots((string)($a['titre'] ?? ''));
     foreach ($connus as $t) { $v = $mots((string)$t); $u = count($m + $v); if ($u > 0 && count(array_intersect_key($m, $v)) / $u >= 0.5) return 'mise_a_jour'; }
