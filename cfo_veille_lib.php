@@ -614,12 +614,46 @@ function cfo_vp_annonces(array $articles, array $lieux, ?int $maintenant = null)
  * dédupliqués ; le niveau de lecture est dit : un résultat de moteur (titre et extrait) ne prouve ni l'accès au post complet ni sa
  * véracité. Rien de pertinent : liste vide (leur présence n'est jamais forcée). → 5 au plus, les plus récents d'abord.
  */
+/**
+ * v37.143 — UNE PUBLICATION, PAS UNE PAGE : « Commune Ouahat Sidi Brahim | Facebook », sa page « à propos », ses « mentions » ou une page
+ * de profil ne disent rien de neuf (ce sont des SOURCES, rangées dans « Sources proposées ») ; une publication, une vidéo, un fil de forum
+ * disent quelque chose. Elles prenaient les 5 places des signaux, faute de date pour les départager.
+ */
+function cfo_vp_signal_publication(string $url, string $titre): bool {
+    $h = strtolower((string)parse_url($url, PHP_URL_HOST));
+    $p = strtolower(trim(rawurldecode((string)parse_url($url, PHP_URL_PATH)), '/'));
+    $seg = $p === '' ? [] : explode('/', $p);
+    if (preg_match('/(^|\.)facebook\.com$/', $h)) {
+        if (preg_match('#(^|/)(posts|videos|reel|reels|permalink|story\.php|watch|photo\.php)(/|$)#', $p) || preg_match('#^groups/[^/]+/(posts|permalink)/#', $p)) return true;
+        if (preg_match('#(^|/)photos/[^/]+/\d+#', $p)) return true;
+        return false;   // la page elle-même, « à propos », « mentions », un profil…
+    }
+    if (preg_match('/(^|\.)instagram\.com$/', $h)) return in_array($seg[0] ?? '', ['p', 'reel', 'reels', 'tv'], true);
+    if (preg_match('/(^|\.)(youtube\.com|youtu\.be)$/', $h)) return ($seg[0] ?? '') === 'watch' || ($seg[0] ?? '') === 'shorts' || str_contains($h, 'youtu.be');
+    if (preg_match('/(^|\.)(x|twitter)\.com$/', $h)) return ($seg[1] ?? '') === 'status';
+    if (preg_match('/(^|\.)tiktok\.com$/', $h)) return ($seg[1] ?? '') === 'video';
+    return !preg_match('/\|\s*(facebook|instagram)\s*$/iu', $titre);   // forums : un fil
+}
+
+/** v37.143 — ce qu'un signal dit de FONCIER (projet, route, aménagement, session du conseil…) : départage les signaux sans date. */
+function cfo_vp_signal_poids(string $texte): int {
+    $t = cfo_vp_norm($texte);
+    $n = 0;
+    //  les projets et l'urbanisme comptent double ; la vie du conseil, les travaux, une fois
+    foreach (['projet' => 2, 'amenagement' => 2, 'route' => 2, 'lotissement' => 2, 'expropriation' => 2, 'zonage' => 2, 'plan d' => 2, 'terrain' => 1, 'foncier' => 1,
+              'conseil' => 1, 'session' => 1, 'travaux' => 1, 'chantier' => 1, 'مشروع' => 2, 'مشاريع' => 2, 'تهيئة' => 2, 'طريق' => 2, 'تجزئة' => 2, 'تصميم' => 2,
+              'نزع الملكية' => 2, 'عقار' => 1, 'دورة' => 1, 'المجلس' => 1, 'اشغال' => 1, 'أشغال' => 1, 'اتفاقية' => 1, 'حصيلة' => 1, 'تنمية' => 1] as $m => $p)
+        if (mb_strpos($t, cfo_vp_norm($m)) !== false) $n += $p;
+    return $n;
+}
+
 function cfo_vp_signaux(array $articles, array $lieux, ?int $maintenant = null, int $fenetreJours = 730): array {
     $now = $maintenant ?? time();
     $L = array_values(array_filter(array_map('cfo_vp_norm', $lieux)));
     $out = []; $vus = [];
     foreach ($articles as $a) {
         if (!in_array($a['portee'] ?? '', ['reseau', 'forum'], true) || !preg_match('#^https?://#i', (string)($a['url'] ?? ''))) continue;
+        if (!cfo_vp_signal_publication((string)$a['url'], (string)($a['titre'] ?? ''))) continue;   // v37.143 : une publication, pas une page
         if (!empty($a['ts']) && $now - (int)$a['ts'] > $fenetreJours * 86400) continue;
         $txt = cfo_vp_norm(($a['titre'] ?? '') . ' ' . ($a['extrait'] ?? ''));
         $lieu = null; foreach ($lieux as $i => $l) if (isset($L[$i]) && $L[$i] !== '' && mb_strpos($txt, $L[$i]) !== false) { $lieu = $l; break; }
@@ -629,11 +663,12 @@ function cfo_vp_signaux(array $articles, array $lieux, ?int $maintenant = null, 
         $vus[$k1] = true; if ($k2 !== '') $vus[$k2] = true;
         $out[] = ['titre' => (string)($a['titre'] ?? ''), 'extrait' => (string)($a['extrait'] ?? ''), 'url' => (string)$a['url'], 'plateforme' => (string)($a['domaine'] ?? ''),
                   'source' => (string)($a['source'] ?? ''), 'portee' => (string)$a['portee'], 'date' => $a['date'] ?? (!empty($a['ts']) ? gmdate('Y-m-d', (int)$a['ts']) : null),
-                  'lieu' => $lieu, 'memoire' => $a['memoire'] ?? null,
+                  'lieu' => $lieu, 'memoire' => $a['memoire'] ?? null, 'poids' => cfo_vp_signal_poids(($a['titre'] ?? '') . ' ' . ($a['extrait'] ?? '')),
                   'niveau' => 'titre et extrait (moteur de recherche) — publication complète non lue, véracité non vérifiée'];
     }
-    usort($out, fn($x, $y) => (string)$y['date'] <=> (string)$x['date']);
-    return array_slice($out, 0, 5);
+    //  v37.143 : datés d'abord (les plus récents), puis ce qui parle de foncier, puis les plus récemment découverts ; 8 au plus (5 avant)
+    usort($out, fn($x, $y) => [(string)$y['date'], $y['poids'], (string)$y['memoire']] <=> [(string)$x['date'], $x['poids'], (string)$x['memoire']]);
+    return array_slice($out, 0, 8);
 }
 
 /**
