@@ -370,15 +370,17 @@
     }
 
     /**
-     * v1.27 — PARCOURIR un .zip SANS LE CHARGER : seuls la fin du fichier et le répertoire central sont lus ; chaque entrée retenue
-     * par garder(nom) est rendue en FLUX (ReadableStream d'octets, décompressé par DecompressionStream « deflate-raw »).
-     * Zip64 pris en charge (exports de plus de 65 535 fichiers). source : Blob / File, ou ArrayBuffer / Uint8Array.
-     * traiter(nom, flux) est attendu entrée après entrée (une seule en mémoire à la fois).
+     * v1.30 — PARCOURIR un .zip EN UNE SEULE LECTURE, du début à la fin. Sur Android, un fichier choisi dans « Mes fichiers » se lit
+     * mal par sauts (chaque saut peut relire le fichier depuis le début) : la v1.27 sautait d'une entrée à l'autre (des milliers de
+     * fois) et l'import ne finissait pas. Désormais : deux petites lectures (la fin du fichier, le répertoire central) pour savoir où
+     * sont les entrées utiles, puis UN flux séquentiel ; chaque entrée retenue est passée, décompressée, à traiter(nom, flux) au fil de
+     * l'eau, avec contre-pression (rien ne s'accumule en mémoire). Zip64 pris en charge. source : Blob / File, ou ArrayBuffer / Uint8Array.
+     * options.progres(lus, total) : appelée au fil de la lecture (octets).
      */
-    async function parcourirZip(source, garder, traiter) {
+    async function parcourirZip(source, garder, traiter, options) {
         const blob = source instanceof Blob ? source : new Blob([source instanceof ArrayBuffer ? new Uint8Array(source) : source]);
         const lire = async (a, b) => new DataView(await blob.slice(a, b).arrayBuffer());
-        const taille = blob.size, debutQueue = Math.max(0, taille - 65557), queue = await lire(debutQueue, taille);
+        const taille = blob.size, queue = await lire(Math.max(0, taille - 65557), taille);
         let e = -1;
         for (let i = queue.byteLength - 22; i >= 0; i--) if (queue.getUint32(i, true) === 0x06054b50) { e = i; break; }
         if (e < 0) throw new Error('ce fichier n’est pas un .zip lisible');
@@ -387,8 +389,7 @@
             const z = Number(queue.getBigUint64(e - 20 + 8, true)), r = await lire(z, z + 56);
             if (r.getUint32(0, true) === 0x06064b50) { total = Number(r.getBigUint64(32, true)); cdTaille = Number(r.getBigUint64(40, true)); cd = Number(r.getBigUint64(48, true)); }
         }
-        const rep = await lire(cd, cd + cdTaille), dec = new TextDecoder();
-        const entrees = [];
+        const rep = await lire(cd, cd + cdTaille), dec = new TextDecoder(), entrees = [];
         let o = 0;
         for (let k = 0; k < total && o + 46 <= rep.byteLength; k++) {
             if (rep.getUint32(o, true) !== 0x02014b50) break;
@@ -406,12 +407,45 @@
             o += 46 + lnom + lext + lcom;
             if (!nom.endsWith('/') && (methode === 0 || methode === 8) && garder(nom)) entrees.push({ nom, methode, tailleC, local });
         }
-        for (const x of entrees) {
-            const h = await lire(x.local, x.local + 30), ln = h.getUint16(26, true), le = h.getUint16(28, true);
-            const brut = blob.slice(x.local + 30 + ln + le, x.local + 30 + ln + le + x.tailleC).stream();
-            await traiter(x.nom, x.methode === 8 ? brut.pipeThrough(new DecompressionStream('deflate-raw')) : brut);
+        if (!entrees.length) return 0;
+        entrees.sort((a, b) => a.local - b.local);
+        //  le flux séquentiel : on avance octet par octet dans le fichier, une entrée utile après l'autre
+        const lecteur = blob.slice(entrees[0].local).stream().getReader(), progres = options && options.progres;
+        let pos = entrees[0].local, k = 0, etat = 'attente', entete = new Uint8Array(30), nEntete = 0, aSauter = 0, reste = 0, ecrivain = null, fini = null;
+        const ouvrir = async () => {
+            const x = entrees[k], ts = new TransformStream({}, { highWaterMark: 4 });
+            ecrivain = ts.writable.getWriter();
+            const lisible = x.methode === 8 ? ts.readable.pipeThrough(new DecompressionStream('deflate-raw')) : ts.readable;
+            fini = Promise.resolve(traiter(x.nom, lisible));
+        };
+        const fermer = async () => { await ecrivain.close(); await fini; ecrivain = null; fini = null; k++; etat = 'attente'; nEntete = 0; };
+        let dernierProgres = 0;
+        while (k < entrees.length) {
+            const { done, value } = await lecteur.read();
+            if (done) break;
+            let i = 0;
+            while (i < value.length && k < entrees.length) {
+                const x = entrees[k];
+                if (etat === 'attente') { const saut = x.local - (pos + i); if (saut > 0) { i += Math.min(saut, value.length - i); continue; } etat = 'entete'; }
+                if (etat === 'entete') {
+                    const n = Math.min(30 - nEntete, value.length - i); entete.set(value.subarray(i, i + n), nEntete); nEntete += n; i += n;
+                    if (nEntete < 30) continue;
+                    const dv = new DataView(entete.buffer); aSauter = dv.getUint16(26, true) + dv.getUint16(28, true); reste = x.tailleC; etat = 'saut';
+                }
+                if (etat === 'saut') { const n = Math.min(aSauter, value.length - i); aSauter -= n; i += n; if (aSauter > 0) continue; etat = 'donnees'; await ouvrir(); if (reste === 0) { await fermer(); continue; } }
+                if (etat === 'donnees') {
+                    const n = Math.min(reste, value.length - i);
+                    await ecrivain.ready; await ecrivain.write(value.slice(i, i + n));   // une copie : le morceau du lecteur peut être réutilisé
+                    reste -= n; i += n;
+                    if (reste === 0) await fermer();
+                }
+            }
+            pos += value.length;
+            if (progres && (pos - dernierProgres > 4e6 || k >= entrees.length)) { dernierProgres = pos; await progres(pos, taille); }
         }
-        return entrees.length;
+        try { await lecteur.cancel(); } catch (e) { /* déjà fini */ }
+        if (ecrivain) await fermer();
+        return k;
     }
 
     /** Compatibilité : les entrées retenues, en texte (le détail de séance gzip décompressé). → [{ nom, texte }] */
