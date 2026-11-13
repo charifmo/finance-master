@@ -505,6 +505,20 @@ function cfo_vp_evolution_majeure(array $a): bool {
     return false;
 }
 
+/**
+ * v37.141 — une PAGE DE LISTE d'un portail d'annonces (pas une annonce) : « Découvrez 17 annonces… », « Ventes immobilières à … »,
+ * « 36 إعلان », ou une adresse de rubrique (Avito : une annonce finit par « <numéro>.htm » ; Mubawab : « /a/<numéro> »).
+ */
+function cfo_vp_page_de_liste(string $titre, string $url): bool {
+    $t = cfo_vp_norm($titre);
+    if (preg_match('/(^|\s)(decouvrez|\d+\s+annonces?|toutes les annonces|annonces? (a vendre|immobilieres?|de vente)|ventes? immobilieres?|resultats? de recherche)(\s|$|:)/u', $t)) return true;
+    if (preg_match('/\d+\s*' . preg_quote(cfo_vp_norm('إعلان'), '/') . '|' . preg_quote(cfo_vp_norm('إعلانات'), '/') . '|' . preg_quote(cfo_vp_norm('اكتشف'), '/') . '/u', $t)) return true;
+    $h = strtolower((string)parse_url($url, PHP_URL_HOST)); $p = (string)parse_url($url, PHP_URL_PATH);
+    if (preg_match('/(^|\.)avito\.ma$/', $h) && !preg_match('/\d{5,}\.htm$/', $p) && !preg_match('#/a/\d+#', $p)) return true;
+    if (preg_match('/(^|\.)mubawab\.ma$/', $h) && !preg_match('#/(a|pa)/\d+#', $p)) return true;
+    return false;
+}
+
 /** v37.138 — un nombre écrit à la marocaine (« 1 200 000 », « 1.200.000 », « 1,2 ») → float, ou null. */
 function cfo_vp_nombre(string $n): ?float {
     $n = trim(str_replace(["\u{00A0}", "\u{202F}"], ' ', $n));
@@ -557,6 +571,15 @@ function cfo_vp_annonces(array $articles, array $lieux, ?int $maintenant = null)
         foreach (['appartement' => '/appartement|studio|شقة/u', 'villa' => '/\bvilla\b|فيلا/u', 'maison' => '/\bmaison\b|riad|منزل|دار\b/u', 'local' => '/\blocal\b|entrepot|depot|مستودع|محل/u',
                   'ferme' => '/\bferme\b|exploitation agricole|ضيعة/u', 'terrain' => '/terrain|\blot\b|lotissement|parcelle|أرض|ارض|بقعة|قطعة/u'] as $k => $re)
             if (preg_match($re, $txt)) { $type = $k; break; }
+        //  v37.141 — « CES RÉSULTATS SONT NULS : MAISONS, APPARTEMENTS… » : le circuit des annonces ne garde que les TERRAINS (terrain, lot, ferme) ;
+        //  un bien bâti, ou une annonce sans type reconnu, n'est pas un prix de terrain — écarté (ce n'est même pas une indication utile)
+        if (!in_array($type, ['terrain', 'ferme'], true)) continue;
+        //  … et jamais une PAGE DE LISTE (« Découvrez 17 annonces pour Ventes Immobilières à … », « 36 إعلان ») : son « prix » et sa « surface »
+        //  sont ceux d'une annonce quelconque de la liste, pas un prix
+        if (cfo_vp_page_de_liste((string)($a['titre'] ?? ''), (string)$a['url'])) continue;
+        //  un prix au m² invraisemblable pour un terrain (moins de 20 ou plus de 30 000 DH/m²) n'est pas gardé comme prix
+        $incoherent = false;
+        if ($pm2 !== null && ($pm2 < 20 || $pm2 > 30000)) { $pm2 = null; $calcule = false; $incoherent = true; }
         $zonage = null;
         if (preg_match('/\b(r ?\+ ?\d|shl ?\d|sa ?\d)\b/u', $txt, $m)) $zonage = strtoupper(str_replace(' ', '', $m[1]));
         elseif (preg_match('/zone (villas?|immeubles?|industrielle|touristique|agricole|logistique)/u', $txt, $m)) $zonage = 'zone ' . $m[1];
@@ -578,7 +601,7 @@ function cfo_vp_annonces(array $articles, array $lieux, ?int $maintenant = null)
                   'date' => $a['date'] ?? (isset($a['ts']) && $a['ts'] ? gmdate('Y-m-d', (int)$a['ts']) : null), 'extrait' => (string)($a['extrait'] ?? ''),
                   'prix_demande' => $total !== null ? (int)round($total) : null, 'prix_m2' => $pm2 !== null ? (int)round($pm2) : null, 'prix_m2_calcule' => $calcule,
                   'surface_m2' => $surf !== null ? (int)round($surf) : null, 'lieu' => $lieu, 'marrakech' => $marrakech, 'type' => $type, 'zonage' => $zonage,
-                  'constructibilite' => $constr, 'titre_foncier' => $tf, 'acces' => $acces ?: null, 'memoire' => $a['memoire'] ?? null,
+                  'constructibilite' => $constr, 'titre_foncier' => $tf, 'acces' => $acces ?: null, 'memoire' => $a['memoire'] ?? null, 'prix_incoherent' => $incoherent,
                   'niveau' => 'titre et extrait (moteur de recherche)'];
     }
     usort($out, fn($x, $y) => [$y['lieu'] !== null ? 1 : 0, ($y['prix_demande'] || $y['prix_m2']) ? 1 : 0, (string)$y['date']]

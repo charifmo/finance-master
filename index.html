@@ -2389,10 +2389,11 @@
                                                                 <button @click="rafraichirMarketIntel(asset)" class="mt-2 text-[10px] font-black uppercase tracking-widest bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition-colors">Réessayer</button>
                                                             </div>
                                                         </div>
-                                                        <!-- v37.140 — LA CALIBRATION FONCIÈRE (calculée par l'application) : d'abord la décision, ensuite les preuves -->
+                                                        <!-- v37.140 — LA CALIBRATION FONCIÈRE (calculée par l'application) ; v37.141 : APRÈS l'analyse (« elle doit venir après l'intelligence marché ») -->
                                                         <template v-else>
+                                                        <div class="cfo-html text-sm text-slate-800 leading-relaxed" v-html="mi.html"></div>
                                                         <template v-for="cv in [calibrationVue(asset, mi.contexte && mi.contexte.presse)]" :key="'cv' + asset.id">
-                                                        <section data-calib class="mb-4 rounded-2xl bg-white ring-1 ring-slate-200 p-3 md:p-4 space-y-3">
+                                                        <section data-calib class="mt-4 rounded-2xl bg-white ring-1 ring-slate-200 p-3 md:p-4 space-y-3">
                                                             <div data-calib-bandeau class="grid grid-cols-2 md:grid-cols-6 gap-2 text-[11px]">
                                                                 <div class="rounded-xl bg-slate-50 p-2"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Valeur retenue</p><p data-calib-valeur class="font-black text-slate-900 text-sm">{{ cv.valeur ? cv.valeur.toLocaleString('fr-FR') + ' DH/m²' : 'non renseignée' }}</p></div>
                                                                 <div class="rounded-xl p-2 col-span-2" :class="cv.valide ? 'bg-emerald-50' : 'bg-amber-50'"><p class="font-black uppercase tracking-widest text-[9px] text-slate-400">Statut</p><p data-calib-statut :class="['font-bold', cv.valide ? 'text-emerald-800' : 'text-amber-800']">{{ cv.statut }}</p></div>
@@ -2451,7 +2452,6 @@
                                                             </details>
                                                         </section>
                                                         </template>
-                                                        <div class="cfo-html text-sm text-slate-800 leading-relaxed" v-html="mi.html"></div>
                                                         </template>
                                                         <!-- v37.39 : les articles que l'IA a reçus, numérotés comme ses renvois [n] -->
                                                         <details v-if="mi.html && !mi.loading && mi.contexte && mi.contexte.presse && mi.contexte.presse.articles.length" data-mi-articles :open="uiOuvert('intel.articles', true)" @toggle="uiFixer('intel.articles', $event.target.open)" class="mt-3 pt-2 border-t border-slate-200">
@@ -9368,8 +9368,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.140 La calibration foncière";
+                    const CURRENT_VERSION = "37.141 Des prix de terrains, rien d'autre";
                     const CHANGELOG = [
+        { version: "37.141 Des prix de terrains, rien d'autre", date: "2026-11-13", changes: [
+            "🏷️ « CES RÉSULTATS SONT NULS : DES MAISONS, DES APPARTEMENTS… » — les prix observés ne gardent plus que des TERRAINS : (1) une page de LISTE d'un portail (« Découvrez 17 annonces pour Ventes Immobilières à Chaibate », « Ventes Immobilières à Bin El Ouidane », « اكتشف 12 إعلان », une rubrique Avito ou Mubawab) n'est plus prise pour une annonce — son « prix » était celui d'une annonce quelconque, d'où un « comparable » à 7 DH/m² ; (2) un bien bâti (appartement, maison, villa, local) ou une annonce sans type reconnu est écarté ; (3) un prix au m² invraisemblable pour un terrain (moins de 20 ou plus de 30 000 DH/m²) n'est pas gardé (« prix incohérent »).",
+            "📐 La calibration vient maintenant APRÈS l'analyse de l'Intelligence Marché (et avant la liste des articles), comme demandé.",
+            "📱 La page Facebook officielle de la commune (facebook.com/communeouahatsidibrahim) est ciblée par défaut (signal public indexé par les moteurs, non vérifié).",
+            "PREUVE — test_veille_presse.php (126) : pages de liste (FR, AR, rubriques Avito / Mubawab) écartées, appartement et maison écartés, 7 DH/m² marqué incohérent, 1 ha à 1,8 MDH → 180 DH/m² ; test_veille_presse.mjs (110) : la calibration après l'analyse et avant les articles.",
+        ] },
         { version: "37.140 La calibration foncière", date: "2026-11-13", changes: [
             "📐 INTELLIGENCE MARCHÉ DEVIENT UN OUTIL DE CALIBRATION (étape 1) — la décision d'abord, les articles ensuite (ils deviennent les preuves). En tête : la valeur retenue, son STATUT (« hypothèse utilisateur — non validée par comparables » tant que vous n'avez rien validé), le niveau de confiance, le nombre de comparables valides (dont fiables), la date de calibration et la dernière évolution importante. Moins de 3 comparables : « Projection non calibrée : données insuffisantes. La valeur de … DH/m² reste une hypothèse conservée, non une estimation calculée. »",
             "🏷️ PRIX OBSERVÉS : un tableau (source, localisation, surface, prix, DH/m², zonage, comparabilité, date) qui sépare transactions réelles, estimations d'agence, références administratives, annonces (toujours « prix demandé ») et signaux de marché ; les annonces de la veille s'y ajoutent, « 📌 Garder » les conserve pour ce bien ; « ➕ Ajouter un prix observé » pour ce que vous savez (notaire, agence, référence). Un nuage surface / prix au m² (échelle log) avec votre terrain et la zone de comparabilité (surface ÷4 à ×4).",
@@ -15208,6 +15214,8 @@
                         const a = asset || {}, r = [];
                         if (o.categorie === 'signal') return { classe: 'indication', raisons: ['simple signal de marché'] };
                         if (o.type && o.type !== 'terrain' && o.type !== 'ferme') r.push('bien bâti (' + o.type + '), pas un terrain');
+                        else if (o.categorie === 'annonce' && !o.type) r.push('type de bien inconnu');   // v37.141 : une annonce sans type n'est jamais un comparable
+                        if (o.prix_incoherent) r.push('prix incohérent pour un terrain (page de liste ?)');
                         if (!o.memeZone) r.push(o.localisation ? 'localisation différente ou trop vague (' + o.localisation + ')' : 'localisation inconnue');
                         const sb = Number(a.surface_totale) || 0, so = Number(o.surface_m2) || 0;
                         if (!so) r.push('surface inconnue');
@@ -15225,7 +15233,7 @@
                         const veille = ((presse && presse.annonces) || []).filter(x => x.lien && !dejaUrl.has(x.lien)).map(x => ({
                             id: 'v_' + x.lien, origine: 'veille', categorie: 'annonce', titre: x.titre, source: x.source || x.domaine, url: x.lien,
                             localisation: x.lieu || (x.marrakech ? 'Marrakech (vague)' : ''), memeZone: !!x.lieu, surface_m2: x.surface_m2, prix_total: x.prix_demande,
-                            prix_m2: x.prix_m2, prix_m2_calcule: !!x.prix_m2_calcule, zonage: x.zonage, date: x.date, type: x.type, _annonce: x }));
+                            prix_m2: x.prix_m2, prix_m2_calcule: !!x.prix_m2_calcule, prix_incoherent: !!x.prix_incoherent, zonage: x.zonage, date: x.date, type: x.type, _annonce: x }));
                         const toutes = [...gardees.map(o => ({ ...o, origine: 'saisie' })), ...veille].map(o => {
                             const prixM2 = Number(o.prix_m2) > 0 ? Math.round(Number(o.prix_m2)) : (Number(o.prix_total) > 0 && Number(o.surface_m2) > 0 ? Math.round(o.prix_total / o.surface_m2) : null);
                             const x = { ...o, prixM2, calcule: !(Number(o.prix_m2) > 0) && prixM2 !== null ? true : !!o.prix_m2_calcule };

@@ -247,13 +247,30 @@ v('v37.138 annonces : « 180 DH/m² » sur 1 ha (prix au m² ÉCRIT, total incon
   && $parU['1']['zonage'] === 'SHL2' && $parU['1']['titre_foncier'] === 'titré' && in_array('RN9', $parU['1']['acces'] ?? [], true) && in_array('façade', $parU['1']['acces'] ?? [], true)
   && ($parU['2']['prix_demande'] ?? 0) === 3500000 && $parU['2']['surface_m2'] === 25000 && $parU['2']['prix_m2'] === 140 && $parU['2']['prix_m2_calcule'] === true
   && $parU['2']['titre_foncier'] === 'non titré / melkia' && $parU['2']['zonage'] === 'agricole' && in_array('piste', $parU['2']['acces'] ?? [], true), $j([$parU['1'] ?? null, $parU['2'] ?? null]));
-v('  → « 5 000 m² · 1 200 000 DH » → 240 DH/m² calculé, lieu INCONNU (Marrakech seulement) ; la villa est typée « villa » ; l\'annonce arabe (3 هكتارات, 900 درهم للمتر) lue',
+v('  → « 5 000 m² · 1 200 000 DH » → 240 DH/m² calculé, lieu INCONNU (Marrakech seulement) ; v37.141 : la VILLA est écartée (pas un terrain) ; l\'annonce arabe (3 هكتارات, 900 درهم للمتر) lue',
   ($parU['3']['surface_m2'] ?? 0) === 5000 && $parU['3']['prix_demande'] === 1200000 && $parU['3']['prix_m2'] === 240 && $parU['3']['lieu'] === null && $parU['3']['marrakech'] === true
-  && ($parU['4']['type'] ?? '') === 'villa' && ($parU['5']['surface_m2'] ?? 0) === 30000 && $parU['5']['prix_m2'] === 900 && $parU['5']['lieu'] === 'واحة سيدي ابراهيم' && $parU['5']['type'] === 'terrain',
-  $j([$parU['3'] ?? null, $parU['4']['type'] ?? null, $parU['5'] ?? null]));
+  && !isset($parU['4']) && ($parU['5']['surface_m2'] ?? 0) === 30000 && $parU['5']['prix_m2'] === 900 && $parU['5']['lieu'] === 'واحة سيدي ابراهيم' && $parU['5']['type'] === 'terrain',
+  $j([$parU['3'] ?? null, $parU['4'] ?? null, $parU['5'] ?? null]));
+//  v37.141 — « CES RÉSULTATS SONT NULS » : les pages de LISTE (« Découvrez 17 annonces… ») et les biens bâtis ne sont pas des prix de terrain
+$anL = cfo_vp_annonces([
+    $A('Découvrez 17 annonces pour Ventes Immobilières à Chaibate - Avito', 'Terrain 9 777 m² 65 000 DH', 'https://www.avito.ma/fr/chaibate/immobilier'),
+    $A('Ventes Immobilières à Bin El Ouidane à vendre - Avito', 'terrain 98 m² 142 800 DH', 'https://www.avito.ma/fr/bin_el_ouidane/ventes_immobilieres'),
+    $A('اكتشف 12 إعلان للبيع أرض الويدان - Avito', 'أرض 5 000 000 درهم', 'https://www.avito.ma/ar/الويدان/عقارات'),
+    $A('Appartement 65 m² Chaibate Marrakech', '230 000 DH', 'https://www.avito.ma/fr/chaibate/appartements/appartement_65_m2_54433210.htm'),
+    $A('Maison à vendre Marrakech Ouahat Sidi Brahim', '1 500 000 DH', 'https://www.avito.ma/fr/marrakech/maisons/maison_54433211.htm'),
+    $A('Terrain 9 777 m² Marrakech Chaibate', '65 000 DH', 'https://www.avito.ma/fr/chaibate/terrains/terrain_54433212.htm'),         // 7 DH/m² : invraisemblable
+    $A('Terrain 1 ha Ouahat Sidi Brahim titré', '1 800 000 DH', 'https://www.avito.ma/fr/marrakech/terrains_et_fermes/terrain_1ha_54433213.htm'),
+    $A('Lot de terrain à vendre Ouahat Sidi Brahim', '2 000 m², 1 100 000 DH', 'https://www.mubawab.ma/fr/sc/terrains-a-vendre:p:2'),   // rubrique Mubawab
+], ['Ouahat Sidi Brahim', 'واحة سيدي ابراهيم'], $now);
+$uL = array_map(fn($x) => basename(parse_url($x['url'], PHP_URL_PATH)), $anL);
+v('v37.141 annonces : pages de liste (« Découvrez 17 annonces… », « Ventes Immobilières à … », « اكتشف 12 إعلان », rubrique Mubawab) ÉCARTÉES ; appartement et maison ÉCARTÉS ; restent les 2 terrains',
+  count($anL) === 2 && in_array('terrain_1ha_54433213.htm', $uL, true) && in_array('terrain_54433212.htm', $uL, true), $j($uL));
+$t7 = array_values(array_filter($anL, fn($x) => str_contains($x['url'], '54433212')))[0] ?? [];
+v('  → « 9 777 m² · 65 000 DH » (7 DH/m², invraisemblable pour un terrain) : prix au m² NON gardé, marqué incohérent ; 1 ha à 1,8 MDH → 180 DH/m²',
+  array_key_exists('prix_m2', $t7) && $t7['prix_m2'] === null && ($t7['prix_incoherent'] ?? false) === true && (array_values(array_filter($anL, fn($x) => str_contains($x['url'], '54433213')))[0]['prix_m2'] ?? 0) === 180, $j($anL));
 v('  → « façade RN9, 210 DH/m² » : 210 DH/m² (le 9 de RN9 n\'est pas collé au prix) ; RN9 lue comme accès', ($parU['8']['prix_m2'] ?? 0) === 210 && in_array('RN9', $parU['8']['acces'] ?? [], true) && ($parU['8']['portee'] ?? '') === 'annonces', $j($parU['8'] ?? null));
 v('  → doublons fusionnés (même lien ; même prix + même surface sur un autre portail) ; Agadir écartée ; celles qui nomment le lieu d\'abord ; ce qui manque reste null',
-  count($an) === 6 && !isset($parU['6']) && !isset($parU['7']) && $an[0]['lieu'] !== null && $an[count($an) - 1]['lieu'] === null && $parU['4']['zonage'] === null && $parU['4']['titre_foncier'] === null,
+  count($an) === 5 && !isset($parU['6']) && !isset($parU['7']) && $an[0]['lieu'] !== null && $an[count($an) - 1]['lieu'] === null && $parU['3']['zonage'] === null && $parU['3']['titre_foncier'] === null,
   $j(array_map(fn($x) => [basename($x['url']), $x['lieu']], $an)));
 $S = fn($t, $ex, $pt, $url, $jours = null) => ['titre' => $t, 'extrait' => $ex, 'url' => $url, 'source' => 'x', 'domaine' => parse_url($url, PHP_URL_HOST), 'portee' => $pt,
     'ts' => $jours === null ? null : $now - $jours * 86400, 'date' => $jours === null ? null : gmdate('Y-m-d', $now - $jours * 86400), 'specifique' => true, 'langue' => 'fr'];

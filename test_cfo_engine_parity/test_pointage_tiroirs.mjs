@@ -218,6 +218,10 @@ try {
     v('  → le Relevé d\'Assafa ne projette plus la prime (ni 23 781, ni 47 562)',
       !m.lignesAssafa.some(([l]) => /PRIME/.test(l)), JSON.stringify(m.lignesAssafa));
     v('  → les chocs restants du cycle : TOIT + ASSURANCE = 6 200, la prime n\'y est plus', m.irr === 6200, String(m.irr));
+    //  attente DÉTERMINISTE (au lieu des 200 ms fixes, trop courts sous la charge de 8 suites) : que le tiroir ⚡ soit rendu sans la prime —
+    //  bornée à 5 s ; si la prime n'en part jamais, le contrôle ci-dessous échoue comme avant
+    await page.waitForFunction(() => { const d = document.querySelector('#pilotage-inbox [data-tiroir="exceptionnel"]');
+        return !d || ![...d.querySelectorAll('[data-tache-nom]')].some(e => /PRIME exceptionnelle/.test(e.textContent)); }, null, { timeout: 5000 }).catch(() => {});
     let f = await file(page);
     v('  → la checklist la montre « Déjà validé » (+ 23 781), plus dans le tiroir ⚡',
       !T(f, 'exceptionnel').lignes.some(l => l.nom === 'PRIME exceptionnelle') && !!f.valide && f.valide.lignes.some(l => l.nom === 'PRIME exceptionnelle' && sansEsp(l.montant) === '+' + nf(23781) + 'DH'),
