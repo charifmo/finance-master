@@ -118,5 +118,17 @@ v('  → fonction hors catalogue : ERROR_OUT_OF_CATALOG', $r2['status'] === 'err
 $l = sante_lecture($etat, '2026-11-03');
 v('G. lecture du CMO : dernier bilan avec statuts, indicateurs, règle « tu lis, tu ne calcules pas »', $l['dernier_bilan']['valeurs']['Triglycérides']['statut'] === 'haut' && $l['dernier_bilan']['indicateurs']['gilbert']['statut'] === 'gilbert' && str_contains($l['regle'], 'ne calcules pas'));
 
+//  v1.26 — composition corporelle et séances (export Samsung Health) : contrôlées comme le reste
+$e4 = sante_normaliser(['compo' => [['date' => '2026-11-12', 'kg' => 110.5, 'graisse_pct' => 34.8, 'muscle_kg' => 39.6, 'eau_kg' => 999], ['date' => '2026-11-12', 'kg' => 110.4, 'muscle_kg' => 39.7],
+                                    ['date' => '2026-11-11', 'kg' => 111], ['date' => 'hier', 'muscle_kg' => 40]],
+                        'seances' => [['id' => 'abc-123', 'date' => '2026-11-13', 'heure' => '07:22', 'nom' => '<b>Marche</b>', 'duree_s' => 2649, 'distance_m' => 3510, 'fc_moy' => 110, 'fc_max' => 999,
+                                       'zones_s' => [100, 600, 1941, 0, 0], 'par_km' => [['km' => 1, 'duree_s' => 752, 'fc' => 108], ['km' => 0.511, 'duree_s' => 411, 'fc' => 125], ['km' => 5, 'duree_s' => 1]], 'vo2max' => 35.4],
+                                      ['id' => '../x', 'date' => '2026-11-13', 'duree_s' => 600], ['id' => 'court', 'date' => '2026-11-13', 'duree_s' => 20]]]);
+v('H. v1.26 composition : une par jour (la dernière lue), valeur hors bornes retirée (eau 999 kg), une pesée sans composition ou une date invalide écartées',
+  count($e4['compo']) === 1 && $e4['compo'][0]['muscle_kg'] === 39.7 && !isset($e4['compo'][0]['eau_kg']) && $e4['compo'][0]['date'] === '2026-11-12');
+$se = $e4['seances'][0] ?? [];
+v('  → séances : identifiant sûr, nom nettoyé, FC max hors bornes retirée, zones gardées, km aberrant (5 km d\'un coup) écarté ; « ../x » et 20 s refusées',
+  count($e4['seances']) === 1 && $se['nom'] === 'Marche' && !isset($se['fc_max']) && $se['zones_s'] === [100, 600, 1941, 0, 0] && count($se['par_km']) === 2 && $se['vo2max'] === 35.4 && $se['heure'] === '07:22');
+
 echo $ko === 0 ? "\n  ✅ TOUT PASSE — $n contrôles\n" : "\n  ❌ $ko contrôle(s) en échec sur $n\n";
 exit($ko === 0 ? 0 : 1);

@@ -9,7 +9,10 @@
     guillemets (JSON). Heures : start_time / end_time en UTC + time_offset (« UTC+0100 ») ; day_time = minuit LOCAL du jour.
     Pas : plusieurs lignes par jour (téléphone, montre, et la ligne « combinée » que Samsung fusionne) → la ligne combinée
     (device_profile.device_group = 0, ou source_info rempli), sinon la plus grande.
-    On n'extrait que ce que l'appli suit : pas, kcal actives, FC moyenne, sommeil, poids. Le reste est ignoré.
+    On n'extrait que ce que l'appli suit : pas, kcal actives, FC moyenne, sommeil, poids — et (v1.26) la COMPOSITION CORPORELLE
+    (masse grasse, muscle squelettique, masse maigre, eau, métabolisme de base, graisse viscérale), les SÉANCES (type, durée,
+    distance, vitesse, FC moyenne / max, calories, pas, dénivelé, VO₂ max ; zones de FC et temps par km tirés du détail
+    jsons/com.samsung.shealth.exercise/…live_data.json) et le VO₂ max. TOUT l'historique de l'export. Le reste est ignoré.
     Navigateur : window.SanteSamsung ; Node : require('./sante_samsung.js'). */
 (function (racine, fabrique) {
     if (typeof module === 'object' && module.exports) module.exports = fabrique();
@@ -26,6 +29,13 @@
         'com.samsung.shealth.sleep': 'sommeil',
         'com.samsung.shealth.sleep_combined': 'sommeil_combine',
         'com.samsung.health.device_profile': 'appareils',
+        //  v1.26 — composition corporelle (balance, montre BIA), séances, VO₂ max
+        'com.samsung.health.body_composition': 'compo',
+        'com.samsung.shealth.exercise': 'seances',
+        'com.samsung.health.exercise': 'seances',
+        'com.samsung.shealth.vo2_max': 'vo2',
+        'com.samsung.health.vo2_max': 'vo2',
+        'com.samsung.shealth.vo2max': 'vo2',
     };
     const RE_NOM = /(?:^|\/)(com\.samsung\.[a-z0-9_.]+?)\.(\d{8,})\.csv$/i;
     const RE_BINNING_PAS = /(?:^|\/)jsons\/com\.samsung\.shealth\.tracker\.pedometer_day_summary\/.*\.json$/i;
@@ -35,6 +45,21 @@
     /** Faut-il lire ce fichier ? (avant même de l'ouvrir : un export complet compte des milliers de fichiers) */
     const estUtile = (nom) => { const t = typeDuNom(nom); return !!(t && UTILES[t]); };
     const estBinningPas = (nom) => RE_BINNING_PAS.test(String(nom || '').replace(/\\/g, '/'));
+    //  v1.26 — le détail d'une séance : « <uuid>.com.samsung.health.exercise.live_data.json » (FC, vitesse… au fil de la séance) et
+    //  « <uuid>…location_data.json » (le tracé). Samsung ne publie pas le format ; selon la version de l'export, ces fichiers sont sous
+    //  jsons/com.samsung.shealth.exercise/<x>/ ou ailleurs (files/…), parfois COMPRESSÉS en gzip : on les cherche partout, par leur nom.
+    const RE_LIVE = /(?:^|\/)([^/.]+)\.[^/]*live_data[^/]*$/i;
+    const RE_LOC = /(?:^|\/)([^/.]+)\.[^/]*location_data[^/]*$/i;
+    const estLiveData = (nom) => { const n = String(nom || '').replace(/\\/g, '/'); return RE_LIVE.test(n) || RE_LOC.test(n); };
+    /** Le texte d'un fichier lu en octets : décompressé s'il est en gzip (1f 8b), sinon décodé tel quel (UTF-8). */
+    async function texteDe(octets) {
+        const u = octets instanceof Uint8Array ? octets : new Uint8Array(octets);
+        if (u.length > 2 && u[0] === 0x1f && u[1] === 0x8b && typeof DecompressionStream !== 'undefined') {
+            try { return new TextDecoder().decode(new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer())); }
+            catch (e) { return ''; }
+        }
+        return new TextDecoder().decode(u);
+    }
     const estExportSamsung = (nom) => !!typeDuNom(nom) || /(?:^|\/)(jsons|files)\/com\.samsung\./i.test(String(nom || '').replace(/\\/g, '/'));
 
     /** CSV (guillemets, virgules et retours à la ligne dans les champs, BOM). */
@@ -161,7 +186,124 @@
             });
             Object.entries(parJour).forEach(([d, p]) => { jour(d).pas = Math.round(p); sources.pas = 'jsons (détail 10 min)'; });
         }
-        return { jours, pesees: Object.entries(pesees).map(([date, p]) => ({ date, kg: p.kg })).sort((a, b) => a.date < b.date ? -1 : 1), lus, sources };
+        //  v1.26 — LA COMPOSITION CORPORELLE : dans la table des pesées (montre, balance connectée) ou dans body_composition ;
+        //  la dernière mesure du jour qui porte au moins une valeur de composition
+        const compo = {};
+        const COMPO = [['graisse_pct', 'body_fat', 2, 75], ['graisse_kg', 'body_fat_mass', 1, 250], ['muscle_kg', 'skeletal_muscle_mass', 5, 150], ['masse_maigre_kg', 'fat_free_mass', 15, 250],
+                       ['muscle_total_kg', 'muscle_mass', 10, 250], ['eau_kg', 'total_body_water', 10, 150], ['bmr_kcal', 'basal_metabolic_rate', 500, 5000], ['graisse_viscerale', 'vfa_level', 1, 60]];
+        const lireCompo = (t) => {
+            const iS = t.col('start_time'), iO = t.col('time_offset'), iW = t.col('weight'), cols = COMPO.map(([k, c, a, b]) => [k, t.col(c), a, b]);
+            if (!cols.some(([, i]) => i >= 0)) return;
+            t.lignes.forEach(r => {
+                const d = dateLocale(r[iS], iO >= 0 ? decalage(r[iO]) : null, defaut), ms = msDe(r[iS]); if (!d) return;
+                const m = {}; cols.forEach(([k, i, a, b]) => { const v = i >= 0 ? num(r[i]) : null; if (v !== null && v >= a && v <= b) m[k] = Math.round(v * 10) / 10; });
+                if (!Object.keys(m).length) return;
+                const kg = iW >= 0 ? num(r[iW]) : null; if (kg !== null && kg >= 20 && kg <= 400) m.kg = Math.round(kg * 10) / 10;
+                if (!compo[d] || ms >= compo[d].ms) compo[d] = { ms, ...m };
+            });
+        };
+        chaque('poids', lireCompo);
+        chaque('compo', lireCompo);
+
+        //  v1.26 — LE VO₂ MAX : sa table (s'il y en a une) et celui de chaque séance
+        const vo2 = {};
+        const noterVo2 = (d, v, ms) => { if (d && v !== null && v >= 10 && v <= 90 && (!vo2[d] || ms >= vo2[d].ms)) vo2[d] = { ms, v: Math.round(v * 10) / 10 }; };
+        chaque('vo2', (t) => { const iS = t.col('start_time'), iO = t.col('time_offset'), iV = [t.col('vo2_max'), t.col('vo2max'), t.col('value')].find(i => i >= 0) ?? -1;
+            t.lignes.forEach(r => noterVo2(dateLocale(r[iS], iO >= 0 ? decalage(r[iO]) : null, defaut), iV >= 0 ? num(r[iV]) : null, msDe(r[iS]))); });
+
+        //  v1.26 — LES SÉANCES : une ligne par séance ; le détail (live_data) donne les zones de FC et les temps par km
+        const live = {}, loc = {};
+        (fichiers || []).forEach(f => { const n = String(f.nom || '').replace(/\\/g, '/'); let m = RE_LIVE.exec(n); if (m) live[m[1].toLowerCase()] = f.texte; else if ((m = RE_LOC.exec(n))) loc[m[1].toLowerCase()] = f.texte; });
+        const fcMax = options && Number.isFinite(options.fcMax) && options.fcMax > 100 ? options.fcMax : null;
+        const seances = {};
+        chaque('seances', (t) => {
+            const c = (n) => t.col(n);
+            const iS = c('start_time'), iE = c('end_time'), iO = c('time_offset'), iT = c('exercise_type'), iDu = c('duration'), iDi = c('distance'), iK = c('calorie'),
+                  iFm = c('mean_heart_rate'), iFx = c('max_heart_rate'), iFn = c('min_heart_rate'), iVm = c('mean_speed'), iVx = c('max_speed'), iAg = c('altitude_gain'),
+                  iN = c('count'), iNt = c('count_type'), iU = c('datauuid'), iL = c('live_data'), iV = [c('vo2_max'), c('vo2max')].find(i => i >= 0) ?? -1, iTi = [c('title'), c('custom_type')].find(i => i >= 0) ?? -1;
+            t.lignes.forEach(r => {
+                const dec = iO >= 0 ? decalage(r[iO]) : null, d = dateLocale(r[iS], dec, defaut), debut = msDe(r[iS]); if (!d || debut === null) return;
+                const fin = iE >= 0 ? msDe(r[iE]) : null;
+                let duree = iDu >= 0 ? num(r[iDu]) : null; duree = duree !== null && duree > 0 ? duree / 1000 : (fin && fin > debut ? (fin - debut) / 1000 : null);
+                if (!duree || duree < 60 || duree > 24 * 3600) return;
+                const type = iT >= 0 ? num(r[iT]) : null, uuid = iU >= 0 ? String(r[iU] || '').trim() : '';
+                const s = { id: uuid || 'S' + debut, date: d, heure: new Date(debut + 60000 * (dec ?? defaut)).toISOString().slice(11, 16), type, nom: nomSeance(type, iTi >= 0 ? r[iTi] : ''), duree_s: Math.round(duree) };
+                const pose = (k, i, f = 1, a = 0, b = Infinity, dec1 = 0) => { const v = i >= 0 ? num(r[i]) : null; if (v !== null && v * f >= a && v * f <= b) s[k] = dec1 ? Math.round(v * f * 10 ** dec1) / 10 ** dec1 : Math.round(v * f); };
+                pose('distance_m', iDi, 1, 1, 500000); pose('kcal', iK, 1, 1, 10000); pose('fc_moy', iFm, 1, 30, 230); pose('fc_max', iFx, 1, 30, 240); pose('fc_min', iFn, 1, 25, 230);
+                pose('vitesse_kmh', iVm, 3.6, 0.1, 120, 1); pose('vitesse_max_kmh', iVx, 3.6, 0.1, 150, 1); pose('denivele_m', iAg, 1, 0, 10000);
+                if (iN >= 0 && (iNt < 0 || /^(30001|0|1)?$/.test(String(r[iNt]).trim()))) pose('pas', iN, 1, 1, 200000);   // count_type 30001 = pas
+                if (iV >= 0) { const v = num(r[iV]); if (v !== null && v >= 10 && v <= 90) { s.vo2max = Math.round(v * 10) / 10; noterVo2(d, v, debut); } }
+                const cle = uuid.toLowerCase() || (iL >= 0 ? String(r[iL] || '').split('.')[0].toLowerCase() : '');
+                if (live[cle] || loc[cle]) Object.assign(s, detailSeance(live[cle] || '[]', debut, fcMax, loc[cle]));
+                if (s.distance_m && !s.vitesse_kmh) s.vitesse_kmh = Math.round(s.distance_m / s.duree_s * 36) / 10;
+                seances[s.id] = s;
+            });
+        });
+        return { jours, pesees: Object.entries(pesees).map(([date, p]) => ({ date, kg: p.kg })).sort((a, b) => a.date < b.date ? -1 : 1), lus, sources,
+                 compo: Object.entries(compo).map(([date, x]) => { const { ms, ...m } = x; return { date, ...m }; }).sort((a, b) => a.date < b.date ? -1 : 1),
+                 vo2: Object.entries(vo2).map(([date, x]) => ({ date, vo2max: x.v })).sort((a, b) => a.date < b.date ? -1 : 1),
+                 seances: Object.values(seances).sort((a, b) => (a.date + a.heure) < (b.date + b.heure) ? -1 : 1) };
+    }
+
+    //  v1.26 — le nom d'une séance d'après son code Samsung (codes publiés du SDK Samsung Health) ; inconnu : on le dit, on ne devine pas
+    const TYPES_SEANCE = { 1001: 'Marche', 1002: 'Course', 11007: 'Vélo', 13001: 'Randonnée', 14001: 'Natation', 9002: 'Yoga', 0: 'Séance personnalisée' };
+    function nomSeance(type, titre) {
+        const t = String(titre || '').trim();
+        if (t && !/^\d+$/.test(t)) return t.slice(0, 40);
+        return type !== null && TYPES_SEANCE[type] ? TYPES_SEANCE[type] : (type !== null ? 'Séance (type ' + type + ')' : 'Séance');
+    }
+
+    /**
+     * v1.26 — le détail d'une séance (live_data : [{ start_time (ms), heart_rate, speed (m/s), distance (m) … }]) →
+     * zones de FC (secondes par zone, en % de la FC max : < 60, 60-70, 70-80, 80-90, ≥ 90) et temps par km (+ le reste).
+     * La distance du détail est cumulée (croissante) ou par intervalle : les deux sont reconnues.
+     */
+    function detailSeance(texte, debut, fcMax, texteLoc) {
+        const lire = (t) => { try { const x = JSON.parse(t || '[]'); return Array.isArray(x) ? x : []; } catch (e) { return []; } };
+        const items = lire(texte);
+        let pts = items.map(it => ({ t: num(it && it.start_time), fc: num(it && it.heart_rate), d: num(it && it.distance), v: num(it && it.speed) })).filter(p => p.t !== null).sort((a, b) => a.t - b.t);
+        //  la distance au fil de la séance : la clé « distance » du détail si elle existe ; sinon le TRACÉ (location_data : latitude,
+        //  longitude) ; sinon la vitesse (m/s) intégrée dans le temps. Aucune des trois : pas de temps par km (rien d'inventé).
+        if (!pts.some(p => p.d !== null)) {
+            const g = lire(texteLoc).map(it => ({ t: num(it && it.start_time), la: num(it && it.latitude), lo: num(it && it.longitude) })).filter(p => p.t !== null && p.la !== null && p.lo !== null).sort((a, b) => a.t - b.t);
+            if (g.length >= 2) {
+                const rad = Math.PI / 180; let c = 0;
+                const tr = g.map((p, i) => { if (i) { const a = g[i - 1], x = Math.sin((p.la - a.la) * rad / 2) ** 2 + Math.cos(a.la * rad) * Math.cos(p.la * rad) * Math.sin((p.lo - a.lo) * rad / 2) ** 2; c += 2 * 6371000 * Math.asin(Math.sqrt(x)); } return { t: p.t, fc: null, d: c }; });
+                pts = pts.concat(tr).sort((a, b) => a.t - b.t);
+            } else if (pts.filter(p => p.v !== null).length >= 2) {
+                let c = 0, tPrec = null;
+                pts.forEach(p => { if (p.v !== null && p.v >= 0) { if (tPrec !== null) c += p.v * Math.min(60, (p.t - tPrec) / 1000); tPrec = p.t; p.d = c; } });
+            }
+        }
+        if (!pts.length) return {};
+        const out = {};
+        const fcs = pts.filter(p => p.fc !== null && p.fc >= 30 && p.fc <= 240);
+        if (fcs.length >= 2) {
+            const fmax = fcMax || null;
+            if (fmax) {
+                const z = [0, 0, 0, 0, 0];
+                fcs.forEach((p, i) => { const dt = i + 1 < fcs.length ? Math.min(60, (fcs[i + 1].t - p.t) / 1000) : 1; const pc = p.fc / fmax; z[pc < 0.6 ? 0 : pc < 0.7 ? 1 : pc < 0.8 ? 2 : pc < 0.9 ? 3 : 4] += dt; });
+                out.zones_s = z.map(Math.round); out.fc_max_ref = fmax;
+            }
+        }
+        const ds = pts.filter(p => p.d !== null && p.d >= 0);
+        if (ds.length >= 2) {
+            const croissante = ds.every((p, i) => i === 0 || p.d >= ds[i - 1].d);
+            let cumul = 0; const tl = ds.map(p => { cumul = croissante ? p.d : cumul + p.d; return { t: p.t, d: cumul }; });
+            const km = []; let k = 1, tPrec = Math.min(debut || tl[0].t, tl[0].t), dPrec = 0;
+            for (let i = 1; i < tl.length; i++) {
+                while (tl[i].d >= k * 1000) {
+                    const a = tl[i - 1], b = tl[i], f = b.d > a.d ? (k * 1000 - a.d) / (b.d - a.d) : 1, tk = a.t + f * (b.t - a.t);
+                    const seg = fcs.filter(p => p.t >= tPrec && p.t <= tk);
+                    km.push({ km: 1, duree_s: Math.round((tk - tPrec) / 1000), fc: seg.length ? Math.round(seg.reduce((s, p) => s + p.fc, 0) / seg.length) : null });
+                    tPrec = tk; dPrec = k * 1000; k++;
+                }
+            }
+            const der = tl[tl.length - 1], reste = der.d - dPrec;
+            if (reste >= 50) { const seg = fcs.filter(p => p.t >= tPrec); km.push({ km: Math.round(reste) / 1000, duree_s: Math.round((der.t - tPrec) / 1000), fc: seg.length ? Math.round(seg.reduce((s, p) => s + p.fc, 0) / seg.length) : null }); }
+            if (km.length) out.par_km = km.slice(0, 200);
+        }
+        return out;
     }
 
     /**
@@ -203,10 +345,10 @@
             if (methode === 0) contenu = brut;
             else if (methode === 8) contenu = new Uint8Array(await new Response(new Blob([brut]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
             else continue;
-            sortie.push({ nom, texte: dec.decode(contenu) });
+            sortie.push({ nom, texte: estLiveData(nom) ? await texteDe(contenu) : dec.decode(contenu) });   // v1.26 : détail de séance gzip
         }
         return sortie;
     }
 
-    return { UTILES, typeDuNom, estUtile, estBinningPas, estExportSamsung, csvLignes, table, decalage, dateLocale, extraire, lireZip };
+    return { UTILES, typeDuNom, estUtile, estBinningPas, estLiveData, texteDe, estExportSamsung, csvLignes, table, decalage, dateLocale, extraire, lireZip, detailSeance, nomSeance };
 });

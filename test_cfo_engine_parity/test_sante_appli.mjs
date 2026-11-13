@@ -338,7 +338,7 @@ z.close()`, src, zip]);
         await attendreEnregistre(p6);
         const f = lireFichier(), msg = await p6.textContent('[data-message-csv]');
         v('M. export Samsung Health en .zip, d\'un seul geste : pas de la ligne COMBINÉE (8 123), sommeil 420 min, pesée — enregistrés', f.journal[d(2)] && f.journal[d(2)].samsung.pas === 8123 && f.journal[d(2)].samsung.sommeil_min === 420 && f.poids.some(p => p.date === d(2) && p.kg === 95.6 && p.source === 'samsung'), [msg, f.journal[d(2)]]);
-        v('  → plus d\'un an : pas dans le journal, mais la pesée rejoint la courbe ; exercice et photos ignorés', !f.journal[d(500)] && f.poids.some(p => p.date === d(500) && p.kg === 101.2) && !Object.values(f.journal).some(j => (j.samsung || {}).pas === 99999), msg);
+        v('  → v1.26 : TOUT l\'historique — 500 jours : dans le journal ET la pesée sur la courbe ; une séance sans durée et les photos ignorées', !!f.journal[d(500)] && f.poids.some(p => p.date === d(500) && p.kg === 101.2) && !Object.values(f.journal).some(j => (j.samsung || {}).pas === 99999), msg);
         v('  → le message dit ce qui a été lu (jours de pas, nuits, pesées)', /jour\(s\) importé\(s\)/.test(msg) && /de pas/.test(msg) && /nuits/.test(msg) && /pesée/.test(msg), msg);
         await p6.close();
     });
@@ -744,6 +744,60 @@ z.close()`, src, zip]);
         await pm.click('[data-valider-ia]'); await pm.waitForFunction(() => /pas encore publié/.test((document.querySelector('[data-ia-message]') || {}).textContent || ''), null, { timeout: 5000 });
         v('  → agent injoignable (502) : la raison du serveur est affichée', /Validation impossible/.test(await pm.textContent('[data-ia-message]')));
         await pm.close();
+    });
+    await section('U', async () => {
+        //  v1.26 — « JE VEUX DANS L'APPLI TOUT CE QUE SAMSUNG A, AVEC L'HISTORIQUE » : un export (FICTIF) importé depuis l'écran
+        fs.rmSync(DATA, { force: true });
+        const pu = await ouvrir();
+        const erreursU = []; pu.on('pageerror', e => erreursU.push(String(e)));
+        await pu.click('[data-charger-demo]'); await pu.waitForTimeout(300); await attendreEnregistre(pu);
+        const iso = (j) => new Date(Date.now() - j * 864e5).toISOString().slice(0, 10);
+        const dS = iso(2), dC1 = iso(400), dC2 = iso(20), dC3 = iso(3);
+        const csv = (type, tete, lignes) => `${type},6313005,${lignes.length}\n${tete.join(',')},\n` + lignes.map(l => l.join(',') + ',').join('\n') + '\n';
+        const t0 = Date.parse(dS + 'T06:22:00Z'), live = [];
+        for (let s = 0; s <= 2640; s += 10) live.push({ start_time: t0 + s * 1000, heart_rate: Math.round(95 + 30 * Math.min(1, s / 600)), distance: Math.round(s * 1.33) });
+        const R = 'samsunghealth_testeur_20261113091500/';
+        const fichiers = [
+            [R + 'com.samsung.health.weight.20261113091500.csv', csv('com.samsung.health.weight', ['start_time', 'time_offset', 'weight', 'body_fat', 'body_fat_mass', 'skeletal_muscle_mass', 'total_body_water', 'basal_metabolic_rate'],
+                [[dC1 + ' 06:00:00.000', 'UTC+0100', '103.1', '33.0', '34.0', '37.9', '50.6', '2010'], [dC2 + ' 06:00:00.000', 'UTC+0100', '111.4', '35.2', '39.2', '39.4', '52.9', '2088'], [dC3 + ' 06:00:00.000', 'UTC+0100', '110.5', '34.8', '38.5', '39.6', '52.7', '2083']])],
+            [R + 'com.samsung.shealth.exercise.20261113091500.csv', csv('com.samsung.shealth.exercise',
+                ['start_time', 'end_time', 'time_offset', 'exercise_type', 'duration', 'distance', 'calorie', 'mean_heart_rate', 'max_heart_rate', 'mean_speed', 'altitude_gain', 'count', 'count_type', 'vo2_max', 'datauuid', 'live_data'],
+                [[dS + ' 06:22:00.000', dS + ' 07:06:09.000', 'UTC+0100', '1001', '2649000', '3510', '351', '110', '125', '1.33', '8', '4636', '30001', '35.4', 'abc-123', 'abc-123.com.samsung.health.exercise.live_data.json'],
+                 [dC1 + ' 17:00:00.000', dC1 + ' 17:30:00.000', 'UTC+0100', '1002', '1800000', '4000', '300', '140', '165', '2.2', '', '', '', '', 'old-1', '']])],
+            [R + 'jsons/com.samsung.shealth.exercise/a/abc-123.com.samsung.health.exercise.live_data.json', JSON.stringify(live)],
+        ];
+        await pu.evaluate(async ({ ST, fichiers }) => {
+            const l = fichiers.map(([chemin, texte]) => { const f = new File([texte], chemin.split('/').pop(), { type: chemin.endsWith('.csv') ? 'text/csv' : 'application/json' }); f._chemin = chemin; return f; });
+            await eval(ST).importerSamsung(l);
+        }, { ST, fichiers });
+        await attendreEnregistre(pu);
+        const msg = await pu.evaluate((ST) => eval(ST).messageCsv, ST);
+        v('U. v1.26 : l\'export importé depuis l\'écran — composition, séances (avec leur détail) et VO₂ max comptés dans le message',
+          /3 mesure\(s\) de composition/.test(msg) && /2 séance\(s\)/.test(msg) && /1 VO₂ max/.test(msg), msg);
+        const f = lireFichier(), m = (f.seances || []).find(s => s.id === 'abc-123') || {};
+        v('  → enregistré par le serveur (contrôlé) : 3 mesures de composition, dont celle d\'il y a 400 jours (historique complet), 2 séances',
+          (f.compo || []).length === 3 && f.compo[0].date === dC1 && f.compo[2].muscle_kg === 39.6 && (f.seances || []).length === 2, { compo: f.compo, n: (f.seances || []).length });
+        v('  → la marche : 3,51 km, 351 kcal, FC 110 / 125, zones de FC (FC max = 220 − âge du profil) et 4 temps par km', m.distance_m === 3510 && m.kcal === 351 && m.fc_max === 125
+          && Array.isArray(m.zones_s) && m.zones_s.length === 5 && m.fc_max_ref >= 150 && (m.par_km || []).length === 4, m);
+        await pu.click('[data-onglet="poids"]'); await pu.waitForTimeout(300);
+        await pu.click('[data-compo-periode="jours"]'); await pu.click('[data-compo-mesure="muscle_kg"]'); await pu.waitForTimeout(250);
+        const st = (await pu.textContent('[data-compo-stats]')).replace(/\s+/g, ' ');
+        v('  → Composition › Jours › Muscle squelettique : moyenne des 30 derniers jours (39,5 kg), min 39,4, max 39,6, la courbe dessinée',
+          /Moyenne\s*39,5 kg/.test(st) && /Min 39,4 · Max 39,6/.test(st) && /30 derniers jours/.test(st) && await pu.evaluate(() => !!Chart.getChart(document.getElementById('graphCompo'))), st);
+        await pu.click('[data-compo-periode="mois"]'); await pu.click('[data-compo-mesure="graisse_pct"]'); await pu.waitForTimeout(250);
+        v('  → Mois › Graisse : « 12 derniers mois (moyenne de chaque mois) », en %', /12 derniers mois/.test(await pu.textContent('[data-compo-stats]')) && /%/.test(await pu.textContent('[data-compo-stats]')));
+        v('  → la dernière mesure complète : muscle, masse grasse, eau, métabolisme de base', /Muscle squelettique\s*39,6 kg/.test((await pu.textContent('[data-compo-derniere]')).replace(/\s+/g, ' ')) && /Métabolisme de base/.test(await pu.textContent('[data-compo-derniere]')));
+        const li = (await pu.textContent('[data-seance][data-id="abc-123"]')).replace(/\s+/g, ' ');
+        v('  → Séances : la plus récente en tête, son résumé (44 min, 3,51 km, 4,8 km/h, 110 bpm, 351 kcal) ; badge VO₂ max 35,4 « passable »',
+          (await pu.$$eval('[data-seance]', l => l.map(x => x.dataset.id)))[0] === 'abc-123' && /44 min 09 s · 3,51 km · 4,8 km\/h · ❤️ 110 bpm · 🔥 351 kcal/.test(li) && /VO₂ max 35,4 · passable/.test(await pu.textContent('[data-vo2]')), li);
+        await pu.click('[data-seance][data-id="abc-123"] button'); await pu.waitForTimeout(200);
+        const z = (await pu.textContent('[data-seance][data-id="abc-123"] [data-seance-zones]')).replace(/\s+/g, ' ');
+        v('  → détail : zones de FC (Maximum → Récupération, durée et %, bornes en bpm) et le tableau des temps par km (4 lignes)',
+          /Maximum/.test(z) && /Aérobie/.test(z) && /Récupération/.test(z) && /bpm/.test(z) && (await pu.$$('[data-seance][data-id="abc-123"] [data-seance-km] tbody tr')).length === 4, z.slice(0, 300));
+        await pu.click('[data-seance][data-id="old-1"] button'); await pu.waitForTimeout(150);
+        v('  → la course ancienne sans détail : « rien n’est inventé », ni zones ni temps par km', /rien n’est inventé/.test(await pu.textContent('[data-seance][data-id="old-1"]')));
+        v('  → aucune erreur JavaScript (composition et séances)', erreursU.length === 0, erreursU.join(' | '));
+        await pu.close();
     });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {

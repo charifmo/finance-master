@@ -10,10 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- v1.4 — la version dans l'adresse : une nouvelle version ne peut plus tourner avec les anciens fichiers gardés en cache
          (page blanche : « suiviPlan is not a function »). Garder ?v= égal à VERSION (contrôlé par test_sante_appli.mjs). -->
-    <script src="sante_calculs.js?v=1.25"></script>
-    <script src="sante_import.js?v=1.25"></script>
-    <script src="sante_samsung.js?v=1.25"></script>
-    <script src="sante_protocole.js?v=1.25"></script>
+    <script src="sante_calculs.js?v=1.26"></script>
+    <script src="sante_import.js?v=1.26"></script>
+    <script src="sante_samsung.js?v=1.26"></script>
+    <script src="sante_protocole.js?v=1.26"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
         .carte { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
@@ -706,6 +706,76 @@
                 </div>
             </div>
             <div class="carte p-4"><canvas id="graphPoids" height="80"></canvas></div>
+            <!-- v1.26 — COMPOSITION CORPORELLE : poids, muscle squelettique, masse grasse, % de graisse — par jour, semaine ou mois, comme Samsung Health -->
+            <div class="carte p-4 space-y-3" data-compo>
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="font-black text-emerald-900 mr-auto">🧍 Composition corporelle</h2>
+                    <button v-for="p in PERIODES_COMPO" :key="p[0]" type="button" :data-compo-periode="p[0]" @click="compoVue.periode = p[0]"
+                            :class="['px-3 py-1 rounded-full text-xs font-black', compoVue.periode === p[0] ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200']">{{ p[1] }}</button>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button v-for="m in MESURES_COMPO" :key="m.id" type="button" :data-compo-mesure="m.id" @click="compoVue.mesure = m.id"
+                            :class="['px-3 py-1 rounded-full text-xs font-bold border', compoVue.mesure === m.id ? 'bg-slate-800 text-white border-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-50']">{{ m.nom }}</button>
+                </div>
+                <div v-if="serieCompo.points.length" class="flex flex-wrap items-end gap-x-6 gap-y-1" data-compo-stats>
+                    <p><span class="text-[10px] font-black uppercase text-slate-400">Moyenne</span><br><b class="text-3xl tabnum">{{ fmt1(serieCompo.moyenne) }}</b> <span class="text-sm">{{ serieCompo.unite }}</span></p>
+                    <p class="text-sm text-slate-600">Min <b class="tabnum">{{ fmt1(serieCompo.min) }}</b> · Max <b class="tabnum">{{ fmt1(serieCompo.max) }}</b></p>
+                    <p v-if="serieCompo.ecart !== null" class="text-sm font-bold" :class="serieCompo.ecart < 0 ? 'text-emerald-700' : (serieCompo.ecart > 0 ? 'text-rose-700' : 'text-slate-500')" data-compo-ecart>{{ serieCompo.ecart > 0 ? '+' : '' }}{{ fmt1(serieCompo.ecart) }} {{ serieCompo.unite }} sur la période</p>
+                    <p class="text-[11px] text-slate-500">{{ serieCompo.libellePeriode }}</p>
+                </div>
+                <p v-else class="text-sm text-slate-500" data-compo-vide>Aucune mesure « {{ (MESURES_COMPO.find(m => m.id === compoVue.mesure) || {}).nom }} » sur cette période. La composition vient de l’export Samsung Health (montre ou balance connectée) : importez le .zip ci-dessous.</p>
+                <div v-show="serieCompo.points.length" class="relative" style="height: 15rem"><canvas id="graphCompo"></canvas></div>
+                <div v-if="derniereCompo" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs" data-compo-derniere>
+                    <p class="col-span-2 md:col-span-4 text-[10px] font-black uppercase text-slate-400">Dernière mesure complète · {{ dateLisible(derniereCompo.date) }}</p>
+                    <p v-for="m in MESURES_COMPO_DETAIL.filter(m => derniereCompo[m.id] != null)" :key="m.id" class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">{{ m.nom }}</span><br><b class="tabnum text-sm">{{ fmt1(derniereCompo[m.id]) }}</b> {{ m.unite }}</p>
+                </div>
+            </div>
+            <!-- v1.26 — LES SÉANCES : chacune avec sa distance, sa vitesse, sa FC, ses calories, ses zones de FC et ses temps par km -->
+            <div class="carte p-4 space-y-3" data-seances>
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="font-black text-emerald-900 mr-auto">🏃 Séances <span class="text-slate-400 font-bold text-sm">({{ (etat.seances || []).length }})</span></h2>
+                    <span v-if="dernierVo2" class="text-xs font-black px-2 py-1 rounded-full bg-amber-50 text-amber-800" data-vo2>VO₂ max {{ fmt1(dernierVo2.v) }} · {{ niveauVo2(dernierVo2.v) }} · {{ dateCourte(dernierVo2.date) }}</span>
+                    <select v-model="seancesVue.type" data-seances-type class="border rounded-lg px-2 py-1 text-xs"><option value="">toutes</option><option v-for="t in typesSeances" :key="t" :value="t">{{ t }}</option></select>
+                </div>
+                <p v-if="!seancesListe.length" class="text-sm text-slate-500" data-seances-vide>Aucune séance. Elles viennent de l’export Samsung Health (.zip) : importez-le ci-dessous, tout l’historique est lu.</p>
+                <ul class="divide-y divide-slate-100">
+                    <li v-for="s in seancesListe.slice(0, seancesVue.n)" :key="s.id" data-seance :data-id="s.id" class="py-2">
+                        <button type="button" class="w-full text-left flex flex-wrap items-baseline gap-x-3 gap-y-0.5" @click="seancesVue.ouverte = seancesVue.ouverte === s.id ? null : s.id">
+                            <b class="text-sm">{{ s.nom }}</b>
+                            <span class="text-xs text-slate-500">{{ dateLisible(s.date) }}{{ s.heure ? ' · ' + s.heure : '' }}</span>
+                            <span class="text-sm tabnum" data-seance-resume>{{ dureeLisible(s.duree_s) }}<template v-if="s.distance_m"> · {{ fmt2(s.distance_m / 1000) }} km</template><template v-if="s.vitesse_kmh"> · {{ fmt1(s.vitesse_kmh) }} km/h</template><template v-if="s.fc_moy"> · ❤️ {{ s.fc_moy }} bpm</template><template v-if="s.kcal"> · 🔥 {{ s.kcal }} kcal</template></span>
+                            <span class="ml-auto text-xs text-emerald-700 font-bold">{{ seancesVue.ouverte === s.id ? '▾' : '▸' }}</span>
+                        </button>
+                        <div v-if="seancesVue.ouverte === s.id" class="mt-2 space-y-3" data-seance-detail>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                <p class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">Durée</span><br><b class="text-sm tabnum">{{ dureeLisible(s.duree_s) }}</b></p>
+                                <p v-if="s.distance_m" class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">Distance</span><br><b class="text-sm tabnum">{{ fmt2(s.distance_m / 1000) }}</b> km</p>
+                                <p v-if="s.vitesse_kmh" class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">Vitesse moyenne</span><br><b class="text-sm tabnum">{{ fmt1(s.vitesse_kmh) }}</b> km/h<span v-if="s.distance_m" class="text-slate-400"> · {{ allure(s) }}/km</span></p>
+                                <p v-if="s.fc_moy" class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">FC moyenne / max</span><br><b class="text-sm tabnum">{{ s.fc_moy }}</b>{{ s.fc_max ? ' / ' + s.fc_max : '' }} bpm</p>
+                                <p v-if="s.kcal" class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">Calories</span><br><b class="text-sm tabnum">{{ s.kcal }}</b> kcal</p>
+                                <p v-if="s.pas" class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">Pas</span><br><b class="text-sm tabnum">{{ fmt(s.pas) }}</b></p>
+                                <p v-if="s.denivele_m != null" class="rounded-lg bg-slate-50 p-2"><span class="text-slate-500">Dénivelé</span><br><b class="text-sm tabnum">{{ s.denivele_m }}</b> m</p>
+                                <p v-if="s.vo2max" class="rounded-lg bg-amber-50 p-2"><span class="text-slate-500">VO₂ max</span><br><b class="text-sm tabnum">{{ fmt1(s.vo2max) }}</b> · {{ niveauVo2(s.vo2max) }}</p>
+                            </div>
+                            <div v-if="s.zones_s" data-seance-zones>
+                                <p class="text-[10px] font-black uppercase text-slate-400">Zones de fréquence cardiaque <span class="normal-case font-bold">(calculées en % de la FC max {{ s.fc_max_ref }} bpm)</span></p>
+                                <div v-for="(z, i) in ZONES_FC.slice().reverse()" :key="z.n" class="flex items-center gap-2 text-xs mt-1">
+                                    <span class="w-40 shrink-0">{{ z.n }} · {{ z.nom }}</span>
+                                    <span class="flex-1 h-2 rounded bg-slate-100 overflow-hidden"><span class="block h-2 rounded" :style="{ width: pctZone(s, z.n - 1) + '%', background: z.couleur }"></span></span>
+                                    <span class="w-24 text-right tabnum">{{ dureeLisible(s.zones_s[z.n - 1]) }} · {{ pctZone(s, z.n - 1) }} %</span>
+                                    <span class="w-24 text-right text-slate-400 tabnum">{{ bornesZone(s, z.n - 1) }}</span>
+                                </div>
+                            </div>
+                            <table v-if="s.par_km" data-seance-km class="w-full text-xs">
+                                <thead><tr class="text-slate-400 text-left"><th class="font-bold">km</th><th class="font-bold">Temps</th><th class="font-bold">Distance</th><th class="font-bold">FC</th><th class="font-bold">Vitesse</th></tr></thead>
+                                <tbody><tr v-for="(k, i) in s.par_km" :key="i" class="border-t border-slate-100 tabnum"><td>{{ i + 1 }}</td><td>{{ dureeLisible(k.duree_s, true) }}</td><td>{{ fmt2(k.km) }}</td><td>{{ k.fc ?? '—' }}</td><td>{{ fmt1(k.km / k.duree_s * 3600) }} km/h</td></tr></tbody>
+                            </table>
+                            <p v-if="!s.zones_s && !s.par_km" class="text-[11px] text-slate-500">Pas de détail minute par minute pour cette séance dans l’export : ni zones ni temps par km (rien n’est inventé).</p>
+                        </div>
+                    </li>
+                </ul>
+                <button v-if="seancesListe.length > seancesVue.n" type="button" data-seances-plus @click="seancesVue.n += 20" class="text-xs font-black text-emerald-700 underline">Voir 20 séances de plus ({{ seancesListe.length - seancesVue.n }} restantes)</button>
+            </div>
             <div class="carte p-4 space-y-3" data-samsung>
                 <h2 class="font-black text-emerald-900">📲 Samsung Health</h2>
                 <p class="text-sm" data-samsung-jour>Aujourd’hui : {{ fmt(jour.samsung.pas) }} pas · {{ fmt(jour.samsung.kcal_actives) }} kcal actives · FC repos {{ jour.samsung.fc_repos ?? '—' }} · sommeil {{ jour.samsung.sommeil_min == null ? '—' : Math.floor(jour.samsung.sommeil_min / 60) + ' h ' + String(jour.samsung.sommeil_min % 60).padStart(2, '0') }}</p>
@@ -902,7 +972,7 @@
 const { createApp, ref, shallowRef, reactive, computed, watch, onMounted, nextTick } = Vue;
 createApp({
     setup() {
-        const VERSION = '1.25';
+        const VERSION = '1.26';
         const ONGLETS = [
             { id: 'pilotage', icone: '🎯', nom: 'Pilotage' }, { id: 'analyses', icone: '🩸', nom: 'Analyses' }, { id: 'nutrition', icone: '🥗', nom: 'Nutrition' },
             { id: 'plans', icone: '📋', nom: 'Plans' }, { id: 'poids', icone: '📱', nom: 'Samsung & Poids' }, { id: 'cmo', icone: '🧠', nom: 'Médecin-Chef IA' },
@@ -922,13 +992,13 @@ createApp({
         const explications = ref({});
         let C = SanteCalc.creer({});
         const Cref = shallowRef(C);
-        const etat = reactive({ profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {}, regles: [], cibles: {}, objectifs_suivi: [], lecons_plan: [] });
+        const etat = reactive({ profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {}, regles: [], cibles: {}, objectifs_suivi: [], lecons_plan: [], compo: [], seances: [] });
         const version = ref(null), statut = ref('chargement'), charge = ref(false);
         const onglet = ref('pilotage'), dateJour = ref(aujourdhui());
         const messageImport = ref('');
 
         // ── chargement et sauvegarde ──
-        const remplacer = (d) => { Object.keys(etat).forEach(k => delete etat[k]); Object.assign(etat, { profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {}, regles: [], cibles: {}, objectifs_suivi: [], lecons_plan: [] }, d || {}); if (Array.isArray(etat.journal)) etat.journal = {}; if (!etat.plans || Array.isArray(etat.plans)) etat.plans = {}; if (!etat.cibles || Array.isArray(etat.cibles)) etat.cibles = {}; };
+        const remplacer = (d) => { Object.keys(etat).forEach(k => delete etat[k]); Object.assign(etat, { profil: { terrain: [] }, objectifs: {}, bilans: [], poids: [], journal: {}, supplements: [], protocole: [], plans: {}, regles: [], cibles: {}, objectifs_suivi: [], lecons_plan: [], compo: [], seances: [] }, d || {}); if (!Array.isArray(etat.compo)) etat.compo = []; if (!Array.isArray(etat.seances)) etat.seances = []; if (Array.isArray(etat.journal)) etat.journal = {}; if (!etat.plans || Array.isArray(etat.plans)) etat.plans = {}; if (!etat.cibles || Array.isArray(etat.cibles)) etat.cibles = {}; };
         const charger = async () => {
             const [cat, al, ex] = await Promise.all(['biomarqueurs.json', 'aliments.json', 'explications.json'].map(f => fetch(f, { cache: 'no-store' }).then(r => r.json())));
             catalogue.value = cat; aliments.value = al.aliments || {}; explications.value = ex.marqueurs || {};
@@ -1351,6 +1421,8 @@ createApp({
         //  Seuls les CSV utiles sont lus (pas, kcal actives, poids, FC, sommeil) ; photos, détails minute par minute et autres
         //  mesures sont ignorés sans être ouverts. Les jours de plus d'un an ne remplissent pas le journal (les pesées, si).
         const UN_AN = 366, enCours = ref(false);
+        const HISTORIQUE_JOURS = 10 * 366;   // v1.26 : TOUT l'historique de l'export (10 ans au plus), plus seulement la dernière année
+        const lireDansZip = (nom) => SanteSamsung.estUtile(nom) || SanteSamsung.estLiveData(nom);   // v1.26 : + le détail des séances
         const importerSamsung = async (liste) => {
             const fichiers = Array.from(liste || []); if (!fichiers.length || enCours.value) return;
             enCours.value = true; messageCsv.value = '⏳ Lecture de ' + (fichiers.length > 1 ? fichiers.length + ' fichiers' : '« ' + fichiers[0].name + ' »') + '…';
@@ -1361,20 +1433,23 @@ createApp({
                     if (/\.zip$/i.test(f.name) || /zip/i.test(f.type || '')) {
                         try {
                             const buf = await f.arrayBuffer();
-                            const u = await SanteSamsung.lireZip(buf, SanteSamsung.estUtile); utiles.push(...u);
+                            const u = await SanteSamsung.lireZip(buf, lireDansZip); utiles.push(...u);
                             if (!u.some(x => /pedometer_day_summary|step_daily_trend|activity\.day_summary/.test(x.nom))) details.push(...await SanteSamsung.lireZip(buf, SanteSamsung.estBinningPas));
                             if (!u.length) erreurs.push('« ' + f.name + ' » : aucun fichier Samsung Health utile dedans');
                         } catch (e) { erreurs.push('« ' + f.name + ' » : ' + (e.message || e)); }
                     }
-                    else if (SanteSamsung.estUtile(nom)) utiles.push({ nom, texte: await f.text() });
+                    else if (SanteSamsung.estLiveData(nom)) utiles.push({ nom, texte: await SanteSamsung.texteDe(await f.arrayBuffer()) });   // v1.26 : détail de séance, gzip ou non
+                    else if (lireDansZip(nom)) utiles.push({ nom, texte: await f.text() });
                     else if (SanteSamsung.estBinningPas(nom)) details.push(f);
                     else if (/\.csv$/i.test(f.name) && !SanteSamsung.estExportSamsung(nom)) generiques.push(f);
                     else ignores++;
                 }
                 if (!utiles.some(x => /pedometer_day_summary|step_daily_trend|activity\.day_summary/.test(x.nom)))
                     for (let i = 0; i < details.length && i < 4000; i++) if (details[i] instanceof Blob) details[i] = { nom: details[i]._chemin || details[i].webkitRelativePath || details[i].name, texte: await details[i].text() };
-                const r = SanteSamsung.extraire(utiles.concat(details.filter(x => !(x instanceof Blob))), { decalageMin: -new Date().getTimezoneOffset() });
-                const limite = Cref.value.decaler(aujourdhui(), -UN_AN), jours = new Set(), compte = { pas: 0, kcal_actives: 0, fc_moy: 0, sommeil_min: 0 };
+                //  v1.26 : la FC max (pour les zones des séances) : 220 − âge, d'après la date de naissance du profil ; inconnue : pas de zones
+                const fcMax = age.value ? 220 - age.value : undefined;
+                const r = SanteSamsung.extraire(utiles.concat(details.filter(x => !(x instanceof Blob))), { decalageMin: -new Date().getTimezoneOffset(), fcMax });
+                const limite = Cref.value.decaler(aujourdhui(), -HISTORIQUE_JOURS), jours = new Set(), compte = { pas: 0, kcal_actives: 0, fc_moy: 0, sommeil_min: 0 };
                 Object.entries(r.jours).forEach(([d, x]) => {
                     if (d < limite || d > aujourdhui()) return;
                     if (!etat.journal[d]) etat.journal[d] = jourVide();
@@ -1383,11 +1458,21 @@ createApp({
                     jours.add(d);
                 });
                 r.pesees.forEach(p => { if (p.date > aujourdhui()) return; etat.poids = etat.poids.filter(q => !(q.date === p.date && q.source === 'samsung')); etat.poids.push({ date: p.date, kg: p.kg, source: 'samsung' }); });
+                //  v1.26 — composition (une par jour, remplacée), séances (une par identifiant, remplacée), VO₂ max (dans le journal du jour)
+                if (!Array.isArray(etat.compo)) etat.compo = []; if (!Array.isArray(etat.seances)) etat.seances = [];
+                const cp = Object.fromEntries(etat.compo.map(c => [c.date, c]));
+                (r.compo || []).forEach(c => { if (c.date <= aujourdhui()) cp[c.date] = { ...c, source: 'samsung' }; });
+                etat.compo = Object.values(cp).sort((a, b) => a.date < b.date ? -1 : 1);
+                const se = Object.fromEntries(etat.seances.map(s => [s.id, s]));
+                (r.seances || []).forEach(s => { if (s.date <= aujourdhui()) se[s.id] = { ...s, source: 'samsung' }; });
+                etat.seances = Object.values(se).sort((a, b) => (a.date + (a.heure || '')) < (b.date + (b.heure || '')) ? -1 : 1);
+                (r.vo2 || []).forEach(x => { if (x.date > aujourdhui()) return; if (!etat.journal[x.date]) etat.journal[x.date] = jourVide(); const j = etat.journal[x.date]; if (!j.samsung || Array.isArray(j.samsung)) j.samsung = {}; j.samsung.vo2max = x.vo2max; });
                 const fc = {};
                 for (const f of generiques) { if (!appliquerCsvGenerique(await f.text(), jours, fc)) erreurs.push(f.name + ' : colonne de date introuvable'); }
                 etat.poids.sort((a, b) => a.date < b.date ? -1 : 1);
                 const lusSamsung = utiles.length + details.filter(x => !(x instanceof Blob)).length, nbFichiers = lusSamsung + generiques.length;
-                const detail = [compte.pas && compte.pas + ' j de pas', compte.kcal_actives && compte.kcal_actives + ' j de calories', compte.fc_moy && compte.fc_moy + ' j de FC', compte.sommeil_min && compte.sommeil_min + ' nuits', r.pesees.length && r.pesees.length + ' pesée(s)'].filter(Boolean).join(' · ');
+                const detail = [compte.pas && compte.pas + ' j de pas', compte.kcal_actives && compte.kcal_actives + ' j de calories', compte.fc_moy && compte.fc_moy + ' j de FC', compte.sommeil_min && compte.sommeil_min + ' nuits', r.pesees.length && r.pesees.length + ' pesée(s)',
+                                (r.compo || []).length && r.compo.length + ' mesure(s) de composition', (r.seances || []).length && r.seances.length + ' séance(s)', (r.vo2 || []).length && r.vo2.length + ' VO₂ max'].filter(Boolean).join(' · ');
                 messageCsv.value = (!jours.size && !r.pesees.length ? '❌ ' : '') + jours.size + ' jour(s) importé(s)' + (nbFichiers > 1 ? ' depuis ' + nbFichiers + ' fichiers' : '') + '.'
                     + (detail ? ' ' + detail + '.' : '')
                     + (ignores ? ' ' + ignores + ' fichier(s) sans utilité ici ignorés (photos, autres mesures).' : '')
@@ -1435,13 +1520,71 @@ createApp({
             const parcourir = async (e, chemin) => {
                 if (e.isFile) { const f = await new Promise((ok, ko) => e.file(ok, ko)); f._chemin = chemin + f.name; out.push(f); return; }
                 const ici = chemin + e.name + '/';
-                if (/(^|\/)files\/$/.test(ici) || (/(^|\/)jsons\/[^/]+\/$/.test(ici) && !/pedometer_day_summary\/$/.test(ici))) return;
+                //  v1.26 : on descend dans le détail des séances (jsons/ ou files/ selon la version de l'export), pas dans les photos ni le reste
+            if ((/(^|\/)files\/[^/]+\/$/.test(ici) && !/exercise\/$/.test(ici)) || (/(^|\/)jsons\/[^/]+\/$/.test(ici) && !/(pedometer_day_summary|exercise)\/$/.test(ici))) return;
                 const lecteur = e.createReader(); let lot;
                 do { lot = await new Promise((ok, ko) => lecteur.readEntries(ok, ko)); for (const x of lot) await parcourir(x, ici); } while (lot.length);
             };
             for (const e of entrees) await parcourir(e, '');
             return importerSamsung(out);
         };
+
+        // ── v1.26 : COMPOSITION CORPORELLE ET SÉANCES (export Samsung Health) ──
+        const PERIODES_COMPO = [['jours', 'Jours'], ['semaines', 'Semaines'], ['mois', 'Mois']];
+        const MESURES_COMPO = [{ id: 'kg', nom: 'Poids', unite: 'kg' }, { id: 'muscle_kg', nom: 'Muscle squelettique', unite: 'kg' }, { id: 'graisse_kg', nom: 'Masse grasse', unite: 'kg' }, { id: 'graisse_pct', nom: 'Graisse', unite: '%' }];
+        const MESURES_COMPO_DETAIL = [...MESURES_COMPO, { id: 'masse_maigre_kg', nom: 'Masse maigre', unite: 'kg' }, { id: 'eau_kg', nom: 'Eau corporelle', unite: 'kg' }, { id: 'bmr_kcal', nom: 'Métabolisme de base', unite: 'kcal' }, { id: 'graisse_viscerale', nom: 'Graisse viscérale', unite: 'niveau' }];
+        const compoVue = reactive({ periode: 'semaines', mesure: 'kg' });
+        //  toutes les mesures d'une grandeur, par date : le poids des pesées ET de la composition ; le reste de la composition seule
+        const mesuresDe = (id) => {
+            const m = {};
+            if (id === 'kg') etat.poids.forEach(p => { if (p.kg != null) m[p.date] = p.kg; });
+            (etat.compo || []).forEach(c => { if (c[id] != null && (id !== 'kg' || m[c.date] === undefined)) m[c.date] = c[id]; });
+            return m;
+        };
+        //  Jours : les 30 derniers jours, un point par jour mesuré ; Semaines : 12 semaines (lundi) ; Mois : 12 mois — la MOYENNE de chaque tranche
+        const serieCompo = computed(() => {
+            const id = compoVue.mesure, unite = (MESURES_COMPO.find(m => m.id === id) || {}).unite || '', m = mesuresDe(id), fin = dateJour.value;
+            const lundi = (d) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
+            const tranche = compoVue.periode === 'jours' ? (d) => d : compoVue.periode === 'semaines' ? lundi : (d) => d.slice(0, 7);
+            const debut = compoVue.periode === 'jours' ? Cref.value.decaler(fin, -29) : compoVue.periode === 'semaines' ? Cref.value.decaler(lundi(fin), -77) : (() => { const x = new Date(fin.slice(0, 7) + '-01T12:00:00Z'); x.setUTCMonth(x.getUTCMonth() - 11); return x.toISOString().slice(0, 10); })();
+            const g = {};
+            Object.entries(m).forEach(([d, v]) => { if (d < debut || d > fin) return; const k = tranche(d); (g[k] = g[k] || []).push(v); });
+            const points = Object.keys(g).sort().map(k => ({ cle: k, v: Math.round(g[k].reduce((s, x) => s + x, 0) / g[k].length * 10) / 10 }));
+            const vs = points.map(p => p.v);
+            const libelle = (k) => compoVue.periode === 'mois' ? new Date(k + '-01T12:00:00Z').toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) : dateCourte(k);
+            return { points, unite, labels: points.map(p => libelle(p.cle)), moyenne: vs.length ? Math.round(vs.reduce((s, x) => s + x, 0) / vs.length * 10) / 10 : null,
+                     min: vs.length ? Math.min(...vs) : null, max: vs.length ? Math.max(...vs) : null, ecart: vs.length >= 2 ? Math.round((vs[vs.length - 1] - vs[0]) * 10) / 10 : null,
+                     libellePeriode: compoVue.periode === 'jours' ? '30 derniers jours' : compoVue.periode === 'semaines' ? '12 dernières semaines (moyenne de chaque semaine)' : '12 derniers mois (moyenne de chaque mois)' };
+        });
+        const derniereCompo = computed(() => { const l = (etat.compo || []).filter(c => Object.keys(c).some(k => !['date', 'kg', 'source'].includes(k))); return l.length ? l[l.length - 1] : null; });
+        let graphC = null;
+        const dessinerCompo = async () => {
+            await nextTick(); const cv = document.getElementById('graphCompo'); if (!cv || typeof Chart === 'undefined' || onglet.value !== 'poids') return;
+            if (graphC) graphC.destroy();
+            const S = serieCompo.value; if (!S.points.length) return;
+            graphC = new Chart(cv, { type: 'line', data: { labels: S.labels, datasets: [{ label: (MESURES_COMPO.find(m => m.id === compoVue.mesure) || {}).nom + ' (' + S.unite + ')', data: S.points.map(p => p.v),
+                borderColor: '#f97316', backgroundColor: '#f97316', pointRadius: 4, tension: 0.15 }] }, options: { animation: false, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+        };
+        watch([() => compoVue.periode, () => compoVue.mesure, () => (etat.compo || []).length, () => etat.poids.length, onglet], dessinerCompo);
+        //  les séances : les plus récentes d'abord, filtrables par type ; le VO₂ max le plus récent (séance ou journal)
+        const seancesVue = reactive({ type: '', n: 20, ouverte: null });
+        const typesSeances = computed(() => [...new Set((etat.seances || []).map(s => s.nom))].sort());
+        const seancesListe = computed(() => (etat.seances || []).filter(s => !seancesVue.type || s.nom === seancesVue.type).slice().sort((a, b) => (b.date + (b.heure || '')) < (a.date + (a.heure || '')) ? -1 : 1));
+        const dernierVo2 = computed(() => {
+            let best = null;
+            Object.entries(etat.journal).forEach(([d, j]) => { const v = j && j.samsung && j.samsung.vo2max; if (v && (!best || d > best.date)) best = { date: d, v }; });
+            (etat.seances || []).forEach(s => { if (s.vo2max && (!best || s.date > best.date)) best = { date: s.date, v: s.vo2max }; });
+            return best;
+        });
+        //  niveaux indicatifs (homme, 40-60 ans, d'après les tables usuelles de l'ACSM) : une repère, pas un diagnostic
+        const niveauVo2 = (v) => v >= 45 ? 'excellent' : v >= 39 ? 'bon' : v >= 34 ? 'passable' : v >= 30 ? 'faible' : 'très faible';
+        const ZONES_FC = [{ n: 1, nom: 'Récupération (< 60 %)', couleur: '#94a3b8', a: 0, b: 0.6 }, { n: 2, nom: 'Contrôle du poids (60-70 %)', couleur: '#22c55e', a: 0.6, b: 0.7 },
+                          { n: 3, nom: 'Aérobie (70-80 %)', couleur: '#eab308', a: 0.7, b: 0.8 }, { n: 4, nom: 'Anaérobie (80-90 %)', couleur: '#f97316', a: 0.8, b: 0.9 }, { n: 5, nom: 'Maximum (≥ 90 %)', couleur: '#ef4444', a: 0.9, b: 1 }];
+        const pctZone = (s, i) => { const t = (s.zones_s || []).reduce((a, x) => a + x, 0); return t ? Math.round(s.zones_s[i] / t * 100) : 0; };
+        const bornesZone = (s, i) => { const z = ZONES_FC[i], f = s.fc_max_ref; if (!f) return ''; return i === 0 ? '< ' + Math.round(f * z.b) + ' bpm' : Math.round(f * z.a) + '-' + (i === 4 ? f : Math.round(f * z.b) - 1) + ' bpm'; };
+        const dureeLisible = (s, court) => { s = Math.round(Number(s) || 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? h + ' h ' + String(m).padStart(2, '0') : (court ? m + ':' + String(x).padStart(2, '0') : m + ' min ' + String(x).padStart(2, '0') + ' s'); };
+        const allure = (s) => { const p = s.duree_s / (s.distance_m / 1000); return Math.floor(p / 60) + ':' + String(Math.round(p % 60)).padStart(2, '0'); };
+        const fmt2 = (v) => v == null ? '—' : Number(v).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         // ── plans nutrition et exercice : prévu / réalisé (v1.4) ──
         const TYPES_PLAN = [{ id: 'nutrition', icone: '🥗', nom: 'Plan nutritionnel' }, { id: 'exercice', icone: '🏋️', nom: 'Plan d’exercice' }];
@@ -1991,7 +2134,8 @@ createApp({
         };
         onMounted(charger);
         onMounted(() => { setTimeout(verifierVersion, 2500); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { verifierVersion(); rechargerEtat(); } }); });
-        return { VERSION, ONGLETS, menuOuvert, erreurSauvegarde, sauver, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
+        return { PERIODES_COMPO, MESURES_COMPO, MESURES_COMPO_DETAIL, compoVue, serieCompo, derniereCompo, seancesVue, typesSeances, seancesListe, dernierVo2, niveauVo2, ZONES_FC, pctZone, bornesZone, dureeLisible, allure, fmt2, fmt1,   // v1.26
+            VERSION, ONGLETS, menuOuvert, erreurSauvegarde, sauver, CHECKLIST, MOMENTS, catalogue, aliments, etat, statut, libelleStatut, onglet, dateJour, vide, chargerDemo, importerDossier, messageImport,
                  fmt, nb, dateLisible, dateCourte, resumeProfil, jour, checklistFaits, majActivite, saisie, pasJour, machinesSemaine, kcalJour, dernierPoids, bmr, energie,
                  systeme, merlin, marqueurChoisi, importOuvert, dernierBilan, ind, lignesSysteme, nbParSysteme, dernierAvec, normes, cible, couleurStatut, cliquerMarqueur, explication, valeurChoisie, explicationStatut, impactProtocole,
                  valeursSuspectes, docsOuverts, basculerDocs, nbValeursTotal, verifierBilanIA, accepterBilanIA, refuserBilanIA, toutAccepterBilanIA, texteBilan, apercus, apercusPrets, lectureEnCours, messageBilan, survolDepot, ICONES, lireFichiersBilan, analyserBilan, retirerApercu, retirerValeurApercu, lireApercu, ajouterApercu, ajouterTous,
