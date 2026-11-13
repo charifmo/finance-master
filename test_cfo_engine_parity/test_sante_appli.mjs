@@ -796,6 +796,21 @@ z.close()`, src, zip]);
           /Maximum/.test(z) && /Aérobie/.test(z) && /Récupération/.test(z) && /bpm/.test(z) && (await pu.$$('[data-seance][data-id="abc-123"] [data-seance-km] tbody tr')).length === 4, z.slice(0, 300));
         await pu.click('[data-seance][data-id="old-1"] button'); await pu.waitForTimeout(150);
         v('  → la course ancienne sans détail : « rien n’est inventé », ni zones ni temps par km', /rien n’est inventé/.test(await pu.textContent('[data-seance][data-id="old-1"]')));
+        //  v1.27 — « ÇA SE BLOQUE APRÈS AVOIR IMPORTÉ LE DOSSIER EN ENTIER » : un dossier réaliste (2 000 fichiers inutiles + une FC de 300 000 lignes)
+        const progres = [];
+        await pu.exposeFunction('noterProgres', (t) => progres.push(t));
+        const fin = await pu.evaluate(async ({ ST, R }) => {
+            const S = eval(ST), l = [];
+            for (let i = 0; i < 2000; i++) { const f = new File(['x'], i + '.jpg'); f._chemin = R + 'files/com.samsung.shealth.food_image/' + i + '.jpg'; l.push(f); }
+            const lignes = ['com.samsung.shealth.tracker.heart_rate,6313005,300000', 'com.samsung.health.heart_rate.start_time,com.samsung.health.heart_rate.time_offset,com.samsung.health.heart_rate.heart_rate,'];
+            for (let i = 0; i < 300000; i++) lignes.push(new Date(Date.UTC(2025, 0, 1) + i * 600000).toISOString().replace('T', ' ').replace('Z', '') + ',UTC+0100,' + (60 + i % 30) + ',');
+            const fc = new File([lignes.join('\n') + '\n'], 'com.samsung.shealth.tracker.heart_rate.20261113091500.csv'); fc._chemin = R + 'com.samsung.shealth.tracker.heart_rate.20261113091500.csv'; l.push(fc);
+            let dernier = ''; const obs = setInterval(() => { if (S.messageCsv !== dernier) { dernier = S.messageCsv; window.noterProgres(dernier); } }, 5);
+            const t = Date.now(); await S.importerSamsung(l); clearInterval(obs);
+            return { ms: Date.now() - t, msg: S.messageCsv, jours: Object.keys(S.etat.journal).filter(d => S.etat.journal[d].samsung && S.etat.journal[d].samsung.fc_moy).length };
+        }, { ST, R });
+        v('  → v1.27 dossier ENTIER (2 000 photos + FC de 300 000 lignes) : la page dit où elle en est (« ⏳ … fichier(s) … »), va au bout, les jours de FC rangés',
+          progres.some(t => /⏳ \d+ fichier\(s\) Samsung lu\(s\) sur 2001 parcourus/.test(t)) && /jour\(s\) importé\(s\)/.test(fin.msg) && /2000 fichier\(s\) sans utilité/.test(fin.msg) && fin.jours >= 300, [fin, progres.slice(0, 4)]);
         v('  → aucune erreur JavaScript (composition et séances)', erreursU.length === 0, erreursU.join(' | '));
         await pu.close();
     });
