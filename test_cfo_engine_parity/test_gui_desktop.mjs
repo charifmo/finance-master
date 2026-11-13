@@ -196,7 +196,7 @@ try {
     await page.click('[data-version-nouveautes]');   // v37.45 : la version ouvre les nouveautés
     await page.waitForTimeout(300);
     v('mode Réalisé : « Changelog » ouvre l\'historique des versions (il n\'ouvrait rien)', await page.isVisible('text=Historique des Versions'));
-    await page.click('button[aria-label="Fermer"]:near(:text("Historique des Versions"))').catch(() => page.evaluate((ST) => { eval(ST).showChangelog = false; }, ST));
+    await page.click('button[aria-label="Fermer"]:near(:text("Historique des Versions"))', { timeout: 1500 }).catch(() => page.evaluate((ST) => { eval(ST).showChangelog = false; }, ST));   // v37.142 : 1,5 s, plus 30 s, avant le secours
     await page.evaluate((ST) => { eval(ST).showImportWarning = true; }, ST); await page.waitForTimeout(250);
     v('mode Réalisé : l\'avertissement d\'import s\'affiche aussi', await page.evaluate(() => [...document.querySelectorAll('.fixed.inset-0')].some(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && /annuler/i.test(e.textContent); })));
     await page.evaluate((ST) => { eval(ST).showImportWarning = false; }, ST);

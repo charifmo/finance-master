@@ -204,7 +204,8 @@ try {
           fams.length >= 3 && fams[0][0] === MERE && fams[1][0] === 'cat_cv_voiture' && /−331 DH/.test(fams[0][1]), JSON.stringify(fams));
         v('  → et l\'écart au cycle précédent : Alimentation ▲ +136 % (331 contre 140), Sorties ▼ −33 % (20 contre 30)',
           /▲ \+136 % vs cycle préc\./.test(fams[0][1]) && fams.some(f => f[0] === 'cat_cv_sorties' && /▼ −33 % vs cycle préc\./.test(f[1])), JSON.stringify(fams));
-        await page.click(`[data-journal-famille="${'cat_cv_alimentation'}"] [data-journal-famille-entete]`, { strict: false }).catch(() => page.click('[data-journal-famille][data-cat="cat_cv_alimentation"] [data-journal-famille-entete]'));
+        //  v37.142 : le bon sélecteur d'emblée (l'ancien « [data-journal-famille="…"] » n'existait pas : 30 s d'attente avant le secours)
+        await page.click('[data-journal-famille][data-cat="cat_cv_alimentation"] [data-journal-famille-entete]');
         await attendre();
         const lig = await page.evaluate(() => [...document.querySelectorAll('[data-journal-famille][data-cat="cat_cv_alimentation"] [data-journal-ligne-cat]')].map(l => l.textContent.replace(/\s+/g, ' ').trim()));
         v('  → déplier la famille : la ligne Marjane (2 ×, moyenne 138 DH, dernier 14/10, « Marjane ×2 »), puis ce qui est rangé sans ligne',

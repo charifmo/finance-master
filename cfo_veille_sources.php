@@ -28,7 +28,7 @@ function vs_sortie(array $p, int $code = 200): void {
     exit;
 }
 function vs_etat(): array {
-    $c = cfo_vp_config();
+    $c = cfo_vp_config(false);   // v37.142 : la liste des médias, sans les sources proposées acceptées (gérées dans « Sources proposées »)
     if (!$c) vs_sortie(['status' => 'error', 'error' => 'SOURCES_ABSENTES', 'message' => 'veille_sources.json absent ou illisible.'], 503);
     return ['status' => 'ok', 'sources' => $c['cfg']['sources'], 'supprimees' => $c['supprimees'], 'stockage' => $c['stockage'],
             'raison' => $c['raison'], 'maj' => $c['maj'], 'max' => CFO_VP_MAX_SOURCES, 'prerequis' => cfo_vp_prerequis()];

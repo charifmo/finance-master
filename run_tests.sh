@@ -29,14 +29,17 @@ trap 'rm -f "$LISTE"' EXIT
 #  v37.110 — PÉRIMÈTRE : un changement qui ne touche que Santé ne rejoue pas les suites de Finance, et inversement.
 #    bash run_tests.sh            → automatique, d'après les fichiers changés depuis origin/main (+ non commités)
 #    bash run_tests.sh sante      → Santé seulement      bash run_tests.sh finance → Finance seulement
+#    bash run_tests.sh veille     → la veille seulement (v37.142 : automatique si seuls ses fichiers ont changé)
 #    bash run_tests.sh tout       → tout (aussi : rien de changé, git absent, ou un fichier commun touché)
 #  Les suites communes (lanceur Mes applis, sauvegarde) tournent toujours.
 PERIMETRE="${1:-${PERIMETRE:-auto}}"
 if [ "$PERIMETRE" = auto ]; then
     BASE=${BASE_TESTS:-$(git merge-base HEAD origin/main 2>/dev/null || true)}
     CHANGES=$( { [ -n "$BASE" ] && git diff --name-only "$BASE" 2>/dev/null; git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | sort -u)
-    S=0; F=0; C=0
+    S=0; F=0; C=0; V=0
     for f in $CHANGES; do
+        #  v37.142 — la veille seule (ses PHP, ses données, ses tests) : seules les suites de la veille sont rejouées
+        case "$f" in cfo_veille_*|veille_*|install_veille.sh|test_cfo_engine_parity/test_veille*|fix_version_*) V=1; continue ;; esac
         case "$f" in
             sante/*|test_cfo_engine_parity/test_sante*) S=1 ;;
             run_tests.sh|run_parallel.mjs|test_cfo_engine_parity/tw_cache.mjs|install.sh|apps.json|package.json|package-lock.json|Caddyfile*|test_cfo_engine_parity/test_lanceur.mjs|test_cfo_engine_parity/test_sauvegarde.php) C=1 ;;
@@ -44,18 +47,21 @@ if [ "$PERIMETRE" = auto ]; then
             *) F=1 ;;
         esac
     done
-    if [ "$C" = 1 ] || [ "$S$F" = 11 ] || [ "$S$F" = 00 ]; then PERIMETRE=tout; elif [ "$S" = 1 ]; then PERIMETRE=sante; else PERIMETRE=finance; fi
+    if [ "$V$S$F$C" = 1000 ]; then PERIMETRE=veille
+    elif [ "$C" = 1 ] || [ "$S$F" = 11 ] || [ "$S$F" = 00 ]; then PERIMETRE=tout; elif [ "$S" = 1 ]; then PERIMETRE=sante; else PERIMETRE=finance; fi
     echo "▸ Périmètre automatique : $PERIMETRE (fichiers changés depuis origin/main ; « bash run_tests.sh tout » pour tout rejouer)"
 else
     echo "▸ Périmètre : $PERIMETRE"
 fi
-case "$PERIMETRE" in sante|finance|tout) ;; *) echo "Périmètre inconnu : $PERIMETRE (sante, finance ou tout)"; exit 2 ;; esac
+case "$PERIMETRE" in sante|finance|veille|tout) ;; *) echo "Périmètre inconnu : $PERIMETRE (sante, finance, veille ou tout)"; exit 2 ;; esac
 
 suite() {
     case "$1" in
-        "Santé Master"*) [ "$PERIMETRE" = finance ] && return 0 ;;
-        "Mes applis"*|"Sauvegarde hors du VPS"*) ;;
-        *) [ "$PERIMETRE" = sante ] && return 0 ;;
+        "Santé Master"*) if [ "$PERIMETRE" = finance ] || [ "$PERIMETRE" = veille ]; then return 0; fi ;;
+        "Mes applis"*|"Sauvegarde hors du VPS"*) if [ "$PERIMETRE" = veille ]; then return 0; fi ;;
+        *) if [ "$PERIMETRE" = sante ]; then return 0; fi
+           #  v37.142 : périmètre « veille » — seules les suites dont la commande lance un test de la veille
+           if [ "$PERIMETRE" = veille ]; then case "$*" in *test_veille*) ;; *) return 0 ;; esac; fi ;;
     esac
     printf '%s\t' "$1" >> "$LISTE"; shift
     for a in "$@"; do printf '%s\037' "$a" >> "$LISTE"; done
@@ -63,7 +69,7 @@ suite() {
 }
 
 echo "▸ Syntaxe PHP"
-[ "$PERIMETRE" = sante ] || for f in cfo_relais.php cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php sante/sante_lib.php sante/sante_integrity.php sante/sante_intent_engine.php sante/sante_store.php sante/save_sante.php sante/sante_reparation.php sante/sante_api.php sante/sync_samsung.php sante/sante_hc.php sante/sante_jeton.php sante/sante_cmo.php n8n/maj_workflow_sante.php sauvegarde.php; do
+[ "$PERIMETRE" = sante ] || for f in cfo_veille_collecte_lib.php cfo_veille_collecte.php cfo_veille_decouvertes.php cfo_veille_domaines.php cfo_relais.php cfo_intent_engine.php cfo_integrity.php cfo_rag_ids.php pending_commit.php tools_schema.php save_data.php get_ai_memory.php repair_finance_data.php cfo_memoire_lib.php cfo_memoire_garde.php cfo_veille_lib.php cfo_veille_presse.php cfo_veille_serveur.php cfo_veille_sources.php sante/sante_lib.php sante/sante_integrity.php sante/sante_intent_engine.php sante/sante_store.php sante/save_sante.php sante/sante_reparation.php sante/sante_api.php sante/sync_samsung.php sante/sante_hc.php sante/sante_jeton.php sante/sante_cmo.php n8n/maj_workflow_sante.php sauvegarde.php; do
     [ -f "$f" ] && php -l "$f" > /dev/null && echo "  ✅ $f"
 done
 
@@ -111,6 +117,7 @@ suite "Mémorisation garantie · Recherche Éclair ciblée"       node test_cfo_
 suite "Revue de presse locale : requêtes, flux, tri"          php test_cfo_engine_parity/test_veille_presse.php
 suite "Presse sans flux ni curl : pages, secours, réseau"   php test_cfo_engine_parity/test_veille_sans_flux.php
 suite "Veille : collecte continue (requêtes rejouées, corpus, Brave, pauses)"   php test_cfo_engine_parity/test_veille_collecte.php
+suite "Veille : sources proposées (normalisation PSL, score, statuts, plafonds, point d'entrée)"   php test_cfo_engine_parity/test_veille_decouvertes.php
 suite "La presse marrakchie lue avant la réponse"             node test_cfo_engine_parity/test_veille_presse.mjs
 suite "Médias de la veille : saisie, contrôles, superposition" php test_cfo_engine_parity/test_veille_sources.php
 suite "Médias réglables depuis l'écran (vraie base)"         node test_cfo_engine_parity/test_veille_sources.mjs

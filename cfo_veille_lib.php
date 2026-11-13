@@ -188,7 +188,7 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
     $ortho = fn(string $l): array => array_values(array_unique(array_merge([$l], cfo_vp_orthographes_ar($l))));
     $tousLieux = array_values(array_unique(array_merge(...array_map($ortho, array_slice($parLangue['ar'], 0, 2)), ...[array_slice($parLangue['fr'], 0, 2)])));
     $langue = fn(array $s) => ($s['langue'] ?? 'fr') === 'ar' ? 'ar' : 'fr';
-    $media = fn(array $s) => ['domaine' => $s['domaine'], 'media' => $s['nom']];
+    $media = fn(array $s) => ['domaine' => $s['domaine'], 'media' => $s['nom']] + (!empty($s['frequence']) ? ['frequence' => $s['frequence']] : []);   // v37.142 : la fréquence suit la requête
     $moteur = function (string $lg, string $q, bool $specifique, string $libelle, array $plus = []) use ($moteurs): ?array {
         if (!isset($moteurs[$lg]) || trim($q) === '') return null;
         return ['type' => 'moteur', 'canal' => 'moteur', 'nom' => $moteurs[$lg]['nom'], 'libelle' => $libelle, 'q' => $q, 'langue' => $lg,
@@ -240,7 +240,7 @@ function cfo_vp_requetes(array $cfg, array $lieux, array $sujets): array {
             }
             foreach ($fam as $s) if (!empty($s['chemin'])) {
                 $q = 'site:' . cfo_vp_cle($s) . ' ' . $ou;
-                foreach ($webs as $m) $webPages[] = $web($m, $q, 'site:' . cfo_vp_cle($s), ['domaine' => cfo_vp_cle($s), 'media' => $s['nom']]);
+                foreach ($webs as $m) $webPages[] = $web($m, $q, 'site:' . cfo_vp_cle($s), ['domaine' => cfo_vp_cle($s), 'media' => $s['nom']] + (!empty($s['frequence']) ? ['frequence' => $s['frequence']] : []));   // v37.142
             }
         }
     }
@@ -1022,6 +1022,8 @@ function cfo_vp_valider_source($s): array {
         $out['flux'] = $flux;
     }
     if (($s['actif'] ?? true) === false) $out['actif'] = false;
+    //  v37.142 — la fréquence de collecte (sources proposées acceptées) : quotidienne, toutes les 3 heures, ou à la demande seulement
+    if (isset($s['frequence']) && in_array($s['frequence'], ['quotidienne', '3h', 'demande'], true)) $out['frequence'] = $s['frequence'];
     return ['source' => $out];
 }
 

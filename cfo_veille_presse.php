@@ -50,7 +50,9 @@ $corps = json_decode((string)file_get_contents('php://input'), true) ?: [];
 if (($corps['action'] ?? '') !== 'revue') vp_sortie(['status' => 'error', 'error' => 'ACTION_INCONNUE', 'message' => 'Action attendue : {action:"revue"}.'], 400);
 
 // v37.40 : la liste d'origine, à laquelle s'appliquent vos réglages faits depuis l'écran
-$conf = cfo_vp_config();
+//  v37.142 : + les sources proposées que vous avez acceptées (celles réservées à d'autres biens sont écartées)
+$lieuxBien = cfo_vp_valider($corps)['lieux'] ?? [];
+$conf = cfo_vp_config(true, $lieuxBien && function_exists('vc_cle_bien') ? vc_cle_bien($lieuxBien) : null);
 $cfg = $conf['cfg'] ?? null;
 if (!is_array($cfg)) vp_sortie(['status' => 'error', 'error' => 'SOURCES_ABSENTES', 'message' => 'veille_sources.json absent ou illisible.'], 503);
 // v37.42 : curl n'est plus requis — sans lui, les sources sont lues une à une (plus lent, même résultat)

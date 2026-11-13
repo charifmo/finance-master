@@ -8,6 +8,7 @@ declare(strict_types=1);
  *  php cfo_veille_collecte.php collecter [n]   un lot de n requêtes (8 par défaut)
  *  php cfo_veille_collecte.php etat            l'état : tâches du jour, corpus, domaines proposés, budget Brave
  *  php cfo_veille_collecte.php chercher <mots…> le corpus contient-il cet article ? (tous les mots exigés)
+ *  php cfo_veille_collecte.php propositions    v37.142 : les sources proposées (score, raisons), jamais activées d'office
  *
  *  Cron (toutes les 10 minutes, jamais deux à la fois) :
  *    *\/10 * * * * flock -n /tmp/fm-veille.lock php /var/www/finance/cfo_veille_collecte.php >> /var/log/fm-veille.log 2>&1
@@ -44,15 +45,30 @@ if ($cmd === 'chercher') {
         . ' UTC · « ' . $a['titre'] . ' » · ' . $a['url'] . "\n";
     exit(0);
 }
+//  v37.142 — « propositions » : les sources proposées (score, raisons, exemple), comme dans Intelligence Marché
+if ($cmd === 'propositions') {
+    vd_mettre_a_jour($pdo, $cfg);
+    $l = vd_lister($pdo);
+    foreach ($l['propositions'] as $p) echo str_pad((string)$p['score'], 3, ' ', STR_PAD_LEFT) . ' · ' . $p['cle'] . ' · ' . $p['type'] . ' · ' . $p['occurrences'] . ' app. · '
+        . $p['requetes'] . ' req. · ' . $p['jours'] . ' j · « ' . ($p['exemples'][0]['titre'] ?? '') . ' »' . "\n";
+    echo count($l['propositions']) . ' proposée(s) · ' . count($l['suivies']) . " suivie(s)\n";
+    exit(0);
+}
 $planifiees = 0;
 if ($cmd === 'tout') $planifiees = vc_planifier($pdo, $brave !== null);
 if ($cmd === 'tout' || $cmd === 'collecter') {
     $b = vc_collecter($pdo, $cfg, ['lot' => max(1, min(50, (int)($argv[2] ?? VC_LOT))), 'brave' => $brave]);
     //  v37.138 : l'origine — sans terminal (TERM absent), c'est le cron ; sinon un lancement à la main
     $origine = getenv('TERM') ? 'manuel' : 'cron';
+    //  v37.142 — les sources proposées : occurrences, agrégation, propositions (jamais d'activation d'office)
+    $vd = '';
+    if (function_exists('vd_mettre_a_jour')) {
+        try { $m = vd_mettre_a_jour($pdo, $cfg); $vd = " · sources : {$m['occurrences']} occ., {$m['proposees']} proposée(s)"; }
+        catch (Throwable $e) { $vd = ' · sources proposées : erreur ' . mb_substr($e->getMessage(), 0, 120); }
+    }
     echo "[$horo] ($origine) planifiées $planifiees · tâches {$b['taches']} · articles {$b['articles']} · Brave {$b['brave_appels']} · "
-       . json_encode($b['statuts'], JSON_UNESCAPED_UNICODE) . "\n";
+       . json_encode($b['statuts'], JSON_UNESCAPED_UNICODE) . $vd . "\n";
     exit(0);
 }
-fwrite(STDERR, "commande inconnue : $cmd (tout | collecter [n] | etat | chercher <mots…>)\n");
+fwrite(STDERR, "commande inconnue : $cmd (tout | collecter [n] | etat | chercher <mots…> | propositions)\n");
 exit(2);

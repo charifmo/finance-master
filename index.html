@@ -2489,6 +2489,95 @@
                                                                 </li>
                                                             </ul>
                                                         </details>
+                                                        <!-- v37.142 : LES SOURCES PROPOSÉES — trouvées par la collecte, normalisées, notées ; rien ne s'active sans votre décision -->
+                                                        <details v-if="mi.html && !mi.loading" data-sp :open="uiOuvert('intel.sourcesProposees', false)" @toggle="uiFixer('intel.sourcesProposees', $event.target.open); if ($event.target.open) chargerSourcesProposees(mi.contexte && mi.contexte.presse ? mi.contexte.presse.lieux : [])" class="mt-3 pt-2 border-t border-slate-200">
+                                                            <summary class="text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer select-none">🧭 Sources proposées<span v-if="srcProp.charge"> ({{ srcProp.propositions.length }} à décider · {{ srcProp.suivies.length }} suivie{{ srcProp.suivies.length > 1 ? 's' : '' }})</span></summary>
+                                                            <p class="mt-1 text-[10px] text-slate-500">Des sites et des pages trouvés plusieurs fois par la collecte pour ce bien. Le score est calculé sans IA ; ses raisons sont affichées. <b>Rien n'est interrogé sans votre accord</b> : une source acceptée entre dans la collecte au cycle suivant.</p>
+                                                            <p v-if="srcProp.chargement" class="text-[11px] text-slate-500 font-bold mt-2">⏳ Lecture des propositions…</p>
+                                                            <p v-if="srcProp.erreur" data-sp-erreur class="mt-2 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-2 py-1 text-[11px] font-bold text-rose-800">⛔ {{ srcProp.erreur }}</p>
+                                                            <p v-if="srcProp.message" data-sp-message class="mt-2 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-800">{{ srcProp.message }}</p>
+                                                            <div v-if="srcProp.charge" class="mt-2 flex flex-wrap gap-1" data-sp-filtres>
+                                                                <button v-for="f in SP_FILTRES" :key="f[0]" type="button" :data-sp-filtre="f[0]" @click="srcProp.filtre = f[0]"
+                                                                        :class="['px-2 py-0.5 rounded-full text-[10px] font-black', srcProp.filtre === f[0] ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200']">{{ f[1] }}</button>
+                                                            </div>
+                                                            <p v-if="srcProp.charge && !sourcesProposeesFiltrees.length" data-sp-vide class="mt-2 text-[11px] text-slate-500">Aucune proposition {{ srcProp.filtre === 'toutes' ? '' : 'dans ce filtre ' }}pour l'instant : la collecte en ajoute quand un site revient plusieurs fois.</p>
+                                                            <ul class="mt-2 space-y-2">
+                                                                <li v-for="p in sourcesProposeesFiltrees" :key="p.cle" data-sp-ligne :data-cle="p.cle" :data-type="p.type" class="rounded-xl ring-1 ring-slate-200 p-2 text-[11px]">
+                                                                    <div class="flex flex-wrap items-center gap-1">
+                                                                        <span data-sp-score :class="['px-1.5 rounded font-black', p.score >= 60 ? 'bg-emerald-100 text-emerald-800' : (p.score >= 30 ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-600')]" :title="'Score ' + p.score + '/100'">{{ p.score }}</span>
+                                                                        <b data-sp-domaine dir="auto" class="text-slate-800">{{ p.page ? p.registrable + '/' + p.page : p.domaine }}</b>
+                                                                        <span class="px-1 rounded bg-slate-100 text-slate-600 font-bold">{{ SP_TYPES[p.type] || p.type }}</span>
+                                                                        <span class="px-1 rounded bg-slate-100 text-slate-600 font-bold uppercase">{{ p.langue }}</span>
+                                                                        <span class="px-1 rounded font-bold" :class="p.confiance === 'forte' ? 'bg-emerald-50 text-emerald-700' : (p.confiance === 'moyenne' ? 'bg-sky-50 text-sky-700' : 'bg-amber-50 text-amber-700')">confiance {{ p.confiance }}</span>
+                                                                        <span class="text-slate-400 font-bold">{{ p.bien === srcProp.bien ? 'ce bien' : 'un autre bien' }}</span>
+                                                                    </div>
+                                                                    <p v-if="p.mention" data-sp-mention class="mt-1 text-[10px] font-black text-amber-700">⚠️ {{ p.mention }} — la page n'est pas lue, seuls les moteurs de recherche la voient.</p>
+                                                                    <p class="mt-1 text-slate-600" data-sp-compteurs>{{ p.occurrences }} apparition{{ p.occurrences > 1 ? 's' : '' }} · {{ p.requetes }} requête{{ p.requetes > 1 ? 's' : '' }} distincte{{ p.requetes > 1 ? 's' : '' }} · {{ p.jours }} jour{{ p.jours > 1 ? 's' : '' }} · vue le {{ new Date(p.dernier).toLocaleDateString('fr-FR') }}</p>
+                                                                    <p v-if="p.exemples && p.exemples[0]" class="mt-0.5" data-sp-exemple>Exemple : <a :href="p.exemples[0].url" target="_blank" rel="noopener noreferrer nofollow" dir="auto" class="text-sky-700 hover:underline">{{ p.exemples[0].titre }}</a> <span class="text-slate-400">{{ p.exemples[0].date || 'sans date' }}</span></p>
+                                                                    <p class="mt-0.5 text-[10px] text-slate-500" data-sp-raisons>Pourquoi : <span v-for="(r, k) in p.raisons" :key="k" :class="r[0] < 0 ? 'text-rose-600' : 'text-emerald-700'">{{ (r[0] > 0 ? '+' : '') + r[0] }} {{ r[1] }}{{ k < p.raisons.length - 1 ? ' · ' : '' }}</span></p>
+                                                                    <p class="mt-0.5 text-[10px] text-slate-400" data-sp-normalisation>{{ p.normalisation }}</p>
+                                                                    <div class="mt-1 flex flex-wrap gap-1">
+                                                                        <button type="button" data-sp-accepter @click="deciderSourceProposee(p, 'accepter')" class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-black">Accepter</button>
+                                                                        <button type="button" data-sp-ignorer @click="deciderSourceProposee(p, 'ignorer')" class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-black">Ignorer</button>
+                                                                        <button type="button" data-sp-une-fois @click="deciderSourceProposee(p, 'une_fois')" class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-black">Surveiller une fois</button>
+                                                                        <button type="button" data-sp-voir @click="voirExemplesSource(p)" class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-black">Voir les exemples</button>
+                                                                        <button type="button" data-sp-modifier @click="modifierSourceProposee(p)" class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-black">Modifier avant acceptation</button>
+                                                                    </div>
+                                                                    <ul v-if="srcProp.exemples[p.cle]" data-sp-exemples class="mt-1 pl-3 border-l-2 border-slate-200 space-y-0.5">
+                                                                        <li v-if="srcProp.exemples[p.cle].chargement" class="text-slate-400">⏳</li>
+                                                                        <li v-for="(x, k) in (srcProp.exemples[p.cle].liste || [])" :key="k"><span class="text-slate-400">{{ x.date || 'sans date' }}</span> <a :href="x.url" target="_blank" rel="noopener noreferrer nofollow" dir="auto" class="text-sky-700 hover:underline">{{ x.titre }}</a><span v-if="x.pertinent" class="text-emerald-700 font-bold"> · nomme le lieu</span></li>
+                                                                    </ul>
+                                                                    <div v-if="srcProp.edition && srcProp.edition.cle === p.cle" data-sp-edition class="mt-2 grid grid-cols-2 md:grid-cols-4 gap-1 text-[10px] bg-slate-50 rounded-lg p-2">
+                                                                        <label class="flex flex-col col-span-2">Nom<input v-model="srcProp.edition.nom" data-sp-e-nom class="border rounded px-1 py-0.5"></label>
+                                                                        <label class="flex flex-col">Type<select v-model="srcProp.edition.type" data-sp-e-type class="border rounded px-1 py-0.5"><option v-for="(lib, k) in SP_TYPES" :key="k" :value="k" :disabled="p.plateforme ? !['reseau', 'video'].includes(k) : ['reseau', 'video'].includes(k)">{{ lib }}</option></select></label>
+                                                                        <label class="flex flex-col">Langue<select v-model="srcProp.edition.langue" data-sp-e-langue class="border rounded px-1 py-0.5"><option value="fr">français</option><option value="ar">arabe</option></select></label>
+                                                                        <label class="flex flex-col">Fréquence<select v-model="srcProp.edition.frequence" data-sp-e-frequence class="border rounded px-1 py-0.5"><option value="quotidienne">quotidienne</option><option value="3h">toutes les 3 h</option><option value="demande">à la demande</option></select></label>
+                                                                        <label class="flex flex-col">Mode<select v-model="srcProp.edition.mode" data-sp-e-mode class="border rounded px-1 py-0.5"><option v-for="(lib, k) in SP_MODES" :key="k" :value="k" :disabled="!!p.plateforme && k !== 'signal'">{{ lib }}</option></select></label>
+                                                                        <label class="flex flex-col">Confiance<select v-model="srcProp.edition.confiance" data-sp-e-confiance class="border rounded px-1 py-0.5"><option value="faible">faible</option><option value="moyenne">moyenne</option><option value="forte" :disabled="!!p.plateforme">forte</option></select></label>
+                                                                        <label class="flex items-center gap-1 mt-3"><input type="checkbox" v-model="srcProp.edition.cebien" data-sp-e-bien> pour ce bien seulement</label>
+                                                                        <label v-if="srcProp.edition.mode === 'recherche'" class="flex flex-col col-span-2">Page de recherche ({q} = mots cherchés)<input v-model="srcProp.edition.flux" data-sp-e-flux class="border rounded px-1 py-0.5" :placeholder="'https://' + p.domaine + '/?s={q}'"></label>
+                                                                        <label class="flex flex-col col-span-2">Requêtes liées (une par ligne)<textarea v-model="srcProp.edition.requetes" data-sp-e-requetes rows="2" class="border rounded px-1 py-0.5"></textarea></label>
+                                                                        <label class="flex flex-col col-span-2">Note<input v-model="srcProp.edition.note" data-sp-e-note class="border rounded px-1 py-0.5"></label>
+                                                                        <p v-if="['rss', 'sitemap'].includes(srcProp.edition.mode)" class="col-span-2 md:col-span-4 text-amber-700 font-bold">Mode enregistré ; la collecte ne lit pas encore les RSS ni les sitemaps : la source sera cherchée par les moteurs en attendant.</p>
+                                                                        <div class="col-span-2 md:col-span-4 flex gap-1">
+                                                                            <button type="button" data-sp-e-accepter @click="validerModifSource(true)" class="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-black">Enregistrer et accepter</button>
+                                                                            <button type="button" data-sp-e-enregistrer @click="validerModifSource(false)" class="px-2 py-0.5 rounded bg-slate-700 text-white text-[10px] font-black">Enregistrer</button>
+                                                                            <button type="button" @click="srcProp.edition = null" class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-black">Annuler</button>
+                                                                        </div>
+                                                                    </div>
+                                                                </li>
+                                                            </ul>
+                                                            <div v-if="srcProp.charge && srcProp.suivies.length" data-sp-suivies class="mt-3">
+                                                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Sources acceptées</p>
+                                                                <ul class="mt-1 space-y-1 text-[11px]">
+                                                                    <li v-for="p in srcProp.suivies" :key="p.cle" data-sp-suivie :data-cle="p.cle" :data-statut="p.statut" class="flex flex-wrap items-center gap-1">
+                                                                        <b dir="auto">{{ (p.config && p.config.nom) || p.domaine }}</b>
+                                                                        <span class="text-slate-400">{{ p.page ? p.registrable + '/' + p.page : p.domaine }} · {{ SP_TYPES[p.type] || p.type }}</span>
+                                                                        <span :class="['px-1 rounded font-bold', p.statut === 'accepted' ? 'bg-emerald-50 text-emerald-700' : (p.statut === 'one_time' ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-500')]">{{ SP_STATUTS[p.statut] || p.statut }}</span>
+                                                                        <span v-if="p.mention" class="text-amber-700 font-bold">{{ p.mention }}</span>
+                                                                        <button v-if="p.statut === 'accepted' || p.statut === 'one_time'" type="button" data-sp-pause @click="deciderSourceProposee(p, 'pause')" class="px-1.5 rounded bg-slate-100 text-[10px] font-black">⏸️ Pause</button>
+                                                                        <button v-if="p.statut === 'paused'" type="button" data-sp-reprendre @click="deciderSourceProposee(p, 'reprendre')" class="px-1.5 rounded bg-slate-100 text-[10px] font-black">▶️ Reprendre</button>
+                                                                        <button type="button" data-sp-retirer @click="deciderSourceProposee(p, 'ignorer')" class="px-1.5 rounded text-rose-600 text-[10px] font-black">Retirer</button>
+                                                                    </li>
+                                                                </ul>
+                                                            </div>
+                                                            <details v-if="srcProp.charge" data-sp-ajout :open="uiOuvert('intel.sourceAjout', false)" @toggle="uiFixer('intel.sourceAjout', $event.target.open)" class="mt-3 rounded-xl ring-1 ring-slate-200 p-2">
+                                                                <summary class="text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer select-none">➕ Ajouter une source à la main</summary>
+                                                                <div class="mt-2 grid grid-cols-2 md:grid-cols-4 gap-1 text-[10px]">
+                                                                    <label class="flex flex-col col-span-2">Adresse (site ou page)<input v-model="srcProp.ajout.url" data-sp-a-url class="border rounded px-1 py-0.5" placeholder="https://www.facebook.com/nom-de-la-page"></label>
+                                                                    <label class="flex flex-col col-span-2">Nom<input v-model="srcProp.ajout.nom" data-sp-a-nom class="border rounded px-1 py-0.5"></label>
+                                                                    <label class="flex flex-col">Type<select v-model="srcProp.ajout.type" data-sp-a-type class="border rounded px-1 py-0.5"><option v-for="(lib, k) in SP_TYPES" :key="k" :value="k">{{ lib }}</option></select></label>
+                                                                    <label class="flex flex-col">Langue<select v-model="srcProp.ajout.langue" data-sp-a-langue class="border rounded px-1 py-0.5"><option value="fr">français</option><option value="ar">arabe</option></select></label>
+                                                                    <label class="flex flex-col">Fréquence<select v-model="srcProp.ajout.frequence" data-sp-a-frequence class="border rounded px-1 py-0.5"><option value="quotidienne">quotidienne</option><option value="3h">toutes les 3 h</option><option value="demande">à la demande</option></select></label>
+                                                                    <label class="flex flex-col">Confiance<select v-model="srcProp.ajout.confiance" data-sp-a-confiance class="border rounded px-1 py-0.5"><option value="faible">faible</option><option value="moyenne">moyenne</option><option value="forte">forte</option></select></label>
+                                                                    <label class="flex items-center gap-1"><input type="checkbox" v-model="srcProp.ajout.cebien" data-sp-a-bien> pour ce bien seulement</label>
+                                                                    <label class="flex flex-col col-span-2 md:col-span-3">Note<input v-model="srcProp.ajout.note" data-sp-a-note class="border rounded px-1 py-0.5"></label>
+                                                                </div>
+                                                                <p v-if="srcProp.ajout.aConfirmer" data-sp-a-confirmer class="mt-1 text-[10px] font-bold text-amber-800">{{ srcProp.ajout.aConfirmer }}</p>
+                                                                <button type="button" data-sp-a-ajouter @click="ajouterSourceManuelle(mi.contexte && mi.contexte.presse ? mi.contexte.presse.lieux : [])" class="mt-2 px-3 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black uppercase">{{ srcProp.ajout.aConfirmer ? 'Confirmer l\'ajout' : 'Ajouter' }}</button>
+                                                                <p class="mt-1 text-[10px] text-slate-400">L'adresse est normalisée (www., m., fr.… regroupés) ; un doublon est signalé, jamais écrasé. La liste des médias (📰 Sources) reste disponible comme avant.</p>
+                                                            </details>
+                                                        </details>
                                                         <p v-if="mi.html && !mi.loading" class="text-[9px] text-slate-400 font-bold mt-3 pt-2 border-t border-slate-200">
                                                             Synthèse de l'IA à partir de la presse locale et de recherches web — à recouper avant toute décision d'achat ou de vente.
                                                         </p>
@@ -9368,8 +9457,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.141 Des prix de terrains, rien d'autre";
+                    const CURRENT_VERSION = "37.142 Les sources proposées";
                     const CHANGELOG = [
+        { version: "37.142 Les sources proposées", date: "2026-11-13", changes: [
+            "🧭 « SOURCES PROPOSÉES » dans l'Intelligence Marché — la collecte repère les sites et les pages qui reviennent pour un bien, les normalise et les note ; VOUS décidez : Accepter, Ignorer, Surveiller une fois (48 h), Voir les exemples, Modifier avant acceptation. Rien ne s'active d'office : une source acceptée entre dans la collecte au cycle suivant. Filtres : toutes, presse, officielles, annonces, réseaux sociaux, forums, score élevé, nouvelles.",
+            "🔎 Normalisation sûre par la Public Suffix List : mobile.telquel.ma et fr.le360.ma regroupés avec leur domaine, sport.le360.ma gardé comme sous-domaine, notle360.ma jamais confondu avec le360.ma (imitation : jamais proposée), une page Facebook = une source, paramètres de suivi retirés (l'adresse d'origine est gardée), adresses à jeton ou session exclues, moteurs et raccourcisseurs ignorés.",
+            "🧮 Un score sans IA, ses raisons affichées : +30 nomme un lieu du bien, +20 requête locale, +20 plusieurs requêtes, +15 plusieurs jours, +15 officielle, +10 plusieurs articles pertinents ; −20 réseau social seulement, −20 sans date, −30 hors zone, −50 déjà ignorée. Proposée à partir de 2 résultats distincts (1 pour une source officielle) ; 10 nouvelles par jour et par bien, 50 visibles. Un réseau social reste « signal public indexé, non vérifié », jamais officiel.",
+            "➕ Ajout manuel amélioré (adresse, nom, type, langue, bien, fréquence, note, confiance) : normalisé, doublon signalé, jamais écrasé. La liste des médias (📰 Sources) reste là, inchangée. Chaque décision est historisée. Commande serveur : « php cfo_veille_collecte.php propositions ».",
+            "⏱️ Tests plus rapides : deux attentes inutiles de 30 s supprimées (Journal, Interface de bureau) ; un changement qui ne touche que la veille ne rejoue plus que les suites de la veille (« bash run_tests.sh veille »).",
+            "PREUVE — test_veille_decouvertes.php (109, SQLite et PostgreSQL, hors ligne) ; test_veille_presse.mjs (120) : la section à l'écran avec le vrai serveur, ajout manuel, doublon, exemples, acceptation puis interrogation au cycle suivant.",
+        ] },
         { version: "37.141 Des prix de terrains, rien d'autre", date: "2026-11-13", changes: [
             "🏷️ « CES RÉSULTATS SONT NULS : DES MAISONS, DES APPARTEMENTS… » — les prix observés ne gardent plus que des TERRAINS : (1) une page de LISTE d'un portail (« Découvrez 17 annonces pour Ventes Immobilières à Chaibate », « Ventes Immobilières à Bin El Ouidane », « اكتشف 12 إعلان », une rubrique Avito ou Mubawab) n'est plus prise pour une annonce — son « prix » était celui d'une annonce quelconque, d'où un « comparable » à 7 DH/m² ; (2) un bien bâti (appartement, maison, villa, local) ou une annonce sans type reconnu est écarté ; (3) un prix au m² invraisemblable pour un terrain (moins de 20 ou plus de 30 000 DH/m²) n'est pas gardé (« prix incohérent »).",
             "📐 La calibration vient maintenant APRÈS l'analyse de l'Intelligence Marché (et avant la liste des articles), comme demandé.",
@@ -15422,6 +15519,81 @@
                         try { const d = await _vsAppel({ action: 'tester', source: _vsSansOrigine(s) }); r = { canaux: Array.isArray(d.canaux) ? d.canaux : [] }; }
                         catch (e) { r = { erreur: e.message }; }
                         veilleSources.tests = Object.assign({}, veilleSources.tests, { [cleSourceVeille(s)]: r });
+                    };
+
+                    // ── v37.142 : LES SOURCES PROPOSÉES (Intelligence Marché) ───────────
+                    //   La collecte trouve des sites et des pages qui reviennent ; le serveur les normalise, les note (sans IA) et les
+                    //   propose. Vous décidez : Accepter, Ignorer, Surveiller une fois, Modifier. Rien ne s'active d'office.
+                    const VEILLE_DECOUVERTES_PATH = '/finance/cfo_veille_decouvertes.php';
+                    const SP_TYPES = { presse: 'presse', officielle: 'officielle', annonces: 'annonces', reseau: 'réseau social', forum: 'forum', video: 'vidéo', inconnu: 'inconnu' };
+                    const SP_MODES = { moteur: 'moteurs de recherche', recherche: 'page de recherche', accueil: "page d'accueil", rss: 'RSS', sitemap: 'sitemap', signal: 'signal seulement' };
+                    const SP_STATUTS = { accepted: 'acceptée', one_time: 'une fois (48 h)', paused: 'en pause', proposed: 'proposée', rejected: 'ignorée', expired: 'expirée', candidate: 'candidate' };
+                    const SP_FILTRES = [['toutes', 'toutes'], ['presse', 'presse'], ['officielle', 'officielles'], ['annonces', 'annonces'], ['reseau', 'réseaux sociaux'], ['forum', 'forums'], ['score', 'score élevé'], ['nouvelles', 'nouvelles']];
+                    const _spAjoutVide = () => ({ url: '', nom: '', type: 'presse', langue: 'fr', frequence: 'quotidienne', confiance: 'moyenne', note: '', cebien: true, aConfirmer: '' });
+                    const srcProp = reactive({ charge: false, chargement: false, erreur: '', message: '', bien: null, lieux: [], propositions: [], suivies: [], ignorees: [], compteurs: {},
+                                               filtre: 'toutes', exemples: {}, edition: null, ajout: _spAjoutVide() });
+                    const _spAppel = async (corps) => {
+                        const res = await fetch(VEILLE_DECOUVERTES_PATH, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(corps) });
+                        let d = null; try { d = JSON.parse(await res.text()); } catch (_) { d = null; }
+                        if (!d || d.status !== 'ok') { const e = new Error((d && (d.message || d.error)) || ('HTTP ' + res.status)); e.code = d && d.error; throw e; }
+                        return d;
+                    };
+                    const _spAppliquer = (d) => Object.assign(srcProp, { charge: true, bien: d.bien || null, propositions: d.propositions || [], suivies: d.suivies || [], ignorees: d.ignorees || [], compteurs: d.compteurs || {} });
+                    const chargerSourcesProposees = async (lieux) => {
+                        srcProp.lieux = Array.isArray(lieux) ? lieux.slice() : [];
+                        Object.assign(srcProp, { chargement: true, erreur: '' });
+                        try { _spAppliquer(await _spAppel({ action: 'lister', lieux: srcProp.lieux, actualiser: true })); }
+                        catch (e) { srcProp.erreur = 'Propositions illisibles — ' + e.message; }
+                        finally { srcProp.chargement = false; }
+                    };
+                    const sourcesProposeesFiltrees = computed(() => {
+                        const f = srcProp.filtre, semaine = Date.now() - 7 * 86400000;
+                        return srcProp.propositions.filter(p => f === 'toutes' || (f === 'reseau' ? ['reseau', 'video'].includes(p.type) : f === 'score' ? p.score >= 60
+                            : f === 'nouvelles' ? new Date(p.premier).getTime() >= semaine : p.type === f));
+                    });
+                    const _SP_MESSAGES = { accepter: '✅ acceptée : interrogée au prochain cycle de collecte.', ignorer: '🙈 ignorée : elle ne sera plus proposée.', une_fois: '👁️ surveillée une fois (48 h).',
+                                           pause: '⏸️ mise en pause.', reprendre: '▶️ reprise au prochain cycle.' };
+                    const deciderSourceProposee = async (p, action) => {
+                        Object.assign(srcProp, { erreur: '', message: '' });
+                        try { await _spAppel({ action, cle: p.cle }); srcProp.message = (p.page ? p.registrable + '/' + p.page : p.domaine) + ' ' + (_SP_MESSAGES[action] || ''); await chargerSourcesProposees(srcProp.lieux); }
+                        catch (e) { srcProp.erreur = e.message; }
+                    };
+                    const voirExemplesSource = async (p) => {
+                        if (srcProp.exemples[p.cle] && !srcProp.exemples[p.cle].chargement) { const x = { ...srcProp.exemples }; delete x[p.cle]; srcProp.exemples = x; return; }
+                        srcProp.exemples = { ...srcProp.exemples, [p.cle]: { chargement: true } };
+                        try { const d = await _spAppel({ action: 'exemples', cle: p.cle }); srcProp.exemples = { ...srcProp.exemples, [p.cle]: { liste: d.exemples || [], historique: d.historique || [] } }; }
+                        catch (e) { srcProp.exemples = { ...srcProp.exemples, [p.cle]: { liste: [] } }; srcProp.erreur = e.message; }
+                    };
+                    const modifierSourceProposee = (p) => {
+                        const c = p.config || {};
+                        srcProp.edition = { cle: p.cle, nom: c.nom || (p.page ? p.page : p.domaine), type: p.type, langue: p.langue, frequence: c.frequence || 'quotidienne',
+                                            mode: c.mode || (p.plateforme ? 'signal' : 'moteur'), confiance: c.confiance || (p.plateforme ? 'faible' : 'moyenne'), flux: c.flux || '',
+                                            requetes: (c.requetes || []).join('\n'), note: c.note || '', cebien: !!(c.biens && c.biens.length) };
+                    };
+                    const validerModifSource = async (accepter) => {
+                        const e = srcProp.edition; if (!e) return;
+                        Object.assign(srcProp, { erreur: '', message: '' });
+                        try {
+                            await _spAppel({ action: 'modifier', cle: e.cle, nom: e.nom, type: e.type, langue: e.langue, frequence: e.frequence, mode: e.mode, confiance: e.confiance, flux: e.flux,
+                                             requetes: String(e.requetes || '').split('\n').map(x => x.trim()).filter(Boolean), note: e.note, lieux: e.cebien ? srcProp.lieux : [], biens: [], accepter });
+                            srcProp.message = accepter ? '✅ ' + e.nom + ' modifiée et acceptée : interrogée au prochain cycle.' : '💾 ' + e.nom + ' modifiée.';
+                            srcProp.edition = null;
+                            await chargerSourcesProposees(srcProp.lieux);
+                        } catch (x) { srcProp.erreur = x.message; }
+                    };
+                    const ajouterSourceManuelle = async (lieux) => {
+                        const a = srcProp.ajout;
+                        Object.assign(srcProp, { erreur: '', message: '' });
+                        try {
+                            const d = await _spAppel({ action: 'ajouter', url: a.url, nom: a.nom, type: a.type, langue: a.langue, frequence: a.frequence, confiance: a.confiance, note: a.note,
+                                                       mode: ['reseau', 'video'].includes(a.type) ? 'signal' : 'moteur', lieux: a.cebien ? (lieux || []) : [], confirmer: !!a.aConfirmer });
+                            srcProp.message = '✅ ' + ((d.source && d.source.config && d.source.config.nom) || a.url) + ' ajoutée : interrogée au prochain cycle de collecte.';
+                            srcProp.ajout = _spAjoutVide();
+                            await chargerSourcesProposees(lieux || srcProp.lieux);
+                        } catch (e) {
+                            if (e.code === 'A_CONFIRMER') { a.aConfirmer = e.message; return; }
+                            a.aConfirmer = ''; srcProp.erreur = e.message;
+                        }
                     };
 
                     // ── v33.96 : DETTE AU SENS DE LA BANQUE ────────────────────────────
@@ -28144,6 +28316,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         calibrationVue, garderAnnonceCalib, calibSaisie, ajouterObservationCalib, retirerObservationCalib, validerCalibration, calibChart, CALIB_CATEGORIES,
                         veilleSources, ouvrirSourcesVeille, fermerSourcesVeille, nouvelleSourceVeille, modifierSourceVeille, annulerSourceVeille,
                         validerSourceVeille, basculerSourceVeille, supprimerSourceVeille, restaurerSourceVeille, reinitialiserSourcesVeille, testerSourceVeille, VS_PORTEES_WEB, cleSourceVeille,
+                        srcProp, SP_TYPES, SP_MODES, SP_STATUTS, SP_FILTRES, sourcesProposeesFiltrees, chargerSourcesProposees, deciderSourceProposee, voirExemplesSource, modifierSourceProposee, validerModifSource, ajouterSourceManuelle,   // v37.142
                         openMasterAssetModal, editMasterAsset, deleteMasterAsset, saveMasterAsset, closeMasterAssetModal, calculerCapital,
                         // v33.10 : objectifs, indépendance financière, arbitrage, studio
                         migrateGoalV19, migrateGoalsV19, wealthGoalsCalc, addWealthGoal, syncGoalLegacy, lierObjectifCompte,
