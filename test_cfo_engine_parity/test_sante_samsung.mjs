@@ -208,6 +208,22 @@ v('  → .zip parcouru en flux depuis un Blob (comme un fichier choisi sur le t�
   nZ === 8 && rZ.lus.fc >= 500000 && rZ.jours['2026-11-01'] && rZ.jours['2026-11-01'].pas === 9050, [nZ, rZ.lus]);
 fs.rmSync(path.dirname(zipB), { recursive: true, force: true });
 
+//  v1.28 — le détail réduit à son résultat dès sa lecture : le tracé AVANT le détail (ordre inverse dans le .zip) donne les mêmes temps par km
+const exO = S.creerExtracteur({ decalageMin: 60, fcMax: 176 });
+exO.ajouterTexte(`${R3}files/x/abc-123.com.samsung.health.exercise.location_data.json`, JSON.stringify(trace));
+exO.ajouterTexte(`${R3}files/x/abc-123.com.samsung.health.exercise.live_data.json`, JSON.stringify(liveSans));
+exO.ajouterTexte(`${R3}com.samsung.shealth.exercise.20250101.csv`, f2[`${R2}com.samsung.shealth.exercise.${TC2}.csv`]);
+const mO = exO.resultat().seances.find(x => x.id === 'abc-123') || {};
+v('  → v1.28 : le tracé lu AVANT le détail (ordre inverse) : mêmes zones et mêmes temps par km', (mO.par_km || []).length === 4 && JSON.stringify(mO.zones_s) === JSON.stringify(m5.zones_s), [mO.par_km, mO.zones_s, m5.zones_s]);
+//  3 000 séances avec leur détail (des années d'export) : traitées une à une, résultat complet
+const ex3 = S.creerExtracteur({ decalageMin: 60, fcMax: 176 }), lig = [];
+const t3 = Date.now();
+for (let i = 0; i < 3000; i++) { const id = 'm' + i, d0 = Date.UTC(2018, 0, 1) + i * 86400000; lig.push([new Date(d0).toISOString().replace('T', ' ').replace('Z', ''), '', 'UTC+0100', '1001', '1800000', '2400', '200', '110', '125', '1.33', '', '', '', '', id, id + '.com.samsung.health.exercise.live_data.json'].join(','));
+  ex3.ajouterTexte(`${R3}jsons/com.samsung.shealth.exercise/${i % 16}/${id}.com.samsung.health.exercise.live_data.json`, JSON.stringify(live.slice(0, 181).map(p => ({ ...p, start_time: p.start_time - t0 + d0 })))); }
+ex3.ajouterTexte(`${R3}com.samsung.shealth.exercise.20250101.csv`, csv('com.samsung.shealth.exercise', ['start_time', 'end_time', 'time_offset', 'exercise_type', 'duration', 'distance', 'calorie', 'mean_heart_rate', 'max_heart_rate', 'mean_speed', 'altitude_gain', 'count', 'count_type', 'vo2_max', 'datauuid', 'live_data'], lig.map(l => l.split(','))));
+const s3 = ex3.resultat().seances;
+v(`  → 3 000 séances et leurs 3 000 fichiers de détail (8 ans) : toutes rendues avec zones et temps par km (${Date.now() - t3} ms)`, s3.length === 3000 && s3.every(x => (x.zones_s || []).length === 5 && (x.par_km || []).length >= 2), s3.length);
+
 v('E. CSV : guillemets, virgules et retours à la ligne dans un champ', JSON.stringify(S.csvLignes('a,b\n"x, ""y""\nz",2\n')) === JSON.stringify([['a', 'b'], ['x, "y"\nz', '2']]));
 v('  → décalages « UTC+0100 », « UTC+05:30 », « UTC-5 », « GMT »', S.decalage('UTC+0100') === 60 && S.decalage('UTC+05:30') === 330 && S.decalage('UTC-5') === -300 && S.decalage('GMT') === 0);
 console.log(ko === 0 ? `\n  ✅ TOUT PASSE — ${n} contrôles` : `\n  ❌ ${ko} contrôle(s) en échec sur ${n}`);
