@@ -206,6 +206,13 @@ await S.parcourirZip(new Blob([fs.readFileSync(zipB)]), S.estUtile, async (nom, 
 const rZ = exZ.resultat();
 v('  → .zip parcouru en flux depuis un Blob (comme un fichier choisi sur le téléphone) : 8 CSV, la FC des 500 000 lignes, les pas du 01/11',
   nZ === 8 && rZ.lus.fc >= 500000 && rZ.jours['2026-11-01'] && rZ.jours['2026-11-01'].pas === 9050, [nZ, rZ.lus]);
+//  v1.30 — Android lit mal un fichier par sauts : le .zip est lu en UNE passe (deux petites lectures de la fin + un flux), quel que soit
+//  le nombre d'entrées utiles ; la progression (octets lus / total) est donnée au fil de la lecture
+let sauts = 0; class BlobCompte extends Blob { slice(...a) { sauts++; return super.slice(...a); } }
+const progresZ = []; const exS = S.creerExtracteur({ decalageMin: 60 }); let nS = 0;
+await S.parcourirZip(new BlobCompte([fs.readFileSync(zipB)]), S.estUtile, async (nom, fl) => { nS++; await exS.ajouterFlux(nom, fl); }, { progres: (l, t) => progresZ.push([l, t]) });
+v('  → v1.30 : .zip lu en UNE passe (3 lectures du fichier au plus, pas une par entrée), progression donnée, même résultat',
+  sauts <= 3 && nS === 8 && progresZ.length >= 1 && progresZ[progresZ.length - 1][0] <= progresZ[progresZ.length - 1][1] && JSON.stringify(exS.resultat().jours) === JSON.stringify(rZ.jours), [sauts, nS, progresZ.length]);
 fs.rmSync(path.dirname(zipB), { recursive: true, force: true });
 
 //  v1.28 — le détail réduit à son résultat dès sa lecture : le tracé AVANT le détail (ordre inverse dans le .zip) donne les mêmes temps par km
