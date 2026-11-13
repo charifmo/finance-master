@@ -116,7 +116,12 @@
         const fcMax = options && Number.isFinite(options.fcMax) && options.fcMax > 100 ? options.fcMax : null;
         const lus = {}, sources = {}, combines = new Set();
         const pasL = { pas: [], pas_tendance: [], activite_jour: [] };
-        const kcal = {}, pesees = {}, fc = {}, sommeil = {}, compo = {}, vo2 = {}, seances = {}, live = {}, loc = {}, binning = {};
+        const kcal = {}, pesees = {}, fc = {}, sommeil = {}, compo = {}, vo2 = {}, seances = {}, binning = {};
+        //  v1.28 — « MÊME COMPORTEMENT » : le détail minute par minute de TOUTES les séances (des milliers de fichiers sur des années)
+        //  était gardé jusqu'à la fin : des centaines de Mo. Chaque détail est désormais réduit à son résultat (zones, temps par km)
+        //  dès sa lecture ; seuls restent, en attendant leur moitié, la FC d'une séance sans distance (toutes les 10 s) ou un tracé.
+        const detail = {}, fcSeule = {}, traceSeul = {};
+        const espacer = (pts, ms) => { let dernier = -Infinity; return pts.filter((p, i) => { if (p.t - dernier >= ms || i === pts.length - 1) { dernier = p.t; return true; } return false; }); };
         const COMPO = [['graisse_pct', 'body_fat', 2, 75], ['graisse_kg', 'body_fat_mass', 1, 250], ['muscle_kg', 'skeletal_muscle_mass', 5, 150], ['masse_maigre_kg', 'fat_free_mass', 15, 250],
                        ['muscle_total_kg', 'muscle_mass', 10, 250], ['eau_kg', 'total_body_water', 10, 150], ['bmr_kcal', 'basal_metabolic_rate', 500, 5000], ['graisse_viscerale', 'vfa_level', 1, 60]];
         const noterVo2 = (d, v, ms) => { if (d && v !== null && v >= 10 && v <= 90 && (!vo2[d] || ms >= vo2[d].ms)) vo2[d] = { ms, v: Math.round(v * 10) / 10 }; };
@@ -198,8 +203,20 @@
         const cleDe = (nom) => { const t = typeDuNom(nom); return t && UTILES[t] ? UTILES[t] : null; };
         const petitFichier = (nom, texte) => {
             const n = String(nom || '').replace(/\\/g, '/'); let m;
-            if ((m = RE_LIVE.exec(n))) { live[m[1].toLowerCase()] = texte; return true; }
-            if ((m = RE_LOC.exec(n))) { loc[m[1].toLowerCase()] = texte; return true; }
+            if ((m = RE_LIVE.exec(n))) {
+                const cle = m[1].toLowerCase(); let pts = pointsLive(texte);
+                const aDistance = pts.some(p => p.d !== null) || pts.filter(p => p.v !== null).length >= 2;
+                if (!aDistance && traceSeul[cle]) { pts = pts.concat(traceSeul[cle]).sort((a, b) => a.t - b.t); delete traceSeul[cle]; }
+                detail[cle] = detailPoints(pts, null, fcMax);
+                if (!aDistance && !detail[cle].par_km) fcSeule[cle] = espacer(pts.filter(p => p.fc !== null).map(p => ({ t: p.t, fc: p.fc, d: null, v: null })), 10000);
+                return true;
+            }
+            if ((m = RE_LOC.exec(n))) {
+                const cle = m[1].toLowerCase(), tr = pointsLoc(texte); if (tr.length < 2) return true;
+                if (fcSeule[cle]) { detail[cle] = detailPoints(fcSeule[cle].concat(tr).sort((a, b) => a.t - b.t), null, fcMax); delete fcSeule[cle]; }
+                else if (!detail[cle] || !detail[cle].par_km) traceSeul[cle] = tr;
+                return true;
+            }
             if (estBinningPas(n)) {
                 let items; try { items = JSON.parse(texte); } catch (e) { return true; }
                 if (!Array.isArray(items)) return true;
@@ -238,7 +255,8 @@
                 Object.entries(sommeil).forEach(([d, m]) => { jour(d).sommeil_min = Math.round(m); });
                 //  secours : aucun CSV de pas, mais le détail par 10 min (jsons/…pedometer_day_summary/)
                 if (!Object.values(jours).some(j => j.pas !== undefined)) Object.entries(binning).forEach(([d, p]) => { jour(d).pas = Math.round(p); sources.pas = 'jsons (détail 10 min)'; });
-                const ss = Object.values(seances).map(s => { const { _cle, _debut, ...x } = s; if (live[_cle] || loc[_cle]) Object.assign(x, detailSeance(live[_cle] || '[]', _debut, fcMax, loc[_cle])); return x; });
+                const ss = Object.values(seances).map(s => { const { _cle, _debut, ...x } = s;
+                    if (detail[_cle]) Object.assign(x, detail[_cle]); else if (traceSeul[_cle]) Object.assign(x, detailPoints(traceSeul[_cle], _debut, fcMax)); return x; });
                 return { jours, pesees: Object.entries(pesees).map(([date, p]) => ({ date, kg: p.kg })).sort((a, b) => a.date < b.date ? -1 : 1), lus, sources,
                          compo: Object.entries(compo).map(([date, x]) => { const { ms, ...m } = x; return { date, ...m }; }).sort((a, b) => a.date < b.date ? -1 : 1),
                          vo2: Object.entries(vo2).map(([date, x]) => ({ date, vo2max: x.v })).sort((a, b) => a.date < b.date ? -1 : 1),
@@ -293,22 +311,32 @@
      * zones de FC (secondes par zone, en % de la FC max : < 60, 60-70, 70-80, 80-90, ≥ 90) et temps par km (+ le reste).
      * La distance du détail est cumulée (croissante) ou par intervalle : les deux sont reconnues.
      */
+    const lireJson = (t) => { try { const x = JSON.parse(t || '[]'); return Array.isArray(x) ? x : []; } catch (e) { return []; } };
+    /** v1.28 — les points du détail d'une séance (live_data) : [{ t, fc, d, v }] triés. */
+    const pointsLive = (texte) => lireJson(texte).map(it => ({ t: num(it && it.start_time), fc: num(it && it.heart_rate), d: num(it && it.distance), v: num(it && it.speed) })).filter(p => p.t !== null).sort((a, b) => a.t - b.t);
+    /** v1.28 — le tracé (location_data) → distance CUMULÉE [{ t, fc: null, d }], un point toutes les 10 s au plus (léger en mémoire). */
+    function pointsLoc(texte) {
+        const g = lireJson(texte).map(it => ({ t: num(it && it.start_time), la: num(it && it.latitude), lo: num(it && it.longitude) })).filter(p => p.t !== null && p.la !== null && p.lo !== null).sort((a, b) => a.t - b.t);
+        if (g.length < 2) return [];
+        const rad = Math.PI / 180; let c = 0, dernier = -Infinity; const out = [];
+        g.forEach((p, i) => {
+            if (i) { const a = g[i - 1], x = Math.sin((p.la - a.la) * rad / 2) ** 2 + Math.cos(a.la * rad) * Math.cos(p.la * rad) * Math.sin((p.lo - a.lo) * rad / 2) ** 2; c += 2 * 6371000 * Math.asin(Math.sqrt(x)); }
+            if (p.t - dernier >= 10000 || i === g.length - 1) { out.push({ t: p.t, fc: null, d: c }); dernier = p.t; }
+        });
+        return out;
+    }
     function detailSeance(texte, debut, fcMax, texteLoc) {
-        const lire = (t) => { try { const x = JSON.parse(t || '[]'); return Array.isArray(x) ? x : []; } catch (e) { return []; } };
-        const items = lire(texte);
-        let pts = items.map(it => ({ t: num(it && it.start_time), fc: num(it && it.heart_rate), d: num(it && it.distance), v: num(it && it.speed) })).filter(p => p.t !== null).sort((a, b) => a.t - b.t);
+        let pts = pointsLive(texte);
         //  la distance au fil de la séance : la clé « distance » du détail si elle existe ; sinon le TRACÉ (location_data : latitude,
         //  longitude) ; sinon la vitesse (m/s) intégrée dans le temps. Aucune des trois : pas de temps par km (rien d'inventé).
-        if (!pts.some(p => p.d !== null)) {
-            const g = lire(texteLoc).map(it => ({ t: num(it && it.start_time), la: num(it && it.latitude), lo: num(it && it.longitude) })).filter(p => p.t !== null && p.la !== null && p.lo !== null).sort((a, b) => a.t - b.t);
-            if (g.length >= 2) {
-                const rad = Math.PI / 180; let c = 0;
-                const tr = g.map((p, i) => { if (i) { const a = g[i - 1], x = Math.sin((p.la - a.la) * rad / 2) ** 2 + Math.cos(a.la * rad) * Math.cos(p.la * rad) * Math.sin((p.lo - a.lo) * rad / 2) ** 2; c += 2 * 6371000 * Math.asin(Math.sqrt(x)); } return { t: p.t, fc: null, d: c }; });
-                pts = pts.concat(tr).sort((a, b) => a.t - b.t);
-            } else if (pts.filter(p => p.v !== null).length >= 2) {
-                let c = 0, tPrec = null;
-                pts.forEach(p => { if (p.v !== null && p.v >= 0) { if (tPrec !== null) c += p.v * Math.min(60, (p.t - tPrec) / 1000); tPrec = p.t; p.d = c; } });
-            }
+        if (!pts.some(p => p.d !== null) && texteLoc) { const tr = pointsLoc(texteLoc); if (tr.length >= 2) pts = pts.concat(tr).sort((a, b) => a.t - b.t); }
+        return detailPoints(pts, debut, fcMax);
+    }
+    /** v1.28 — zones de FC et temps par km à partir de points [{ t, fc, d, v }] (distance absente : la vitesse intégrée). */
+    function detailPoints(pts, debut, fcMax) {
+        if (!pts.some(p => p.d !== null) && pts.filter(p => p.v !== null).length >= 2) {
+            let c = 0, tPrec = null;
+            pts.forEach(p => { if (p.v !== null && p.v >= 0) { if (tPrec !== null) c += p.v * Math.min(60, (p.t - tPrec) / 1000); tPrec = p.t; p.d = c; } });
         }
         if (!pts.length) return {};
         const out = {};
@@ -393,5 +421,5 @@
         return sortie;
     }
 
-    return { UTILES, typeDuNom, estUtile, estBinningPas, estLiveData, texteDe, estExportSamsung, csvLignes, table, decalage, dateLocale, extraire, creerExtracteur, analyseurCsv, parcourirZip, lireZip, detailSeance, nomSeance };
+    return { UTILES, typeDuNom, estUtile, estBinningPas, estLiveData, texteDe, estExportSamsung, csvLignes, table, decalage, dateLocale, extraire, creerExtracteur, analyseurCsv, parcourirZip, lireZip, detailSeance, detailPoints, pointsLive, pointsLoc, nomSeance };
 });
