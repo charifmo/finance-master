@@ -8020,35 +8020,45 @@
                             </div>
                         </div>
                         <div v-for="l in c.lignes" :key="'fl' + l.cle" data-frise-ligne :data-poste="l.cle" :data-unite="l.unite" class="grid grid-cols-1 md:grid-cols-[11rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 items-center pt-1 md:pt-0 border-t border-slate-100 md:border-0">
-                            <p class="min-w-0 md:truncate text-[12px] md:text-[11px] font-semibold text-slate-700 md:text-slate-600 pl-1 cursor-pointer select-none leading-snug" data-frise-nom @dblclick="allerAuPrevuFrise(c, l)" title="Double-clic (ou ✏️) : changer le prévu de cette ligne"><button type="button" @click.stop="allerAuPrevuFrise(c, l)" data-frise-vers-prevu class="mr-0.5 opacity-50 hover:opacity-100" title="Changer le prévu (Budget Structurel ou Calendrier Pluriannuel)" aria-label="Changer le prévu">✏️</button>{{ l.emoji }} {{ l.nom }} <span class="text-slate-400">{{ l.unite === 'semaine' ? '/ sem' : (l.unite === 'quinzaine' ? '/ 15 j' : '/ cycle') }}</span></p>
+                            <p class="min-w-0 md:truncate text-[12px] md:text-[11px] font-semibold text-slate-700 md:text-slate-600 pl-1 cursor-pointer select-none leading-snug" data-frise-nom @dblclick="ouvrirPrevuFrise(c, l)" title="Double-clic (ou ✏️) : changer le prévu de cette ligne"><button type="button" @click.stop="ouvrirPrevuFrise(c, l)" data-frise-vers-prevu class="mr-0.5 opacity-50 hover:opacity-100" title="Changer le prévu (Budget Structurel ou Calendrier Pluriannuel)" aria-label="Changer le prévu">✏️</button>{{ l.emoji }} {{ l.nom }} <span class="text-slate-400">{{ l.unite === 'semaine' ? '/ sem' : (l.unite === 'quinzaine' ? '/ 15 j' : '/ cycle') }}</span><span v-if="l.compte" data-frise-compte :title="'Prélevé sur ' + l.compte + (l.compteRegle ? ' — ' + l.compteRegle : '')" class="ml-1 inline-block align-middle max-w-[9rem] truncate px-1.5 rounded-full bg-slate-100 ring-1 ring-slate-200 text-[10px] font-bold text-slate-600">💳 {{ l.compte }}</span></p>
                             <div v-if="l.cellules" class="flex rounded-md overflow-hidden ring-1 ring-slate-200">
                                 <span v-for="(x, i) in l.cellules" :key="'fx' + i" data-frise-case role="button" tabindex="0" @click="ouvrirApercuFrise(c, l, x)" @keydown.enter="ouvrirApercuFrise(c, l, x)" :data-etat="x.depasse && !x.avenir ? 'depasse' : (x.avenir ? 'avenir' : (x.auPrevu ? 'auprevu' : (x.encours ? 'encours' : 'tenu')))" :style="{ width: x.part + '%' }" :title="x.titre + ' : ' + x.reel + ' / ' + x.prevu + ' DH' + (x.auPrevu ? ' (au prévu, rien tapé)' : '')"
                                       :class="['h-7 md:h-6 flex items-center justify-center text-[11px] md:text-[10px] font-bold tabular-nums border-r border-white leading-none cursor-pointer hover:brightness-95 hover:ring-2 hover:ring-inset hover:ring-blue-400',
-                                               x.avenir ? 'bg-slate-50 text-slate-400' : (x.depasse ? 'bg-rose-200 text-rose-900' : (x.auPrevu ? 'bg-emerald-50 text-emerald-700 italic' : (x.encours ? 'bg-sky-100 text-sky-900' : 'bg-emerald-200 text-emerald-900')))]">{{ x.avenir ? x.prevu : x.reel + '/' + x.prevu }}</span>
+                                               x.clos && !x.depasse ? 'bg-slate-200 text-slate-700 ring-2 ring-inset ring-slate-500' : (x.avenir ? 'bg-slate-50 text-slate-400' : (x.depasse ? 'bg-rose-200 text-rose-900' : (x.auPrevu ? 'bg-emerald-50 text-emerald-700 italic' : (x.encours ? 'bg-sky-100 text-sky-900' : 'bg-emerald-200 text-emerald-900'))))]" :data-clos="x.clos ? 'oui' : 'non'">{{ x.clos ? '🔒 ' : '' }}{{ x.avenir ? x.prevu : x.reel + '/' + x.prevu }}</span>
                             </div>
                             <div v-else class="min-w-0">
-                                <div data-frise-enveloppe role="button" tabindex="0" @click="ouvrirApercuFrise(c, l, null)" @keydown.enter="ouvrirApercuFrise(c, l, null)" class="relative h-6 rounded-md bg-slate-100 ring-1 ring-slate-200 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-400" :title="l.engage + ' / ' + l.enveloppe + ' DH sur le cycle — touchez pour voir ce qui a été saisi'">
-                                    <span :class="['absolute inset-y-0 left-0', l.depasse ? 'bg-rose-300' : 'bg-violet-200']" :style="{ width: l.pct + '%' }"></span>
+                                <div class="flex items-stretch gap-1">
+                                <div data-frise-enveloppe :data-clos="l.clos ? 'oui' : 'non'" role="button" tabindex="0" @click="ouvrirApercuFrise(c, l, null)" @keydown.enter="ouvrirApercuFrise(c, l, null)"
+                                     :class="['relative flex-1 min-w-0 h-6 rounded-md overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-400', l.clos ? 'bg-slate-200 ring-2 ring-slate-500 bg-[repeating-linear-gradient(135deg,transparent_0,transparent_6px,rgba(100,116,139,0.18)_6px,rgba(100,116,139,0.18)_12px)]' : 'bg-slate-100 ring-1 ring-slate-200']"
+                                     :title="l.clos ? '🔒 Clôturé pour ce cycle : plus rien n’est attendu — ' + l.engage + ' DH réglés' + (l.eco > 0 ? ', ' + l.eco + ' DH libérés' : '') : l.engage + ' / ' + l.enveloppe + ' DH sur le cycle — touchez pour voir ce qui a été saisi'">
+                                    <span :class="['absolute inset-y-0 left-0', l.clos ? 'bg-slate-400/60' : (l.depasse ? 'bg-rose-300' : 'bg-violet-200')]" :style="{ width: l.pct + '%' }"></span>
                                     <!-- v37.107 : les repères (payé ●, prochaine ○) passent DERRIÈRE les chiffres, translucides : ils ne cachent plus rien -->
                                     <span v-for="(s, k) in l.seances" :key="'fs' + k" data-frise-seance :data-etat="s.etat" :title="(s.etat === 'paye' ? 'Payé le ' : (s.etat === 'suivant' ? 'Prochaine ≈ ' + s.quand + ' : au cycle suivant' : 'Prochaine ≈ ')) + (s.etat === 'suivant' ? '' : s.quand)"
                                           :class="['absolute top-0.5 bottom-0.5 w-1.5 -ml-[3px] rounded-full ring-2 opacity-60', s.etat === 'paye' ? 'bg-violet-600 ring-white' : (s.etat === 'suivant' ? 'bg-white ring-amber-500' : 'bg-white ring-violet-500')]" :style="{ left: Math.min(99, s.pos) + '%' }"></span>
-                                    <span class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"><span data-frise-chiffres class="pointer-events-auto px-1.5 rounded bg-white/75 text-[10px] font-bold text-slate-700 tabular-nums">{{ l.engage }} / {{ l.enveloppe }} DH sur le cycle{{ l.fois ? ' · ≈ ' + l.fois + '×' : '' }}</span></span>
+                                    <span class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"><span data-frise-chiffres :class="['pointer-events-auto px-1.5 rounded text-[10px] font-bold tabular-nums', l.clos ? 'bg-slate-700 text-white' : 'bg-white/75 text-slate-700']"><template v-if="l.clos">🔒 Clôturé · {{ l.engage }} / {{ l.enveloppe }} DH<template v-if="l.eco > 0"> · {{ l.eco }} libérés</template></template><template v-else>{{ l.engage }} / {{ l.enveloppe }} DH sur le cycle{{ l.fois ? ' · ≈ ' + l.fois + '×' : '' }}</template></span></span>
                                 </div>
-                                <div v-if="l.quinzaines && l.quinzaines.length" data-frise-quinzaines :data-poste="l.cle" class="mt-0.5 flex rounded-md overflow-hidden ring-1 ring-slate-200">
+                                <button v-if="l.verrouillable" type="button" data-frise-cloturer :data-poste="l.cle" :aria-pressed="l.clos ? 'true' : 'false'" @click.stop="basculerClotureConso(null, l.cle, l.unite)"
+                                        :title="l.clos ? 'Rouvrir ' + l.nom + ' : son enveloppe attend de nouveau des dépenses' : 'Clôturer ' + l.nom + ' pour ce cycle : plus rien n’est attendu, le reste de son enveloppe est libéré'"
+                                        :class="['shrink-0 w-7 h-6 grid place-items-center rounded-md text-[12px] transition', l.clos ? 'bg-slate-700 text-white ring-2 ring-slate-500' : 'bg-slate-100 ring-1 ring-slate-200 opacity-60 hover:opacity-100 hover:bg-slate-200']">{{ l.clos ? '🔒' : '🔓' }}</button>
+                                </div>
+                                <div v-if="l.quinzaines && l.quinzaines.length" data-frise-quinzaines :data-poste="l.cle" :class="['mt-0.5 flex rounded-md overflow-hidden ring-1 ring-slate-200', l.clos ? 'opacity-50' : '']">
                                     <span v-for="q in l.quinzaines" :key="'fq' + q.rang" data-frise-quinzaine :data-rang="q.rang" :style="{ width: q.part + '%' }"
                                           :class="['relative h-7 md:h-6 flex items-center justify-center gap-1 border-r border-white text-[11px] md:text-[10px] font-bold tabular-nums leading-none',
-                                                   (q.saisi + q.tickets) > q.prevu + 0.5 ? 'bg-rose-200 text-rose-900' : ((q.saisi + q.tickets) > 0 ? 'bg-emerald-200 text-emerald-900' : (q.encours ? 'bg-sky-100 text-sky-900' : (q.passe ? 'bg-amber-50 text-amber-800' : 'bg-slate-50 text-slate-500')))]"
-                                          :title="q.label + ' (' + q.dates + ') : ' + (q.saisi + q.tickets) + ' / ' + q.prevu + ' DH' + (q.tickets ? ' (dont ' + q.tickets + ' DH d\u2019opérations du journal)' : '') + ' — touchez pour saisir'">
+                                                   Math.max(q.saisi, q.tickets) > q.prevu + 0.5 ? 'bg-rose-200 text-rose-900' : (Math.max(q.saisi, q.tickets) > 0 ? 'bg-emerald-200 text-emerald-900' : (q.encours ? 'bg-sky-100 text-sky-900' : (q.passe ? 'bg-amber-50 text-amber-800' : 'bg-slate-50 text-slate-500')))]"
+                                          :title="q.label + ' (' + q.dates + ') : ' + Math.max(q.saisi, q.tickets) + ' / ' + q.prevu + ' DH' + (q.tickets ? ' (tapé ' + q.saisi + ' DH, journal ' + q.tickets + ' DH : le plus grand compte)' : '') + ' — touchez pour saisir'">
                                         <input v-if="friseQEdit === l.cle + '#' + q.rang" data-frise-quinzaine-saisie :data-rang="q.rang" type="text" inputmode="decimal" autocomplete="off"
                                                :value="q.tape ? q.saisi : ''" :placeholder="String(q.prevu)" @vue:mounted="({ el }) => { el.focus(); el.select(); }"
                                                @change="saisirQuinzaineFrise(l, q, $event.target.value)" @blur="friseQEdit = null" @keydown.enter.prevent="$event.target.blur()" @keydown.esc="friseQEdit = null"
                                                class="w-full h-full bg-white text-center text-[12px] font-black text-slate-900 outline-none ring-2 ring-inset ring-blue-400">
                                         <template v-else>
                                             <button type="button" data-frise-quinzaine-ouvrir :data-rang="q.rang" @click="friseQEdit = l.cle + '#' + q.rang" class="min-w-0 flex-1 h-full truncate px-1">
-                                                <span class="hidden md:inline">{{ q.rang === 1 && l.quinzaines.length === 1 ? '' : (q.rang + (q.rang === 1 ? 'ʳᵉ' : 'ᵉ') + ' · ') }}</span>{{ (q.saisi + q.tickets) > 0 || q.tape ? q.saisi + q.tickets : '–' }} / {{ q.prevu }}
+                                                <span class="hidden md:inline">{{ q.rang === 1 && l.quinzaines.length === 1 ? '' : (q.rang + (q.rang === 1 ? 'ʳᵉ' : 'ᵉ') + ' · ') }}</span>{{ Math.max(q.saisi, q.tickets) > 0 || q.tape ? Math.max(q.saisi, q.tickets) : '–' }} / {{ q.prevu }}
                                             </button>
-                                            <button v-if="!(q.saisi + q.tickets > 0) && q.prevu > 0" type="button" data-frise-quinzaine-payee :data-rang="q.rang" @click="saisirQuinzaineFrise(l, q, String(q.prevu))"
-                                                    :title="'Payé au prévu (' + q.prevu + ' DH) — ' + q.label" class="shrink-0 mr-0.5 px-1 rounded bg-white/70 hover:bg-white text-emerald-700 font-black">✓</button>
+                                            <!-- v37.143 — « C'EST QUOI CE ✓ ? PARFOIS IL DISPARAÎT » : « ✓ payé » inscrit le prévu de la quinzaine comme réglé ; une fois inscrit, « ✕ » l'annule -->
+                                            <button v-if="!(q.saisi + q.tickets > 0) && q.prevu > 0 && (q.passe || q.encours)" type="button" data-frise-quinzaine-payee :data-rang="q.rang" @click="saisirQuinzaineFrise(l, q, String(q.prevu))"
+                                                    :title="'Marquer ' + q.label + ' payée au prévu : ' + q.prevu + ' DH (✕ annule ensuite)'" class="shrink-0 mr-0.5 px-1.5 py-0.5 rounded bg-white/80 hover:bg-white text-emerald-700 text-[10px] font-black whitespace-nowrap">✓ payé</button>
+                                            <button v-else-if="q.tape && q.saisi > 0" type="button" data-frise-quinzaine-annuler :data-rang="q.rang" @click="saisirQuinzaineFrise(l, q, '')"
+                                                    :title="'Annuler les ' + q.saisi + ' DH inscrits pour ' + q.label" class="shrink-0 mr-0.5 px-1 rounded text-slate-500 hover:text-rose-700 hover:bg-white/80 text-[11px] font-black">✕</button>
                                         </template>
                                     </span>
                                 </div>
@@ -8064,6 +8074,8 @@
                         <span class="inline-block w-3 h-3 align-middle rounded bg-rose-200"></span> dépassé ·
                         <span class="inline-block w-3 h-3 align-middle rounded bg-slate-50 ring-1 ring-slate-200"></span> à venir (prévu) ·
                         <span class="inline-block w-3 h-3 align-middle rounded bg-amber-100"></span> ✂️ coupé par la paie ·
+                        <span class="inline-block px-1 align-middle rounded bg-white ring-1 ring-emerald-300 text-emerald-700 text-[9px] font-black">✓ payé</span> inscrire le prévu de la quinzaine comme réglé (✕ annule) ·
+                        <span class="inline-block px-1 align-middle rounded bg-slate-700 text-white text-[9px]">🔒</span> clôturé (plus rien n’est attendu, le reste est libéré ; 🔓 pour clôturer ou rouvrir) ·
                         <span class="inline-block w-2 h-2 align-middle rounded-full bg-violet-600"></span> séance payée ·
                         <span class="inline-block w-2 h-2 align-middle rounded-full ring-2 ring-violet-500"></span> prochaine ·
                         <span class="inline-block w-2 h-2 align-middle rounded-full ring-2 ring-amber-500"></span> au cycle suivant ·
@@ -8074,6 +8086,41 @@
         </div>
 
         <!-- v37.100 : ce qui a été saisi derrière une case de la frise — modifiable et supprimable sur place -->
+        <!-- v37.143 — « CHANGER LE PRÉVU N'AFFICHE RIEN : PLUTÔT UNE PETITE FENÊTRE OÙ JE RENSEIGNE TOUT » : le prévu d'une ligne, modifié sur place -->
+        <div v-if="prevuFrise" data-prevu-frise class="fixed inset-0 z-[10002] bg-black/40 flex items-end md:items-center justify-center p-0 md:p-4" @click.self="prevuFrise = null">
+            <div class="w-full md:max-w-md bg-white rounded-t-2xl md:rounded-2xl shadow-2xl p-4 space-y-3">
+                <div class="flex items-start gap-2">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-black text-slate-800" data-prevu-frise-titre>✏️ Prévu de « {{ prevuFrise.nomInitial }} »</p>
+                        <p class="text-[11px] font-semibold text-slate-500">{{ prevuFrise.catLabel }} · budget {{ prevuFrise.an }}</p>
+                    </div>
+                    <button type="button" @click="prevuFrise = null" aria-label="Fermer" class="shrink-0 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">✕</button>
+                </div>
+                <label class="block text-[11px] font-black text-slate-600">Nom
+                    <input data-prevu-frise-nom v-model="prevuFrise.nom" type="text" autocomplete="off" class="mt-1 w-full rounded-lg ring-1 ring-slate-300 px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-400">
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="block text-[11px] font-black text-slate-600">Montant (DH)
+                        <input data-prevu-frise-montant v-model="prevuFrise.montant" type="text" inputmode="decimal" autocomplete="off" class="mt-1 w-full rounded-lg ring-1 ring-slate-300 px-3 py-2 text-right text-base font-black text-slate-900 tabular-nums outline-none focus:ring-2 focus:ring-blue-400">
+                    </label>
+                    <div class="text-[11px] font-black text-slate-600">Rythme
+                        <div class="mt-1 grid grid-cols-3 gap-1">
+                            <button v-for="r in [['semaine', '/ sem'], ['quinzaine', '/ 15 j'], ['cycle', '/ cycle']]" :key="r[0]" type="button" :data-prevu-frise-rythme="r[0]" @click="prevuFrise.periode = r[0]"
+                                    :class="['py-2 rounded-lg text-[11px] font-black', prevuFrise.periode === r[0] ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200']">{{ r[1] }}</button>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[11px] font-semibold text-slate-500" data-prevu-frise-apercu>{{ apercuPrevuFrise }}</p>
+                <label v-if="prevuFrise.anneesSuivantes.length" class="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                    <input type="checkbox" v-model="prevuFrise.aussiSuivantes" data-prevu-frise-suivantes> aussi pour {{ prevuFrise.anneesSuivantes.join(', ') }}
+                </label>
+                <p v-if="prevuFrise.erreur" data-prevu-frise-erreur class="text-[11px] font-black text-rose-600">{{ prevuFrise.erreur }}</p>
+                <div class="flex gap-2">
+                    <button type="button" data-prevu-frise-enregistrer @click="enregistrerPrevuFrise()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black">Enregistrer</button>
+                    <button type="button" data-prevu-frise-budget @click="const x = prevuFrise; prevuFrise = null; allerAuPrevuFrise(x.c, x.l)" class="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-black text-slate-700">Tout le budget ›</button>
+                </div>
+            </div>
+        </div>
         <div v-if="friseOuverte && apercuFrise" data-frise-apercu class="fixed inset-0 z-[10001] bg-black/30 flex items-end md:items-center justify-center p-0 md:p-4" @click.self="fermerApercuFrise()">
             <div class="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl shadow-2xl max-h-[85vh] flex flex-col">
                 <div class="flex items-start gap-3 px-4 py-3 border-b border-slate-100">
@@ -8084,6 +8131,13 @@
                     <button type="button" data-frise-apercu-fermer @click="fermerApercuFrise()" aria-label="Fermer" class="shrink-0 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">✕</button>
                 </div>
                 <div class="overflow-y-auto px-3 py-2 space-y-1.5">
+                    <!-- v37.143 : le verrou, ici aussi — / sem : pour CETTE semaine ; / 15 j et / cycle : pour le cycle -->
+                    <button v-if="apercuFrise.verrouillable" type="button" data-frise-apercu-cloturer :aria-pressed="apercuClos ? 'true' : 'false'"
+                            @click="basculerClotureConso(apercuFrise.semaine || null, apercuFrise.cle, apercuFrise.semaine ? 'semaine' : apercuFrise.unite)"
+                            :class="['w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-black text-left', apercuClos ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200']">
+                        <span class="text-base leading-none">{{ apercuClos ? '🔒' : '🔓' }}</span>
+                        <span class="flex-1 min-w-0">{{ apercuClos ? 'Clôturé ' + (apercuFrise.semaine ? 'pour ' + apercuFrise.periode : 'pour ce cycle') + ' — plus rien n’est attendu. Toucher pour rouvrir.' : 'Clôturer ' + (apercuFrise.semaine ? 'pour ' + apercuFrise.periode : 'pour ce cycle') + ' : plus rien n’est attendu, le reste du prévu est libéré' }}</span>
+                    </button>
                     <!-- v37.131 : le montant tapé pour CE morceau, corrigé ici -->
                     <label v-if="apercuFrise.semaine" data-frise-apercu-saisi class="flex items-center gap-2 rounded-lg bg-sky-50 ring-1 ring-sky-200 px-2.5 py-1.5 text-[11px] font-bold text-sky-900">
                         <span class="flex-1 min-w-0">✍️ Tapé pour {{ apercuFrise.periode }} (sans ticket)</span>
@@ -8103,8 +8157,10 @@
                             <input data-frise-apercu-quinzaine-saisie :data-rang="q.rang" type="text" inputmode="decimal" autocomplete="off" :value="q.tape ? q.saisi : ''" :placeholder="String(q.prevu)"
                                    @change="saisirQuinzaineFrise({ cle: apercuFrise.cle }, q, $event.target.value)" @keydown.enter.prevent="$event.target.blur()"
                                    class="w-20 rounded-md bg-white ring-1 ring-violet-300 px-2 py-1 text-right text-sm font-black text-slate-900 tabular-nums outline-none focus:ring-2 focus:ring-violet-500">
-                            <button v-if="!(q.saisi + q.tickets > 0) && q.prevu > 0" type="button" data-frise-apercu-quinzaine-payee :data-rang="q.rang" @click="saisirQuinzaineFrise({ cle: apercuFrise.cle }, q, String(q.prevu))"
-                                    class="shrink-0 rounded-md bg-emerald-100 hover:bg-emerald-200 px-2 py-1 text-[11px] font-black text-emerald-800" :title="'Payée : ' + q.prevu + ' DH'">✓</button>
+                            <button v-if="!(q.saisi + q.tickets > 0) && q.prevu > 0 && (q.passe || q.encours)" type="button" data-frise-apercu-quinzaine-payee :data-rang="q.rang" @click="saisirQuinzaineFrise({ cle: apercuFrise.cle }, q, String(q.prevu))"
+                                    class="shrink-0 rounded-md bg-emerald-100 hover:bg-emerald-200 px-2 py-1 text-[11px] font-black text-emerald-800 whitespace-nowrap" :title="'Marquer payée au prévu : ' + q.prevu + ' DH'">✓ Payé</button>
+                            <button v-else-if="q.tape && q.saisi > 0" type="button" data-frise-apercu-quinzaine-annuler :data-rang="q.rang" @click="saisirQuinzaineFrise({ cle: apercuFrise.cle }, q, '')"
+                                    class="shrink-0 rounded-md bg-slate-100 hover:bg-rose-100 px-2 py-1 text-[11px] font-black text-slate-600 hover:text-rose-700" :title="'Annuler les ' + q.saisi + ' DH inscrits'">✕</button>
                             <span v-else class="shrink-0 w-7"></span>
                         </div>
                     </div>
@@ -8163,7 +8219,7 @@
                 <div class="px-3 py-2.5 border-t border-slate-100 flex items-center gap-2">
                     <span class="mr-auto text-[11px] font-black text-slate-600 tabular-nums" data-frise-apercu-total>{{ apercuFriseOps.ops.length }} opération{{ apercuFriseOps.ops.length > 1 ? 's' : '' }} · {{ formatMAD(apercuFriseOps.total) }}</span>
                     <button v-if="!apercuAjout.ouvert && apercuCategorieAjout" type="button" data-frise-apercu-ajouter @click="ouvrirAjoutApercu()" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100">➕ Ajouter</button>
-                    <button type="button" data-frise-apercu-prevu @click="allerAuPrevuFrise({ key: apercuFrise.catKey }, { catKey: apercuFrise.catKey, catId: apercuFrise.catId, cle: apercuFrise.cle })" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-sky-700 bg-sky-50 hover:bg-sky-100" title="Budget Structurel ou Calendrier Pluriannuel">✏️ Changer le prévu</button>
+                    <button type="button" data-frise-apercu-prevu @click="ouvrirPrevuFrise({ key: apercuFrise.catKey, label: apercuFrise.catLabel }, { catKey: apercuFrise.catKey, catId: apercuFrise.catId, cle: apercuFrise.cle, nom: apercuFrise.nom })" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-sky-700 bg-sky-50 hover:bg-sky-100" title="Budget Structurel ou Calendrier Pluriannuel">✏️ Changer le prévu</button>
                     <button type="button" data-frise-apercu-journal @click="apercuVersJournal()" class="px-3 py-1.5 rounded-lg text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200">📋 Voir dans le Journal</button>
                 </div>
             </div>
@@ -9457,8 +9513,16 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.143 Les publications, pas les pages";
+                    const CURRENT_VERSION = "37.144 La frise verrouille, compte juste et se règle sur place";
                     const CHANGELOG = [
+        { version: "37.144 La frise verrouille, compte juste et se règle sur place", date: "2026-11-14", changes: [
+            "🔒 « LHRRI EST VERROUILLÉ POUR CE CYCLE MAIS PAS DANS LA FRISE » — la frise lit le même verrou que la Météo et le Réalisé : une enveloppe / 15 j ou / cycle close est grisée et dit « 🔒 Clôturé · 50 / 1 355 DH · 1 305 libérés » ; son bouton 🔓 / 🔒 la clôt ou la rouvre depuis la frise. Une case / sem close pour sa semaine porte « 🔒 » ; l'aperçu d'une case la clôt ou la rouvre pour cette semaine.",
+            "🐟 « SAMAK : LES CASES DISENT 250 + 230, L'ENVELOPPE 250 / 500 » — le plus grand du tapé et du journal se prenait sur TOUT le cycle (250 tapés la 1ʳᵉ quinzaine contre 230 au journal la 2ᵉ → 250). Une ligne / 15 j ou / cycle se compte maintenant quinzaine par quinzaine — dans chacune le plus grand des deux, la règle des semaines — puis on additionne : 480 / 500, dans la Météo comme dans la frise.",
+            "✏️ « CHANGER LE PRÉVU N'AFFICHE RIEN » — une petite fenêtre s'ouvre sur place : nom, montant, rythme (/ sem, / 15 j, / cycle), ce que ça fait sur le cycle, « aussi pour les années suivantes » ; « Tout le budget › » garde l'ancien chemin.",
+            "✓ « C'EST QUOI CE ✓ ? PARFOIS IL DISPARAÎT » — il s'appelle maintenant « ✓ payé » : il inscrit le prévu de la quinzaine comme réglé, seulement pour une quinzaine commencée ; une fois inscrit, « ✕ » l'annule (le bouton ne s'évanouit plus sans trace). Expliqué dans la légende.",
+            "💳 « CHAQUE LIGNE DE LA FRISE DOIT MENTIONNER SON COMPTE » — à côté du nom : « 💳 Assafa principal », « 💳 Compte Courant »… La règle du Relevé, mot pour mot : le compte choisi sur la charge, sinon celui des charges variables ; une dépense exceptionnelle, son compte source (la règle s'affiche au survol).",
+            "PREUVE — test_frise_cycle.mjs : section F (verrou depuis la frise et depuis la Météo, case / sem close, aperçu, 400 + 300 = 700, ✓ payé ↔ ✕, le compte de chaque ligne) ; test_voyage_saisie.mjs (40) : la petite fenêtre du prévu, montant invalide refusé, 275 / 15 j enregistré.",
+        ] },
         { version: "37.143 Les publications, pas les pages", date: "2026-11-13", changes: [
             "💬 « RÉSULTAT FAIBLE, PAS DE RÉSEAUX SOCIAUX » — la collecte avait bien trouvé les publications Facebook de la commune (la vidéo du président sur les projets, le bilan 2023/2024, le post du 13 nov.), mais les 5 places des signaux étaient prises par la page elle-même, sa page « à propos », ses « mentions » et des profils, tous sans date. Désormais : seules les PUBLICATIONS (posts, vidéos, photos légendées, fils de forum) sont des signaux ; les pages sont des sources (« Sources proposées ») ; ce qui parle de projets, de routes, d'aménagement passe devant ; 8 signaux au plus.",
             "🧠 L'analyse a maintenant une rubrique « Ce qui se dit localement (signaux non vérifiés) » — 2 puces au plus, chacune avec son lien et « non vérifié », jamais mêlées aux faits ; « aucun signal utile » sinon.",
@@ -23215,7 +23279,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 //  tickets datés du poste restent dans `depense` (audit).
                                 const cle = cleDetailT0(c.key, x);
                                 const saisiP = Math.max(0, Math.round(Number(consoT0Saisies.value[cle] || 0)));
-                                const engP = Math.max(saisiP, dep) + Math.round(consoDefautsParCle.value[cle] || 0);   // v37.31
+                                //  v37.143 — « SAMAK : LES CASES DISENT 250 + 230, L'ENVELOPPE 250 / 500 » : le plus grand du tapé et du journal se prenait
+                                //  sur TOUT le cycle (250 tapés la 1ʳᵉ quinzaine contre 230 au journal la 2ᵉ → 250), alors que ce sont deux achats. Une
+                                //  ligne / 15 j ou / cycle se compte maintenant QUINZAINE PAR QUINZAINE — dans chacune, le plus grand des deux (la règle
+                                //  des semaines : un ticket ne s'ajoute pas à ce que vous avez tapé pour lui) — puis on additionne.
+                                const unitP = periodeDetail(x, cv);
+                                const parQ = unitP === 'semaine' ? 0 : quinzainesDuPoste(c.key, { cle, unite: unitP, categorieId: x.categorieId || null, prevu: Number(x.montant) || 0, cyclePrevu: partCycle }, null)
+                                    .reduce((a, q) => a + Math.max(q.saisi, q.tickets), 0);
+                                const engP = Math.max(saisiP, dep, parQ) + Math.round(consoDefautsParCle.value[cle] || 0);   // v37.31
                                 const p = { nom: x.nom || '—', emoji: emojiPoste(x.nom, x.icone), montant: Math.round(Number(x.montant) * ajuste), unite: periodeDetail(x, cv), categorieId: x.categorieId || null,
                                             depense: dep, pct: partCycle > 0 ? Math.min(100, Math.round(dep / partCycle * 100)) : (dep > 0 ? 100 : 0), depasse: dep > partCycle,
                                             cle, saisi: saisiP, declare: Object.prototype.hasOwnProperty.call(consoT0Saisies.value, cle),
@@ -23438,7 +23509,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const prevu = Math.round(Number(prevus[i][cle] || 0)), defaut = Math.round(Number(m.defs[cle] || 0));
                                 const auPrevu = !tape && tk <= 0 && defaut > 0;
                                 const reel = Math.round(Math.max(sai, tk) + (auPrevu ? defaut : 0));
-                                return { prevu, reel, auPrevu, etat: m.etat, avenir: m.etat === 'avenir' && !tape && tk <= 0, encours: m.etat === 'encours', depasse: reel > prevu + 0.5, part: m.part, titre: m.titre, du: m.debut, au: m.fin, saisi: tape ? Math.round(sai) : null, defaut };
+                                //  v37.143 — la case close pour SA semaine (le 🔒 de la Météo) : la frise le montre, et la case close vide vaut 0
+                                const clos = !!(_cloturesConso.value['S' + m.debut] || {})[cle];
+                                const auP = auPrevu && !clos, reelC = clos && auPrevu ? Math.round(Math.max(sai, tk)) : reel;
+                                return { prevu, reel: reelC, auPrevu: auP, clos, etat: m.etat, avenir: m.etat === 'avenir' && !tape && tk <= 0 && !clos, encours: m.etat === 'encours', depasse: reelC > prevu + 0.5, part: m.part, titre: m.titre, du: m.debut, au: m.fin, saisi: tape ? Math.round(sai) : null, defaut: clos ? 0 : defaut };
                             };
                             const lignes = [];
                             //  v37.128 — AUDIT Réalisé ↔ frise : une sous-catégorie cochée (ou « + ajouter ») dans le Réalisé, sans semaine.
@@ -23468,7 +23542,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 } else p.paiements.forEach(iso => seances.push({ pos: pos(iso), quand: libIso(iso), etat: 'paye' }));
                                 lignes.push({ cle: p.cle, nom: p.nom, emoji: p.emoji, unite: p.unite, catKey: c.key, catId: p.categorieId || null, du: _ymd(debut), au: _ymd(fin), saisi: morceaux.reduce((s, m) => s + (Object.prototype.hasOwnProperty.call(m.vals, p.cle) ? Number(m.vals[p.cle] || 0) : 0), 0), enveloppe: p.cyclePrevu, engage: p.cycleEngage, depasse: p.exces > 0, fois: p.unite === 'quinzaine' ? p.fois : null,
                                               pct: p.cyclePrevu > 0 ? Math.min(100, Math.round(p.cycleEngage / p.cyclePrevu * 100)) : (p.cycleEngage > 0 ? 100 : 0), seances, alerte: p.alerte,
-                                              quinzaines: p.quinzaines || [] });   // v37.130 : les mêmes cases que la Météo
+                                              quinzaines: p.quinzaines || [],   // v37.130 : les mêmes cases que la Météo
+                                              //  v37.143 — « LHRRI EST VERROUILLÉ POUR CE CYCLE MAIS PAS DANS LA FRISE » : le même verrou que la Météo et le Réalisé
+                                              verrouillable: true, clos: !!p.clos, eco: Math.round(p.eco || 0) });
                                 if (p.exces > 0) alertes.push('🔴 ' + p.nom + ' (' + c.label + ') : ' + Math.round(p.cycleEngage) + ' DH sur une enveloppe de ' + Math.round(p.cyclePrevu) + ' — dépassement de ' + Math.round(p.exces) + ' DH');
                                 else if (p.alerte && p.alerte.niveau === 'depasse') alertes.push(p.alerte.texte.replace('⚠️ ', '⚠️ ' + p.nom + ' : '));
                             });
@@ -23550,6 +23626,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                                   pct: budget > 0 ? Math.min(100, Math.round(engage / budget * 100)) : (engage > 0 ? 100 : 0), pctAttendu: null, depasse: engage > budget, lignes: lignesF });
                             });
                         }
+                        //  v37.144 — « CHAQUE LIGNE DOIT MENTIONNER SON COMPTE (Assafa principal, Courant…) » : la règle du Relevé, mot pour mot —
+                        //  une charge variable (et ses lignes) : son compte choisi, sinon celui des charges variables ; une dépense exceptionnelle : son compte source
+                        categories.forEach(c => {
+                            const cv = (d.chargesVariables || {})[c.key];
+                            c.lignes.forEach(l => {
+                                if (l.compte) return;
+                                if (c.key === '__exceptionnel') { if (l.ref) { l.compte = getNomCompte(compteDeFlux('exceptionnel', l.ref)); l.compteRegle = regleDeRoutage('exceptionnel', l.ref); } return; }
+                                if (cv) { l.compte = getNomCompte(compteDeFlux('variable', cv)); l.compteRegle = regleDeRoutage('variable', cv); }
+                            });
+                        });
                         //  Une seule note pour les postes « toutes les 2 semaines » (au lieu d'une par poste)
                         const nQ = (L.postesCycle || []).filter(p => p.unite === 'quinzaine').length, fois = nSem / 2;
                         const quinzaine = !nQ ? null : '⏱️ ' + nQ + ' poste' + (nQ > 1 ? 's' : '') + ' « toutes les 2 semaines » : ce cycle de ' + J + ' jours en couvre ≈ ' + String(Math.round(fois * 10) / 10).replace('.', ',') + ' fois'
@@ -23581,6 +23667,45 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             await new Promise(r => setTimeout(r, 50));
                         }
                         return false;
+                    };
+                    //  v37.143 — LE PRÉVU D'UNE LIGNE, MODIFIÉ SUR PLACE (petite fenêtre) : nom, montant, rythme ; « Tout le budget › » garde l'ancien chemin.
+                    //  Une dépense exceptionnelle ou une catégorie sans ligne : le Budget Structurel / les Flux, comme avant.
+                    const prevuFrise = ref(null);
+                    const ouvrirPrevuFrise = (c, l) => {
+                        if (!c || !l) return false;
+                        const key = l.catKey || c.key, catId = String(l.catId || '');
+                        if (key === '__exceptionnel' || catId.startsWith('cat_irr')) return allerAuPrevuFrise(c, l);
+                        const an = Number(consoT0Annee.value) || anneeAffichage.value, cv = ((donneesAnnuelles.value[an] || {}).chargesVariables || {})[key];
+                        const id = String(l.cle || '').startsWith(key + '::') ? String(l.cle).slice(key.length + 2) : '';
+                        const det = cv && id ? (cv.details || []).find(x => x && String(x.id) === id) : null;
+                        if (!det) return allerAuPrevuFrise(c, l);
+                        const suivantes = Object.keys(donneesAnnuelles.value || {}).map(Number).filter(a => a > an && (((donneesAnnuelles.value[a] || {}).chargesVariables || {})[key] || {}).details?.some(x => x && String(x.id) === id)).sort();
+                        prevuFrise.value = { c, l, an, key, id, catLabel: c.label || cv.label || key, nomInitial: det.nom || l.nom || '—', nom: det.nom || '', montant: String(Number(det.montant) || 0),
+                                             periode: periodeDetail(det, cv), anneesSuivantes: suivantes, aussiSuivantes: suivantes.length > 0, erreur: '' };
+                        return true;
+                    };
+                    const apercuPrevuFrise = computed(() => {
+                        const x = prevuFrise.value; if (!x) return '';
+                        const v = Number(String(x.montant).replace(/\s/g, '').replace(',', '.'));
+                        if (!Number.isFinite(v) || v < 0) return '';
+                        const n = semainesDuCycle(moisBudgetaire.value.mois, moisBudgetaire.value.an), f = facteurPeriode(x.periode, n);
+                        return x.periode === 'cycle' ? 'Soit ' + formatMAD(v) + ' sur le cycle.' : 'Soit ≈ ' + formatMAD(Math.round(v * f)) + ' sur ce cycle (' + String(Math.round(f * 10) / 10).replace('.', ',') + ' fois).';
+                    });
+                    const enregistrerPrevuFrise = () => {
+                        const x = prevuFrise.value; if (!x) return false;
+                        const nom = String(x.nom || '').trim(), v = Number(String(x.montant).replace(/\s/g, '').replace(',', '.'));
+                        if (!nom) { x.erreur = 'Le nom ne peut pas être vide.'; return false; }
+                        if (!Number.isFinite(v) || v < 0 || v > 10000000) { x.erreur = 'Montant : un nombre positif (ex. 250).'; return false; }
+                        if (!RYTHMES.includes(x.periode)) { x.erreur = 'Rythme : / sem, / 15 j ou / cycle.'; return false; }
+                        const annees = [x.an, ...(x.aussiSuivantes ? x.anneesSuivantes : [])];
+                        let n = 0;
+                        annees.forEach(a => { const det = ((((donneesAnnuelles.value[a] || {}).chargesVariables || {})[x.key] || {}).details || []).find(y => y && String(y.id) === x.id);
+                                              if (det) { det.nom = nom; det.montant = Math.round(v * 100) / 100; det.periode = x.periode; n++; } });
+                        if (!n) { x.erreur = 'Ligne introuvable dans le budget.'; return false; }
+                        prevuFrise.value = null;
+                        calculationTick.value++;
+                        handleDataChange();
+                        return true;
                     };
                     const allerAuPrevuFrise = async (c, l) => {
                         if (!c || !l) return false;
@@ -23626,8 +23751,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                               autres: /::autres$/.test(String(l.cle || '')),   // v37.132
                                               ref: l.ref || null, due: l.due || 0,                  // v37.133
                                               //  v37.132 : une facture / dépense exceptionnelle : ce qui est compté au-delà du journal vient du Réalisé (coché, « + ajouter »)
-                                              parRealise: !x && !l.cellules && !(Array.isArray(l.quinzaines) && l.quinzaines.length) };
+                                              parRealise: !x && !l.cellules && !(Array.isArray(l.quinzaines) && l.quinzaines.length),
+                                              //  v37.143 : le verrou de la Météo — une case / sem (sa semaine), une enveloppe / 15 j ou / cycle (le cycle)
+                                              verrouillable: !!(x ? l.cellules && l.catKey && !String(l.catKey).startsWith('__') : l.verrouillable), unite: l.unite };
                     };
+                    const apercuClos = computed(() => {
+                        const a = apercuFrise.value; if (!a || !a.verrouillable) return false;
+                        return !!(_cloturesConso.value[a.semaine ? 'S' + a.semaine : 'C' + consoT0CycleKey.value] || {})[a.cle];
+                    });
                     //  v37.131 : les moitiés du poste ouvert, à jour (relues dans la frise à chaque saisie)
                     const apercuQuinzaines = computed(() => {
                         const A = apercuFrise.value, F = friseCycle.value;
@@ -28379,7 +28510,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, friseQEdit, saisirQuinzaineFrise, apercuQuinzaines, apercuSaisirSemaine, apercuRealiseVersJournal, realiseVersJournal, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, apercuClos, prevuFrise, ouvrirPrevuFrise, apercuPrevuFrise, enregistrerPrevuFrise, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, friseQEdit, saisirQuinzaineFrise, apercuQuinzaines, apercuSaisirSemaine, apercuRealiseVersJournal, realiseVersJournal, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire

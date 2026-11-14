@@ -21,7 +21,7 @@ const v = (t, ok, d = '') => { if (!ok) ko++; console.log(`  ${ok ? '✅' : '❌
 const section = async (nom, f) => { try { await f(); } catch (e) { v(`${nom} : exécution sans exception`, false, String(e && e.stack || e).slice(0, 300)); } };
 console.log('\n  LA FRISE S’OUVRE SUR LE JOURNAL\n  ' + '─'.repeat(80));
 v('A. cases et enveloppes cliquables ; un panneau avec modifier / supprimer / « Voir dans le Journal »',
-  /data-frise-case role="button" tabindex="0" @click="ouvrirApercuFrise\(c, l, x\)"/.test(html) && /data-frise-enveloppe role="button"/.test(html)
+  /data-frise-case role="button" tabindex="0" @click="ouvrirApercuFrise\(c, l, x\)"/.test(html) && /data-frise-enveloppe[^>]*role="button"/.test(html)
   && /data-frise-apercu-supprimer @click="supprimerOperation\(o\.t\.id\)"/.test(html) && /data-frise-apercu-enregistrer @click="enregistrerOperation\(\)"/.test(html) && /data-frise-apercu-journal/.test(html));
 
 const require = createRequire(import.meta.url);
@@ -192,7 +192,11 @@ try {
         await page.click('[data-frise-apercu-fermer]'); await page.waitForTimeout(150);
         //  v37.131 : le montant TAPÉ d'un morceau (sans ticket) se corrige dans l'aperçu, plus « dans la Météo »
         await caseMarjane(0).click(); await page.waitForSelector('[data-frise-apercu-saisie]');
-        await page.fill('[data-frise-apercu-saisie]', '77'); await page.press('[data-frise-apercu-saisie]', 'Enter'); await page.waitForTimeout(300);
+        await page.fill('[data-frise-apercu-saisie]', '77');
+        //  la validation du champ (son « change ») envoyée directement : sous charge, l'« Entrée » se perdait si la page se redessinait pendant la frappe
+        await page.evaluate(() => { const e = document.querySelector('[data-frise-apercu-saisie]'); e.value = '77'; e.dispatchEvent(new Event('change', { bubbles: true })); });
+        //  v37.144 : l'effet attendu (la saisie écrite), plus 300 ms fixes — sous charge, la suite échouait parfois
+        await page.waitForFunction((ST) => Object.values(eval(ST).donneesAnnuelles[2026].consoRealiseeT0).some(x => x && Number(x['alimentation::1']) === 77), ST, { timeout: 5000 }).catch(() => {});
         const tape = await page.evaluate((ST) => { const r = eval(ST).donneesAnnuelles[2026].consoRealiseeT0; return Object.entries(r).filter(([k, x]) => x && x['alimentation::1'] !== undefined).map(([k, x]) => [k, x['alimentation::1']]); }, ST);
         v('E2. Marjane, 1ᵉʳ morceau (27 oct. → 1ᵉʳ nov.) : « 77 » tapé dans l\u2019aperçu → enregistré pour CE morceau', JSON.stringify(tape) === '[["S2026-10-27",77]]', JSON.stringify(tape));
         await page.fill('[data-frise-apercu-saisie]', ''); await page.press('[data-frise-apercu-saisie]', 'Enter'); await page.waitForTimeout(200);
