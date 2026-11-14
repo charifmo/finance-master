@@ -44,6 +44,8 @@ const portLibre = () => new Promise(r => { const s = net.createServer(); s.liste
 const attendre = (ms) => new Promise(r => setTimeout(r, ms));
 //  v37.145 — l'EFFET attendu (valeur arrivée sur le serveur, bandeau de conflit…), plus 3 s fixes à chaque étape : rend la main dès qu'il est
 //  là, au plus `max` ms (les contrôles qui suivent restent les mêmes : un effet absent échoue toujours)
+//  …et un état qui TIENT (vrai sans interruption pendant `tenir` ms) : un enregistrement différé de l'appli peut le défaire juste après
+const attendreStable = async (cond, tenir = 1500, max = 20000) => { const t = Date.now(); let depuis = null; while (Date.now() - t < max) { let ok = false; try { ok = await cond(); } catch { } if (ok) { if (depuis === null) depuis = Date.now(); if (Date.now() - depuis >= tenir) return true; } else depuis = null; await attendre(100); } return false; };
 const attendreQue = async (cond, max = 10000) => { const t = Date.now(); while (Date.now() - t < max) { try { if (await cond()) return true; } catch { } await attendre(100); } return false; };
 const attendrePort = async (port, essais = 60) => {
     for (let i = 0; i < essais; i++) {
@@ -151,14 +153,17 @@ const scene = async (mode, pg) => {
         v(`[${mode}]   → et A est prévenu (bandeau de conflit)`, eA.divergent === true, JSON.stringify(eA));
         // A choisit de recharger : il récupère B (sa saisie locale non sauvegardée est perdue, il l'a accepté)
         await A.page.evaluate((ST) => eval(ST).forcerRechargementServeur(), ST);
-        await attendreQue(async () => await soldeEcran(A, 2) === 7777, 5000);
+        //  …et A a fini de digérer ce rechargement (« synchronisé ») : avant, l'appli ne se rafraîchit pas (elle protège une saisie en cours)
+        await attendreStable(async () => await soldeEcran(A, 2) === 7777 && (await etat(A)).statut === 'synced');
         v(`[${mode}]   → « Recharger » rend à A la version de B`, await soldeEcran(A, 2) === 7777, String(await soldeEcran(A, 2)));
 
         // 3. Revenir sur un onglet sans modification en cours le remet à jour.
         await modifier(B, 1, 3333);
         await attendreQue(() => soldeServeur(1) === 3333);
-        await A.page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
-        await attendreQue(async () => await soldeEcran(A, 1) === 3333, 5000);
+        //  revenir sur l'onglet : l'appli peut ignorer un retour trop proche de sa vérification précédente — on revient donc, au besoin,
+        //  une fois par seconde (comme un utilisateur), jusqu'à la mise à jour (10 s au plus ; le contrôle qui suit reste le même)
+        const revenir = () => A.page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
+        { const t = Date.now(); let dernier = 0; while (Date.now() - t < 10000 && await soldeEcran(A, 1) !== 3333) { if (Date.now() - dernier >= 1000) { await revenir(); dernier = Date.now(); } await attendre(100); } }
         v(`[${mode}] revenir sur l'onglet de A le met à jour tout seul`, await soldeEcran(A, 1) === 3333, String(await soldeEcran(A, 1)));
 
         // 4. Un PC qui ouvre l'appli à froid voit le dernier état — et ne le ré-écrit pas en arrière.
