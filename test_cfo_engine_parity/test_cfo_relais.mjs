@@ -124,7 +124,7 @@ try {
         fs.copyFileSync(chartJs, path.join(doc, 'chart.js'));
         const fx = JSON.parse(fs.readFileSync(path.join(ICI, 'fixture.json'), 'utf8'));
         fs.writeFileSync(path.join(F, 'finance_data.json'), JSON.stringify(fx));
-        browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+        browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
         const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
         await ctx.addInitScript((o) => { try { localStorage.setItem('cfo_webhook_url', o + '/webhook/finance-cfo-web'); } catch (_) { } }, ORIGINE);
         let directs = 0;

@@ -42,6 +42,9 @@ if (!pw || !vueJs || !chartJs || !chromium || !php) {
 
 const portLibre = () => new Promise(r => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
 const attendre = (ms) => new Promise(r => setTimeout(r, ms));
+//  v37.145 — l'EFFET attendu (valeur arrivée sur le serveur, bandeau de conflit…), plus 3 s fixes à chaque étape : rend la main dès qu'il est
+//  là, au plus `max` ms (les contrôles qui suivent restent les mêmes : un effet absent échoue toujours)
+const attendreQue = async (cond, max = 10000) => { const t = Date.now(); while (Date.now() - t < max) { try { if (await cond()) return true; } catch { } await attendre(100); } return false; };
 const attendrePort = async (port, essais = 60) => {
     for (let i = 0; i < essais; i++) {
         const ok = await new Promise(r => { const c = net.connect(port, '127.0.0.1', () => { c.end(); r(true); }); c.on('error', () => r(false)); });
@@ -99,7 +102,7 @@ const lirePg = (pg) => {
     return out ? JSON.parse(out) : null;
 };
 
-const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 
 const scene = async (mode, pg) => {
@@ -130,7 +133,7 @@ const scene = async (mode, pg) => {
         if (pg) v(`[${mode}] base encore vide : l'appli lit le fichier existant, pas des valeurs par défaut`,
                   await soldeEcran(A, 1) === 1000 && await soldeEcran(A, 2) === 500, JSON.stringify([await soldeEcran(A, 1), await soldeEcran(A, 2)]));
         await modifier(A, 1, 1001);
-        await attendre(3000);
+        await attendreQue(() => soldeServeur(1) === 1001);
         v(`[${mode}] PC A enregistre`, soldeServeur(1) === 1001, String(soldeServeur(1)));
 
         // 1. Ce qu'un PC enregistre, l'autre le lit en ouvrant l'appli.
@@ -139,23 +142,23 @@ const scene = async (mode, pg) => {
 
         // 2. B modifie et enregistre ; A, resté ouvert sur l'ancienne version, modifie autre chose.
         await modifier(B, 2, 7777);
-        await attendre(3000);
+        await attendreQue(() => soldeServeur(2) === 7777);
         v(`[${mode}] PC B enregistre sa modification`, soldeServeur(2) === 7777, String(soldeServeur(2)));
         await modifier(A, 1, 1002);
-        await attendre(3000);
+        await attendreQue(async () => (await etat(A)).divergent === true);
         v(`[${mode}] l'onglet périmé de A N'ÉCRASE PAS l'écriture de B`, soldeServeur(2) === 7777, `Assafa sur le serveur = ${soldeServeur(2)} (B avait mis 7777)`);
         const eA = await etat(A);
         v(`[${mode}]   → et A est prévenu (bandeau de conflit)`, eA.divergent === true, JSON.stringify(eA));
         // A choisit de recharger : il récupère B (sa saisie locale non sauvegardée est perdue, il l'a accepté)
         await A.page.evaluate((ST) => eval(ST).forcerRechargementServeur(), ST);
-        await attendre(800);
+        await attendreQue(async () => await soldeEcran(A, 2) === 7777, 5000);
         v(`[${mode}]   → « Recharger » rend à A la version de B`, await soldeEcran(A, 2) === 7777, String(await soldeEcran(A, 2)));
 
         // 3. Revenir sur un onglet sans modification en cours le remet à jour.
         await modifier(B, 1, 3333);
-        await attendre(3000);
+        await attendreQue(() => soldeServeur(1) === 3333);
         await A.page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
-        await attendre(1200);
+        await attendreQue(async () => await soldeEcran(A, 1) === 3333, 5000);
         v(`[${mode}] revenir sur l'onglet de A le met à jour tout seul`, await soldeEcran(A, 1) === 3333, String(await soldeEcran(A, 1)));
 
         // 4. Un PC qui ouvre l'appli à froid voit le dernier état — et ne le ré-écrit pas en arrière.
@@ -169,12 +172,12 @@ const scene = async (mode, pg) => {
         }
         // 5. « Imposer la version de cet appareil » : le choix explicite gagne.
         await modifier(C, 2, 8888);                 // C enregistre…
-        await attendre(3000);
+        await attendreQue(() => soldeServeur(2) === 8888);
         await modifier(B, 2, 4242);                 // …B, périmé, est refusé
-        await attendre(3000);
+        await attendreQue(async () => (await etat(B)).divergent === true);
         const refuse = soldeServeur(2);
         await B.page.evaluate((ST) => eval(ST).imposerMaVersion(), ST);
-        await attendre(1200);
+        await attendreQue(async () => soldeServeur(2) === 4242 && (await etat(B)).divergent === false, 5000);
         v(`[${mode}] « Imposer » : refusé d'abord, puis la version choisie gagne`,
           refuse === 8888 && soldeServeur(2) === 4242 && (await etat(B)).divergent === false, JSON.stringify({ refuse, apres: soldeServeur(2), etat: await etat(B) }));
 

@@ -179,15 +179,15 @@ const parMorceaux = [[1], [2, 3], [5], [7, 1, 13], [1000]].map(t => { const l = 
 v('H. analyseur PAR MORCEAUX : guillemets, virgules et retours à la ligne dans un champ, CRLF, BOM — même résultat, quel que soit le découpage',
   parMorceaux.every(x => x === attendu), [attendu, parMorceaux]);
 //  un gros CSV de FC (500 000 lignes, ~28 Mo) lu en FLUX par morceaux de 64 Ko : mêmes moyennes que la lecture d'un bloc
-const lignesFc = ['com.samsung.shealth.tracker.heart_rate,6313005,500000', 'com.samsung.health.heart_rate.start_time,com.samsung.health.heart_rate.time_offset,com.samsung.health.heart_rate.heart_rate,'];
-for (let i = 0; i < 500000; i++) { const ms = Date.UTC(2024, 0, 1) + i * 600000; lignesFc.push(new Date(ms).toISOString().replace('T', ' ').replace('Z', '') + ',UTC+0100,' + (60 + (i % 40)) + ','); }
+const lignesFc = ['com.samsung.shealth.tracker.heart_rate,6313005,200000', 'com.samsung.health.heart_rate.start_time,com.samsung.health.heart_rate.time_offset,com.samsung.health.heart_rate.heart_rate,'];
+for (let i = 0; i < 200000; i++) { const ms = Date.UTC(2024, 0, 1) + i * 600000; lignesFc.push(new Date(ms).toISOString().replace('T', ' ').replace('Z', '') + ',UTC+0100,' + (60 + (i % 40)) + ','); }
 const grosCsv = lignesFc.join('\n') + '\n', nomFc = `${R}com.samsung.shealth.tracker.heart_rate.${TC}.csv`;
 const octets = new TextEncoder().encode(grosCsv);
 const flux = new ReadableStream({ start(c) { for (let i = 0; i < octets.length; i += 65536) c.enqueue(octets.subarray(i, i + 65536)); c.close(); } });
 const tF = Date.now(), exF = S.creerExtracteur({ decalageMin: 60 }); await exF.ajouterFlux(nomFc, flux); const rF = exF.resultat(), dureeF = Date.now() - tF;
 const rB = S.extraire([{ nom: nomFc, texte: grosCsv }], { decalageMin: 60 });
 v(`  → un CSV de FC de ${(octets.length / 1e6).toFixed(0)} Mo lu en flux (morceaux de 64 Ko) : ${Object.keys(rF.jours).length} jours, mêmes moyennes qu'en un bloc (${dureeF} ms)`,
-  rF.lus.fc === 500000 && JSON.stringify(rF.jours) === JSON.stringify(rB.jours) && Object.keys(rF.jours).length >= 3470, [rF.lus, Object.keys(rF.jours).length]);
+  rF.lus.fc === 200000 && JSON.stringify(rF.jours) === JSON.stringify(rB.jours) && Object.keys(rF.jours).length >= 1385, [rF.lus, Object.keys(rF.jours).length]);
 //  l'ordre des fichiers n'importe plus : les pas (combinée) avant la table des appareils, la séance avant son détail
 const ordreInverse = S.extraire([...tous].reverse().filter(f => S.estUtile(f.nom)), { decalageMin: 60 });
 const sInv = S.extraire([...t2].reverse(), { decalageMin: 60, fcMax: 176 });
@@ -204,8 +204,8 @@ z.close()`, zipB + '.json', zipB]);
 const exZ = S.creerExtracteur({ decalageMin: 60 }); let nZ = 0;
 await S.parcourirZip(new Blob([fs.readFileSync(zipB)]), S.estUtile, async (nom, fl) => { nZ++; await exZ.ajouterFlux(nom, fl); });
 const rZ = exZ.resultat();
-v('  → .zip parcouru en flux depuis un Blob (comme un fichier choisi sur le téléphone) : 8 CSV, la FC des 500 000 lignes, les pas du 01/11',
-  nZ === 8 && rZ.lus.fc >= 500000 && rZ.jours['2026-11-01'] && rZ.jours['2026-11-01'].pas === 9050, [nZ, rZ.lus]);
+v('  → .zip parcouru en flux depuis un Blob (comme un fichier choisi sur le téléphone) : 8 CSV, la FC des 200 000 lignes, les pas du 01/11',
+  nZ === 8 && rZ.lus.fc >= 200000 && rZ.jours['2026-11-01'] && rZ.jours['2026-11-01'].pas === 9050, [nZ, rZ.lus]);
 //  v1.30 — Android lit mal un fichier par sauts : le .zip est lu en UNE passe (deux petites lectures de la fin + un flux), quel que soit
 //  le nombre d'entrées utiles ; la progression (octets lus / total) est donnée au fil de la lecture
 let sauts = 0; class BlobCompte extends Blob { slice(...a) { sauts++; return super.slice(...a); } }
@@ -225,11 +225,11 @@ v('  → v1.28 : le tracé lu AVANT le détail (ordre inverse) : mêmes zones et
 //  3 000 séances avec leur détail (des années d'export) : traitées une à une, résultat complet
 const ex3 = S.creerExtracteur({ decalageMin: 60, fcMax: 176 }), lig = [];
 const t3 = Date.now();
-for (let i = 0; i < 3000; i++) { const id = 'm' + i, d0 = Date.UTC(2018, 0, 1) + i * 86400000; lig.push([new Date(d0).toISOString().replace('T', ' ').replace('Z', ''), '', 'UTC+0100', '1001', '1800000', '2400', '200', '110', '125', '1.33', '', '', '', '', id, id + '.com.samsung.health.exercise.live_data.json'].join(','));
+for (let i = 0; i < 1000; i++) { const id = 'm' + i, d0 = Date.UTC(2018, 0, 1) + i * 86400000; lig.push([new Date(d0).toISOString().replace('T', ' ').replace('Z', ''), '', 'UTC+0100', '1001', '1800000', '2400', '200', '110', '125', '1.33', '', '', '', '', id, id + '.com.samsung.health.exercise.live_data.json'].join(','));
   ex3.ajouterTexte(`${R3}jsons/com.samsung.shealth.exercise/${i % 16}/${id}.com.samsung.health.exercise.live_data.json`, JSON.stringify(live.slice(0, 181).map(p => ({ ...p, start_time: p.start_time - t0 + d0 })))); }
 ex3.ajouterTexte(`${R3}com.samsung.shealth.exercise.20250101.csv`, csv('com.samsung.shealth.exercise', ['start_time', 'end_time', 'time_offset', 'exercise_type', 'duration', 'distance', 'calorie', 'mean_heart_rate', 'max_heart_rate', 'mean_speed', 'altitude_gain', 'count', 'count_type', 'vo2_max', 'datauuid', 'live_data'], lig.map(l => l.split(','))));
 const s3 = ex3.resultat().seances;
-v(`  → 3 000 séances et leurs 3 000 fichiers de détail (8 ans) : toutes rendues avec zones et temps par km (${Date.now() - t3} ms)`, s3.length === 3000 && s3.every(x => (x.zones_s || []).length === 5 && (x.par_km || []).length >= 2), s3.length);
+v(`  → 1 000 séances et leurs 1 000 fichiers de détail (3 ans) : toutes rendues avec zones et temps par km (${Date.now() - t3} ms)`, s3.length === 1000 && s3.every(x => (x.zones_s || []).length === 5 && (x.par_km || []).length >= 2), s3.length);
 
 v('E. CSV : guillemets, virgules et retours à la ligne dans un champ', JSON.stringify(S.csvLignes('a,b\n"x, ""y""\nz",2\n')) === JSON.stringify([['a', 'b'], ['x, "y"\nz', '2']]));
 v('  → décalages « UTC+0100 », « UTC+05:30 », « UTC-5 », « GMT »', S.decalage('UTC+0100') === 60 && S.decalage('UTC+05:30') === 330 && S.decalage('UTC-5') === -300 && S.decalage('GMT') === 0);

@@ -105,7 +105,7 @@ const srv = http.createServer((req, res) => {
     return s(200, '{"status":"ok"}');
 });
 await new Promise(r => srv.listen(0, '127.0.0.1', r));
-const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 const lire = (page, an) => page.evaluate(async ({ ST, an }) => {
     const st = eval(ST); st.anneeAffichage = an; await new Promise(r => setTimeout(r, 200));

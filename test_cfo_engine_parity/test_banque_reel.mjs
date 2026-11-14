@@ -14,6 +14,7 @@
  *     390 px, une photo illisible.
  */
 import fs from 'node:fs';
+import { brancherCacheOCR } from './ocr_cache.mjs';
 import { twCompiler } from './tw_cache.mjs';   // v37.109 : Tailwind compilé une fois pour toutes les suites
 import http from 'node:http';
 import path from 'node:path';
@@ -137,11 +138,12 @@ const srv = http.createServer((req, res) => {
 });
 await new Promise(r => srv.listen(0, '127.0.0.1', r));
 const port = srv.address().port;
-const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 const erreurs = [], externes = [];
 const ouvrirPage = async (opts) => {
     const ctx = await browser.newContext(opts);
+    await brancherCacheOCR(ctx);   // v37.145 : l'OCR réel, mémorisé entre deux exécutions (même image envoyée → même lecture)
     const page = await ctx.newPage();
     await page.clock.setFixedTime(new Date(2026, 9, 14, 10, 0, 0));
     page.on('pageerror', e => erreurs.push(String(e)));

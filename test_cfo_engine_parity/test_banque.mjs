@@ -16,6 +16,7 @@
  *     H. Ctrl+V d'une image et d'un texte.
  */
 import fs from 'node:fs';
+import { brancherCacheOCR } from './ocr_cache.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -122,9 +123,10 @@ const srv = http.createServer((req, res) => {
 });
 await new Promise(r => srv.listen(0, '127.0.0.1', r));
 const port = srv.address().port;
-const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 const page = await browser.newPage({ viewport: { width: 1300, height: 1000 } });
+await brancherCacheOCR(page);   // v37.145 : l'OCR réel, mémorisé entre deux exécutions (même image envoyée → même lecture)
 await page.clock.setFixedTime(new Date(2026, 9, 14, 10, 0, 0));
 const erreurs = [], externes = [], webhooks = [];
 page.on('pageerror', e => erreurs.push(String(e)));

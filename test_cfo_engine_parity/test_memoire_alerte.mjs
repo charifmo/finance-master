@@ -94,7 +94,7 @@ const srv = http.createServer((req, res) => {
 });
 await new Promise(r => srv.listen(0, '127.0.0.1', r));
 const port = srv.address().port;
-const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
 const ST = 'document.querySelector("#app").__vue_app__._instance.setupState';
 const ouvrir = async (sc, opts = { viewport: { width: 1400, height: 1100 } }) => {
     fxCourant = fixture(sc);

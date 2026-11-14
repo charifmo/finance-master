@@ -179,7 +179,7 @@ try {
   });
 
   console.log('  ── B. l\'écran : ajouter, modifier, pause, retirer, rétablir, tester');
-  browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+  browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   await ctx.route('**/get_ai_memory.php*', (route) => route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'ok', rag: { regles: [] } }) }));

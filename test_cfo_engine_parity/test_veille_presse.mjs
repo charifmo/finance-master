@@ -306,7 +306,7 @@ try {
 
   /* ═══ B. LA RECHERCHE ÉCLAIR ════════════════════════════════════════════ */
   console.log('  ── B. Recherche Éclair : la presse lue, la réponse cadrée');
-  browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+  browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   await ctx.route('**/get_ai_memory.php*', (route) => route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'ok', rag: { regles: [{ id: 'u-nord', texte: FICHE_NORD }, { id: 'u-est', texte: FICHE_EST }] } }) }));
