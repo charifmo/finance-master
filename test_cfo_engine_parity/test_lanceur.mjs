@@ -47,7 +47,7 @@ const port = 25000 + Math.floor(Math.random() * 3000);
 const php = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', RACINE], { env: { ...process.env, SANTE_DATA_FILE: path.join(tmp, 'sante.json') }, stdio: 'ignore' });
 const U = `http://127.0.0.1:${port}/`;
 for (let i = 0; i < 50; i++) { try { await fetch(U + 'apps.json'); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
-const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
 const erreurs = [];
 const preparer = async (ctx, { sansApps = false } = {}) => {
     const page = await ctx.newPage();

@@ -244,7 +244,7 @@ try {
     schema();
     let ctx, page, erreurs = [];
   await partie('B', async () => {
-    browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+    browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
     ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
     await ctx.addInitScript(() => { try { localStorage.setItem('cfo_webhook_url', 'https://n8n.test/webhook/finance-cfo-web'); } catch (_) {} });
     const envoyes = [];

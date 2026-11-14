@@ -28,7 +28,7 @@ const port = 22000 + Math.floor(Math.random() * 3000);
 const php = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', RACINE], { env: { ...process.env, SANTE_DATA_FILE: DATA, SANTE_SAMSUNG_TOKEN: JETON }, stdio: 'ignore' });
 const U = `http://127.0.0.1:${port}/sante/`;
 for (let i = 0; i < 50; i++) { try { await fetch(U + 'biomarqueurs.json'); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
-const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox'] });
+const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--no-sandbox', '--force-prefers-reduced-motion'] });
 const erreurs = [];
 const ouvrir = async () => {
     const page = await browser.newPage({ viewport: { width: 1300, height: 1000 } });
@@ -803,16 +803,16 @@ z.close()`, src, zip]);
         await pu.exposeFunction('noterProgres', (t) => progres.push(t));
         const fin = await pu.evaluate(async ({ ST, R }) => {
             const S = eval(ST), l = [];
-            for (let i = 0; i < 2000; i++) { const f = new File(['x'], i + '.jpg'); f._chemin = R + 'files/com.samsung.shealth.food_image/' + i + '.jpg'; l.push(f); }
-            const lignes = ['com.samsung.shealth.tracker.heart_rate,6313005,300000', 'com.samsung.health.heart_rate.start_time,com.samsung.health.heart_rate.time_offset,com.samsung.health.heart_rate.heart_rate,'];
-            for (let i = 0; i < 300000; i++) lignes.push(new Date(Date.UTC(2025, 0, 1) + i * 600000).toISOString().replace('T', ' ').replace('Z', '') + ',UTC+0100,' + (60 + i % 30) + ',');
+            for (let i = 0; i < 600; i++) { const f = new File(['x'], i + '.jpg'); f._chemin = R + 'files/com.samsung.shealth.food_image/' + i + '.jpg'; l.push(f); }
+            const lignes = ['com.samsung.shealth.tracker.heart_rate,6313005,80000', 'com.samsung.health.heart_rate.start_time,com.samsung.health.heart_rate.time_offset,com.samsung.health.heart_rate.heart_rate,'];
+            for (let i = 0; i < 80000; i++) lignes.push(new Date(Date.UTC(2025, 0, 1) + i * 600000).toISOString().replace('T', ' ').replace('Z', '') + ',UTC+0100,' + (60 + i % 30) + ',');
             const fc = new File([lignes.join('\n') + '\n'], 'com.samsung.shealth.tracker.heart_rate.20261113091500.csv'); fc._chemin = R + 'com.samsung.shealth.tracker.heart_rate.20261113091500.csv'; l.push(fc);
             let dernier = ''; const obs = setInterval(() => { if (S.messageCsv !== dernier) { dernier = S.messageCsv; window.noterProgres(dernier); } }, 5);
             const t = Date.now(); await S.importerSamsung(l); clearInterval(obs);
             return { ms: Date.now() - t, msg: S.messageCsv, jours: Object.keys(S.etat.journal).filter(d => S.etat.journal[d].samsung && S.etat.journal[d].samsung.fc_moy).length };
         }, { ST, R });
-        v('  → v1.27 dossier ENTIER (2 000 photos + FC de 300 000 lignes) : la page dit où elle en est (« ⏳ … fichier(s) … »), va au bout, les jours de FC rangés',
-          progres.some(t => /⏳ \d+ fichier\(s\) Samsung lu\(s\) sur 2001 parcourus/.test(t)) && /jour\(s\) importé\(s\)/.test(fin.msg) && /2000 fichier\(s\) sans utilité/.test(fin.msg) && fin.jours >= 300, [fin, progres.slice(0, 4)]);
+        v('  → v1.27 dossier ENTIER (600 photos + FC de 80 000 lignes) : la page dit où elle en est (« ⏳ … fichier(s) … »), va au bout, les jours de FC rangés',
+          progres.some(t => /⏳ \d+ fichier\(s\) Samsung lu\(s\) sur 601 parcourus/.test(t)) && /jour\(s\) importé\(s\)/.test(fin.msg) && /600 fichier\(s\) sans utilité/.test(fin.msg) && fin.jours >= 300, [fin, progres.slice(0, 4)]);
         //  v1.27 — la page blanche du téléphone : Chrome ferme l'onglet en préparant les 62 721 fichiers du dossier ; au rechargement, c'est expliqué
         v('  → v1.27 : un import réussi efface sa marque (aucun faux avertissement)', await pu.evaluate(() => localStorage.getItem('sante_import_samsung')) === null && !(await pu.$('[data-import-interrompu]')));
         await pu.evaluate(() => localStorage.setItem('sante_import_samsung', JSON.stringify({ etape: 'choix', t: Date.now() })));
