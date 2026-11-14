@@ -26,34 +26,20 @@ cd "$(dirname "$0")"
 LISTE=$(mktemp)
 trap 'rm -f "$LISTE"' EXIT
 
-#  v37.110 — PÉRIMÈTRE : un changement qui ne touche que Santé ne rejoue pas les suites de Finance, et inversement.
-#    bash run_tests.sh            → automatique, d'après les fichiers changés depuis origin/main (+ non commités)
-#    bash run_tests.sh sante      → Santé seulement      bash run_tests.sh finance → Finance seulement
-#    bash run_tests.sh veille     → la veille seulement (v37.142 : automatique si seuls ses fichiers ont changé)
-#    bash run_tests.sh tout       → tout (aussi : rien de changé, git absent, ou un fichier commun touché)
-#  Les suites communes (lanceur Mes applis, sauvegarde) tournent toujours.
-PERIMETRE="${1:-${PERIMETRE:-auto}}"
-if [ "$PERIMETRE" = auto ]; then
-    BASE=${BASE_TESTS:-$(git merge-base HEAD origin/main 2>/dev/null || true)}
-    CHANGES=$( { [ -n "$BASE" ] && git diff --name-only "$BASE" 2>/dev/null; git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | sort -u)
-    S=0; F=0; C=0; V=0
-    for f in $CHANGES; do
-        #  v37.142 — la veille seule (ses PHP, ses données, ses tests) : seules les suites de la veille sont rejouées
-        case "$f" in cfo_veille_*|veille_*|install_veille.sh|test_cfo_engine_parity/test_veille*|fix_version_*) V=1; continue ;; esac
-        case "$f" in
-            sante/*|test_cfo_engine_parity/test_sante*) S=1 ;;
-            run_tests.sh|run_parallel.mjs|test_cfo_engine_parity/tw_cache.mjs|install.sh|apps.json|package.json|package-lock.json|Caddyfile*|test_cfo_engine_parity/test_lanceur.mjs|test_cfo_engine_parity/test_sauvegarde.php) C=1 ;;
-            *.md) ;;
-            *) F=1 ;;
-        esac
-    done
-    if [ "$V$S$F$C" = 1000 ]; then PERIMETRE=veille
-    elif [ "$C" = 1 ] || [ "$S$F" = 11 ] || [ "$S$F" = 00 ]; then PERIMETRE=tout; elif [ "$S" = 1 ]; then PERIMETRE=sante; else PERIMETRE=finance; fi
-    echo "▸ Périmètre automatique : $PERIMETRE (fichiers changés depuis origin/main ; « bash run_tests.sh tout » pour tout rejouer)"
-else
-    echo "▸ Périmètre : $PERIMETRE"
-fi
-case "$PERIMETRE" in sante|finance|veille|tout) ;; *) echo "Périmètre inconnu : $PERIMETRE (sante, finance, veille ou tout)"; exit 2 ;; esac
+#  v37.146 — TROIS NIVEAUX DE TNR, CHOISIS SELON L'IMPACT DU CHANGEMENT (choisir_suites.mjs) :
+#    bash run_tests.sh            → automatique d'après les fichiers changés depuis origin/main (+ non commités) :
+#                                   niveau 1 (ciblé : les suites qui touchent ce qui a changé + un socle rapide),
+#                                   niveau 2 (tout le domaine touché : Finance, Santé ou Veille) si un fichier cœur ou un gros écran change,
+#                                   niveau 3 (complet) si le noyau commun change. Un domaine que rien ne touche n'est pas testé.
+#    bash run_tests.sh 1 | 2 | 3  → forcer un niveau (2 au moins avant de publier)
+#    bash run_tests.sh sante | finance | veille | tout  → l'ancien périmètre explicite (v37.110)
+ARG="${1:-${PERIMETRE:-auto}}"
+NIVEAU=''
+case "$ARG" in
+    auto|1|2|3|cible|domaine|perimetre|complet) NIVEAU="$ARG"; PERIMETRE=tout ;;
+    sante|finance|veille|tout) PERIMETRE="$ARG"; echo "▸ Périmètre : $PERIMETRE" ;;
+    *) echo "Argument inconnu : $ARG (auto, 1, 2, 3, sante, finance, veille ou tout)"; exit 2 ;;
+esac
 
 suite() {
     case "$1" in
@@ -188,10 +174,12 @@ suite "Santé Master : synchro automatique HC Webhook (Health Connect)"  php tes
 suite "Santé Master : la v1.20 rétablie après le retour d'une ancienne version"  php test_cfo_engine_parity/test_sante_reparation.php
 suite "Santé Master : l'agent Telegram (Médecin-Chef IA) réécrit et publié"  php test_cfo_engine_parity/test_sante_agent.php
 suite "Santé Master : l'appli, le stockage, l'API du CMO, le webhook Samsung"  node test_cfo_engine_parity/test_sante_appli.mjs
+suite "Mes applis · le lanceur des tests : trois niveaux selon l'impact du changement"  node test_cfo_engine_parity/test_choisir_suites.mjs
 suite "Sauvegarde hors du VPS (Telegram) et surveillance"  php test_cfo_engine_parity/test_sauvegarde.php
 
 #  v37.109 — DEUX SUITES PAR CŒUR (8 au plus) par défaut : une suite « navigateur » attend beaucoup (Chromium, minuteries de
 #  l'appli) et laisse ses cœurs libres pendant ce temps — mesuré : ≈ 290 s à 4, ≈ 230 s à 8 sur 4 cœurs. JOBS=… pour choisir.
 COEURS=$(nproc 2>/dev/null || echo 4)
 JOBS_DEFAUT=$((COEURS * 2)); [ "$JOBS_DEFAUT" -gt 8 ] && JOBS_DEFAUT=8
+if [ -n "$NIVEAU" ]; then node choisir_suites.mjs "$LISTE" "$NIVEAU" || exit 2; fi
 node run_parallel.mjs "$LISTE" "${JOBS:-$JOBS_DEFAUT}"
