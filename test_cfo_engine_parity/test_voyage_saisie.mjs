@@ -184,12 +184,25 @@ try {
         v('  → un ANCIEN montant coché (70 DH, sans opération) : l\u2019aperçu le dit ; « 📝 En faire une opération du journal » → l\u2019opération « eau » 70 DH, plus rien à part, toujours 70 comptés',
           /70\s?DH réglés dans le Réalisé/.test(ap.ancienne) && JSON.stringify(ap.converti.ops) === '[["eau",70,"realise"]]' && !ap.converti.note && !/montantPaye":70/.test(ap.converti.tracker) && ap.converti.engage === 70, JSON.stringify(ap));
         await page.waitForSelector('[data-cat="factures"] [data-frise-ligne]', { state: 'attached', timeout: 5000 });
-        //  ✏️ depuis la frise : la ligne du prévu, ouverte et surlignée
+        //  v37.143 — ✏️ depuis la frise : une PETITE FENÊTRE (nom, montant, rythme) ; « Tout le budget › » ouvre le Budget Structurel
         await page.click('[data-frise-ligne][data-poste="alimentation::555"] [data-frise-vers-prevu]');
+        await page.waitForSelector('[data-prevu-frise]', { state: 'visible', timeout: 5000 });
+        const pf0 = await page.evaluate(() => ({ titre: document.querySelector('[data-prevu-frise-titre]').textContent, nom: document.querySelector('[data-prevu-frise-nom]').value, montant: document.querySelector('[data-prevu-frise-montant]').value }));
+        await page.fill('[data-prevu-frise-montant]', 'abc'); await page.click('[data-prevu-frise-enregistrer]');
+        const pfErr = await page.textContent('[data-prevu-frise-erreur]').catch(() => '');
+        await page.fill('[data-prevu-frise-montant]', '275'); await page.click('[data-prevu-frise-rythme="quinzaine"]');
+        const pfAp = await page.textContent('[data-prevu-frise-apercu]');
+        await page.click('[data-prevu-frise-enregistrer]'); await page.waitForTimeout(250);
+        const pf = await page.evaluate((ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026].chargesVariables.alimentation.details.find(x => String(x.id) === '555');
+            return { montant: d.montant, periode: d.periode, ouverte: !!document.querySelector('[data-prevu-frise]'), frise: st.friseOuverte }; }, ST);
+        v('  → v37.143 : ✏️ sur « khdra » dans la frise : une petite fenêtre (nom, montant, rythme) ; montant invalide refusé ; 275 / 15 j enregistré sur place, la frise reste ouverte',
+          /khdra/.test(pf0.titre) && pf0.nom === 'khdra' && /Montant/.test(pfErr) && /fois/.test(pfAp) && pf.montant === 275 && pf.periode === 'quinzaine' && !pf.ouverte && pf.frise, JSON.stringify([pf0, pfErr, pfAp, pf]));
+        await page.click('[data-frise-ligne][data-poste="alimentation::555"] [data-frise-vers-prevu]');
+        await page.click('[data-prevu-frise-budget]');
         await page.waitForSelector('[data-cv-detail="alimentation::555"][data-surligne]', { state: 'visible', timeout: 5000 }).catch(() => { });
         const bs = await page.evaluate((ST) => ({ mode: eval(ST).appMode, tab: eval(ST).activeTab, frise: eval(ST).friseOuverte, el: !!document.querySelector('[data-cv-detail="alimentation::555"][data-surligne]'),
             focus: document.activeElement && document.activeElement.closest && !!document.activeElement.closest('[data-cv-detail="alimentation::555"]') }), ST);
-        v('  → ✏️ (ou double-clic) sur « khdra » dans la frise : Budget Structurel, la ligne khdra surlignée, son montant prêt à changer',
+        v('  → « Tout le budget › » dans la fenêtre : Budget Structurel, la ligne khdra surlignée, son montant prêt à changer',
           bs.mode === 'previsionnel' && bs.tab === 'parametres' && !bs.frise && bs.el && bs.focus, JSON.stringify(bs));
         await page.evaluate(async (ST) => { const st = eval(ST); st.appMode = 'reel'; st.activeTab = 'saisie'; await Vue.nextTick(); st.friseOuverte = true; await Vue.nextTick(); }, ST);
         await page.waitForSelector('[data-frise-categorie="__exceptionnel"], [data-frise-categorie][data-cat="__exceptionnel"]', { state: 'attached', timeout: 5000 }).catch(() => { });

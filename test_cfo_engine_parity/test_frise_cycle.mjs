@@ -279,6 +279,66 @@ try {
     });
 
     /* ── E. Fermer ────────────────────────────────────────────────────── */
+    /* ── F. v37.143 — « LHRRI EST VERROUILLÉ POUR CE CYCLE MAIS PAS DANS LA FRISE » et « SAMAK : 250 + 230 DANS LES CASES, 250 / 500 SUR L'ENVELOPPE » ── */
+    await section('F', async () => {
+        await page.evaluate((ST) => { eval(ST).friseOuverte = true; }, ST); await page.waitForTimeout(300);
+        //  le cas samak : 400 tapés la 1ʳᵉ quinzaine, 300 au journal (sans rien taper) la 2ᵉ → deux achats : 700, pas max(400, 300) = 400
+        await page.evaluate(({ ST, PSY }) => {
+            const d = eval(ST).donneesAnnuelles[2026];
+            d.chargesVariables.alimentation.details[1].categorieId = 'cat_cv_alimentation__psy';
+            delete d.consoRealiseeT0['S2026-11-09'][PSY];
+            d.transactionsReelles.push({ id: 'tx_psy', date: '2026-11-10', montant: 300, libelle: 'PSY', categorieId: 'cat_cv_alimentation__psy', compteId: 'acc_cc' });
+            eval(ST).calculationTick++;
+        }, { ST, PSY }); await page.waitForTimeout(400);
+        const F1 = await page.evaluate(({ ST, PSY }) => { const S = eval(ST), p = S.liberteCycle.postesCycle.find(x => x.cle === PSY), l = S.friseCycle.categories.flatMap(c => c.lignes).find(x => x.cle === PSY);
+            return JSON.parse(JSON.stringify({ meteo: p.cycleEngage, frise: l.engage, env: l.enveloppe, q: l.quinzaines.map(q => [q.saisi, q.tickets, q.prevu]) })); }, { ST, PSY });
+        v('F. Psy : 400 tapés (1ʳᵉ quinzaine) + 300 au journal (2ᵉ) = 700 sur l\'enveloppe, dans la Météo ET la frise (avant : 400, le plus grand des deux sur tout le cycle)',
+          F1.meteo === 700 && F1.frise === 700 && JSON.stringify(F1.q.map(q => q.slice(0, 2))) === '[[400,0],[0,300]]', JSON.stringify(F1));
+        const qtxt = await page.$$eval(`[data-frise-quinzaines][data-poste="${PSY}"] [data-frise-quinzaine]`, l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+        v('  → les cases : « 400 / … » et « 300 / … » — leur somme est l\'engagé de l\'enveloppe', qtxt.length === 2 && /400 \//.test(qtxt[0]) && /300 \//.test(qtxt[1]), JSON.stringify(qtxt));
+        //  le verrou du cycle, dans la frise : le même que la Météo et le Réalisé
+        const env = `[data-frise-ligne][data-poste="${PSY}"] [data-frise-enveloppe]`, btn = `[data-frise-ligne][data-poste="${PSY}"] [data-frise-cloturer]`;
+        v('  → ouvert : 🔓 sur la ligne, enveloppe normale', (await page.textContent(btn)).trim() === '🔓' && await page.getAttribute(env, 'data-clos') === 'non');
+        await page.click(btn); await page.waitForTimeout(300);
+        const F2 = await page.evaluate(({ ST, PSY }) => { const S = eval(ST); return { meteo: S.liberteCycle.postesCycle.find(x => x.cle === PSY).clos, frise: S.friseCycle.categories.flatMap(c => c.lignes).find(x => x.cle === PSY).clos }; }, { ST, PSY });
+        const chiffres = (await page.textContent(env + ' [data-frise-chiffres]')).replace(/\s+/g, ' ');
+        const lib = F1.env - 700;
+        v('  → 🔓 touché dans la frise : clôturé pour le cycle — la Météo le voit aussi ; « 🔒 Clôturé · 700 / … DH · N libérés », enveloppe grisée, bouton 🔒',
+          F2.meteo && F2.frise && new RegExp('🔒 Clôturé · 700 / ' + F1.env + ' DH · ' + lib + ' libérés').test(chiffres) && await page.getAttribute(env, 'data-clos') === 'oui' && (await page.textContent(btn)).trim() === '🔒', JSON.stringify([F2, chiffres]));
+        await page.click(btn); await page.waitForTimeout(300);
+        v('  → 🔒 retouché : rouvert partout', await page.evaluate(({ ST, PSY }) => !eval(ST).liberteCycle.postesCycle.find(x => x.cle === PSY).clos, { ST, PSY }) && await page.getAttribute(env, 'data-clos') === 'non');
+        //  clôturé depuis la Météo (le 🔒 de « Sur tout le cycle ») → la frise le montre
+        await page.evaluate(({ ST, HRI }) => eval(ST).basculerClotureConso(null, HRI, 'cycle'), { ST, HRI }); await page.waitForTimeout(300);
+        v('  → Hri clôturé depuis la Météo : la frise affiche « 🔒 Clôturé » sur son enveloppe', /🔒 Clôturé/.test(await page.textContent(`[data-frise-ligne][data-poste="${HRI}"] [data-frise-chiffres]`)));
+        //  une case / sem close pour SA semaine : « 🔒 » dans la case ; l'aperçu la clôt et la rouvre
+        await page.evaluate(({ ST, MARJANE }) => eval(ST).basculerClotureConso('2026-11-09', MARJANE, 'semaine'), { ST, MARJANE }); await page.waitForTimeout(300);
+        const cases = await page.$$eval(`[data-frise-ligne][data-poste="${MARJANE}"] [data-frise-case]`, l => l.map(x => [x.dataset.clos, x.textContent.trim()]));
+        v('  → Marjane close pour la semaine du 9 nov. : sa case porte « 🔒 », les autres non', cases.filter(c => c[0] === 'oui').length === 1 && cases.find(c => c[0] === 'oui')[1].startsWith('🔒'), JSON.stringify(cases));
+        const i9 = cases.findIndex(c => c[0] === 'oui');
+        await (await page.$$(`[data-frise-ligne][data-poste="${MARJANE}"] [data-frise-case]`))[i9].click(); await page.waitForTimeout(250);
+        v('  → l\'aperçu de la case : « 🔒 Clôturé pour du 9 nov. … Toucher pour rouvrir »', /Clôturé pour du 9 nov/.test(await page.textContent('[data-frise-apercu-cloturer]')), await page.textContent('[data-frise-apercu-cloturer]').catch(() => ''));
+        await page.click('[data-frise-apercu-cloturer]'); await page.waitForTimeout(300);
+        v('  → touché : la semaine rouverte (la case perd son 🔒)', (await page.$$eval(`[data-frise-ligne][data-poste="${MARJANE}"] [data-frise-case]`, l => l.filter(x => x.dataset.clos === 'oui').length)) === 0
+          && /Clôturer pour/.test(await page.textContent('[data-frise-apercu-cloturer]')));
+        await page.evaluate((ST) => eval(ST).fermerApercuFrise(), ST); await page.waitForTimeout(150);
+        //  « C'EST QUOI CE ✓ ? PARFOIS IL DISPARAÎT » : « ✓ payé » inscrit le prévu ; une fois inscrit, « ✕ » l'annule (le bouton ne s'évanouit plus)
+        await page.evaluate(({ ST, HRI }) => eval(ST).basculerClotureConso(null, HRI, 'cycle'), { ST, HRI }); await page.waitForTimeout(250);   // Hri rouvert
+        const qH = `[data-frise-quinzaines][data-poste="${HRI}"]`;
+        const avant = { annuler: !!(await page.$(qH + ' [data-frise-quinzaine-annuler]')), payer: !!(await page.$(qH + ' [data-frise-quinzaine-payee]')) };
+        await page.click(qH + ' [data-frise-quinzaine-annuler]'); await page.waitForTimeout(300);
+        const vide = { payer: (await page.textContent(qH + ' [data-frise-quinzaine-payee]').catch(() => '')).trim(), engage: await page.evaluate(({ ST, HRI }) => eval(ST).friseCycle.categories.flatMap(c => c.lignes).find(x => x.cle === HRI).engage, { ST, HRI }) };
+        await page.click(qH + ' [data-frise-quinzaine-payee]'); await page.waitForTimeout(300);
+        const paye = { annuler: !!(await page.$(qH + ' [data-frise-quinzaine-annuler]')), engage: await page.evaluate(({ ST, HRI }) => eval(ST).friseCycle.categories.flatMap(c => c.lignes).find(x => x.cle === HRI).engage, { ST, HRI }) };
+        v('  → Hri : saisi → « ✕ » (annuler) ; ✕ touché → vide, « ✓ payé » apparaît ; ✓ payé touché → le prévu (1 000) inscrit, « ✕ » revient',
+          avant.annuler && !avant.payer && vide.payer === '✓ payé' && vide.engage === 0 && paye.annuler && paye.engage === 1000, JSON.stringify({ avant, vide, paye }));
+        //  v37.144 — « CHAQUE LIGNE DOIT MENTIONNER SON COMPTE » : la règle du Relevé (compte choisi sur la charge, sinon celui des charges variables)
+        const cptAvant = await page.$$eval('[data-frise-categorie] [data-frise-ligne] [data-frise-compte]', l => l.map(x => x.textContent.trim()));
+        await page.evaluate((ST) => { const st = eval(ST); st.comptes.push({ id: 'acc_as', label: 'Assafa principal', type: 'liquide', solde: 5000, icone: '🏦' });
+            st.donneesAnnuelles[2026].chargesVariables.alimentation.compte = 'cpt_acc_as'; st.calculationTick++; }, ST); await page.waitForTimeout(400);
+        const cpt = await page.evaluate(() => [...document.querySelectorAll('[data-frise-ligne]')].map(l => [l.dataset.poste, (l.querySelector('[data-frise-compte]') || {}).textContent || ''].map(x => String(x).trim())));
+        v('  → chaque ligne dit son compte : « 💳 Compte Courant » par défaut ; la charge Courses prélevée sur Assafa → ses lignes (Marjane, Psy, Hri) disent « 💳 Assafa principal »',
+          cptAvant.length >= 3 && cptAvant.every(t => /Compte Courant/.test(t)) && ['alimentation::1', 'alimentation::2', 'alimentation::3'].every(k => (cpt.find(x => x[0] === k) || [])[1] === '💳 Assafa principal'), JSON.stringify([cptAvant, cpt]));
+    });
     await section('E', async () => {
         await page.click('[data-frise-fermer]');
         await page.waitForTimeout(250);

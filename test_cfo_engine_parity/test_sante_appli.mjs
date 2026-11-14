@@ -277,7 +277,9 @@ z.close()`, docx, para]);
         fs.writeFileSync(c1, `com.samsung.shealth.tracker.pedometer_day_summary,6313005,3\nstep_count,calorie,day_time,deviceuuid\n6200,250.5,${ms('2026-10-20')},tel\n9100,380.2,${ms('2026-10-20')},montre\n7000,300,${ms('2026-10-21')},tel\n`);
         fs.writeFileSync(c2, 'com.samsung.health.weight,6312004,5\ncom.samsung.health.weight.start_time,com.samsung.health.weight.weight,com.samsung.health.weight.height\n2026-10-21 07:12:00.000,96.8,178\n');
         await p4.click('[data-onglet="poids"]');
-        await p4.setInputFiles('[data-import-csv]', [c1, c2]); await p4.waitForTimeout(300); await attendreEnregistre(p4);
+        await p4.setInputFiles('[data-import-csv]', [c1, c2]);
+        //  v1.27 : l'import est progressif (il laisse la main entre deux fichiers) — on attend son message final, pas 300 ms fixes
+        await p4.waitForFunction(() => /importé|❌/.test((document.querySelector('[data-message-csv]') || {}).textContent || ''), null, { timeout: 20000 }); await attendreEnregistre(p4);
         f = lireFichier();
         v('  → CSV réels de Samsung Health (2 fichiers d\'un coup) : en-tête en 2ᵉ ligne lu, téléphone + montre → le maximum, pesée reprise', /2 jour\(s\) importé\(s\) depuis 2 fichiers/.test(await p4.textContent('[data-message-csv]'))
           && f.journal['2026-10-20'].samsung.pas === 9100 && f.journal['2026-10-21'].samsung.pas === 7000 && f.poids.some(p => p.date === '2026-10-21' && p.kg === 96.8 && p.source === 'samsung'), [await p4.textContent('[data-message-csv]'), f.journal['2026-10-20']]);
