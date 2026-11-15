@@ -338,6 +338,40 @@ try {
         const cpt = await page.evaluate(() => [...document.querySelectorAll('[data-frise-ligne]')].map(l => [l.dataset.poste, (l.querySelector('[data-frise-compte]') || {}).textContent || ''].map(x => String(x).trim())));
         v('  → chaque ligne dit son compte : « 💳 Compte Courant » par défaut ; la charge Courses prélevée sur Assafa → ses lignes (Marjane, Psy, Hri) disent « 💳 Assafa principal »',
           cptAvant.length >= 3 && cptAvant.every(t => /Compte Courant/.test(t)) && ['alimentation::1', 'alimentation::2', 'alimentation::3'].every(k => (cpt.find(x => x[0] === k) || [])[1] === '💳 Assafa principal'), JSON.stringify([cptAvant, cpt]));
+        //  v37.147 — « POURQUOI JE NE PEUX PAS CLÔTURER ICI ? » : une FACTURE se clôt par le verrou du Réalisé, depuis la frise aussi
+        await page.evaluate((ST) => { const st = eval(ST); st.donneesAnnuelles[2026].chargesVariables.factures.details = [{ id: 7, nom: 'Élec', montant: 300, periode: 'cycle', categorieId: 'cat_cv_factures__delec' }]; st.calculationTick++; }, ST);
+        await page.waitForTimeout(400);
+        const bF = '[data-frise-ligne][data-poste="factures::7"] [data-frise-cloturer]', eF = '[data-frise-ligne][data-poste="factures::7"] [data-frise-enveloppe]';
+        const realise = () => page.evaluate((ST) => { const st = eval(ST), mb = st.moisBudgetaire, det = st.donneesAnnuelles[2026].chargesVariables.factures.details[0]; return st.estClotureItem(det, st.cyclePilotage); }, ST);
+        const f0 = { bouton: (await page.textContent(bF).catch(() => '')).trim(), realise: await realise(), chiffres: (await page.textContent(eF + ' [data-frise-chiffres]').catch(() => '')).replace(/\s+/g, ' ') };
+        await page.click(bF); await page.waitForTimeout(300);
+        const f1 = { bouton: (await page.textContent(bF)).trim(), clos: await page.getAttribute(eF, 'data-clos'), realise: await realise(), chiffres: (await page.textContent(eF + ' [data-frise-chiffres]')).replace(/\s+/g, ' ') };
+        await page.click(bF); await page.waitForTimeout(300);
+        const f2 = { bouton: (await page.textContent(bF)).trim(), clos: await page.getAttribute(eF, 'data-clos'), realise: await realise() };
+        v('  → v37.147 : la facture Élec a son 🔓 dans la frise ; touché → clôturée (« 🔒 Clôturé · 300 / 300 DH », déjà réglée au journal) ET clôturée dans le Réalisé ; retouché → rouverte partout',
+          f0.bouton === '🔓' && !f0.realise && f1.bouton === '🔒' && f1.clos === 'oui' && f1.realise && /^🔒 Clôturé · 300 \/ 300 DH$/.test(f1.chiffres.trim()) && /300 \/ 300 DH sur le cycle/.test(f0.chiffres) && f2.bouton === '🔓' && f2.clos === 'non' && !f2.realise,
+          JSON.stringify({ f0, f1, f2 }));
+        //  v37.147 — « JOUETS ABDELJALIL, HABITS ABDELJALIL, HABITS CHARIF… IL NE DOIT RIEN MANQUER À LA FRISE » : charges fixes, épargne, virements, revenus
+        await page.evaluate((ST) => { const st = eval(ST), d = st.donneesAnnuelles[2026];
+            Object.assign(d.chargesFixes.jouets, { label: 'Jouets Abdeljalil', valeur: 300, jourPrevu: 5 }); Object.assign(d.chargesFixes.habitsBebe, { label: 'Habits Abdeljalil', valeur: 400, jourPrevu: 10 });
+            d.epargne = [{ id: 91, nom: 'Épargne voyage', valeur: 1000, jourPrevu: 28, paye: false, montantPaye: 0 }];
+            st.calculationTick++; }, ST);
+        await page.waitForTimeout(400);
+        const blocs = await page.evaluate((ST) => JSON.parse(JSON.stringify(eval(ST).friseCycle.categories.filter(c => c.key.startsWith('__')).map(c => ({ key: c.key, lignes: c.lignes.map(l => [l.nom, l.engage, l.enveloppe, l.compte, l.verrouillable]) })))), ST);
+        const fixes = (blocs.find(b => b.key === '__fixes') || {}).lignes || [], rev = (blocs.find(b => b.key === '__revenus') || {}).lignes || [], ep = (blocs.find(b => b.key === '__epargne') || {}).lignes || [];
+        v('  → v37.147 : la frise a ses blocs « Charges fixes » (Jouets Abdeljalil 0 / 300, Habits Abdeljalil 0 / 400), « Épargne » (1 000), « Revenus » (SALAIRE 20 000) — chaque ligne avec son compte et son verrou',
+          fixes.some(l => l[0] === 'Jouets Abdeljalil' && l[1] === 0 && l[2] === 300 && /Compte Courant/.test(l[3]) && l[4]) && fixes.some(l => l[0] === 'Habits Abdeljalil' && l[2] === 400)
+          && ep.some(l => l[0] === 'Épargne voyage' && l[2] === 1000) && rev.some(l => l[0] === 'SALAIRE' && l[2] === 20000) && !fixes.some(l => l[0] === '—'), JSON.stringify(blocs));
+        const bJ = '[data-frise-ligne][data-poste="fixe_jouets"] [data-frise-cloturer]';
+        await page.click(bJ); await page.waitForTimeout(300);
+        const jClos = await page.evaluate((ST) => { const st = eval(ST); return st.estClotureItem(st.donneesAnnuelles[2026].chargesFixes.jouets, st.cyclePilotage); }, ST);
+        await page.click(bJ); await page.waitForTimeout(300);
+        v('  → une charge fixe se clôt depuis la frise (verrou du Réalisé) et se rouvre', jClos && !(await page.evaluate((ST) => { const st = eval(ST); return st.estClotureItem(st.donneesAnnuelles[2026].chargesFixes.jouets, st.cyclePilotage); }, ST)));
+        await page.click('[data-frise-ligne][data-poste="fixe_jouets"] [data-frise-vers-prevu]'); await page.waitForSelector('[data-prevu-frise]');
+        const sansRythme = !(await page.$('[data-prevu-frise-rythme]'));
+        await page.fill('[data-prevu-frise-montant]', '350'); await page.click('[data-prevu-frise-enregistrer]'); await page.waitForTimeout(300);
+        const jv = await page.evaluate((ST) => eval(ST).donneesAnnuelles[2026].chargesFixes.jouets.valeur, ST);
+        v('  → ✏️ sur « Jouets Abdeljalil » : la petite fenêtre (nom, montant, sans rythme) ; 350 enregistré sur la charge fixe', sansRythme && jv === 350, JSON.stringify({ sansRythme, jv }));
     });
     await section('E', async () => {
         await page.click('[data-frise-fermer]');

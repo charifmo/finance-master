@@ -17,7 +17,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'niveaux-'));
 const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 const ecrire = (f, t) => { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), t); };
 fs.copyFileSync(path.join(RACINE, 'choisir_suites.mjs'), path.join(dir, 'choisir_suites.mjs'));
-ecrire('index.html', '<div data-frise-cloturer></div>\n<p data-meteo-x></p>\n<script>const basculerClotureConso = () => 1;\nconst autreCalculLong = () => 2;</script>\n');
+ecrire('index.html', '<div data-frise-cloturer></div>\n<p data-meteo-x></p>\n<p>PREUVE — test_frise.mjs : cité dans le changelog</p>\n<script>const basculerClotureConso = () => 1;\nconst autreCalculLong = () => 2;</script>\n');
 ecrire('sante/index.html', '<div data-sante-a></div>\n<script src="sante_samsung.js"></script>\n');
 ecrire('sante/sante_samsung.js', 'x\n'); ecrire('sante/sante_lib.php', 'x\n'); ecrire('cfo_intent_engine.php', 'x\n'); ecrire('cfo_veille_lib.php', 'x\n');
 ecrire('run_parallel.mjs', 'x\n'); ecrire('README.md', 'x\n');
@@ -52,6 +52,10 @@ v('C. une ligne de l\'écran Finance (data-frise-cloturer) : niveau 1 — la sui
 remettre();
 ecrire('index.html', '<div data-frise-cloturer></div>\n<p data-meteo-x></p>\n<script>const basculerClotureConso = () => 1;\nconst autreCalculLong = () => 3;</script>\n'); r = choisir();
 v('  → un calcul changé (autreCalculLong) : la suite qui l\'appelle est rejouée', r.gardees.includes('Calcul') && !r.gardees.includes('Météo'), JSON.stringify(r));
+remettre();
+ecrire('test_cfo_engine_parity/test_frise.mjs', T.frise + ' // modifié\n'); r = choisir();
+v('  → une suite modifiée, citée seulement dans le TEXTE de l\'écran (changelog) : elle seule (+ socle), pas toutes les suites qui ouvrent l\'écran',
+  JSON.stringify(r.gardees) === JSON.stringify(['Frise', 'Un seul atterrissage']), JSON.stringify(r));
 remettre();
 ecrire('index.html', Array.from({ length: 500 }, (_, i) => '<p>' + i + '</p>').join('\n')); r = choisir();
 v('D. un gros changement de l\'écran Finance (500 lignes) : niveau 2 — toutes les suites Finance, pas Santé', JSON.stringify(r.gardees) === JSON.stringify(['Calcul', 'Frise', 'Météo', 'Un seul atterrissage']) && /niveau 2/.test(r.sortie), JSON.stringify(r));

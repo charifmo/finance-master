@@ -94,7 +94,10 @@ else {
         const noms = fs_.map(f => f.split('/').pop()).filter(x => !/^index\.html$/.test(x));
         //  un fichier CHARGÉ PAR L'ÉCRAN (sante_samsung.js dans sante/index.html…) : les suites qui ouvrent cet écran le testent aussi
         let ecranTexte = ''; try { ecranTexte = ecran ? fs.readFileSync(ecran, 'utf8') : ''; } catch { }
-        const chargesParEcran = noms.filter(nm => ecranTexte.includes(nm));
+        //  cité comme une ADRESSE (entre guillemets ou après « / » : src="sante_samsung.js", '/finance/cfo_veille_presse.php') — pas une simple
+        //  mention dans un texte (le changelog cite des noms de tests) ; jamais un fichier de test
+        const echappe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const chargesParEcran = noms.filter(nm => !/^test_/.test(nm) && new RegExp('["\'/]' + echappe(nm) + '(?:["\'?#]|$)', 'm').test(ecranTexte));
         const ouvreEcran = (t) => dom === 'sante' ? /['"`/]sante\/(?:['"`]|index\.html)|\/sante\//.test(t) : /index\.html/.test(t);
         const choisies = duDomaine.filter(s => {
             if (!s.fichier) return false;
