@@ -8040,7 +8040,7 @@
                                           :class="['absolute top-0.5 bottom-0.5 w-1.5 -ml-[3px] rounded-full ring-2 opacity-60', s.etat === 'paye' ? 'bg-violet-600 ring-white' : (s.etat === 'suivant' ? 'bg-white ring-amber-500' : 'bg-white ring-violet-500')]" :style="{ left: Math.min(99, s.pos) + '%' }"></span>
                                     <span class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"><span data-frise-chiffres :class="['pointer-events-auto px-1.5 rounded text-[10px] font-bold tabular-nums', l.clos ? 'bg-slate-700 text-white' : 'bg-white/75 text-slate-700']"><template v-if="l.clos">🔒 Clôturé · {{ l.engage }} / {{ l.enveloppe }} DH<template v-if="l.eco > 0"> · {{ l.eco }} libérés</template></template><template v-else>{{ l.engage }} / {{ l.enveloppe }} DH sur le cycle{{ l.fois ? ' · ≈ ' + l.fois + '×' : '' }}</template></span></span>
                                 </div>
-                                <button v-if="l.verrouillable" type="button" data-frise-cloturer :data-poste="l.cle" :aria-pressed="l.clos ? 'true' : 'false'" @click.stop="basculerClotureConso(null, l.cle, l.unite)"
+                                <button v-if="l.verrouillable" type="button" data-frise-cloturer :data-poste="l.cle" :aria-pressed="l.clos ? 'true' : 'false'" @click.stop="basculerClotureFrise(l)"
                                         :title="l.clos ? 'Rouvrir ' + l.nom + ' : son enveloppe attend de nouveau des dépenses' : 'Clôturer ' + l.nom + ' pour ce cycle : plus rien n’est attendu, le reste de son enveloppe est libéré'"
                                         :class="['shrink-0 w-7 h-6 grid place-items-center rounded-md text-[12px] transition', l.clos ? 'bg-slate-700 text-white ring-2 ring-slate-500' : 'bg-slate-100 ring-1 ring-slate-200 opacity-60 hover:opacity-100 hover:bg-slate-200']">{{ l.clos ? '🔒' : '🔓' }}</button>
                                 </div>
@@ -8106,7 +8106,7 @@
                     <label class="block text-[11px] font-black text-slate-600">Montant (DH)
                         <input data-prevu-frise-montant v-model="prevuFrise.montant" type="text" inputmode="decimal" autocomplete="off" class="mt-1 w-full rounded-lg ring-1 ring-slate-300 px-3 py-2 text-right text-base font-black text-slate-900 tabular-nums outline-none focus:ring-2 focus:ring-blue-400">
                     </label>
-                    <div class="text-[11px] font-black text-slate-600">Rythme
+                    <div v-if="!prevuFrise.sansRythme" class="text-[11px] font-black text-slate-600">Rythme
                         <div class="mt-1 grid grid-cols-3 gap-1">
                             <button v-for="r in [['semaine', '/ sem'], ['quinzaine', '/ 15 j'], ['cycle', '/ cycle']]" :key="r[0]" type="button" :data-prevu-frise-rythme="r[0]" @click="prevuFrise.periode = r[0]"
                                     :class="['py-2 rounded-lg text-[11px] font-black', prevuFrise.periode === r[0] ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200']">{{ r[1] }}</button>
@@ -8136,7 +8136,7 @@
                 <div class="overflow-y-auto px-3 py-2 space-y-1.5">
                     <!-- v37.143 : le verrou, ici aussi — / sem : pour CETTE semaine ; / 15 j et / cycle : pour le cycle -->
                     <button v-if="apercuFrise.verrouillable" type="button" data-frise-apercu-cloturer :aria-pressed="apercuClos ? 'true' : 'false'"
-                            @click="basculerClotureConso(apercuFrise.semaine || null, apercuFrise.cle, apercuFrise.semaine ? 'semaine' : apercuFrise.unite)"
+                            @click="apercuFrise.ref && !apercuFrise.semaine ? basculerClotureFrise({ ref: apercuFrise.ref, verrouRealise: true }) : basculerClotureConso(apercuFrise.semaine || null, apercuFrise.cle, apercuFrise.semaine ? 'semaine' : apercuFrise.unite)"
                             :class="['w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-black text-left', apercuClos ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200']">
                         <span class="text-base leading-none">{{ apercuClos ? '🔒' : '🔓' }}</span>
                         <span class="flex-1 min-w-0">{{ apercuClos ? 'Clôturé ' + (apercuFrise.semaine ? 'pour ' + apercuFrise.periode : 'pour ce cycle') + ' — plus rien n’est attendu. Toucher pour rouvrir.' : 'Clôturer ' + (apercuFrise.semaine ? 'pour ' + apercuFrise.periode : 'pour ce cycle') + ' : plus rien n’est attendu, le reste du prévu est libéré' }}</span>
@@ -9516,8 +9516,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.146 Trois niveaux de tests";
+                    const CURRENT_VERSION = "37.147 Les factures se clôturent aussi dans la frise";
                     const CHANGELOG = [
+        { version: "37.147 Les factures se clôturent aussi dans la frise", date: "2026-11-14", changes: [
+            "🔒 « POURQUOI JE NE PEUX PAS CLÔTURER ICI ? » (Factures dans la frise) — une facture, ou une dépense exceptionnelle, se clôt par le verrou du Réalisé (« Clôturer pour ce cycle », posé sur la ligne) ; la frise n'avait que celui de la Météo. Chaque facture a maintenant son 🔓 / 🔒 dans la frise et dans son aperçu : clôturée d'un côté, elle l'est de l'autre ; grisée, « 🔒 Clôturé · réglé / prévu · N libérés ».",
+            "🏢 « JOUETS ABDELJALIL, HABITS ABDELJALIL, HABITS CHARIF… IL NE DOIT RIEN MANQUER À LA FRISE » — elle montre maintenant TOUT ce que le Réalisé pointe : 🏢 Charges fixes, 💎 Épargne, 🔄 Virements internes, 💰 Revenus (reçu / attendu), en plus de la consommation, des factures et de l'exceptionnel. Chaque ligne : réglé / prévu sur le cycle (le même chiffre que le Réalisé), un repère à sa date prévue, son compte, son 🔓 / 🔒 ; ✏️ ouvre la petite fenêtre (nom, montant).",
+            "🧪 Le choix automatique des tests ne prend plus une simple mention d'un fichier dans le changelog pour un fichier chargé par l'écran (une suite modifiée relançait 90 suites au lieu de quelques-unes).",
+            "PREUVE — test_frise_cycle.mjs : la facture Élec clôturée depuis la frise l'est dans le Réalisé, puis rouverte ; blocs Charges fixes, Épargne, Revenus, chacun avec son compte et son verrou ; une charge fixe clôturée et rouverte depuis la frise ; ✏️ → 350 enregistré. test_choisir_suites.mjs (13).",
+        ] },
         { version: "37.146 Trois niveaux de tests", date: "2026-11-14", changes: [
             "🧪 TROIS NIVEAUX DE TNR, CHOISIS SELON L'IMPACT DU CHANGEMENT (bash run_tests.sh) — niveau 1 « ciblé » : les suites qui touchent ce qui a changé (une suite modifiée, un fichier qu'elle nomme, un identifiant des lignes changées de l'écran, un fichier chargé par l'écran) + un socle rapide ; niveau 2 « domaine » : tout Finance, Santé ou Veille si un fichier cœur (moteur, stockage, intégrité, données de test) ou un gros morceau d'écran change ; niveau 3 « complet » si le noyau commun change. Un domaine que rien ne touche n'est pas testé : Santé inchangée, Santé non testée. « bash run_tests.sh 1 | 2 | 3 » force un niveau ; sante | finance | veille | tout restent possibles.",
             "Mesuré : une ligne de la frise → 16 suites sur 97 (≈ 53 s au lieu de ≈ 200 s) ; sante_samsung.js → les 7 suites Santé qui le lisent ou ouvrent l'écran qui le charge. PREUVE — test_choisir_suites.mjs (12) sur un dépôt git jetable.",
@@ -23637,8 +23643,48 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                                   pct: budget > 0 ? Math.min(100, Math.round(engage / budget * 100)) : (engage > 0 ? 100 : 0), pctAttendu: null, depasse: engage > budget, lignes: lignesF });
                             });
                         }
+                        //  v37.147 — « POURQUOI DANS LA FRISE IL N'Y A PAS JOUETS ABDELJALIL, HABITS ABDELJALIL, HABITS CHARIF… ? IL NE DOIT RIEN
+                        //  MANQUER » : la frise ne montrait que la consommation, les factures et l'exceptionnel. Elle montre maintenant TOUT ce
+                        //  que le Réalisé pointe : charges fixes, épargne, virements internes, revenus — réglé (ou reçu) / prévu sur le cycle,
+                        //  le même chiffre que le Réalisé (case cochée, « + ajouter », journal), un repère à sa date prévue, son compte, son verrou.
+                        {
+                            const du = _ymd(debut), au = _ymd(fin), cleC = _cleCycle(mb.mois, mb.an);
+                            const posRang = (j) => { const r = _rangDansCycle(j); return Math.max(0, Math.min(100, (r - 0.5) / J * 100)); };
+                            const quandRang = (j) => lib(_decaler(_ymd(debut), _rangDansCycle(j) - 1));
+                            const bloc = (key, label, items, nature, emoji, opts = {}) => {
+                                const lignesB = [];
+                                items.forEach(({ ref, nom, due, jour, cle, champNom, champMontant }) => {
+                                    const prevu = Math.round(Math.abs(Number(due) || 0));
+                                    if (prevu <= 0) return;
+                                    const reel = Math.round(Math.abs(Number(getPaidAmount(ref, prevu, cleC)) || 0));
+                                    lignesB.push({ ref, due: prevu, cle, nom: String(nom || '—').trim(), emoji, unite: 'cycle', catKey: key, catId: null, du, au, saisi: null, engage: reel, enveloppe: prevu,
+                                                   pct: prevu > 0 ? Math.min(100, Math.round(reel / prevu * 100)) : 0, depasse: !opts.entree && reel > prevu + 0.5, champNom, champMontant,
+                                                   seances: jour ? [{ pos: posRang(jour), quand: quandRang(jour), etat: reel > 0 ? 'paye' : 'prevue' }] : [], alerte: null,
+                                                   compte: getNomCompte(compteDeFlux(nature, ref)), compteRegle: regleDeRoutage(nature, ref) });
+                                    if (!opts.entree && reel > prevu + 0.5) alertes.push('🔴 ' + String(nom || '').trim() + ' (' + label.replace(/^\S+\s/, '') + ') : ' + reel + ' DH pour ' + prevu + ' prévus — dépassement de ' + (reel - prevu) + ' DH');
+                                });
+                                if (!lignesB.length) return;
+                                const budget = lignesB.reduce((x, l) => x + l.enveloppe, 0), engage = lignesB.reduce((x, l) => x + l.engage, 0);
+                                categories.push({ key, label, budget, engage, estime: false, entree: !!opts.entree,
+                                                  pct: budget > 0 ? Math.min(100, Math.round(engage / budget * 100)) : 0, pctAttendu: null, depasse: !opts.entree && engage > budget, lignes: lignesB });
+                            };
+                            bloc('__fixes', '🏢 Charges fixes', Object.entries(d.chargesFixes || {}).map(([k, x]) => ({ ref: x, nom: x.label, due: getDueFixe(x, mb.an, mb.mois), jour: x.jourPrevu, cle: 'fixe_' + k, champNom: 'label', champMontant: 'valeur' })), 'fixe', '🏢');
+                            bloc('__epargne', '💎 Épargne', (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).map((x, i) => ({ ref: x, nom: x.nom || x.label || 'Épargne', due: getDueFixe(x, mb.an, mb.mois), jour: x.jourPrevu, cle: 'ep_' + (x.id != null ? x.id : i), champNom: x.nom !== undefined ? 'nom' : 'label', champMontant: 'valeur' })), 'epargne', '💎');
+                            bloc('__virements', '🔄 Virements internes', getVirementsCycle(mb.mois, mb.an).filter(x => cleDeCompte(x.sourceCompte || 'courant') !== cleDeCompte(x.destinationCompte || 'courant'))
+                                .map((x, i) => ({ ref: x, nom: 'Virement ' + infoCompte(cleDeCompte(x.sourceCompte || 'courant')).tag + ' → ' + infoCompte(cleDeCompte(x.destinationCompte || 'courant')).tag, due: x.montant, jour: x.jourPrevu, cle: 'vir_' + (x.id != null ? x.id : i) })), 'virement', '🔄');
+                            bloc('__revenus', '💰 Revenus (reçu / attendu)', Object.entries(d.revenus || {}).map(([k, x]) => ({ ref: x, nom: x.label, due: getDueRevenu(x, mb.an, mb.mois), jour: x.jourPrevu, cle: 'rev_' + k, champNom: 'label', champMontant: 'base' })), 'revenu', '💰', { entree: true });
+                        }
                         //  v37.144 — « CHAQUE LIGNE DOIT MENTIONNER SON COMPTE (Assafa principal, Courant…) » : la règle du Relevé, mot pour mot —
                         //  une charge variable (et ses lignes) : son compte choisi, sinon celui des charges variables ; une dépense exceptionnelle : son compte source
+                        //  v37.147 — « POURQUOI JE NE PEUX PAS CLÔTURER ICI ? » (Factures) : une facture ou une dépense exceptionnelle se clôt par
+                        //  le verrou du RÉALISÉ (« Clôturer pour ce cycle », posé sur la ligne elle-même) — la frise le lit et le manie aussi
+                        const cleCycF = _cleCycle(mb.mois, mb.an);
+                        categories.forEach(c => c.lignes.forEach(l => {
+                            if (!l.ref || l.cellules) return;
+                            l.verrouillable = true; l.verrouRealise = true;
+                            l.clos = estClotureItem(l.ref, cleCycF);
+                            l.eco = l.clos ? Math.max(0, Math.round((l.due || l.enveloppe || 0) - (l.engage || 0))) : 0;
+                        }));
                         categories.forEach(c => {
                             const cv = (d.chargesVariables || {})[c.key];
                             c.lignes.forEach(l => {
@@ -23685,7 +23731,14 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const ouvrirPrevuFrise = (c, l) => {
                         if (!c || !l) return false;
                         const key = l.catKey || c.key, catId = String(l.catId || '');
-                        if (key === '__exceptionnel' || catId.startsWith('cat_irr')) return allerAuPrevuFrise(c, l);
+                        //  v37.147 : une charge fixe, une épargne, un revenu (ligne avec sa référence) — nom et montant, modifiés sur la ligne elle-même
+                        if (l.ref && l.champMontant) {
+                            prevuFrise.value = { c, l, mode: 'ref', ref: l.ref, champNom: l.champNom, champMontant: l.champMontant, an: Number(consoT0Annee.value) || anneeAffichage.value,
+                                                 catLabel: c.label || '', nomInitial: l.ref[l.champNom] || l.nom || '—', nom: l.ref[l.champNom] || '', montant: String(Number(l.ref[l.champMontant]) || 0),
+                                                 periode: 'cycle', sansRythme: true, anneesSuivantes: [], aussiSuivantes: false, erreur: '' };
+                            return true;
+                        }
+                        if (key === '__exceptionnel' || catId.startsWith('cat_irr') || String(key).startsWith('__')) return allerAuPrevuFrise(c, l);
                         const an = Number(consoT0Annee.value) || anneeAffichage.value, cv = ((donneesAnnuelles.value[an] || {}).chargesVariables || {})[key];
                         const id = String(l.cle || '').startsWith(key + '::') ? String(l.cle).slice(key.length + 2) : '';
                         const det = cv && id ? (cv.details || []).find(x => x && String(x.id) === id) : null;
@@ -23700,6 +23753,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const v = Number(String(x.montant).replace(/\s/g, '').replace(',', '.'));
                         if (!Number.isFinite(v) || v < 0) return '';
                         const n = semainesDuCycle(moisBudgetaire.value.mois, moisBudgetaire.value.an), f = facteurPeriode(x.periode, n);
+                        if (x.sansRythme) return 'Le montant prévu chaque mois (une exception sur un mois, s\'il y en a une, reste prioritaire).';
                         return x.periode === 'cycle' ? 'Soit ' + formatMAD(v) + ' sur le cycle.' : 'Soit ≈ ' + formatMAD(Math.round(v * f)) + ' sur ce cycle (' + String(Math.round(f * 10) / 10).replace('.', ',') + ' fois).';
                     });
                     const enregistrerPrevuFrise = () => {
@@ -23707,6 +23761,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const nom = String(x.nom || '').trim(), v = Number(String(x.montant).replace(/\s/g, '').replace(',', '.'));
                         if (!nom) { x.erreur = 'Le nom ne peut pas être vide.'; return false; }
                         if (!Number.isFinite(v) || v < 0 || v > 10000000) { x.erreur = 'Montant : un nombre positif (ex. 250).'; return false; }
+                        if (x.mode === 'ref') {   // v37.147 : charge fixe, épargne, revenu
+                            x.ref[x.champNom] = nom; x.ref[x.champMontant] = Math.round(v * 100) / 100;
+                            prevuFrise.value = null; calculationTick.value++; handleDataChange(); return true;
+                        }
                         if (!RYTHMES.includes(x.periode)) { x.erreur = 'Rythme : / sem, / 15 j ou / cycle.'; return false; }
                         const annees = [x.an, ...(x.aussiSuivantes ? x.anneesSuivantes : [])];
                         let n = 0;
@@ -23766,8 +23824,18 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                               //  v37.143 : le verrou de la Météo — une case / sem (sa semaine), une enveloppe / 15 j ou / cycle (le cycle)
                                               verrouillable: !!(x ? l.cellules && l.catKey && !String(l.catKey).startsWith('__') : l.verrouillable), unite: l.unite };
                     };
+                    //  v37.147 : le 🔓 / 🔒 d'une ligne de la frise — le verrou de la Météo (postes / 15 j, / cycle), ou celui du Réalisé (factures, exceptionnel)
+                    const basculerClotureFrise = (l) => {
+                        if (!l) return;
+                        if (!l.verrouRealise) return basculerClotureConso(null, l.cle, l.unite);
+                        const mb = moisBudgetaire.value, cle = _cleCycle(mb.mois, mb.an), e = _etatCycle(l.ref, cle);
+                        if (e && e.cloture) { const r = Object.assign({}, e); delete r.cloture; _poserEtatCycle(l.ref, cle, r); handleDataChange(); }
+                        else cloturerItem(l.ref, cle);
+                        calculationTick.value++;
+                    };
                     const apercuClos = computed(() => {
                         const a = apercuFrise.value; if (!a || !a.verrouillable) return false;
+                        if (a.ref && !a.semaine) { calculationTick.value; const mb = moisBudgetaire.value; return estClotureItem(a.ref, _cleCycle(mb.mois, mb.an)); }
                         return !!(_cloturesConso.value[a.semaine ? 'S' + a.semaine : 'C' + consoT0CycleKey.value] || {})[a.cle];
                     });
                     //  v37.131 : les moitiés du poste ouvert, à jour (relues dans la frise à chaque saisie)
@@ -28521,7 +28589,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         derniereValidation, validerChargesEchues, annulerValidation,
                         bulleOuverte, bulleEpinglee, survolBulle, quitterBulle, basculerBulle, fermerBulle, allerAInbox,
                         // v37.17 : météo financière + respiration du Prévisionnel
-                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, apercuClos, prevuFrise, ouvrirPrevuFrise, apercuPrevuFrise, enregistrerPrevuFrise, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, friseQEdit, saisirQuinzaineFrise, apercuQuinzaines, apercuSaisirSemaine, apercuRealiseVersJournal, realiseVersJournal, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
+                        meteoFinanciere, revenusAilleurs, retirerVirementPrevu, friseOuverte, friseCycle, apercuClos, basculerClotureFrise, prevuFrise, ouvrirPrevuFrise, apercuPrevuFrise, enregistrerPrevuFrise, dateReleve, adapterEpargneAuPotentiel, retirerAdaptationEpargne, alimenterCourantAuJusteBesoin, annulerAlimentationCourant, recalibrerAnnee, annulerRecalibrage, lignesRecalibrage, apercuFrise, ouvrirApercuFrise, fermerApercuFrise, apercuFriseOps, apercuVersJournal, friseQEdit, saisirQuinzaineFrise, apercuQuinzaines, apercuSaisirSemaine, apercuRealiseVersJournal, realiseVersJournal, modeExpert, choisirModeAffichage, vueAujourdhui, chiffresDuJour, actionDuJour, faireActionDuJour, reponseInstantanee, donneesChargees, gardeFousAnnee, gardeFousAffichage, retirerDoublonsVirements, virementsDepuisCourant, fairePartirDuSalaire, compteDuSalaire, cycleDuVirement, actionsEnAttente, executerActionsAppli, plafondAdaptation, potentielEpargneAn, potentielEpargneDuMois, epargneDuMoisHors, webhookCfoParDefaut, dateDuCycle, moisCourt, regleParJournal, quinzaineDuPoste, respirationBudgetaire, respirationDuMois, NIVEAUX_RESPIRATION, semainesVariablesDuCycle,
                         comptesFonctionnement, estFonctionnement, fonctionnementExplicite, definirFonctionnement, remettreFonctionnementAuto, sensEpargne, perimetreSurplus,
                         surbrillanceEchues, estEchue,
                         // v37.18 : logistique bancaire
