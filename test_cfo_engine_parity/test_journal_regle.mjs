@@ -133,6 +133,31 @@ try {
         v('E. le Relevé ne projette plus « elect » (déjà sortie du compte) : « Total Factures » = les 50 qui restent sur « tel » (et non 299)',
           L.length === 1 && /Total Factures/.test(L[0][0]) && L[0][1] === 50, JSON.stringify(L));
     });
+    await section('F', async () => {
+        //  v37.148 — « LA SAISIE NE SE FAIT PAS » : TOUCHE PAR TOUCHE (les autres contrôles posaient la valeur d'un coup, jamais « 3 », puis « 30 », puis « 300 »).
+        //  Depuis la v37.133, chaque chiffre était écrit au journal et la case vidée : le champ repartait de zéro à chaque touche (« 300 » devenait « 0 »),
+        //  et, une fois le dû atteint, la ligne passait dans « Déjà validé » : son tiroir, vide, disparaissait avec le champ.
+        await page.evaluate(() => document.querySelectorAll('details').forEach(d => { d.open = true; }));
+        await page.evaluate(async (ST) => { const st = eval(ST); const it = st.donneesAnnuelles[2026].chargesVariables.factures.details[1]; st.setMontantPayeCycle(it, 0, st.cyclePilotage); st.forceUpdateCalculations(); await new Promise(r => setTimeout(r, 200)); }, ST);
+        const R = await page.evaluate(async () => {
+            const dormir = (ms) => new Promise(r => setTimeout(r, ms));
+            const el = [...document.querySelectorAll('input[data-saisie="invitante"]')].find(e => e.offsetParent !== null);
+            if (!el) return null;
+            el.focus(); const pas = [];
+            for (const c of '300') { el.value = (el.value || '') + c; el.dispatchEvent(new Event('input', { bubbles: true })); await dormir(80); pas.push([el.value, document.contains(el)]); }
+            return { pas, avantBlur: el.value };
+        });
+        v('F. « 300 » tapé touche par touche sur « tel » (99 prévus, 49 déjà réglés) : le champ montre 3, 30, 300 — il n\'est jamais remis à zéro et ne disparaît pas',
+          R && JSON.stringify(R.pas) === JSON.stringify([['3', true], ['30', true], ['300', true]]), JSON.stringify(R));
+        const E1 = await page.evaluate((ST) => { const st = eval(ST); const t = st.tachesPilotageToutes.find(x => x.libelle === 'tel'); const ops = st.donneesAnnuelles[2026].transactionsReelles.filter(x => x.source === 'realise' && x.libelle === 'tel').map(x => x.montant);
+            return { regle: t.regle, paye: t.paye, ops, enTiroir: !!document.querySelector('[data-tiroir="variable"] input[data-saisie]') }; }, ST);
+        v('  → réglé 300 (les 49 d\'Orange + une opération « tel » de 251 au journal), la ligne reste dans son tiroir tant qu\'on est dans le champ',
+          E1.regle === 300 && E1.paye === true && JSON.stringify(E1.ops) === '[251]' && E1.enTiroir, JSON.stringify(E1));
+        await page.evaluate(() => { const el = [...document.querySelectorAll('input[data-saisie="invitante"]')].find(e => e.offsetParent !== null); if (el) { el.dispatchEvent(new Event('blur')); } });
+        await page.waitForTimeout(250);
+        const E2 = await page.evaluate((ST) => ({ champs: document.querySelectorAll('[data-tiroir="variable"] input[data-saisie]').length, valides: eval(ST).tachesTerminees.filter(t => t.libelle === 'tel').length }), ST);
+        v('  → en quittant le champ : « tel » passe dans « Déjà validé » (réglé 300), plus de champ à traiter', E2.champs === 0 && E2.valides === 1, JSON.stringify(E2));
+    });
     v('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 } finally {
     await browser.close();
