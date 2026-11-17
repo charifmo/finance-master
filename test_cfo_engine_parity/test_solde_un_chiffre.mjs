@@ -41,8 +41,8 @@ v('  → rien n\'est posé sur le ➕ : v37.62, plus de 🪄 ni de 💾 flottant
   && /data-flottant="saisie"\s+class="fixed bottom-20 right-4/.test(html));
 v('  → 📑 🧠 masqués pendant la saisie rapide et l\'import (ils couvraient Montant, Catégorie, Libellé)',
   (html.match(/v-if="isMobile && !showSaisieQuickModal && !importBanque\.ouvert"/g) || []).length === 2);
-v('  → l\'OCR : thème sombre (canal clair inversé), centimes relus trois fois, 3e lecture « en-tête » si aucun solde',
-  /const _ecranSombre = /.test(html) && /mode === 'max'/.test(html) && /for \(const \[dx, k\] of \[\[3, 2\], \[0, 2\], \[3, 3\]\]\)/.test(html) && /textes\.enTete = 2/.test(html));
+v('  → l\'OCR : thème sombre (canal clair inversé), centimes relus cinq fois (v37.149), 3e lecture « en-tête » si aucun solde',
+  /const _ecranSombre = /.test(html) && /mode === 'max'/.test(html) && /for \(const \[dx, k\] of \[\[3, 2\], \[0, 2\], \[3, 3\], \[5, 2\], \[1, 2\]\]\)/.test(html) && /textes\.enTete = 2/.test(html));
 //  Dépôt PUBLIC : tout RIB écrit dans l'appli et les fixtures est fictif
 const RIBS_FICTIFS = ['007 450 0001234567890123 45', '190 780 2100345600071234 52'];
 const ribsDe = (s) => s.match(/\b\d{3} \d{3} \d{16} \d{2}\b/g) || [];

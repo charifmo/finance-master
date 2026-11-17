@@ -43,7 +43,7 @@ v('  → rien n\'est posé sur le ➕ : v37.62, plus de 🪄 ni de 💾 flottant
 v('  → 📑 🧠 masqués pendant la saisie rapide et l\'import (ils couvraient Montant, Catégorie, Libellé)',
   (html.match(/v-if="isMobile && !showSaisieQuickModal && !importBanque\.ouvert"/g) || []).length === 2);
 v('  → l\'OCR : thème sombre (canal clair inversé), centimes relus trois fois, 3e lecture « en-tête » si aucun solde',
-  /const _ecranSombre = /.test(html) && /mode === 'max'/.test(html) && /for \(const \[dx, k\] of \[\[3, 2\], \[0, 2\], \[3, 3\]\]\)/.test(html) && /textes\.enTete = 2/.test(html));
+  /const _ecranSombre = /.test(html) && /mode === 'max'/.test(html) && /for \(const \[dx, k\] of \[\[3, 2\], \[0, 2\], \[3, 3\], \[5, 2\], \[1, 2\]\]\)/.test(html) && /textes\.enTete = 2/.test(html));
 //  Dépôt PUBLIC : tout RIB écrit dans l'appli et les fixtures est fictif
 const RIBS_FICTIFS = ['007 450 0001234567890123 45', '190 780 2100345600071234 52'];
 const ribsDe = (s) => s.match(/\b\d{3} \d{3} \d{16} \d{2}\b/g) || [];
@@ -245,6 +245,25 @@ ACCUEIL  VIREMENT  LIFESTYLE  AUTRES`;
 
 try {
     /* ── B. Le parseur, sur ce que l'OCR rend vraiment ─────────────────── */
+    await section('B0', async () => {
+        //  v37.149 — « POURQUOI ILLISIBLE ? » (Attijari Mobile, « 2 168,⁸⁶ DH » vert sur blanc) : seule UNE lecture des centimes rendait « 86 » (les autres :
+        //  rien, ou « 8 » — le « 6 » perdu à l'agrandissement). Les lectures à un chiffre valaient chacune « 80 » : avec plus d'essais, « 80 » l'aurait emporté.
+        const D = (votes, uns) => page.evaluate(({ ST, votes, uns }) => eval(ST).bqChoisirCentimes(votes, uns), { ST, votes, uns });
+        const cas = [
+            [{ 86: 1 }, { 8: 1 }, '86', 'une seule lecture à deux chiffres, un chiffre la confirme (le cas de la capture : 86, 8, 8, 8…)'],
+            [{ 86: 3 }, { 8: 6 }, '86', 'trois lectures « 86 » face à six « 8 » : « 86 », jamais « 80 »'],
+            [{ 86: 2, 56: 1 }, {}, '86', 'deux d\'accord contre une'],
+            [{ 86: 1, 56: 1 }, {}, null, 'deux lectures différentes à égalité : illisible, pas de choix au hasard'],
+            [{ 86: 1 }, {}, null, 'une seule lecture et rien qui la confirme : illisible'],
+            [{ 86: 1 }, { 5: 1 }, null, 'un chiffre qui CONTREDIT la seule lecture : illisible'],
+            [{}, { 8: 2 }, '80', '« ⁸ DH » lu deux fois, aucune lecture à deux chiffres : 80 (le zéro final est tu)'],
+            [{}, { 8: 1 }, null, 'un seul chiffre lu : illisible'],
+            [{}, { 8: 1, 3: 1 }, null, 'deux chiffres différents : illisible'],
+        ];
+        const R = []; for (const [vo, un] of cas) R.push(await D(vo, un));
+        v('B0. v37.149 centimes relus : le vote ne se laisse plus noyer par les lectures à un chiffre (9 cas)',
+          cas.every((c, i) => R[i] === c[2]), JSON.stringify(cas.map((c, i) => [c[3], R[i], c[2]]).filter((x, i) => R[i] !== cas[i][2])));
+    });
     await section('B', async () => {
         const at = await analyser(ATTIJARI_MOBILE);
         v('B. Attijari Mobile : « Mes comptes » 4 318,35 et « Compte chèque » 4 213,32 (« DH PH » en exposant avalé)',
