@@ -4887,7 +4887,7 @@
                                                         <span :class="['text-sm font-bold flex-1', isItemPaid(f, getDueFixe(f, soldesInitiaux.anneeActuelle)) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ f.label }}</span>
                                                     </label>
                                                     <div class="flex items-center gap-2">
-                                                        <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value)" placeholder="0" class="flex-1 bg-slate-900 text-orange-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <input type="number" :value="valeurSaisie(f, undefined, false)" @input="saisirMontant(f, $event.target.value)" @blur="finSaisieMontant(f)" placeholder="0" class="flex-1 bg-slate-900 text-orange-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
                                                         <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(getDueFixe(f, soldesInitiaux.anneeActuelle)).replace(' DH', '') }} DH</span>
                                                     </div>
                                                 </div>
@@ -4903,7 +4903,7 @@
                                                         <span :class="['text-sm font-bold flex-1', isItemPaid(f, f.montant) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ f.nom }}</span>
                                                     </label>
                                                     <div class="flex items-center gap-2">
-                                                        <input type="number" :value="montantPayeCycle(f)" @input="setMontantPayeCycle(f, $event.target.value)" placeholder="0" class="flex-1 bg-slate-900 text-blue-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <input type="number" :value="valeurSaisie(f, undefined, false)" @input="saisirMontant(f, $event.target.value)" @blur="finSaisieMontant(f)" placeholder="0" class="flex-1 bg-slate-900 text-blue-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
                                                         <span class="text-[10px] text-slate-400 font-black w-20 text-right">/ {{ formatMAD(f.montant).replace(' DH', '') }} DH</span>
                                                     </div>
                                                 </div>
@@ -4919,7 +4919,7 @@
                                                         <span :class="['text-sm font-bold flex-1', isItemPaid(dep, dep.montant) ? 'text-slate-500 line-through' : 'text-slate-100']">{{ dep.nom }}</span>
                                                     </label>
                                                     <div class="flex items-center gap-2">
-                                                        <input type="number" :value="montantPayeCycle(dep)" @input="setMontantPayeCycle(dep, $event.target.value)" placeholder="0" class="flex-1 bg-slate-900 text-red-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
+                                                        <input type="number" :value="valeurSaisie(dep, undefined, false)" @input="saisirMontant(dep, $event.target.value)" @blur="finSaisieMontant(dep)" placeholder="0" class="flex-1 bg-slate-900 text-red-400 border border-slate-600 rounded-lg p-3 text-right font-bold outline-none"/>
                                                         <span :class="['text-[10px] font-black w-20 text-right', Number(dep.montant) < 0 ? 'text-emerald-400' : 'text-slate-400']">{{ Number(dep.montant) < 0 ? '+ ' + formatMAD(-Number(dep.montant)) : '/ ' + formatMAD(dep.montant) }}</span>
                                                     </div>
                                                 </div>
@@ -5716,8 +5716,8 @@
                                                          discrète, pour une avance) ; une entrée exceptionnelle peut être reçue en partie. -->
                                                     <div v-if="t.sens !== 'credit' || t.nature === 'exceptionnel'" class="relative">
                                                         <input type="number" inputmode="decimal" min="0"
-                                                               :value="montantPayeCycle(t.ref, cyclePilotage) || ''"
-                                                               @input="setMontantPayeCycle(t.ref, $event.target.value, cyclePilotage)"
+                                                               :value="valeurSaisie(t.ref, cyclePilotage)"
+                                                               @input="saisirMontant(t.ref, $event.target.value, cyclePilotage)" @blur="finSaisieMontant(t.ref, cyclePilotage)"
                                                                :data-saisie="t.sens !== 'credit' && (t.nature === 'variable' || t.nature === 'exceptionnel') ? 'invitante' : 'discrete'"
                                                                :placeholder="t.parJournal > 0 && t.sens !== 'credit' ? formatNombre(t.parJournal) + ' 🧾' : (t.sens === 'credit' ? 'reçu' : ((t.nature === 'variable' || t.nature === 'exceptionnel') ? 'Saisir' : 'avance'))"
                                                                :title="t.sens === 'credit' ? 'Déjà reçu, en partie' : ((t.nature === 'variable' || t.nature === 'exceptionnel') ? 'Saisissez ce qui a vraiment été payé' : 'Avance partielle déjà versée')"
@@ -5981,7 +5981,7 @@
                                 </div>
 
                                 <!-- Formulaire ajout/édition — v21.10 -->
-                                <div v-if="showAssuranceForm" class="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
+                                <div v-if="showAssuranceForm" data-assur-form class="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3 scroll-mt-4">
                                     <div class="flex items-center justify-between">
                                         <p class="text-[9px] font-black uppercase tracking-widest text-blue-600">{{ editingAssuranceId ? '✏️ Modifier la créance' : '⚡ Nouvelle créance' }}</p>
                                         <button title="Annuler" aria-label="Annuler" @click="annulerEditionAssurance" class="text-gray-400 hover:text-red-500 font-black text-lg leading-none transition-colors">×</button>
@@ -9516,8 +9516,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.147 Les factures se clôturent aussi dans la frise";
+                    const CURRENT_VERSION = "37.148 La saisie des montants ne repart plus de zéro";
                     const CHANGELOG = [
+        { version: "37.148 La saisie des montants ne repart plus de zéro", date: "2026-11-17", changes: [
+            "⌨️ « LA SAISIE NE SE FAIT PAS DANS LA PARTIE SAISIE » (Pilotage mensuel, les champs « Saisir ») — depuis la v37.133, chaque chiffre tapé était écrit au journal puis la case vidée ; le champ, qui affiche cette case, était remis à zéro à chaque touche : « 300 » donnait « 3 » puis « 0 » (le « 3 » en journal, le suivant repartait de rien). Le champ garde maintenant ce que vous tapez pendant que le journal suit chaque touche ; en le quittant, il montre à nouveau ce que le journal a réglé. Même correction pour les champs de la Saisie plus ancienne (charges fixes, dépenses).",
+            "↕️ Et la ligne que l'on tape ne saute plus : à « 300 » sur 99 prévus, elle passait aussitôt dans « Déjà validé » et, son tiroir devenu vide, le champ disparaissait sous les doigts. Elle reste en place jusqu'à ce que vous quittiez le champ.",
+            "✏️ « JE CLIQUE SUR MODIFIER, ÇA NE DONNE RIEN, C'EST BLOQUÉ ! » (Créances et remboursements) — le formulaire de modification s'ouvre en HAUT de la section ; avec la liste en dessous, on cliquait sur ✏️ et rien ne bougeait à l'écran. ✏️ amène maintenant le formulaire à l'écran, au centre, son premier champ prêt.",
+            "PREUVE — test_journal_regle.mjs (section F) : « 300 » tapé touche par touche sur « tel » (99 prévus, 49 déjà réglés) → le champ montre 3, 30, 300 ; réglé 300 (opération de 251 au journal) ; ligne validée en quittant le champ. Les contrôles d'avant posaient la valeur d'un coup, jamais touche par touche : ils ne pouvaient pas voir le défaut (échec confirmé sur la v37.147).",
+        ] },
         { version: "37.147 Les factures se clôturent aussi dans la frise", date: "2026-11-14", changes: [
             "🔒 « POURQUOI JE NE PEUX PAS CLÔTURER ICI ? » (Factures dans la frise) — une facture, ou une dépense exceptionnelle, se clôt par le verrou du Réalisé (« Clôturer pour ce cycle », posé sur la ligne) ; la frise n'avait que celui de la Météo. Chaque facture a maintenant son 🔓 / 🔒 dans la frise et dans son aperçu : clôturée d'un côté, elle l'est de l'autre ; grisée, « 🔒 Clôturé · réglé / prévu · N libérés ».",
             "🏢 « JOUETS ABDELJALIL, HABITS ABDELJALIL, HABITS CHARIF… IL NE DOIT RIEN MANQUER À LA FRISE » — elle montre maintenant TOUT ce que le Réalisé pointe : 🏢 Charges fixes, 💎 Épargne, 🔄 Virements internes, 💰 Revenus (reçu / attendu), en plus de la consommation, des factures et de l'exceptionnel. Chaque ligne : réglé / prévu sur le cycle (le même chiffre que le Réalisé), un repère à sa date prévue, son compte, son 🔓 / 🔒 ; ✏️ ouvre la petite fenêtre (nom, montant).",
@@ -19807,6 +19813,24 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         handleDataChange();
                     };
 
+                    //  v37.148 — « LA SAISIE NE SE FAIT PAS » : depuis la v37.133, chaque chiffre tapé était écrit au journal et la case (montantPaye)
+                    //  vidée aussitôt ; le champ, qui affiche cette case, était remis à zéro à chaque touche — « 300 » devenait « 0 » (le « 3 » écrit,
+                    //  le « 0 » suivant repartait de rien). Le champ garde maintenant ce qui est tapé (un BROUILLON, le temps de la saisie) pendant
+                    //  que le journal suit chaque touche ; en quittant le champ, il montre à nouveau ce que le journal a réglé.
+                    const brouillonsMontant = reactive({});
+                    const _kBrouillon = (item, cle) => String(cle || '') + '|' + String((item && (item.id ?? item.nom ?? item.label)) ?? '') + '|' + String((item && item.categorieId) || '');
+                    const valeurSaisie = (item, cle, vide = true) => {
+                        const k = _kBrouillon(item, cle);
+                        if (k in brouillonsMontant) return brouillonsMontant[k];
+                        const v = montantPayeCycle(item, cle);
+                        return vide ? (v || '') : v;
+                    };
+                    const saisirMontant = (item, valeur, cle) => {
+                        brouillonsMontant[_kBrouillon(item, cle)] = String(valeur == null ? '' : valeur);
+                        setMontantPayeCycle(item, valeur, cle);
+                    };
+                    const finSaisieMontant = (item, cle) => { delete brouillonsMontant[_kBrouillon(item, cle)]; };
+
                     //  Date de règlement effective, quand elle existe.
                     const dateReelleCycle = (item, cle) => {
                         const e = _etatCycle(item, cle);
@@ -22601,6 +22625,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const tachesPilotage = computed(() => focusCompte.value
                         ? tachesPilotageToutes.value.filter(t => t.compte === focusCompte.value)
                         : tachesPilotageToutes.value);
+                    //  v37.148 : une ligne dont on TAPE le montant reste dans son tiroir jusqu'à ce qu'on quitte le champ — à « 300 » sur 99 prévus,
+                    //  elle passait aussitôt dans « Déjà validé » (et son tiroir, vide, disparaissait) : le champ s'évanouissait sous les doigts
+                    const _enSaisie = (t) => _kBrouillon(t.ref, cyclePilotage.value) in brouillonsMontant;
                     const tachesATraiter = computed(() => tachesPilotage.value.filter(t => !t.paye));
                     const tachesTerminees = computed(() => tachesPilotage.value.filter(t => t.paye));
 
@@ -22701,7 +22728,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             .concat(cle === 'exceptionnel' ? entreesPilotage.value.filter(e => e.nature === 'exceptionnel') : []);
                     const tiroirsPilotage = computed(() => TIROIRS_POINTAGE.map(T => {
                         const toutes = _lignesDuTiroir(T.cle);
-                        const aFaire = toutes.filter(t => !t.paye)
+                        const aFaire = toutes.filter(t => !t.paye || _enSaisie(t))   // v37.148 : une ligne en cours de frappe reste à sa place
                             .sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle));
                         const reste = (sens) => Math.round(aFaire.filter(t => (t.sens || 'debit') === sens)
                             .reduce((s, t) => s + Math.max(0, t.due - (t.regle || 0)), 0));
@@ -22712,7 +22739,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                  urgent: aFaire.some(t => t.retard || t.proche) };
                     }).filter(T => T.aFaire.length));
                     const dejaValidePilotage = computed(() => {
-                        const lignes = TIROIRS_POINTAGE.flatMap(T => _lignesDuTiroir(T.cle).filter(t => t.paye)
+                        const lignes = TIROIRS_POINTAGE.flatMap(T => _lignesDuTiroir(T.cle).filter(t => t.paye && !_enSaisie(t))
                             .sort((a, b) => a.rang - b.rang || a.libelle.localeCompare(b.libelle)));
                         const somme = (sens) => Math.round(lignes.filter(t => (t.sens || 'debit') === sens).reduce((s, t) => s + (t.clos ? t.regle : (t.regle || t.due)), 0));
                         return { lignes, regle: somme('debit'), encaisse: somme('credit') };
@@ -25760,6 +25787,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         };
                         editingAssuranceId.value = item.id;
                         showAssuranceForm.value = true;
+                        //  v37.148 — « JE CLIQUE SUR MODIFIER, ÇA NE DONNE RIEN, C'EST BLOQUÉ ! » : le formulaire s'ouvre en HAUT de la section, la
+                        //  liste est en dessous — on cliquait sur ✏️ tout en bas et rien ne bougeait à l'écran. On se place maintenant sur le formulaire.
+                        nextTick(() => { const e = document.querySelector('[data-assur-form]'); if (e) { e.scrollIntoView({ behavior: 'smooth', block: 'center' }); const c = e.querySelector('input[type="number"], input, select'); if (c) c.focus({ preventScroll: true }); } });
                     };
 
                     const annulerEditionAssurance = () => {
@@ -28568,7 +28598,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         getVirementsMois, getVirementsCycle, resumesMois, ajouterVirementInterne, supprimerVirementInterne, joursDuMoisCal, fixerJourExact, jourApresPaie, jourDePaieCal, cycleSuivantNom, isEpLinked, getEpLinkedId,
                         canUndo, canRedo, undoCount, redoCount, undo, redo, autoBackupToast,
                         // v37.12 — suivi d'exécution par cycle
-                        cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, dateReelleCycle,
+                        cycleRealiseActif, cyclePilotage, montantPayeCycle, setMontantPayeCycle, valeurSaisie, saisirMontant, finSaisieMontant, dateReelleCycle,
                         estClotureItem, cloturerItem, ajouterAuRegle, basculerClotureConso, consoEcoT0, entreesPilotageToutes,
                         // v37.53 — calibrage bancaire & import
                         BANQUES_SELECT, nomBanque, idLisible, signatureLisible, importBanque, calibrageBanque, ouvrirImportBanque, fermerImportBanque,

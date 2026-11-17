@@ -197,6 +197,18 @@ try {
     await page.waitForTimeout(300);
     v('décocher : elle redevient attendue au journal', await page.evaluate((ST) => eval(ST).journalHybridePourReleve.entries.some(e => (e.libelle || '').includes('Créance attendue : ATT PEDIATRE')), ST));
 
+    //  v37.148 — « JE CLIQUE SUR MODIFIER, ÇA NE DONNE RIEN, C'EST BLOQUÉ ! » : le formulaire s'ouvre en HAUT de la section ; avec la liste en dessous, rien
+    //  ne bougeait à l'écran. ✏️ amène maintenant le formulaire à l'écran, prêt à modifier ; ✓ Mettre à jour l'enregistre.
+    await page.evaluate(() => { const l = [...document.querySelectorAll('[data-assur-ligne]')].pop(); if (l) l.scrollIntoView({ block: 'center' }); });
+    const bas = await page.evaluate(() => { const l = [...document.querySelectorAll('[data-assur-ligne]')].pop(); const r = l.getBoundingClientRect(); return { lib: l.textContent.replace(/\s+/g, ' ').trim().slice(0, 40), visible: r.top >= 0 && r.bottom <= innerHeight }; });
+    await page.click('[data-assur-ligne]:has-text("' + (bas.lib.match(/ENC [A-Z]+|ATT [A-Z]+/) || ['ATT ORL'])[0] + '") button[title="Modifier"]');
+    await page.waitForSelector('[data-assur-form]', { timeout: 5000 });
+    await page.waitForTimeout(900);
+    const fm = await page.evaluate(() => { const e = document.querySelector('[data-assur-form]'), r = e.getBoundingClientRect(), a = document.activeElement; return { haut: Math.round(r.top), bas: Math.round(r.bottom), vp: innerHeight, dansLeFormulaire: !!(a && e.contains(a)), titre: (e.querySelector('p') || {}).textContent }; });
+    v('✏️ Modifier (en bas de la liste) : le formulaire est AMENÉ À L\'ÉCRAN (dans la fenêtre), son 1er champ actif, titre « Modifier la créance »',
+      fm.haut >= -2 && fm.haut < fm.vp && fm.dansLeFormulaire && /Modifier la créance/.test(fm.titre || ''), JSON.stringify({ bas, fm }));
+    await page.click('[data-assur-form] button[title="Annuler"]'); await page.waitForTimeout(200);
+
     if (CAPTURES) {
         await page.evaluate((ST) => { const st = eval(ST); st.ouvrirReleve && st.ouvrirReleve('cpt_1'); }, ST);
         await page.waitForTimeout(800);
