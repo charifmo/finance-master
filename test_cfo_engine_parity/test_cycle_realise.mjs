@@ -74,6 +74,9 @@ const browser = await pw.chromium.launch({ executablePath: chromium, args: ['--n
 
 try {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+    //  v37.150 — horloge figée au 12 du mois courant (milieu de cycle, paie le 27) : le dernier jour d'un cycle (le 26), il n'y a ni
+    //  « sept prochains jours » ni « plus tard » DANS le cycle, et le contrôle des échéances (section rangs) échouait selon le jour du test.
+    { const n = new Date(); await page.clock.setFixedTime(new Date(n.getFullYear(), n.getMonth(), 12, 12, 0, 0)); }
     const erreurs = []; page.on('pageerror', e => erreurs.push(String(e)));
     page.on('dialog', d => d.accept());
     await page.goto(`http://127.0.0.1:${port}/finance/`, { waitUntil: 'load' });
