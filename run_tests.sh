@@ -31,14 +31,17 @@ trap 'rm -f "$LISTE"' EXIT
 #                                   niveau 1 (ciblé : les suites qui touchent ce qui a changé + un socle rapide),
 #                                   niveau 2 (tout le domaine touché : Finance, Santé ou Veille) si un fichier cœur ou un gros écran change,
 #                                   niveau 3 (complet) si le noyau commun change. Un domaine que rien ne touche n'est pas testé.
-#    bash run_tests.sh 1 | 2 | 3  → forcer un niveau (2 au moins avant de publier)
+#    bash run_tests.sh 1 | 2 | 3  → forcer un niveau
+#  v37.151 — LÉGER · MOYEN · FULL : bash run_tests.sh leger | moyen | full (= 1 | 2 | 3). Le moyen de la Finance n'est plus « tout le
+#    domaine » (≈ le full) mais le léger + un socle moyen (moteur, projection, cycle, Relevé, CFO). Le full automatique : noyau commun,
+#    changement de fond dans deux domaines, ou très gros changement. PLAN=1 bash run_tests.sh … : affiche le choix et la durée, n'exécute rien.
 #    bash run_tests.sh sante | finance | veille | tout  → l'ancien périmètre explicite (v37.110)
 ARG="${1:-${PERIMETRE:-auto}}"
 NIVEAU=''
 case "$ARG" in
-    auto|1|2|3|cible|domaine|perimetre|complet) NIVEAU="$ARG"; PERIMETRE=tout ;;
+    auto|1|2|3|cible|domaine|perimetre|complet|leger|léger|moyen|full) NIVEAU="$ARG"; PERIMETRE=tout ;;
     sante|finance|veille|tout) PERIMETRE="$ARG"; echo "▸ Périmètre : $PERIMETRE" ;;
-    *) echo "Argument inconnu : $ARG (auto, 1, 2, 3, sante, finance, veille ou tout)"; exit 2 ;;
+    *) echo "Argument inconnu : $ARG (auto, leger, moyen, full, 1, 2, 3, sante, finance, veille ou tout)"; exit 2 ;;
 esac
 
 suite() {
@@ -151,6 +154,8 @@ suite "Vos comptes : aujourd’hui, au plus bas, fin de cycle ; virements à pr�
 suite "Dictionnaire et variantes : Carrefour sûr, vos corrections apprises, frise visible"  node test_cfo_engine_parity/test_dictionnaire_variantes.mjs
 suite "Le cycle se lit comme le Relevé : dates, pourquoi du point bas, dépassements, zoom"  node test_cfo_engine_parity/test_cycle_lisible.mjs
 suite "Le journal règle sa ligne du Pilotage (factures, fixes, épargne)"  node test_cfo_engine_parity/test_journal_regle.mjs
+suite "Charge fixe selon X mois (trimestre, semestre, an)"  node test_cfo_engine_parity/test_periodicite.mjs
+suite "Charge fixe selon X mois — serveur (PHP)"  php test_cfo_engine_parity/test_periodicite.php
 suite "Des dates, partout : plus aucun « j.N » ni « J−N »"  node test_cfo_engine_parity/test_dates_partout.mjs
 suite "Le même jour : les entrées d’abord, la grande case dit où elle regarde et quel virement avancer"  node test_cfo_engine_parity/test_meme_jour.mjs
 suite "Les deux graphiques du Bilan : par compte, par type de charges"  node test_cfo_engine_parity/test_graphiques_bilan.mjs
@@ -182,4 +187,5 @@ suite "Sauvegarde hors du VPS (Telegram) et surveillance"  php test_cfo_engine_p
 COEURS=$(nproc 2>/dev/null || echo 4)
 JOBS_DEFAUT=$((COEURS * 2)); [ "$JOBS_DEFAUT" -gt 8 ] && JOBS_DEFAUT=8
 if [ -n "$NIVEAU" ]; then node choisir_suites.mjs "$LISTE" "$NIVEAU" || exit 2; fi
+if [ -n "${PLAN:-}" ]; then echo "  (PLAN=1 : rien n'est exécuté)"; sed 's/\t.*//' "$LISTE" | sed 's/^/    - /'; exit 0; fi
 node run_parallel.mjs "$LISTE" "${JOBS:-$JOBS_DEFAUT}"

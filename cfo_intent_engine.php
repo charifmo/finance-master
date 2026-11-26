@@ -303,6 +303,18 @@ function cfo_periode_detail($d, $cv): string {
 }
 function cfo_facteur_periode(string $p, float $n): float { return $p === 'semaine' ? $n : ($p === 'quinzaine' ? $n / 2 : 1.0); }
 function cfo_a_des_lignes($cv): bool { $d = oget($cv, 'details'); return is_array($d) && count($d) > 0; }
+/*  v37.150 — LE RYTHME DE PAIEMENT D'UNE LIGNE (miroir de periodiciteDe / estMoisDePaiement / mensuelLisse de l'application) :
+    periodicite = { tous: 2|3|4|6|12, depart: 1-12 } ; le montant est celui d'UN paiement, dû les mois de paiement, rien les autres. */
+function cfo_periodicite($item): ?array {
+    $p = oget($item, 'periodicite'); $n = (int)(oget($p, 'tous', 1) ?: 1);
+    if ($n <= 1 || 12 % $n !== 0) return null;
+    return ['tous' => $n, 'depart' => max(1, min(12, (int)round((float)(oget($p, 'depart', 1) ?: 1))))];
+}
+function cfo_mois_de_paiement($item, int $m): bool {
+    $p = cfo_periodicite($item); if (!$p) return true;
+    return (((($m ?: 1) - $p['depart']) % $p['tous']) + $p['tous']) % $p['tous'] === 0;
+}
+function cfo_mensuel_lisse($item, $base): float { $p = cfo_periodicite($item); return (float)($base ?: 0) / ($p ? $p['tous'] : 1); }
 function cfo_exception_du_mois($item, int $m) {
     $v = null;
     foreach ((oget($item, 'exceptions') ?: []) as $e) {
@@ -354,7 +366,7 @@ function cfo_compute_reliquat($fd, $yr) {
     if (!is_object($y)) return 0;
     $sumRev = 0.0; $sumFix = 0.0; $sumVar = 0.0;
     foreach (ovals(oget($y, 'revenus', onew())) as $o)      $sumRev += (float)(oget($o, 'base', 0) ?: 0);
-    foreach (ovals(oget($y, 'chargesFixes', onew())) as $o) $sumFix += (float)(oget($o, 'valeur', 0) ?: 0);
+    foreach (ovals(oget($y, 'chargesFixes', onew())) as $o) $sumFix += cfo_mensuel_lisse($o, oget($o, 'valeur', 0));   // v37.150 : lissé
     foreach (ovals(oget($y, 'chargesVariables', onew())) as $o) {
         // v37.29 : un mois MOYEN de l'année = ses semaines ÷ 12 (v37.65 : 365 jours ÷ 7)
         // v37.30 : et chaque ligne de détail avec SON rythme
@@ -415,6 +427,7 @@ function cfo_compute_monthly_net_courant($fd, $year): array {
     $jdp    = cfo_jour_de_paie($fd);   // v37.29
 
     $eff = function ($item, $base, int $m) {
+        if (!cfo_mois_de_paiement($item, $m)) return 0.0;   // v37.150
         $v = (float)($base ?: 0);
         foreach ((oget($item, 'exceptions') ?: []) as $e) {
             $md = (int)(oget($e, 'moisDebut', 0) ?: 0);

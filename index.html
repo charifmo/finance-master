@@ -1495,6 +1495,20 @@
                                 <input type="number" v-model.number="item.jourPrevu" @input="handleDataChange" min="1" max="31" placeholder="ex: 4" class="w-20 p-1.5 text-xs font-black text-indigo-800 border border-indigo-200 rounded-lg bg-indigo-50 outline-none focus:ring-2 focus:ring-indigo-400 text-center"/>
                                 <span class="text-[9px] text-slate-400 font-bold">du mois (1–31)</span>
                             </div>
+                            <!-- v37.150 : rythme de paiement (le syndic chaque trimestre…) -->
+                            <div data-periodicite :data-ligne="'chargesFixes:' + key" class="flex items-center gap-2 mt-1 mb-1 flex-wrap">
+                                <label class="text-[9px] font-black text-teal-700 uppercase tracking-widest whitespace-nowrap">🔁 Paiement :</label>
+                                <select data-periodicite-tous :value="(periodiciteDe(item) || { tous: 1 }).tous" @change="choisirPeriodicite('chargesFixes', key, item, $event.target.value)" class="p-1.5 text-xs font-black text-teal-800 border border-teal-200 rounded-lg bg-teal-50 outline-none cursor-pointer">
+                                    <option v-for="o in PERIODICITES_FIXES" :key="o.n" :value="o.n">{{ o.label }}</option>
+                                </select>
+                                <template v-if="periodiciteDe(item)">
+                                    <label class="text-[9px] font-black text-teal-700 uppercase tracking-widest whitespace-nowrap">1ᵉʳ paiement :</label>
+                                    <select data-periodicite-depart :value="periodiciteDe(item).depart" @change="choisirDepartPeriodicite('chargesFixes', key, item, $event.target.value)" class="p-1.5 text-xs font-black text-teal-800 border border-teal-200 rounded-lg bg-teal-50 outline-none cursor-pointer">
+                                        <option v-for="m in 12" :key="m" :value="m">{{ nomDuMois(m) }}</option>
+                                    </select>
+                                    <span data-periodicite-resume class="text-[10px] text-teal-700/80 font-bold basis-full sm:basis-auto">{{ resumePeriodicite(item) }}</span>
+                                </template>
+                            </div>
                             <div v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions)" class="mt-4 bg-orange-50/50 rounded-xl p-4 border border-orange-100 shadow-inner">
                                 <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="flex items-center gap-3 mb-3 bg-white p-2 rounded-lg border border-orange-100 shadow-sm flex-wrap sm:flex-nowrap">
                                     <span class="text-[10px] font-bold text-gray-500 uppercase">De</span>
@@ -5112,6 +5126,20 @@
                                     <button v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions) && (!item.parts || !item.parts.length)" @click="scinderLigneObj(item)" class="py-2 px-3 text-[10px] text-blue-500 font-bold uppercase tracking-widest rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">✂️ Scinder</button>
                                     <button v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions)" data-supprimer-ligne @click="supprimerLigneBudget('chargesFixes', key)" class="py-2 px-3 text-[10px] text-red-400 font-bold uppercase tracking-widest rounded-lg border border-red-200 hover:bg-red-50 transition-colors">🗑️</button>
                                 </div>
+                                <!-- v37.150 : rythme de paiement (le syndic chaque trimestre…) -->
+                            <div data-periodicite :data-ligne="'chargesFixes:' + key" class="flex items-center gap-2 mt-1 mb-1 flex-wrap">
+                                <label class="text-[9px] font-black text-teal-700 uppercase tracking-widest whitespace-nowrap">🔁 Paiement :</label>
+                                <select data-periodicite-tous :value="(periodiciteDe(item) || { tous: 1 }).tous" @change="choisirPeriodicite('chargesFixes', key, item, $event.target.value)" class="p-2 text-xs font-black text-teal-800 border border-teal-200 rounded-lg bg-teal-50 outline-none cursor-pointer">
+                                    <option v-for="o in PERIODICITES_FIXES" :key="o.n" :value="o.n">{{ o.label }}</option>
+                                </select>
+                                <template v-if="periodiciteDe(item)">
+                                    <label class="text-[9px] font-black text-teal-700 uppercase tracking-widest whitespace-nowrap">1ᵉʳ paiement :</label>
+                                    <select data-periodicite-depart :value="periodiciteDe(item).depart" @change="choisirDepartPeriodicite('chargesFixes', key, item, $event.target.value)" class="p-2 text-xs font-black text-teal-800 border border-teal-200 rounded-lg bg-teal-50 outline-none cursor-pointer">
+                                        <option v-for="m in 12" :key="m" :value="m">{{ nomDuMois(m) }}</option>
+                                    </select>
+                                    <span data-periodicite-resume class="text-[10px] text-teal-700/80 font-bold basis-full sm:basis-auto">{{ resumePeriodicite(item) }}</span>
+                                </template>
+                            </div>
                                 <div v-if="uiOuvert('budget.fixes.' + key + '.periodes', item.showExceptions)" class="mt-3 bg-orange-50 rounded-xl p-3 border border-orange-100">
                                     <div v-for="(exc, idx) in (item.exceptions || [])" :key="exc.id" class="bg-white p-2 rounded-lg border border-orange-100 mb-2">
                                         <div class="grid grid-cols-2 gap-2 mb-2">
@@ -9516,8 +9544,18 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.149 Les centimes en exposant mieux lus";
+                    const CURRENT_VERSION = "37.151 Tests légers, moyens ou complets";
                     const CHANGELOG = [
+        { version: "37.151 Tests légers, moyens ou complets", date: "2026-11-26", changes: [
+            "⏱️ « OPTIMISE LES TESTS : NE REJOUE PAS TOUS LES TNR SAUF SI C'EST COMPLEXE ET QUE ÇA TOUCHE À TOUT — 3 NIVEAUX : LÉGER, MOYEN, FULL » — les trois niveaux existaient (v37.146) mais ne triaient presque rien : le « léger » d'un changement de l'écran Finance retenait 95 suites sur 99 (il lisait les phrases du changelog et des mots que presque toutes les suites citent : chargesFixes, valeur, donneesAnnuelles…), et le « moyen » rejouait tout le domaine Finance, soit presque le complet.",
+            "DÉSORMAIS — bash run_tests.sh leger | moyen | full (ou 1 | 2 | 3 ; sans argument : automatique). Léger : les suites qui nomment ce qui a changé + un socle rapide ; le changelog et les commentaires ne comptent plus, un identifiant cité par plus de 10 % des suites est écarté (et c'est dit). Moyen : le léger + un socle moyen de 23 suites (moteur, projection, cycle, Relevé, CFO). Full automatique seulement si le noyau des tests change, si deux domaines ont un changement de fond, ou au-delà de 3 000 lignes. Durée estimée affichée ; PLAN=1 montre le choix sans rien exécuter. Sur le changement de la v37.150 : léger 37 suites ≈ 68 s, moyen 45 ≈ 71 s, full 119 ≈ 208 s.",
+            "AU PASSAGE — « Pilotage Réalisé (suivi par cycle) » échouait le dernier jour d'un cycle (le 26, paie le 27) : son échéance « dans la semaine » retombait au début du cycle suivant. Son horloge est figée au 12 du mois. PREUVE — test_choisir_suites.mjs (17 contrôles, dépôt git jetable) : moyen ≠ tout le domaine ; cœur Finance + cœur Santé → full ; un identifiant commun ne trie rien ; une phrase du changelog ne désigne rien ; léger / moyen / full = 1 / 2 / 3.",
+        ] },
+        { version: "37.150 Une charge fixe selon X mois", date: "2026-11-26", changes: [
+            "🔁 « JE VEUX UNE OPTION DANS LES CHARGES FIXES QUI SE FONT SELON X MOIS — LE SYNDIC, DES FOIS C'EST CHAQUE TRIMESTRE » — chaque charge fixe du Budget a maintenant « 🔁 Paiement : Chaque mois / Tous les 2 mois / Chaque trimestre / Tous les 4 mois / Chaque semestre / Une fois par an », et le mois du 1ᵉʳ paiement. Le montant est celui d'UN paiement (900 le trimestre) : dû en entier les mois de paiement, rien les autres. La ligne dit ses mois (« payé en mars · juin · sept. · déc. — soit ≈ 300 DH / mois lissé »). Le rythme vaut aussi pour les années suivantes de la même ligne.",
+            "PARTOUT LE MÊME CALCUL — le Pilotage (la ligne n'apparaît que les mois de paiement), le Réalisé, le Relevé et le patrimoine projeté, la projection « bilan » (qui recopiait encore sa propre règle des exceptions : elle passe désormais par l'évaluateur commun), le journal du cycle et la clôture rétro (qui lisaient le montant brut), le moteur du CFO côté serveur. Les totaux « par mois » (total des charges fixes, audit, dépenses hors crédits) prennent l'équivalent lissé : 900 le trimestre = 300 / mois. Le surplus moyen, lui, se lisse tout seul (moyenne des mois).",
+            "PREUVE — test_periodicite.mjs (vrai navigateur, 16 contrôles) : Syndic 300 chaque mois → « Chaque trimestre » et « Décembre » choisis À L'ÉCRAN, 900 : rien à traiter en novembre, projection fin 2026 −300 (un paiement de 900 au lieu de 2 × 300) ; dès février : 900 en novembre ; dès janvier : +600 ; une fois par an 3 600 en novembre ; retour à « Chaque mois » : tout revient au dirham. test_periodicite.php (serveur) : net −600 les mois de paiement, +300 les autres, même coût sur l'année, même reliquat.",
+        ] },
         { version: "37.149 Les centimes en exposant mieux lus", date: "2026-11-17", changes: [
             "🔍 « POURQUOI ILLISIBLE ? » (import Attijari Mobile : « Solde Compte chèque illisible sur cette capture ») — le solde « 2 168,⁸⁶ DH » (vert sur blanc, centimes en petit exposant) était lu « 2 168, 56P\" » ; la relecture des centimes (trois essais, deux d'accord) n'en voyait qu'un rendre « 86 » (les autres : rien, ou « 8 », le « 6 » perdu à l'agrandissement). Désormais cinq essais, et les lectures à DEUX chiffres décident ; une lecture à un chiffre ne vaut plus « 80 » face à elles (avec plus d'essais, « 80 » l'aurait emporté : un solde faux). Toujours illisible plutôt qu'inventé quand les lectures se contredisent.",
             "PREUVE — test_banque_reel.mjs (B0) : neuf cas du vote (86 face à six « 8 » → 86, jamais 80 ; deux lectures à égalité, une seule sans confirmation, un chiffre qui contredit → illisible). Vérifié sur la vraie capture : « Compte chèque » 2 168,86 lu. Les quatre suites Banque passent.",
@@ -16964,8 +17002,11 @@
                         Object.entries(d.chargesFixes || {}).forEach(([k, f]) => {
                             const m = N((f || {}).valeur);
                             if (m <= 0) return;
-                            lignes.push({ cle: 'cf_' + k, nom: (f || {}).label || k, mensuel: Math.round(m),
-                                          annuel: Math.round(m * moisRestants), onglet: 'saisie',
+                            //  v37.150 : une charge trimestrielle compte ses paiements restants, et 1/3 « par mois »
+                            let annuel = 0;
+                            for (let mm = 13 - moisRestants; mm <= 12; mm++) annuel += valeurEffective(f, m, mm);
+                            lignes.push({ cle: 'cf_' + k, nom: (f || {}).label || k, mensuel: Math.round(mensuelLisse(f, m)),
+                                          annuel: Math.round(annuel), onglet: 'saisie',
                                           categorie: estCredit(k, (f || {}).label) ? 'Mensualité de crédit' : 'Charge fixe' });
                         });
                         Object.entries(d.chargesVariables || {}).forEach(([k, c]) => {
@@ -19337,14 +19378,56 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const MOIS_BUDGETAIRE_COURANT = () =>
                         Number(moisBudgetaire?.value?.mois || (soldesInitiaux.value || {}).moisActuel || 1);
 
+                    //  v37.150 — « UNE CHARGE FIXE SELON X MOIS (le syndic, des fois chaque trimestre) » : une ligne porte son RYTHME de
+                    //  paiement, periodicite = { tous: 2 | 3 | 4 | 6 | 12, depart: 1-12 } (le mois budgétaire du premier paiement ; les diviseurs
+                    //  de 12 seulement, pour que le rythme tombe pareil chaque année). Le montant saisi est celui d'UN paiement (900 le trimestre) :
+                    //  dû en entier les mois de paiement, rien les autres. Les totaux « par mois » (budget, audit) prennent l'équivalent lissé (300).
+                    const PERIODICITES_FIXES = [
+                        { n: 1, label: 'Chaque mois' }, { n: 2, label: 'Tous les 2 mois' }, { n: 3, label: 'Chaque trimestre' },
+                        { n: 4, label: 'Tous les 4 mois' }, { n: 6, label: 'Chaque semestre' }, { n: 12, label: 'Une fois par an' },
+                    ];
+                    const periodiciteDe = (item) => {
+                        const p = item && item.periodicite, n = Number(p && p.tous) || 1;
+                        if (n <= 1 || 12 % n !== 0) return null;
+                        return { tous: n, depart: Math.min(12, Math.max(1, Math.round(Number(p.depart) || 1))) };
+                    };
+                    const estMoisDePaiement = (item, m) => {
+                        const p = periodiciteDe(item); if (!p) return true;
+                        return ((((Number(m) || 1) - p.depart) % p.tous) + p.tous) % p.tous === 0;
+                    };
+                    const moisDePaiement = (item) => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => estMoisDePaiement(item, m));
+                    const mensuelLisse = (item, base) => { const p = periodiciteDe(item); return Number(base || 0) / (p ? p.tous : 1); };
                     const valeurEffective = (item, base, moisBudget) => {
                         let v = Number(base || 0);
                         const m = Number(moisBudget != null ? moisBudget : MOIS_BUDGETAIRE_COURANT());
+                        if (!estMoisDePaiement(item, m)) return 0;      // v37.150 : pas un mois de paiement
                         ((item || {}).exceptions || []).forEach(e => {
                             const md = Number(e.moisDebut || 0), mf = Number(e.moisFin || 0);
                             if (md && mf && m >= md && m <= mf) v = Number(e.nouvelleValeur || 0);
                         });
                         return v;
+                    };
+                    const resumePeriodicite = (item) => {
+                        const p = periodiciteDe(item); if (!p) return '';
+                        const base = (item && item.parts && item.parts.length) ? item.parts.reduce((s, x) => s + (Number(x && x.valeur) || 0), 0) : Number((item || {}).valeur || 0);
+                        return 'payé en ' + moisDePaiement(item).map(m => _MOIS_COURTS[m - 1]).join(' · ') + (base > 0 ? ' — soit ≈ ' + formatMAD(Math.round(base / p.tous)) + ' / mois lissé' : '');
+                    };
+                    //  Le rythme vaut aussi pour les années suivantes de la même ligne (un syndic trimestriel le reste).
+                    const choisirPeriodicite = (coll, key, item, n) => {
+                        n = Number(n) || 1;
+                        const garde = periodiciteDe(item);
+                        const val = n > 1 && 12 % n === 0 ? { tous: n, depart: garde ? garde.depart : MOIS_BUDGETAIRE_COURANT() } : null;
+                        const cibles = [item, ..._lignesSuivantes(coll, key).filter(it => it !== item)];
+                        cibles.forEach(it => { if (val) it.periodicite = { ...val }; else delete it.periodicite; });
+                        calculationTick.value++;
+                        handleDataChange();
+                    };
+                    const choisirDepartPeriodicite = (coll, key, item, m) => {
+                        const p = periodiciteDe(item); if (!p) return;
+                        const val = { tous: p.tous, depart: Math.min(12, Math.max(1, Number(m) || 1)) };
+                        [item, ..._lignesSuivantes(coll, key).filter(it => it !== item)].forEach(it => { it.periodicite = { ...val }; });
+                        calculationTick.value++;
+                        handleDataChange();
                     };
 
                     /*  v37.65 — LES SEMAINES COUPÉES PAR LA PAIE (avant : la règle du jeudi, v37.27-29).
@@ -19987,7 +20070,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             });
                         } else {
                             Object.values(dAnnee.chargesFixes || {}).forEach(f => {
-                                const due = Number(f.valeur || 0);
+                                const due = getDueFixe(f, an, mois);   // v37.150 : rien les mois sans paiement
                                 if (!due) return;
                                 const paid = isItemPaid(f, due, _cyc);
                                 const amt = paid ? (regleDuItem(f, due, _cyc)) : due;
@@ -20587,7 +20670,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                     const getMonthlyVariableValue = (item, mois, an) => coutVariableDuCycle(item, mois, an, false);
 
                     const totalRevenusBase = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.revenus || {}).reduce((sum, item) => sum + Number((item || {}).base||0), 0) : 0; });
-                    const totalFixes = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.chargesFixes || {}).reduce((sum, item) => sum + Number((item || {}).valeur||0), 0) : 0; });
+                    const totalFixes = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.chargesFixes || {}).reduce((sum, item) => sum + mensuelLisse(item, (item || {}).valeur), 0) : 0; });   // v37.150 : lissé
                     const totalVariables = computed(() => { calculationTick.value; const d = donneesAnnuelles.value[anneeAffichage.value]; return d ? Object.values(d.chargesVariables || {}).reduce((acc, curr) => acc + getMonthlyVariableValue(curr || {}), 0) : 0; });
                     const totalEpargne = computed(() => { // v17.15 : array + fallback objet legacy
                         calculationTick.value;
@@ -21697,7 +21780,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         let totalRevDue = 0, totalRevPaid = 0;
                         Object.values(dAnnee.revenus || {}).forEach(r => { const due = Number(r.base || 0); totalRevDue += due; totalRevPaid += getPaidAmount(r, due); });
                         let totalFixDue = 0, totalFixPaid = 0;
-                        Object.values(dAnnee.chargesFixes || {}).forEach(f => { const due = Number(f.valeur || 0); totalFixDue += due; totalFixPaid += getPaidAmount(f, due); });
+                        Object.values(dAnnee.chargesFixes || {}).forEach(f => { const due = getDueFixe(f, an, mois); totalFixDue += due; totalFixPaid += getPaidAmount(f, due); });   // v37.150
                         let totalVarDue = 0, totalVarPaid = 0;
                         Object.values(dAnnee.chargesVariables || {}).forEach(cv => {
                             if ((cv.details || []).length > 0) {
@@ -25429,7 +25512,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const d = donneesAnnuelles.value[anneeAffichage.value] || {};
                         const fixesHorsCredit = Object.entries(d.chargesFixes || {})
                             .filter(([k]) => !k.startsWith('credit'))
-                            .reduce((s, [, f]) => s + N(f.valeur), 0);
+                            .reduce((s, [, f]) => s + mensuelLisse(f, N(f.valeur)), 0);   // v37.150 : lissé
                         const variables = Object.values(d.chargesVariables || {})
                             .reduce((s, c) => { let t = 0; for (let m = 1; m <= 12; m++) t += coutVariableDuCycle(c, m, anneeAffichage.value, false); return s + t / 12; }, 0);   // v37.29-30 : mois MOYEN, ligne par ligne
                         return Math.round((fixesHorsCredit + variables) * 100) / 100;
@@ -26058,9 +26141,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             let fixCourant = 0;
                             const fixParCompte = {};
                             Object.values(dataAnnee.chargesFixes || {}).forEach(f => {
-                                let baseVal = Number((f || {}).valeur || 0);
-                                let effVal = baseVal;
-                                (f?.exceptions || []).forEach(e => { if (mNum >= e.moisDebut && mNum <= e.moisFin) effVal = Number(e.nouvelleValeur || 0); });
+                                const effVal = valeurEffective(f, (f || {}).valeur, mNum);   // v37.150 : exceptions ET rythme de paiement
                                 // v24.80 : routing macro-compte (ignore sourceCompte par ligne) — v37.50 : ou le compte de la ligne
                                 const _sfx = _normKey(compteDeLaCharge('fixe', f));
                                 if (_sfx === courantCptKey || _sfx === 'courant') { fixCourant += effVal; }
@@ -26896,7 +26977,7 @@ Score global : ${a.scoreTotal}/14 (${a.scoreGlobal === 'vert' ? 'SAIN' : (a.scor
                             .filter(x => Number(x?.valeur) > 0)
                             .sort((x, y) => Number(y.valeur) - Number(x.valeur))
                             .slice(0, 5)
-                            .map(x => `  - ${x.label}: ${formatMAD(x.valeur)}/mois`)
+                            .map(x => periodiciteDe(x) ? `  - ${x.label}: ${formatMAD(x.valeur)} ${PERIODICITES_FIXES.find(o => o.n === periodiciteDe(x).tous).label.toLowerCase()} (${resumePeriodicite(x)})` : `  - ${x.label}: ${formatMAD(x.valeur)}/mois`)
                             .join('\n');
 
                         const chocs = Array.isArray(d.depensesIrregulieres) ? d.depensesIrregulieres : [];
@@ -28630,7 +28711,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage,
-                        tachesSansDate, valeurEffective,
+                        tachesSansDate, valeurEffective, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
                         // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.
