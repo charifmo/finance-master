@@ -1,4 +1,10 @@
-/*  v37.146 — TROIS NIVEAUX DE TNR, CHOISIS SELON L'IMPACT DU CHANGEMENT.
+/*  v37.151 — LÉGER · MOYEN · FULL (« ne rejoue pas tous les TNR, sauf si c'est complexe et que ça touche à tout »).
+    Avant, le niveau 2 rejouait TOUT le domaine : pour la Finance, ~100 suites sur 119, presque le complet. Le moyen = le léger
+    + un SOCLE MOYEN (le moteur, la projection, le cycle, le Relevé, le CFO) ; le full ne vient que si le noyau change, si
+    deux domaines ont un changement de fond, ou si le changement est très gros. Noms : léger | moyen | full (ou 1 | 2 | 3).
+    Estimation de durée affichée (durées de la dernière exécution) ; PLAN=1 n'exécute rien.
+
+    v37.146 — TROIS NIVEAUX DE TNR, CHOISIS SELON L'IMPACT DU CHANGEMENT.
     run_tests.sh dépose la liste COMPLÈTE des suites ; ce script la réduit selon les fichiers changés depuis origin/main
     (+ non commités), puis réécrit la liste. Appel : node choisir_suites.mjs <liste> <niveau> (auto | 1 | 2 | 3).
 
@@ -17,6 +23,8 @@
     Le niveau 1 est une sélection par indices : avant de publier, le niveau 2 au moins (bash run_tests.sh 2). */
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
 
 const [fichier, demande = 'auto'] = process.argv.slice(2);
 const git = (args) => { try { return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }); } catch { return null; } };
@@ -48,7 +56,9 @@ const nbLignes = (f) => { const t = (base ? git(['diff', '--numstat', base, '--'
 //  les identifiants des lignes changées d'un écran : attributs data-…, et noms déclarés dans le fichier que ces lignes citent
 function identifiants(f) {
     const diff = ((base ? git(['diff', '-U0', base, '--', f]) : '') || '') + (git(['diff', '-U0', 'HEAD', '--', f]) || '');
-    const changees = diff.split('\n').filter(l => /^[+-](?![+-])/.test(l)).map(l => l.slice(1));
+    //  v37.151 : les lignes du CHANGELOG (des phrases entre guillemets) et les commentaires ne désignent rien à tester
+    const changees = diff.split('\n').filter(l => /^[+-](?![+-])/.test(l)).map(l => l.slice(1))
+        .filter(l => !/^\s*"/.test(l) && !/^\s*\{ version: "/.test(l) && !/^\s*(\/\/|\/\*|\*)/.test(l));
     let texte = ''; try { texte = fs.readFileSync(f, 'utf8'); } catch { }
     const declares = new Set([...texte.matchAll(/(?:const|let|function)\s+([A-Za-z_$][\w$]{5,})\s*[=(]/g)].map(m => m[1]));
     const ids = new Set();
@@ -58,18 +68,35 @@ function identifiants(f) {
     });
     return [...ids];
 }
+//  v37.151 — le SOCLE MOYEN de la Finance : large, sans les suites les plus lentes (presse, deux PC, bureau…) sauf si elles sont visées.
+//  Santé et Veille sont petites : leur moyen = tout le domaine.
+const SOCLE_MOYEN = {
+    finance: new RegExp('test_cfo_engine_parity/(' + ['test_une_seule_verite', 'test_projection', 'test_releve_cycle', 'test_mois_budgetaire', 'test_cycle_realise',
+        'test_resolution', 'test_integrite', 'test_robustesse', 'test_schema_goals', 'test_surplus_fonctionnement', 'test_meteo', 'test_journal', 'test_comptes_cycle',
+        'test_epargne_du_mois', 'test_depenses_exceptionnelles', 'test_frise_cycle', 'test_cfo_lit_le_moteur', 'test_pointage_tiroirs', 'test_rafraichissement',
+        'test_compte_par_ligne', 'test_prevu_par_defaut'].join('|') + ')\\.'),
+    descFinance: /^Parité différentielle|^Schéma n8n/,
+};
 const SOCLE = {   // rapides et larges : le moteur, l'atterrissage, le Relevé, le cycle
     finance: /test_cfo_engine_parity\/(test_une_seule_verite|test_releve_cycle|test_mois_budgetaire|test_cycle_realise|test_resolution|test_integrite)\./,
     sante: /test_cfo_engine_parity\/test_sante_calculs\./,
     veille: /test_cfo_engine_parity\/test_veille_presse\.php/,
 };
 
-let niveau = { auto: null, 1: 1, cible: 1, 2: 2, domaine: 2, perimetre: 2, 3: 3, complet: 3 }[demande];
+let niveau = { auto: null, 1: 1, cible: 1, leger: 1, 'léger': 1, 2: 2, domaine: 2, perimetre: 2, moyen: 2, 3: 3, complet: 3, full: 3 }[demande];
+const NOM = { 1: 'léger', 2: 'moyen', 3: 'full' };
 const raisons = [];
 if (niveau === undefined) { console.error('Niveau inconnu : ' + demande + ' (auto, 1, 2 ou 3)'); process.exit(2); }
 if (niveau === null) {
     if (!changes.length) { niveau = 3; raisons.push('rien de changé (ou git absent) : tout est rejoué'); }
     else if (parDomaine.noyau.length) { niveau = 3; raisons.push('noyau commun touché (' + parDomaine.noyau.slice(0, 3).join(', ') + ')'); }
+    else {
+        //  v37.151 — « complexe et touche à tout » : deux domaines avec un changement de fond, ou un très gros changement
+        const deFond = ['finance', 'sante', 'veille'].filter(dom => parDomaine[dom].some(f => COEUR[dom].test(f)));
+        const total = changes.filter(f => domaineFichier(f) !== 'doc').reduce((a, f) => a + nbLignes(f), 0);
+        if (deFond.length >= 2) { niveau = 3; raisons.push('changement de fond dans ' + deFond.join(' et ') + ' : tout est rejoué'); }
+        else if (total > 3000) { niveau = 3; raisons.push('très gros changement (' + total + ' lignes) : tout est rejoué'); }
+    }
 }
 let garder;
 if (niveau === 3) garder = new Set(suites);
@@ -88,9 +115,21 @@ else {
             else n = 1;
         }
         const duDomaine = suites.filter(s => domaineDe(s) === dom);
-        if (n === 2) { duDomaine.forEach(s => garder.add(s)); if (niveau !== null) raisons.push(dom + ' : niveau 2 demandé'); continue; }
+        //  v37.151 : le moyen de la Finance = le léger (plus bas) + le socle moyen ; Santé et Veille : tout le domaine
+        if (n === 2 && dom !== 'finance') { duDomaine.forEach(s => garder.add(s)); if (niveau !== null) raisons.push(dom + ' : moyen demandé'); continue; }
+        if (n === 2) {
+            const socle = duDomaine.filter(s => (s.fichier && SOCLE_MOYEN.finance.test(s.fichier)) || SOCLE_MOYEN.descFinance.test(s.desc));
+            socle.forEach(s => garder.add(s));
+            raisons.push(dom + ' : moyen — socle moyen (' + socle.length + ' suites : moteur, projection, cycle, Relevé, CFO) + les suites visées' + (niveau !== null ? ' (demandé)' : ''));
+        }
         //  niveau 1 : ciblé
-        const ids = ecran && fs_.includes(ecran) ? identifiants(ecran) : [];
+        let ids = ecran && fs_.includes(ecran) ? identifiants(ecran) : [];
+        //  v37.151 — un identifiant que presque toutes les suites citent (chargesFixes, data-ligne…) ne trie rien : écarté au-delà
+        //  de 10 % des suites du domaine (le socle moyen et les identifiants rares font le travail)
+        const textes = new Map(duDomaine.map(s => { let t = ''; try { t = s.fichier ? fs.readFileSync(s.fichier, 'utf8') : ''; } catch { } return [s, t]; }));
+        const seuil = Math.max(3, Math.ceil(duDomaine.length * 0.1)), communs = [];
+        ids = ids.filter(id => { const k = [...textes.values()].filter(t => t.includes(id)).length; if (k > seuil) { communs.push(id); return false; } return true; });
+        if (communs.length) raisons.push(dom + ' : trop courants pour trier, écartés : ' + communs.slice(0, 6).join(', ') + (communs.length > 6 ? '…' : ''));
         const noms = fs_.map(f => f.split('/').pop()).filter(x => !/^index\.html$/.test(x));
         //  un fichier CHARGÉ PAR L'ÉCRAN (sante_samsung.js dans sante/index.html…) : les suites qui ouvrent cet écran le testent aussi
         let ecranTexte = ''; try { ecranTexte = ecran ? fs.readFileSync(ecran, 'utf8') : ''; } catch { }
@@ -107,13 +146,22 @@ else {
         });
         if (chargesParEcran.length) raisons.push(dom + ' : ' + chargesParEcran.join(', ') + ' est chargé par l\'écran → les suites qui ouvrent l\'écran sont rejouées');
         choisies.forEach(s => garder.add(s));
-        raisons.push(dom + ' : niveau 1 — ' + choisies.length + ' suite(s) sur ' + duDomaine.length + ' (fichiers et identifiants touchés' + (ids.length ? ' : ' + ids.slice(0, 6).join(', ') + (ids.length > 6 ? '…' : '') : '') + ' + socle)');
+        if (n === 1) raisons.push(dom + ' : niveau 1 — ' + choisies.length + ' suite(s) sur ' + duDomaine.length + ' (fichiers et identifiants touchés' + (ids.length ? ' : ' + ids.slice(0, 6).join(', ') + (ids.length > 6 ? '…' : '') : '') + ' + socle)');
     }
     //  les suites communes : seulement si le noyau est touché (niveau 3) — jamais pour un changement d'un seul domaine
 }
-const niveauAffiche = niveau || Math.max(...raisons.map(r => (r.match(/niveau (\d)/) || [0, 1])[1]).map(Number), 1);
+const niveauAffiche = niveau || Math.max(...raisons.map(r => (r.match(/niveau (\d)/) || [0, /: moyen/.test(r) ? 2 : 1])[1]).map(Number), 1);
 fs.writeFileSync(fichier, suites.filter(s => garder.has(s)).map(s => s.l).join('\n') + (garder.size ? '\n' : ''));
-console.log('▸ TNR niveau ' + (niveau === 3 ? '3 (complet)' : niveauAffiche === 2 ? '2 (domaine)' : '1 (ciblé)') + ' : ' + garder.size + ' suite(s) sur ' + suites.length
-    + (demande === 'auto' ? ' — choisi automatiquement (« bash run_tests.sh 1 | 2 | 3 » pour forcer)' : ''));
+//  v37.151 — durée estimée (dernière exécution de chaque suite, 8 en parallèle ≈ somme ÷ 8)
+let duree = ''; try {
+    const D = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), 'finance_master_durees_tests.json'), 'utf8'));
+    const somme = (L) => L.reduce((a, s) => a + (D[s.desc] || 15000), 0);
+    const gard = suites.filter(s => garder.has(s)), jobs = Number(process.env.JOBS) || 8;
+    const est = (L) => Math.max(...L.map(s => D[s.desc] || 15000), somme(L) / jobs) / 1000;
+    if (gard.length) duree = ' · ≈ ' + Math.round(est(gard)) + ' s (full ≈ ' + Math.round(est(suites)) + ' s)';
+} catch { }
+const niv = niveau === 3 ? 3 : niveauAffiche;
+console.log('▸ TNR ' + NOM[niv] + ' (niveau ' + niv + ') : ' + garder.size + ' suite(s) sur ' + suites.length + duree
+    + (demande === 'auto' ? ' — choisi automatiquement (« bash run_tests.sh leger | moyen | full » pour forcer)' : ''));
 raisons.forEach(r => console.log('    · ' + r));
-if (niveau !== 3 && niveauAffiche === 1) console.log('    ⚠️ niveau 1 = sélection par indices : avant de publier, au moins « bash run_tests.sh 2 »');
+if (niveau !== 3 && niveauAffiche === 1) console.log('    ⚠️ léger = sélection par indices : avant de publier un changement du moteur ou de l\'écran, « bash run_tests.sh moyen »');
