@@ -2928,7 +2928,7 @@
                                 </div>
                                 <!-- v37.85 : adapter l'épargne au potentiel de chaque mois -->
                                 <div data-epargne-adapter class="flex items-center gap-2 pl-1 mt-1 flex-wrap">
-                                    <button type="button" data-adapter-potentiel @click="adapterEpargneAuPotentiel(obj, anneeAffichage, plafondAdaptation[obj.id])" title="Pour chaque mois restant : le Brut du mois (Surplus détaillé) moins les autres épargnes — jamais sous zéro. Écrit les exceptions de cette ligne."
+                                    <button type="button" data-adapter-potentiel @click="proposerAdaptation(obj, anneeAffichage, plafondAdaptation[obj.id])" title="Pour chaque mois restant : le Brut du mois (Surplus détaillé) moins les autres épargnes — jamais sous zéro. Écrit les exceptions de cette ligne."
                                             class="text-[10px] font-black uppercase tracking-widest text-white bg-purple-600 hover:bg-purple-700 px-2.5 py-1 rounded-lg">⚖️ Adapter au potentiel</button>
                                     <label class="text-[10px] font-bold text-gray-500 flex items-center gap-1">plafond <input type="number" min="0" v-model.number="plafondAdaptation[obj.id]" placeholder="facultatif" class="w-24 p-1 text-xs font-black text-purple-800 border border-purple-200 rounded text-right bg-white outline-none"/> DH</label>
                                     <span v-if="obj.adapteePotentiel" data-adaptee class="text-[10px] font-bold text-emerald-700">✓ adaptée au potentiel de {{ obj.adapteePotentiel.an }}<template v-if="obj.adapteePotentiel.plafond"> (plafond {{ formatMAD(obj.adapteePotentiel.plafond) }})</template></span>
@@ -4590,7 +4590,7 @@
                                 </div>
                                 <!-- v37.85 : adapter l'épargne au potentiel de chaque mois (mobile) -->
                                 <div data-epargne-adapter class="flex items-center gap-2 flex-wrap rounded-xl bg-purple-50/60 border border-purple-100 p-2">
-                                    <button type="button" data-adapter-potentiel @click="adapterEpargneAuPotentiel(obj, anneeAffichage, plafondAdaptation[obj.id])" title="Pour chaque mois restant : le Brut du mois (Surplus détaillé) moins les autres épargnes — jamais sous zéro. Écrit les exceptions de cette ligne."
+                                    <button type="button" data-adapter-potentiel @click="proposerAdaptation(obj, anneeAffichage, plafondAdaptation[obj.id])" title="Pour chaque mois restant : le Brut du mois (Surplus détaillé) moins les autres épargnes — jamais sous zéro. Écrit les exceptions de cette ligne."
                                             class="text-[10px] font-black uppercase tracking-widest text-white bg-purple-600 hover:bg-purple-700 px-2.5 py-1 rounded-lg">⚖️ Adapter au potentiel</button>
                                     <label class="text-[10px] font-bold text-gray-500 flex items-center gap-1">plafond <input type="number" min="0" v-model.number="plafondAdaptation[obj.id]" placeholder="facultatif" class="w-24 p-1 text-xs font-black text-purple-800 border border-purple-200 rounded text-right bg-white outline-none"/> DH</label>
                                     <span v-if="obj.adapteePotentiel" data-adaptee class="text-[10px] font-bold text-emerald-700">✓ adaptée au potentiel de {{ obj.adapteePotentiel.an }}<template v-if="obj.adapteePotentiel.plafond"> (plafond {{ formatMAD(obj.adapteePotentiel.plafond) }})</template></span>
@@ -6971,6 +6971,34 @@
 
         <!-- v37.107 — PENDANT LA SAISIE, LA FRISE EN UN APPUI : 📈 rejoint la rangée des boutons flottants (téléphone), une
              pastille « 📈 Frise du cycle » en bas à droite (ordinateur). Seulement sur l'écran Saisie. -->
+        <!-- v37.154 : ⚖️ Adapter au potentiel — l'aperçu avant d'appliquer -->
+        <div v-if="propositionAdaptation" data-apercu-adaptation class="fixed inset-0 z-[400] bg-black/50 flex items-center justify-center p-4" @click.self="propositionAdaptation = null">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 space-y-3">
+                <p class="text-[11px] font-black uppercase tracking-widest text-purple-700">⚖️ Adapter au potentiel — aperçu</p>
+                <p class="text-sm font-black text-gray-800">« {{ propositionAdaptation.nom }} » · {{ propositionAdaptation.an }} · depuis {{ propositionAdaptation.compte }}<template v-if="propositionAdaptation.plafond"> · plafond {{ formatMAD(propositionAdaptation.plafond) }}</template></p>
+                <table class="w-full text-sm">
+                    <thead><tr class="text-[10px] uppercase tracking-widest text-gray-400"><th class="text-left py-1">Mois</th><th class="text-right">Actuel</th><th class="text-right">Proposé</th></tr></thead>
+                    <tbody>
+                        <tr v-for="l in propositionAdaptation.lignes" :key="'ap' + l.mois" data-apercu-ligne :data-mois="l.mois" class="border-t border-gray-100">
+                            <td class="py-1.5 font-bold text-gray-700">{{ l.nom }}</td>
+                            <td class="text-right tabular-nums text-gray-500">{{ formatMAD(l.actuel) }}</td>
+                            <td class="text-right tabular-nums font-black text-purple-800">{{ formatMAD(l.propose) }}
+                                <span v-if="l.plafonne !== null" data-apercu-plafonne class="block text-[10px] font-bold text-amber-700">réduit (au lieu de {{ formatMAD(l.plafonne) }}) : {{ propositionAdaptation.compte }} resterait ≥ 0</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="text-[12px] font-bold text-gray-700" data-apercu-bas>Point bas de {{ propositionAdaptation.compte }} sur ces mois :
+                    <span :class="(propositionAdaptation.basAvant ?? 0) < 0 ? 'text-rose-700' : 'text-gray-700'">{{ propositionAdaptation.basAvant === null ? '—' : formatMAD(propositionAdaptation.basAvant) }}</span> aujourd'hui →
+                    <span :class="(propositionAdaptation.basApres ?? 0) < 0 ? 'text-rose-700 font-black' : 'text-emerald-700 font-black'">{{ propositionAdaptation.basApres === null ? '—' : formatMAD(propositionAdaptation.basApres) }}</span> après</p>
+                <p v-if="propositionAdaptation.absorbes > 0" class="text-[11px] font-semibold text-gray-600">{{ propositionAdaptation.absorbes }} virement(s) vers le même compte seront intégrés à cette épargne (ils reviennent si vous retirez l'adaptation).</p>
+                <p v-for="z in propositionAdaptation.sousZero" :key="'sz' + z.nom" data-apercu-sous-zero class="text-[11px] font-black text-rose-700">⚠️ {{ propositionAdaptation.compte }} reste sous zéro en {{ z.nom }} ({{ formatMAD(z.bas) }}) même sans cette épargne : un virement vers ce compte ou une dépense reportée est nécessaire.</p>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" data-apercu-annuler @click="propositionAdaptation = null" class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-xs font-black hover:bg-gray-100">Annuler</button>
+                    <button type="button" data-apercu-valider @click="validerAdaptation()" class="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-black hover:bg-purple-700">✓ Valider</button>
+                </div>
+            </div>
+        </div>
         <button v-if="isMobile && activeTab === 'saisie' && !showSaisieQuickModal && !importBanque.ouvert && !friseOuverte" @click="friseOuverte = true"
             title="La frise du cycle" data-flottant="frise"
             class="fixed z-[9994] rounded-full flex items-center justify-center border-2 transition-all hover:scale-110 shadow-xl
@@ -9582,8 +9610,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.153 L'épargne variable se voit au Budget";
+                    const CURRENT_VERSION = "37.154 Adapter au potentiel sans découvert";
                     const CHANGELOG = [
+        { version: "37.154 Adapter au potentiel sans découvert", date: "2026-11-27", changes: [
+            "⚖️ « OUI, CHANGE » — « Adapter au potentiel » avait mis 22 210 en décembre sur « Alimentation Dépenses Annuelles & Projets », versés depuis ASSAFA qui finissait à −12 217 : le potentiel est un budget THÉORIQUE (entrées − sorties du mois) et ce qu'un mois n'utilisait pas s'accumulait sur le dernier, sans jamais regarder le solde du compte d'où part l'argent.",
+            "LA GARDE — l'adaptation lit maintenant le Relevé : au premier cycle où le compte SOURCE passe sous zéro, elle retire le manque au mois versé le plus proche (jamais sous 0), et recommence. Si le compte est sous zéro même sans cette épargne, rien n'est versé et c'est dit. Même garde pour le CFO et « Recalibrer l'année ».",
+            "L'APERÇU — le bouton ⚖️ n'applique plus d'un coup : une fenêtre montre mois par mois l'actuel et le proposé, ce qui est réduit (« au lieu de 7 090 : Compte Courant resterait ≥ 0 »), le point bas du compte source avant / après, les virements intégrés ; « ✓ Valider » applique, « Annuler » ne touche à rien (le calcul est fait à blanc et l'état remis tel quel).",
+            "PREUVE — test_adapter_sans_decouvert.mjs (vrai navigateur, 12 contrôles) : Courant 15 000, potentiel théorique ≈ 18 000 / mois : novembre réduit de 7 090 à 2 880, point bas −116 → +4 ; aperçu à blanc ; Annuler ; le bouton ouvre l'aperçu ; Valider applique tel que montré, Relevé jamais sous zéro ; appel direct identique ; Courant à 1 000 : rien versé, « même sans cette épargne ». test_epargne_potentiel.mjs inchangé et vert.",
+        ] },
         { version: "37.153 L'épargne variable se voit au Budget", date: "2026-11-27", changes: [
             "📅 « D'OÙ VIENT CE VIREMENT DE 22 K ? JE NE LE VOIS NULLE PART » — « Y'EN A PAS !! » : le Relevé du cycle de décembre montrait « 💎 Transfert → Alimentation Dépenses Annuelles & Projets 22 210 », le Budget Structurel « 3 000 DH /mois ». Les deux disaient vrai : décembre a une exception (« ⚖️ Adapter au potentiel » met dans chaque mois ce qui y reste), que le Relevé applique — mais le bloc Épargne du Budget n'affichait que le montant de base, sans trace des mois qui varient.",
             "DÉSORMAIS — sous le montant d'une épargne qui varie : « 📅 variable : déc. 22 210 DH · adaptée au potentiel » (au bureau et au téléphone) ; un clic ouvre Patrimoine & Objectifs, où ces mois se règlent (« Montant variable selon le mois », « ↩ retirer » l'adaptation). PREUVE — test_epargne_variable_visible.mjs : décembre 22 210 et novembre 3 000 au moteur, le résumé à l'écran sur la seule ligne qui varie, le clic.",
@@ -20836,7 +20870,22 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         return { mois: m, potentiel_avant_epargne: pot, epargne_programmee: ep, net_apres_epargne: pot - ep };
                     });
                     const plafondAdaptation = reactive({});
-                    const adapterEpargneAuPotentiel = (obj, an, plafond) => {
+                    //  v37.154 — le point bas du compte SOURCE de l'épargne, cycle par cycle (mois budgétaires de l'année a), lu au Relevé
+                    const _basDuCompte = (a, cle) => {
+                        const mb = moisBudgetaire.value, out = {};
+                        if (Number(a) < mb.an) return out;
+                        const cles = []; for (let m = mb.mois, y = mb.an; y < a || (y === a && m <= 12); ) { cles.push(m + '-' + y); m++; if (m > 12) { m = 1; y++; } }
+                        let E; try { E = ((_buildJournalReleve([], cles) || {}).entries || []); } catch (e) { return out; }
+                        E.forEach(e => {
+                            if (!e || e.compteKey !== cle || (e.type !== 'credit' && e.type !== 'debit')) return;
+                            const pc = String(e.cycle || '').split('-').map(Number);
+                            if (pc[1] !== Number(a)) return;
+                            const v = Math.round(Number(e.soldeCompteApres) || 0);
+                            if (out[pc[0]] === undefined || v < out[pc[0]]) out[pc[0]] = v;
+                        });
+                        return out;
+                    };
+                    const adapterEpargneAuPotentiel = (obj, an, plafond, opts = {}) => {
                         const a = Number(an), mb = moisBudgetaire.value;
                         if (!obj || !donneesAnnuelles.value[a]) return null;
                         const sens = sensEpargne(obj.sourceCompte || 'courant', destEpargne(obj));
@@ -20881,21 +20930,85 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             cumul += libre[m] - v;
                         });
                         //  les exceptions existantes, mois par mois ; celles des mois adaptés sont remplacées, les autres gardées
-                        const parMois = {};
-                        (obj.exceptions || []).forEach(e => { const d0 = Number(e.moisDebut), f0 = Number(e.moisFin); for (let m = d0; m <= f0 && m <= 12; m++) if (d0 && f0) parMois[m] = Number(e.nouvelleValeur) || 0; });
-                        Object.entries(valeurs).forEach(([m, v]) => { parMois[m] = v; });
-                        const plages = [];
-                        Object.keys(parMois).map(Number).sort((x, y) => x - y).forEach(m => {
-                            const p = plages[plages.length - 1];
-                            if (p && p.moisFin === m - 1 && p.nouvelleValeur === parMois[m]) p.moisFin = m;
-                            else plages.push({ id: Date.now() + plages.length, moisDebut: m, moisFin: m, nouvelleValeur: parMois[m] });
-                        });
-                        obj.exceptions = plages;
-                        obj.adapteePotentiel = { an: a, plafond: cap, le: _aujourdhuiISO(), mois: valeurs, virementsAbsorbes: absorbes };
+                        const excOrigine = JSON.parse(JSON.stringify(obj.exceptions || []));
+                        const poser = () => {
+                            const parMois = {};
+                            excOrigine.forEach(e => { const d0 = Number(e.moisDebut), f0 = Number(e.moisFin); for (let m = d0; m <= f0 && m <= 12; m++) if (d0 && f0) parMois[m] = Number(e.nouvelleValeur) || 0; });
+                            Object.entries(valeurs).forEach(([m, v]) => { parMois[m] = v; });
+                            const plages = [];
+                            Object.keys(parMois).map(Number).sort((x, y) => x - y).forEach(m => {
+                                const pl = plages[plages.length - 1];
+                                if (pl && pl.moisFin === m - 1 && pl.nouvelleValeur === parMois[m]) pl.moisFin = m;
+                                else plages.push({ id: Date.now() + plages.length, moisDebut: m, moisFin: m, nouvelleValeur: parMois[m] });
+                            });
+                            obj.exceptions = plages;
+                            calculationTick.value++;
+                            return plages;
+                        };
+                        let plages = poser();
+                        /*  v37.154 — « L'ADAPTATION NE DOIT JAMAIS FAIRE PASSER LE COMPTE SOURCE SOUS ZÉRO » (ASSAFA à −12 217 avec
+                            22 210 versés en décembre : le potentiel est un budget THÉORIQUE, et le reste des mois d'avant s'accumulait
+                            sur décembre). On lit le Relevé : au premier cycle où le compte d'où part l'épargne passe sous zéro, on
+                            retire le manque au mois versé le plus proche AVANT (ou à ce mois-là), jamais sous 0 ; et on recommence. */
+                        const srcK = cleDeCompte(String(obj.sourceCompte || 'courant'));
+                        const plafonnes = {}, irreparables = [];
+                        for (let it = 0; it < 48; it++) {
+                            const bas = _basDuCompte(a, srcK);
+                            const k = mois.find(m => bas[m] !== undefined && bas[m] < -0.5 && !irreparables.includes(m));
+                            if (k === undefined) break;
+                            const jm = mois.filter(m => m <= k && valeurs[m] > 0).pop();
+                            if (jm === undefined) { irreparables.push(k); continue; }
+                            if (!(jm in plafonnes)) plafonnes[jm] = valeurs[jm];
+                            valeurs[jm] = Math.max(0, Math.floor((valeurs[jm] - Math.ceil(-bas[k] / 10) * 10) / 10) * 10);
+                            plages = poser();
+                        }
+                        const basFinal = _basDuCompte(a, srcK);
+                        const sousZero = irreparables.map(m => ({ mois: m, bas: basFinal[m] }));
+                        obj.adapteePotentiel = { an: a, plafond: cap, le: _aujourdhuiISO(), mois: valeurs, virementsAbsorbes: absorbes,
+                                                 compteSource: srcK, plafonnes, sousZero };
                         calculationTick.value++;
+                        if (opts.apercu) return valeurs;
                         handleDataChange();
-                        addLog('⚖️ « ' + (obj.nom || 'Épargne') + ' » adaptée au potentiel de ' + a + ' : ' + plages.filter(p => valeurs[p.moisDebut] !== undefined).map(p => (p.moisDebut === p.moisFin ? 'M' + p.moisDebut : 'M' + p.moisDebut + '–M' + p.moisFin) + ' ' + formatMAD(p.nouvelleValeur)).join(' · '), 'success');
+                        addLog('⚖️ « ' + (obj.nom || 'Épargne') + ' » adaptée au potentiel de ' + a + ' : ' + plages.filter(pl => valeurs[pl.moisDebut] !== undefined).map(pl => (pl.moisDebut === pl.moisFin ? 'M' + pl.moisDebut : 'M' + pl.moisDebut + '-' + pl.moisFin) + ' ' + formatMAD(pl.nouvelleValeur)).join(', ')
+                               + (Object.keys(plafonnes).length ? ' — réduite pour que ' + getNomCompte(srcK) + ' ne passe pas sous zéro' : ''), 'success');
                         return valeurs;
+                    };
+                    /*  v37.154 — AVANT D'APPLIQUER, L'APERÇU. Le bouton ⚖️ calcule à blanc (l'état est remis tel quel), montre mois
+                        par mois l'actuel et le proposé, ce qui a été réduit et pourquoi, le point bas du compte source avant / après ;
+                        « Valider » applique, « Annuler » ne touche à rien. (Le CFO et « Recalibrer l'année » appliquent directement,
+                        avec la même garde du compte source.) */
+                    const propositionAdaptation = ref(null);
+                    const proposerAdaptation = (obj, an, plafond) => {
+                        const a = Number(an), dA = (donneesAnnuelles.value || {})[a];
+                        if (!obj || !dA) return null;
+                        const srcK = cleDeCompte(String(obj.sourceCompte || 'courant'));
+                        const snap = { exc: JSON.parse(JSON.stringify(obj.exceptions || [])), ap: obj.adapteePotentiel ? JSON.parse(JSON.stringify(obj.adapteePotentiel)) : null,
+                                       vir: Array.isArray(dA.virementsInternes) ? dA.virementsInternes.slice() : null };
+                        const actuel = {}; for (let m = 1; m <= 12; m++) actuel[m] = valeurEffective(obj, obj.valeur, m);
+                        const basAvant = _basDuCompte(a, srcK);
+                        let valeurs = null, ap = null, basApres = {};
+                        try { valeurs = adapterEpargneAuPotentiel(obj, a, plafond, { apercu: true }); ap = obj.adapteePotentiel; basApres = _basDuCompte(a, srcK); }
+                        finally {
+                            obj.exceptions = snap.exc;
+                            if (snap.ap) obj.adapteePotentiel = snap.ap; else delete obj.adapteePotentiel;
+                            if (snap.vir) dA.virementsInternes = snap.vir;
+                            calculationTick.value++;
+                        }
+                        if (!valeurs) return null;
+                        const ms = Object.keys(valeurs).map(Number).sort((x, y) => x - y);
+                        const minDe = (B) => { const v = ms.map(m => B[m]).filter(x => x !== undefined); return v.length ? Math.min(...v) : null; };
+                        propositionAdaptation.value = {
+                            obj, an: a, plafond: Number(plafond) > 0 ? Number(plafond) : null, nom: obj.nom || obj.label || 'Épargne', compte: getNomCompte(srcK),
+                            lignes: ms.map(m => ({ mois: m, nom: nomDuMois(m), actuel: actuel[m], propose: valeurs[m], plafonne: ap && ap.plafonnes && ap.plafonnes[m] !== undefined ? ap.plafonnes[m] : null })),
+                            basAvant: minDe(basAvant), basApres: minDe(basApres), absorbes: ((ap && ap.virementsAbsorbes) || []).length - ((snap.ap && snap.ap.an === a && snap.ap.virementsAbsorbes) || []).length,
+                            sousZero: ((ap && ap.sousZero) || []).map(x => ({ nom: nomDuMois(x.mois), bas: x.bas })),
+                        };
+                        return propositionAdaptation.value;
+                    };
+                    const validerAdaptation = () => {
+                        const pr = propositionAdaptation.value; if (!pr) return null;
+                        propositionAdaptation.value = null;
+                        return adapterEpargneAuPotentiel(pr.obj, pr.an, pr.plafond);
                     };
                     //  v37.153 — « D'OÙ VIENT CE VIREMENT DE 22 K ? JE NE LE VOIS NULLE PART » : le Budget Structurel n'affichait que le
                     //  montant de base (3 000 / mois) ; les mois variables (exceptions, « ⚖️ Adapter au potentiel ») que le Relevé applique
@@ -28875,7 +28988,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage, restesCyclePrecedent, ciblesReport, resteCible, resteMarquerPaye, resteReporter, resteClore,
-                        tachesSansDate, valeurEffective, resumeExceptions, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
+                        tachesSansDate, valeurEffective, resumeExceptions, propositionAdaptation, proposerAdaptation, validerAdaptation, basDuCompteAdapte: _basDuCompte, cleDeCompte, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
                         // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.
