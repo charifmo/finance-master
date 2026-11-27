@@ -583,6 +583,9 @@
                             <button @click="ajouterAnnee" class="bg-slate-200 text-slate-700 hover:bg-slate-300 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shadow-sm uppercase tracking-widest">
                                 + Nouvelle Année
                             </button>
+                            <!-- v37.158 : copier le Budget et le Calendrier de cette année vers les années à venir -->
+                            <button type="button" data-copier-annee @click="ouvrirCopieAnnee" class="bg-indigo-100 text-indigo-800 hover:bg-indigo-200 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shadow-sm uppercase tracking-wider">📋 Copier vers…</button>
+                            <button v-if="(donneesAnnuelles[anneeAffichage] || {}).copieAnnee" type="button" data-annuler-copie @click="annulerCopieAnnee(anneeAffichage)" :title="'Copiée depuis ' + donneesAnnuelles[anneeAffichage].copieAnnee.de + ' le ' + donneesAnnuelles[anneeAffichage].copieAnnee.le" class="bg-white border border-gray-300 text-gray-600 hover:bg-gray-100 font-bold px-3 py-1.5 rounded-lg text-xs">↩ Annuler la copie de {{ donneesAnnuelles[anneeAffichage].copieAnnee.de }}</button>
                         </div>
                     </div>
                     <!-- v32.80 : patrimoine projeté ramené sur une seule ligne -->
@@ -6985,6 +6988,52 @@
 
         <!-- v37.107 — PENDANT LA SAISIE, LA FRISE EN UN APPUI : 📈 rejoint la rangée des boutons flottants (téléphone), une
              pastille « 📈 Frise du cycle » en bas à droite (ordinateur). Seulement sur l'écran Saisie. -->
+        <!-- v37.158 : copier une année vers les années à venir -->
+        <div v-if="copieAnnee" data-copie-annee class="fixed inset-0 z-[1100] bg-black/50 flex items-center justify-center p-4" @click.self="copieAnnee = null">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[88vh] overflow-y-auto p-5 space-y-3">
+                <p class="text-[11px] font-black uppercase tracking-widest text-indigo-700">📋 Copier {{ copieAnnee.de }} vers les années à venir</p>
+                <div class="space-y-1">
+                    <p class="text-[11px] font-black text-gray-600">Vers :</p>
+                    <div class="flex flex-wrap gap-2">
+                        <label v-for="a in anneesDisponibles.filter(x => x > copieAnnee.de)" :key="'ca' + a" class="flex items-center gap-1.5 text-sm font-black border border-gray-200 rounded-lg px-2 py-1 cursor-pointer">
+                            <input type="checkbox" data-copie-cible :value="a" v-model="copieAnnee.cibles"/> {{ a }}</label>
+                        <label class="flex items-center gap-1.5 text-sm font-black border border-dashed border-indigo-300 rounded-lg px-2 py-1 cursor-pointer text-indigo-700">
+                            <input type="checkbox" data-copie-creer v-model="copieAnnee.creer"/> créer {{ Math.max(...anneesDisponibles) + 1 }}</label>
+                    </div>
+                </div>
+                <div class="space-y-1.5" data-copie-rubriques>
+                    <p class="text-[11px] font-black text-gray-600">Quoi : cochez les rubriques, ouvrez-en une pour choisir ligne par ligne</p>
+                    <div v-for="R in RUBRIQUES_COPIE" :key="'rq' + R.cle" data-copie-rubrique :data-rubrique="R.cle" class="rounded-lg border border-gray-200">
+                        <div class="flex items-center gap-2 px-2 py-1.5">
+                            <input type="checkbox" data-copie-section v-model="copieAnnee.sections[R.cle]"/>
+                            <span class="text-sm font-black text-gray-800 flex-1">{{ R.titre }} <span class="text-[10px] font-bold text-gray-400">· {{ R.groupe === 'budget' ? 'Budget Structurel' : 'Calendrier' }}</span></span>
+                            <span class="text-[11px] font-bold text-gray-500 tabular-nums" data-copie-compte>{{ (lignesSourceCopie[R.cle] || []).filter(l => !copieAnnee.exclus[R.cle + ':' + l.cle]).length }} / {{ (lignesSourceCopie[R.cle] || []).length }}</span>
+                            <button type="button" data-copie-detail @click="copieAnnee.ouvertes[R.cle] = !copieAnnee.ouvertes[R.cle]" :disabled="!copieAnnee.sections[R.cle] || !(lignesSourceCopie[R.cle] || []).length" class="text-[10px] font-black text-indigo-700 px-1.5 py-0.5 rounded hover:bg-indigo-50 disabled:opacity-30">{{ copieAnnee.ouvertes[R.cle] ? '▾ fermer' : '▸ choisir' }}</button>
+                        </div>
+                        <div v-if="copieAnnee.ouvertes[R.cle] && copieAnnee.sections[R.cle]" class="border-t border-gray-100 px-2 py-1.5 space-y-1 max-h-52 overflow-y-auto">
+                            <div class="flex gap-2 text-[10px] font-black"><button type="button" @click="toutesLignesCopie(R.cle, true)" class="text-indigo-700 hover:underline">tout</button><button type="button" @click="toutesLignesCopie(R.cle, false)" class="text-gray-500 hover:underline">rien</button></div>
+                            <label v-for="l in lignesSourceCopie[R.cle]" :key="R.cle + l.cle" data-copie-ligne :data-cle="l.cle" class="flex items-center gap-2 text-[12px] font-semibold text-gray-700 cursor-pointer">
+                                <input type="checkbox" :checked="!copieAnnee.exclus[R.cle + ':' + l.cle]" @change="basculerLigneCopie(R.cle, l.cle)"/>
+                                <span class="flex-1 truncate">{{ l.nom }}</span><span class="tabular-nums text-gray-500">{{ formatMAD(l.montant) }}</span>
+                            </label>
+                        </div>
+                    </div>
+                    <label v-if="copieAnnee.sections.revenus || copieAnnee.sections.chargesFixes || copieAnnee.sections.chargesVariables || copieAnnee.sections.epargne" class="flex items-start gap-2 text-sm font-bold text-gray-800"><input type="checkbox" data-copie-exceptions v-model="copieAnnee.exceptions" class="mt-1"/>
+                        <span>avec les montants variables selon le mois <span class="block text-[11px] font-semibold text-gray-500">sauf ceux d'« Adapter au potentiel », propres à {{ copieAnnee.de }}</span></span></label>
+                </div>
+                <div v-for="pl in apercuCopieAnnee" :key="'ap' + pl.vers" data-copie-apercu :data-annee="pl.vers" class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 text-[12px] font-semibold text-gray-700 space-y-0.5">
+                    <p class="font-black text-indigo-900">{{ pl.vers }}{{ pl.existe ? '' : ' (créée)' }}</p>
+                    <p v-if="pl.budget.lignes.length || pl.budget.gardees.length">Budget : {{ pl.budget.remplacees.length }} ligne(s) mise(s) à jour<template v-if="pl.budget.nouvelles.length">, {{ pl.budget.nouvelles.length }} nouvelle(s) ({{ pl.budget.nouvelles.slice(0, 4).join(', ') }}{{ pl.budget.nouvelles.length > 4 ? '…' : '' }})</template><template v-if="pl.budget.gardees.length"> · {{ pl.budget.gardees.length }} propre(s) à {{ pl.vers }} gardée(s)</template></p>
+                    <p v-if="copieAnnee.sections.flux || copieAnnee.sections.virements">Calendrier : {{ pl.flux.ajoutes.length }} flux et {{ pl.vir.ajoutes.length }} virement(s) ajoutés<template v-if="pl.flux.ignores + pl.vir.ignores"> · {{ pl.flux.ignores + pl.vir.ignores }} déjà présent(s), pas doublé(s)</template></p>
+                </div>
+                <p v-if="!apercuCopieAnnee.length" class="text-[12px] font-bold text-rose-700">Choisissez au moins une année.</p>
+                <p class="text-[10px] font-semibold text-gray-500">Le pointage (Réalisé) repart à zéro dans l'année cible ; le journal des opérations n'est pas copié. « ↩ Annuler la copie » (à côté de l'année) remet l'année comme avant.</p>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" data-copie-annuler @click="copieAnnee = null" class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-xs font-black hover:bg-gray-100">Annuler</button>
+                    <button type="button" data-copie-valider @click="appliquerCopieAnnee()" :disabled="!apercuCopieAnnee.length || !apercuCopieAnnee.some(pl => pl.budget.lignes.length || pl.flux.ajoutes.length || pl.vir.ajoutes.length)" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 disabled:opacity-40">✓ Copier</button>
+                </div>
+            </div>
+        </div>
         <!-- v37.157 : le Relevé interactif — la fenêtre d'une ligne -->
         <div v-if="actionReleve" data-action-releve :data-type="actionReleve.s.k" class="fixed inset-0 z-[1100] bg-black/50 flex items-center justify-center p-4" @click.self="actionReleve = null">
             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 space-y-3">
@@ -9664,8 +9713,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.157 Le Relevé interactif";
+                    const CURRENT_VERSION = "37.158 Copier une année, en choisissant quoi";
                     const CHANGELOG = [
+        { version: "37.158 Copier une année, en choisissant quoi", date: "2026-11-27", changes: [
+            "📋 « JE VEUX POUVOIR COPIER LES INPUTS DU CALENDRIER PLURIANNUEL ET DU BUDGET STRUCTUREL DE 2026 À 2027 — JE NE VEUX PAS CHANGER CHAMP PAR CHAMP SUR CHAQUE ANNÉE » + « ET JE PEUX CHOISIR CE QUE JE COPIE » — à côté de « + Nouvelle année » : « 📋 Copier vers… ». Vers une ou plusieurs années à venir, ou une année créée pour l'occasion.",
+            "CHOISIR — six rubriques à cocher (Revenus, Charges fixes, Charges variables, Épargne · Flux exceptionnels, Virements), et dans chacune, ligne par ligne (« ▸ choisir », tout / rien). Budget : chaque ligne cochée REMPLACE la même ligne de l'année cible (montant, compte, jour, rythme, nom), le pointage repart à zéro, les lignes propres à la cible sont gardées, les lignes vides de remplissage ne sont jamais copiées. Les montants variables selon le mois : seulement si on coche l'option — jamais ceux d'« Adapter au potentiel », propres à l'année source. Calendrier : flux et virements au même mois, AJOUTÉS sans doubler ceux déjà présents (pas les virements posés par l'appli, ni les reports d'un cycle). L'aperçu dit, année par année, ce qui va changer. « ↩ Annuler la copie de 2026 » (à côté de l'année) remet l'année comme avant — ou la retire si elle avait été créée.",
+            "PREUVE — test_copie_annee.mjs (vrai navigateur, vrai CSS) : 2026 modifiée → 2027 : aperçu (lignes mises à jour, « École 2027 » gardée, « Paiement Notaire » ajouté, « Assurance kia » pas doublée) ; les comptes de l'aperçu = les lignes proposées ; rubrique Virements et ligne Nounou décochées → ni l'une ni l'autre copiées ; Syndic 1 275 trimestriel, pointage à zéro ; épargne sans l'adaptation de 2026 ; « créer 2028 » avec les montants par mois : juin oui, décembre adapté non ; Annuler : 2028 disparaît, 2027 redevient comme avant.",
+        ] },
         { version: "37.157 Le Relevé interactif", date: "2026-11-27", changes: [
             "👆 « JE VEUX QUE CE SOIT PLUS INTERACTIF, COMME LA FRISE : JE CLIQUE SUR UN TRUC, IL ME DONNE DES OPTIONS — ALLER DANS LA PARTIE MODIFIABLE, MODIFIER LA DATE, LA VALEUR OU LE NOM, ET ÇA SE MODIFIE DIRECT COMME SI JE L'AVAIS CHANGÉ LÀ-BAS ; MÊME CHOSE POUR LE DELETE » — chaque ligne prévue du Relevé de comptes sait maintenant ce qu'elle représente, et un clic ouvre sa fenêtre.",
             "CE QU'ON PEUT FAIRE — un flux du Calendrier (« ⚠️ Medoc Ma femme ») : nom, montant, mois, jour ; 🗑️ supprimer. Un virement : montant, mois, jour ; supprimer. Une épargne ou un revenu : le nom, le jour, et le montant DE CE MOIS (le montant de base ne bouge pas) ; « 🗑️ Retirer ce mois-ci » (la ligne reste au budget). Une créance attendue : montant et date. Partout : « ↗ Ouvrir dans … » (Calendrier, mois déplié ; Patrimoine & Objectifs ; Budget Structurel ; Créances). Une ligne qui regroupe (Total Charges Fixes, Factures, enveloppes de la semaine) le dit et renvoie au Budget. C'est l'élément lui-même qui change : Relevé, Budget, Calendrier et projection suivent ; supprimer demande une confirmation (« Oui, supprimer »).",
@@ -17634,6 +17688,154 @@
                         return Object.keys(donneesAnnuelles.value).map(Number).sort((a,b) => a - b);
                     });
 
+
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.158 — COPIER UNE ANNÉE VERS LES ANNÉES À VENIR. « Je veux pouvoir copier les inputs du Calendrier
+                       pluriannuel et du Budget structurel de 2026 à 2027 : si j'ai changé beaucoup de choses, je veux que ça se
+                       reporte sur une année à venir — je ne veux pas changer champ par champ sur chaque année. »
+                       En un geste, vers une ou plusieurs années (ou une année créée pour l'occasion) :
+                         • Budget Structurel — revenus, charges fixes, charges variables (et leurs lignes), épargne : chaque ligne de
+                           l'année source REMPLACE la même ligne de l'année cible (montant, compte, jour, rythme, nom) ; les lignes
+                           que seule la cible possède sont gardées ; le pointage (Réalisé) repart à zéro. Les montants variables
+                           selon le mois (exceptions) ne suivent que si on le demande — sauf ceux d'« Adapter au potentiel »,
+                           propres à l'année source, jamais copiés.
+                         • Calendrier — flux exceptionnels et virements, mois par mois, AJOUTÉS (ceux déjà présents — même mois, même
+                           nom ou mêmes comptes, même montant — ne sont pas doublés) ; pas les virements posés par l'appli pour
+                           l'année source, ni les reports d'un cycle.
+                       Un aperçu dit ce qui va changer ; « ↩ Annuler la copie » remet chaque année cible comme avant.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const COLL_BUDGET = ['revenus', 'chargesFixes', 'chargesVariables', 'epargne'];
+                    const copieAnnee = ref(null);
+                    const _lignesDe = (d, coll) => { const v = (d || {})[coll]; if (!v) return []; return Array.isArray(v) ? v.filter(Boolean).map(x => [String(x.id), x]) : Object.entries(v).filter(([, x]) => x); };
+                    const _nomLigne = (x, k) => (x && (x.label || x.nom)) || k;
+                    //  une ligne de remplissage (« — », 0 DH, sans détail) n'est jamais copiée : elle écraserait une vraie valeur de l'année cible
+                    const _ligneVide = (x, coll) => { const nom = String((x && (x.label || x.nom)) || '').trim(), v = Number(coll === 'revenus' ? (x || {}).base : (x || {}).valeur) || 0;
+                        return (!nom || /^[—–-]+$/.test(nom)) && !(v > 0) && !((x || {}).details || []).length && !((x || {}).parts || []).length; };
+                    const _cloneLignePourAnnee = (x, garderExceptions) => {
+                        const c = JSON.parse(JSON.stringify(x));
+                        const adaptes = Object.keys(((x.adapteePotentiel || {}).mois) || {}).map(Number);
+                        delete c.adapteePotentiel;
+                        c.trackerRealise = {}; c.paye = false; c.montantPaye = 0;
+                        if (!garderExceptions) c.exceptions = [];
+                        else c.exceptions = (c.exceptions || []).filter(e => !(Number(e.moisDebut) === Number(e.moisFin) && adaptes.includes(Number(e.moisDebut))));
+                        (c.details || []).forEach(dd => { if (dd && typeof dd === 'object') { dd.trackerRealise = {}; delete dd.paye; delete dd.montantPaye; } });
+                        (c.parts || []).forEach(pp => { if (pp && typeof pp === 'object') pp.trackerRealise = {}; });
+                        return c;
+                    };
+                    const _sigFlux = (x) => [Number(x.mois) || 0, String(x.nom || '').trim().toLowerCase(), Math.round(Number(x.montant) || 0)].join('|');
+                    const _sigVir = (x) => [Number(x.mois) || 0, cleDeCompte(String(x.sourceCompte || 'courant')), cleDeCompte(String(x.destinationCompte || 'courant')), Math.round(Math.abs(Number(x.montant) || 0))].join('|');
+                    const _fluxCopiables = (d) => (d.depensesIrregulieres || []).filter(x => x && !x.reportDe && !x.sourceAssurance);
+                    const _virCopiables = (d) => (d.virementsInternes || []).filter(x => x && x.origine !== 'juste_besoin');
+                    //  v37.158 — « JE PEUX CHOISIR CE QUE JE COPIE » : une rubrique se coche ou non (sections), et chaque ligne aussi (exclus)
+                    const _retenu = (o, rub, cle) => !!(o.sections && o.sections[rub]) && !(o.exclus && o.exclus[rub + ':' + cle]);
+                    const planCopieAnnee = (de, vers, o) => {
+                        const D = donneesAnnuelles.value || {}, src = D[de], dst = D[vers] || {};
+                        const plan = { vers, existe: !!D[vers], budget: { lignes: [], remplacees: [], nouvelles: [], gardees: [] }, flux: { ajoutes: [], ignores: 0 }, vir: { ajoutes: [], ignores: 0 } };
+                        if (!src) return plan;
+                        COLL_BUDGET.forEach(coll => {
+                            if (!(o.sections && o.sections[coll])) return;
+                            const cible = new Map(_lignesDe(dst, coll));
+                            _lignesDe(src, coll).forEach(([k, x]) => {
+                                if (_ligneVide(x, coll) || !_retenu(o, coll, k)) return;
+                                plan.budget.lignes.push([coll, k, x]);
+                                (cible.has(k) ? plan.budget.remplacees : plan.budget.nouvelles).push(_nomLigne(x, k)); cible.delete(k);
+                            });
+                            cible.forEach((x, k) => { if (!_ligneVide(x, coll)) plan.budget.gardees.push(_nomLigne(x, k)); });
+                        });
+                        const fl = new Set((dst.depensesIrregulieres || []).filter(Boolean).map(_sigFlux)), vi = new Set((dst.virementsInternes || []).filter(Boolean).map(_sigVir));
+                        _fluxCopiables(src).forEach(x => { if (!_retenu(o, 'flux', x.id)) return; if (fl.has(_sigFlux(x))) plan.flux.ignores++; else plan.flux.ajoutes.push(x); });
+                        _virCopiables(src).forEach(x => { if (!_retenu(o, 'virements', x.id)) return; if (vi.has(_sigVir(x))) plan.vir.ignores++; else plan.vir.ajoutes.push(x); });
+                        return plan;
+                    };
+                    //  ce que l'année source propose, rubrique par rubrique (l'écran de choix)
+                    const RUBRIQUES_COPIE = [
+                        { cle: 'revenus', titre: '💰 Revenus', groupe: 'budget' }, { cle: 'chargesFixes', titre: '🏢 Charges fixes', groupe: 'budget' },
+                        { cle: 'chargesVariables', titre: '🛒 Charges variables', groupe: 'budget' }, { cle: 'epargne', titre: '💎 Épargne', groupe: 'budget' },
+                        { cle: 'flux', titre: '⚡ Flux exceptionnels', groupe: 'calendrier' }, { cle: 'virements', titre: '🔄 Virements', groupe: 'calendrier' },
+                    ];
+                    const lignesSourceCopie = computed(() => {
+                        const c = copieAnnee.value; if (!c) return {};
+                        calculationTick.value;
+                        const src = (donneesAnnuelles.value || {})[c.de] || {}, out = {};
+                        const M = (m) => m ? ' · ' + nomDuMois(Number(m)) : '';
+                        COLL_BUDGET.forEach(coll => {
+                            out[coll] = _lignesDe(src, coll).filter(([, x]) => !_ligneVide(x, coll)).map(([k, x]) => ({ cle: k, nom: _nomLigne(x, k),
+                                montant: coll === 'revenus' ? Number(x.base || 0) : Number(x.valeur || 0) }));
+                        });
+                        out.flux = _fluxCopiables(src).map(x => ({ cle: String(x.id), nom: (x.nom || 'Flux') + M(x.mois), montant: Number(x.montant || 0) }));
+                        out.virements = _virCopiables(src).map(x => ({ cle: String(x.id), nom: getNomCompte(x.sourceCompte || 'courant') + ' → ' + getNomCompte(x.destinationCompte || 'courant') + M(x.mois), montant: Math.abs(Number(x.montant || 0)) }));
+                        return out;
+                    });
+                    const basculerLigneCopie = (rub, cle) => { const c = copieAnnee.value; if (!c) return; const k = rub + ':' + cle; if (c.exclus[k]) delete c.exclus[k]; else c.exclus[k] = true; };
+                    const toutesLignesCopie = (rub, oui) => { const c = copieAnnee.value; if (!c) return; (lignesSourceCopie.value[rub] || []).forEach(l => { const k = rub + ':' + l.cle; if (oui) delete c.exclus[k]; else c.exclus[k] = true; }); };
+                    const ouvrirCopieAnnee = () => {
+                        const de = Number(anneeAffichage.value), futures = anneesDisponibles.value.filter(a => a > de);
+                        copieAnnee.value = { de, cibles: futures.length ? futures.slice() : [], creer: !futures.length, exceptions: false, ouvertes: {},
+                                             sections: { revenus: true, chargesFixes: true, chargesVariables: true, epargne: true, flux: true, virements: true }, exclus: {} };
+                    };
+                    const apercuCopieAnnee = computed(() => {
+                        const c = copieAnnee.value; if (!c) return [];
+                        calculationTick.value;
+                        const vers = c.cibles.slice(); if (c.creer) vers.push(Math.max(...anneesDisponibles.value) + 1);
+                        return vers.filter(a => a > c.de).sort((x, y) => x - y).map(a => planCopieAnnee(c.de, a, c));
+                    });
+                    const appliquerCopieAnnee = () => {
+                        const c = copieAnnee.value; if (!c) return null;
+                        const D = donneesAnnuelles.value, src = D[c.de]; if (!src) return null;
+                        const faits = [];
+                        apercuCopieAnnee.value.forEach(plan => {
+                            const a = plan.vers;
+                            if (!D[a]) {   // l'année n'existe pas : créée vide de flux, puis remplie comme les autres
+                                const base = JSON.parse(JSON.stringify(src));
+                                ['depensesIrregulieres', 'virementsInternes', 'transactionsReelles'].forEach(k => { base[k] = []; });
+                                ['consoRealiseeT0', 'consoClotureT0', 'banqueOperations'].forEach(k => { base[k] = {}; });
+                                ['alimentationJusteBesoin', 'recalibrage', 'doublonsRetires', 'copieAnnee'].forEach(k => { delete base[k]; });
+                                //  la structure (lignes de remplissage vides) est gardée ; les vraies lignes ne viennent que si elles sont cochées
+                                COLL_BUDGET.forEach(coll => {
+                                    const vides = _lignesDe(src, coll).filter(([, x]) => _ligneVide(x, coll)).map(([k, x]) => [k, _cloneLignePourAnnee(x, false)]);
+                                    base[coll] = Array.isArray(src[coll]) ? vides.map(([, x]) => x) : Object.fromEntries(vides);
+                                });
+                                D[a] = base;
+                            }
+                            const d = D[a];
+                            const avant = {}; COLL_BUDGET.concat(['depensesIrregulieres', 'virementsInternes']).forEach(k => { avant[k] = d[k] === undefined ? null : JSON.parse(JSON.stringify(d[k])); });
+                            plan.budget.lignes.forEach(([coll, k, x]) => {
+                                const cl = _cloneLignePourAnnee(x, c.exceptions);
+                                if (Array.isArray(src[coll])) {
+                                    if (!Array.isArray(d[coll])) d[coll] = Object.values(d[coll] || {});
+                                    const i = d[coll].findIndex(y => y && String(y.id) === k); if (i >= 0) d[coll].splice(i, 1, cl); else d[coll].push(cl);
+                                } else {
+                                    if (!d[coll] || typeof d[coll] !== 'object' || Array.isArray(d[coll])) d[coll] = {};
+                                    d[coll][k] = cl;
+                                }
+                            });
+                            {
+                                if (!Array.isArray(d.depensesIrregulieres)) d.depensesIrregulieres = [];
+                                if (!Array.isArray(d.virementsInternes)) d.virementsInternes = [];
+                                let n = 0;
+                                plan.flux.ajoutes.forEach(x => { const cl = JSON.parse(JSON.stringify(x)); cl.id = Date.now() * 100 + (n++); cl.annee = a; cl.trackerRealise = {}; cl.paye = false; cl.montantPaye = 0; (cl.parts || []).forEach(pp => { if (pp) pp.trackerRealise = {}; }); d.depensesIrregulieres.push(cl); });
+                                plan.vir.ajoutes.forEach(x => { const cl = JSON.parse(JSON.stringify(x)); cl.id = Date.now() * 100 + (n++); cl.trackerRealise = {}; delete cl.origine; d.virementsInternes.push(cl); });
+                            }
+                            d.copieAnnee = { de: c.de, le: _aujourdhuiISO(), avant, cree: !plan.existe };
+                            faits.push(a + ' (' + (plan.budget.remplacees.length + plan.budget.nouvelles.length) + ' ligne(s) du budget, ' + plan.flux.ajoutes.length + ' flux, ' + plan.vir.ajoutes.length + ' virement(s))');
+                        });
+                        migrateCategoriesV22();
+                        calculationTick.value++;
+                        handleDataChange();
+                        addLog('📋 ' + c.de + ' copiée vers ' + faits.join(' · ') + '.', 'success');
+                        copieAnnee.value = null;
+                        return faits;
+                    };
+                    const annulerCopieAnnee = (an) => {
+                        const D = donneesAnnuelles.value, d = D[Number(an)], r = d && d.copieAnnee;
+                        if (!r) return false;
+                        if (r.cree) { delete D[Number(an)]; if (Number(anneeAffichage.value) === Number(an)) anneeAffichage.value = r.de; }
+                        else { Object.entries(r.avant || {}).forEach(([k, v]) => { if (v === null) delete d[k]; else d[k] = v; }); delete d.copieAnnee; }
+                        calculationTick.value++;
+                        handleDataChange();
+                        addLog('↩️ Copie de ' + r.de + ' vers ' + an + ' annulée.', 'success');
+                        return true;
+                    };
                     const ajouterAnnee = () => {
                         const maxYear = Math.max(...anneesDisponibles.value);
                         const newYear = maxYear + 1;
@@ -29220,7 +29422,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage, restesCyclePrecedent, ciblesReport, resteCible, resteMarquerPaye, resteReporter, resteClore,
-                        tachesSansDate, valeurEffective, actionReleve, ouvrirActionReleve, enregistrerActionReleve, supprimerActionReleve, allerAActionReleve, operationsAutoDuMois, operationsAutoAnnee, resumeExceptions, propositionAdaptation, proposerAdaptation, validerAdaptation, basDuCompteAdapte: _basDuCompte, cleDeCompte, buildJournalReleve: _buildJournalReleve, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
+                        tachesSansDate, valeurEffective, copieAnnee, ouvrirCopieAnnee, apercuCopieAnnee, RUBRIQUES_COPIE, lignesSourceCopie, basculerLigneCopie, toutesLignesCopie, appliquerCopieAnnee, annulerCopieAnnee, planCopieAnnee, actionReleve, ouvrirActionReleve, enregistrerActionReleve, supprimerActionReleve, allerAActionReleve, operationsAutoDuMois, operationsAutoAnnee, resumeExceptions, propositionAdaptation, proposerAdaptation, validerAdaptation, basDuCompteAdapte: _basDuCompte, cleDeCompte, buildJournalReleve: _buildJournalReleve, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
                         // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.

@@ -162,6 +162,7 @@ suite "Adapter au potentiel sans découvert, avec aperçu"  node test_cfo_engine
 suite "Ce que l'appli pose, affiché chaque mois"  node test_cfo_engine_parity/test_operations_auto.mjs
 suite "Calendrier : chaque ✕ visible (bureau, téléphone)"  node test_cfo_engine_parity/test_calendrier_lignes.mjs
 suite "Le Relevé interactif : modifier, supprimer, ouvrir"  node test_cfo_engine_parity/test_releve_interactif.mjs
+suite "Copier une année vers les suivantes, en choisissant quoi"  node test_cfo_engine_parity/test_copie_annee.mjs
 suite "Des dates, partout : plus aucun « j.N » ni « J−N »"  node test_cfo_engine_parity/test_dates_partout.mjs
 suite "Le même jour : les entrées d’abord, la grande case dit où elle regarde et quel virement avancer"  node test_cfo_engine_parity/test_meme_jour.mjs
 suite "Les deux graphiques du Bilan : par compte, par type de charges"  node test_cfo_engine_parity/test_graphiques_bilan.mjs
