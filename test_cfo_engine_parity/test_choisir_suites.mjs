@@ -22,7 +22,7 @@ fs.copyFileSync(path.join(RACINE, 'choisir_suites.mjs'), path.join(dir, 'choisir
 ecrire('index.html', '<div data-frise-cloturer></div>\n<p data-meteo-x></p>\n<p>PREUVE — test_frise.mjs : cité dans le changelog</p>\n<script>const basculerClotureConso = () => 1;\nconst autreCalculLong = () => 2;\nconst chargesCommunes = () => 0;</script>\n');
 ecrire('sante/index.html', '<div data-sante-a></div>\n<script src="sante_samsung.js"></script>\n');
 ecrire('sante/sante_samsung.js', 'x\n'); ecrire('sante/sante_lib.php', 'x\n'); ecrire('cfo_intent_engine.php', 'x\n'); ecrire('cfo_veille_lib.php', 'x\n');
-ecrire('run_parallel.mjs', 'x\n'); ecrire('README.md', 'x\n');
+ecrire('run_parallel.mjs', 'x\n'); ecrire('README.md', 'x\n'); ecrire('run_tests.sh', 'suite "Frise" node test_cfo_engine_parity/test_frise.mjs\n');
 const T = {
     frise: "page.click('[data-frise-cloturer]') chargesCommunes", meteo: "page.click('[data-meteo-x]') chargesCommunes", socle: 'rien chargesCommunes', calcul: 'eval(ST).autreCalculLong() chargesCommunes',
     samsung: "require('../sante/sante_samsung.js')", sante_appli: "page.goto(U) // U = http://127.0.0.1/sante/", sante_calculs: 'rien', veille: "require('../cfo_veille_lib.php')", lanceur: 'rien',
@@ -72,6 +72,11 @@ v('  → la bibliothèque Santé (cœur Santé) : niveau 2 Santé seulement', JS
 remettre();
 ecrire('run_parallel.mjs', 'y\n'); r = choisir();
 v('F. le lanceur des tests (noyau commun) : niveau 3, tout', r.gardees.length === 9 && /noyau commun/.test(r.sortie), JSON.stringify(r));
+remettre();
+ecrire('run_tests.sh', 'suite "Frise" node test_cfo_engine_parity/test_frise.mjs\nsuite "Nouvelle" node test_cfo_engine_parity/test_nouvelle.mjs\n'); ecrire('test_cfo_engine_parity/test_nouvelle.mjs', 'rien\n'); r = choisir();
+v('F2. run_tests.sh qui ne fait qu\'AJOUTER une ligne « suite » (un nouveau test) : pas de full — le léger (socle) suffit', !/niveau 3/.test(r.sortie) && JSON.stringify(r.gardees) === JSON.stringify(['Un seul atterrissage']), JSON.stringify(r));
+ecrire('run_tests.sh', 'suite "Frise" node test_cfo_engine_parity/test_frise.mjs --autre\n'); r = choisir();
+v('  → une ligne existante CHANGÉE dans run_tests.sh : noyau, full', r.gardees.length === 9 && /noyau commun/.test(r.sortie), JSON.stringify(r));
 remettre();
 ecrire('README.md', 'y\n'); r = choisir();
 v('G. la documentation seule : aucune suite', r.gardees.length === 0, JSON.stringify(r));

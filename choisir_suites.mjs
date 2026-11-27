@@ -42,7 +42,16 @@ const COEUR = {
     sante: /^sante\/(sante_lib\.php|sante_integrity\.php|sante_store\.php|save_sante\.php|sante_calculs\.js|sante_intent_engine\.php)$/,
     veille: /^$/,   // la veille est petite : son niveau 2 et son niveau 1 se valent presque
 };
+//  v37.152 — run_tests.sh dont le diff n'est QUE des lignes « suite "…" » ajoutées : un test de plus, pas le lanceur
+//  changé. Le nouveau fichier de test est lui-même dans les changements et sera rejoué ; pas de full pour autant.
+const seulementDesSuites = (f) => {
+    if (f !== 'run_tests.sh') return false;
+    const diff = ((base ? git(['diff', '-U0', base, '--', f]) : '') || '') + (git(['diff', '-U0', 'HEAD', '--', f]) || '');
+    const l = diff.split('\n').filter(x => /^[+-](?![+-])/.test(x));
+    return l.length > 0 && l.every(x => /^\+suite "/.test(x));
+};
 const domaineFichier = (f) => {
+    if (seulementDesSuites(f)) return 'doc';
     if (NOYAU.test(f)) return 'noyau';
     if (/\.md$/.test(f) || /^fix_version_\d+\.mjs$/.test(f) || /^migrations\//.test(f)) return 'doc';
     if (/^sante\//.test(f) || /test_sante/.test(f)) return 'sante';
