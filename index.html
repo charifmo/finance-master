@@ -1754,6 +1754,8 @@
                                 <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm">Mois {{ moisNum }} - {{ nomDuMois(moisNum) }} {{ anneeAffichage }}</h3>
                                 <!-- v37.35 : ce que contient le mois, même fermé — sorties, entrées, virements -->
                                 <span class="flex flex-wrap items-center justify-end gap-1.5" data-mois-resume :data-mois="moisNum">
+                                    <span v-if="operationsAutoAnnee[moisNum].length" data-mois-auto :title="operationsAutoAnnee[moisNum].map(o => o.texte).join('\n')"
+                                          class="text-sm font-black text-amber-800 bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-full whitespace-nowrap">🤖 {{ operationsAutoAnnee[moisNum].length }} posé{{ operationsAutoAnnee[moisNum].length > 1 ? 's' : '' }} par l’appli</span>
                                     <span v-if="resumesMois[moisNum].sorties > 0" data-mois-sorties class="text-sm font-black text-red-600 bg-red-100 px-4 py-1.5 rounded-full shadow-inner whitespace-nowrap">{{ formatMAD(resumesMois[moisNum].sorties) }}</span>
                                     <span v-if="resumesMois[moisNum].entrees > 0" data-mois-entrees class="text-sm font-black text-green-700 bg-green-100 px-3 py-1.5 rounded-full shadow-inner whitespace-nowrap">+ {{ formatMAD(resumesMois[moisNum].entrees) }}</span>
                                     <span v-if="resumesMois[moisNum].virements > 0" data-mois-virements :title="formatMAD(resumesMois[moisNum].montantVirements) + ' transférés entre vos comptes'"
@@ -1761,6 +1763,14 @@
                                 </span>
                             </div>
                             <div v-show="moisOuverts.includes(moisNum)" class="p-4 md:p-6 bg-white space-y-3">
+                                <!-- v37.155 : ce que l'appli a posé, changé ou retiré ce mois — toujours affiché -->
+                                <div v-if="operationsAutoAnnee[moisNum].length" data-mois-auto-detail class="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-1.5">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-amber-800">🤖 Posé par l’appli ce mois</p>
+                                    <div v-for="op in operationsAutoAnnee[moisNum]" :key="op.cle" data-mois-auto-ligne :data-type="op.type" class="flex items-start gap-2 text-[12px]">
+                                        <span class="shrink-0">{{ op.icone }}</span>
+                                        <span :class="['flex-1 font-bold', op.type === 'retrait' ? 'text-gray-500' : 'text-gray-800']">{{ op.texte }}<span class="block text-[10px] font-semibold text-amber-700">{{ op.par }}</span></span>
+                                    </div>
+                                </div>
                                 <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" :data-dep-id="depense.id" class="bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
                                     <!-- v18.00 : overflow-x-auto pour éviter l'élargissement horizontal sur mobile -->
                                     <div class="overflow-x-auto">
@@ -1809,6 +1819,7 @@
                                 <div class="mt-4 pt-4 border-t border-gray-100">
                                     <h4 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-2">🔄 Virements internes</h4>
                                     <div v-for="vir in getVirementsMois(moisNum, anneeAffichage)" :key="vir.id" class="flex items-center gap-2 mb-2 bg-indigo-50 rounded-xl p-2.5 border border-indigo-100">
+                                        <span v-if="vir.origine === 'juste_besoin'" data-vir-auto title="Posé par l’appli (alimentation au juste besoin / Recalibrer)" class="text-[9px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded shrink-0">🤖 auto</span>
                                         <select v-model="vir.sourceCompte" @change="handleDataChange" class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none cursor-pointer text-gray-700" title="Compte source">
                                             <option value="courant">💳 Courant</option>
                                             <option v-for="c in comptesSelectOptions" :key="'vsrc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
@@ -9610,8 +9621,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.154 Adapter au potentiel sans découvert";
+                    const CURRENT_VERSION = "37.155 Ce que l'appli pose, affiché chaque mois";
                     const CHANGELOG = [
+        { version: "37.155 Ce que l'appli pose, affiché chaque mois", date: "2026-11-27", changes: [
+            "🤖 « L'APPLI NE DOIT PAS ÊTRE MUETTE : SI RECALIBRER FAIT QUELQUE CHOSE, ELLE DOIT AFFICHER EN PERMANENCE SES TRANSACTIONS, SUR CHAQUE MOIS » — jusqu'ici, « Recalibrer » et ses étapes ne laissaient qu'une ligne dans le journal d'activité et un résumé en haut du Calendrier ; un doublon retiré disparaissait sans trace, une épargne réadaptée ne se voyait qu'en ouvrant ses exceptions.",
+            "DÉSORMAIS, DANS LE CALENDRIER — l'en-tête de chaque mois concerné, même fermé : « 🤖 N posé(s) par l'appli » ; le mois ouvert : « 🤖 Posé par l'appli ce mois », une ligne par opération et qui l'a faite (« Recalibrer 2026, le 27/11/2026 ») : 🔄 virement posé pour alimenter le Courant · 🗑️ ancien virement retiré (remplacé) · ⚖️ montant d'une épargne fixé par l'adaptation (et réduit pour garder le compte source ≥ 0) · 📥 virement intégré à une épargne · 🧹 doublon retiré (désormais gardé). Les virements posés par l'appli portent « 🤖 auto ». AU RELEVÉ — « · 🤖 posé par l'appli » sur ces virements, « · ⚖️ adapté par l'appli » sur l'épargne d'un mois adapté. « Annuler le recalibrage » efface aussi ce qu'il avait dit.",
+            "PREUVE — test_operations_auto.mjs (vrai navigateur) : avant, aucun mois ne parle ; après « Recalibrer 2026 » : doublon de décembre dit dans décembre, chaque virement posé dans SON mois, chaque mois d'épargne adaptée, l'auteur et la date ; en-têtes des mois fermés, détail, badges ; Relevé ; Annuler.",
+        ] },
         { version: "37.154 Adapter au potentiel sans découvert", date: "2026-11-27", changes: [
             "⚖️ « OUI, CHANGE » — « Adapter au potentiel » avait mis 22 210 en décembre sur « Alimentation Dépenses Annuelles & Projets », versés depuis ASSAFA qui finissait à −12 217 : le potentiel est un budget THÉORIQUE (entrées − sorties du mois) et ce qu'un mois n'utilisait pas s'accumulait sur le dernier, sans jamais regarder le solde du compte d'où part l'argent.",
             "LA GARDE — l'adaptation lit maintenant le Relevé : au premier cycle où le compte SOURCE passe sous zéro, elle retire le manque au mois versé le plus proche (jamais sous 0), et recommence. Si le compte est sous zéro même sans cette épargne, rien n'est versé et c'est dit. Même garde pour le CFO et « Recalibrer l'année ».",
@@ -20406,8 +20422,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 amt = Math.round(amt * 100) / 100;
                                 if (amt <= 0) return;
                                 const _vj = Number(vir.jourPrevu || 20);
-                                out.push({ account: _vs, libelle: '🔄 Virement → ' + getNomCompte(vir.destinationCompte || 'courant'), montant: amt, type: 'debit', jourPrevu: _vj, internal: true });
-                                out.push({ account: _vd, libelle: '🔄 Virement reçu ← ' + getNomCompte(vir.sourceCompte || 'courant'), montant: amt, type: 'credit', jourPrevu: _vj, internal: true });
+                                const _auto = vir.origine === 'juste_besoin' ? ' · 🤖 posé par l’appli' : '';   // v37.155
+                                out.push({ account: _vs, libelle: '🔄 Virement → ' + getNomCompte(vir.destinationCompte || 'courant') + _auto, montant: amt, type: 'debit', jourPrevu: _vj, internal: true });
+                                out.push({ account: _vd, libelle: '🔄 Virement reçu ← ' + getNomCompte(vir.sourceCompte || 'courant') + _auto, montant: amt, type: 'credit', jourPrevu: _vj, internal: true });
                             });
 
                             // ===== CHOCS EXCEPTIONNELS : DÉTAILLÉS ligne par ligne (créances via assurances_tracker) =====
@@ -20431,7 +20448,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const v = _effVal(e, e.valeur, m); if (v <= 0) return;
                                 if (mode !== 'full' && isItemPaid(e, v, _cyc)) return; // transfert déjà réalisé → censuré 100% (jamais affiché)
                                 const amt = Math.round(v * 100) / 100;
-                                const lbl = e.nom || e.label || 'Épargne';
+                                const _ap = e.adapteePotentiel, _adapte = _ap && Number(_ap.an) === a && _ap.mois && _ap.mois[m] !== undefined;   // v37.155
+                                const lbl = (e.nom || e.label || 'Épargne') + (_adapte ? ' · ⚖️ adapté par l’appli' : '');
                                 const _jr = Number(e.jourPrevu || jdp);
                                 const _src = _normKey(e.sourceCompte || 'courant');
                                 const _dst = e.linkedAccountId ? _normKey(e.linkedAccountId) : ('ep_' + e.id);
@@ -21198,7 +21216,10 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const d = (donneesAnnuelles.value || {})[Number(an)];
                         if (!d || !Array.isArray(d.virementsInternes)) return 0;
                         const vus = new Set(); let n = 0;
-                        d.virementsInternes = d.virementsInternes.filter(v => { if (!v) return true; const s = _sigVirement(v); if (vus.has(s)) { n++; return false; } vus.add(s); return true; });
+                        const retires = [];
+                        d.virementsInternes = d.virementsInternes.filter(v => { if (!v) return true; const s = _sigVirement(v); if (vus.has(s)) { n++; retires.push(JSON.parse(JSON.stringify(v))); return false; } vus.add(s); return true; });
+                        //  v37.155 : gardés (les 40 derniers) — le Calendrier les montre dans leur mois
+                        if (retires.length) { if (!Array.isArray(d.doublonsRetires)) d.doublonsRetires = []; retires.forEach(v => d.doublonsRetires.push({ le: _aujourdhuiISO(), v })); d.doublonsRetires = d.doublonsRetires.slice(-40); }
                         if (n) { calculationTick.value++; if (!silencieux) { addLog('🧹 ' + n + ' virement(s) en double retiré(s) en ' + an + '.', 'success'); handleDataChange(); } }
                         return n;
                     };
@@ -21212,6 +21233,49 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                  alertes: gardeFousAnnee(a, mins).length };
                     };
                     const _lignesEpargne = (d) => (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).filter(Boolean);
+
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.155 — « L'APPLI NE DOIT PAS ÊTRE MUETTE : SI RECALIBRER FAIT QUELQUE CHOSE, ELLE DOIT AFFICHER EN
+                       PERMANENCE SES TRANSACTIONS, SUR CHAQUE MOIS. » Tout ce que l'appli a posé, changé ou retiré d'elle-même,
+                       relu depuis les données (rien de calculé à part) : les virements de l'alimentation au juste besoin (ajoutés,
+                       et les anciens retirés), les mois d'une épargne fixés par « Adapter au potentiel » (et réduits pour ne pas
+                       mettre le compte source à découvert), les virements intégrés à une épargne, les doublons retirés.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _dateFr = (iso) => { const x = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return x ? x[3] + '/' + x[2] + '/' + x[1] : ''; };
+                    const _libVirement = (v) => formatMAD(Math.abs(Number(v.montant) || 0)) + ' de ' + getNomCompte(v.sourceCompte || 'courant') + ' vers ' + getNomCompte(v.destinationCompte || 'courant')
+                                                   + (v.jourPrevu ? ' (le ' + v.jourPrevu + ')' : '');
+                    const operationsAutoDuMois = (an, m) => {
+                        const a = Number(an), M = Number(m), d = (donneesAnnuelles.value || {})[a];
+                        if (!d) return [];
+                        const out = [], aj = d.alimentationJusteBesoin, rc = d.recalibrage;
+                        const parQui = (le) => (rc && rc.le === le ? 'Recalibrer ' + a : 'Alimentation au juste besoin') + (le ? ', le ' + _dateFr(le) : '');
+                        (d.virementsInternes || []).filter(v => v && v.origine === 'juste_besoin' && Number(v.mois) === M).forEach(v =>
+                            out.push({ cle: 'aj+' + v.id, type: 'ajout', icone: '🔄', texte: 'Virement posé : ' + _libVirement(v), par: parQui(aj && aj.le) }));
+                        ((aj && aj.retires) || []).filter(x => x && Number(x.an) === a && x.v && Number(x.v.mois) === M).forEach((x, i) =>
+                            out.push({ cle: 'aj-' + (x.v.id || i), type: 'retrait', icone: '🗑️', texte: 'Ancien virement retiré (remplacé) : ' + _libVirement(x.v), par: parQui(aj && aj.le) }));
+                        (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).forEach(o => {
+                            const ap = o && o.adapteePotentiel;
+                            if (!ap || Number(ap.an) !== a) return;
+                            const nom = o.nom || o.label || 'Épargne', par = (rc && rc.le === ap.le ? 'Recalibrer ' + a : 'Adapter au potentiel') + (ap.le ? ', le ' + _dateFr(ap.le) : '');
+                            if (ap.mois && ap.mois[M] !== undefined) {
+                                const red = ap.plafonnes && ap.plafonnes[M] !== undefined;
+                                out.push({ cle: 'ep' + o.id, type: 'epargne', icone: '⚖️', par,
+                                           texte: '« ' + nom + ' » : ' + formatMAD(ap.mois[M]) + ' ce mois (montant de base ' + formatMAD(o.valeur) + ')'
+                                                  + (red ? ' — réduit au lieu de ' + formatMAD(ap.plafonnes[M]) + ' pour que ' + getNomCompte(ap.compteSource || o.sourceCompte || 'courant') + ' reste ≥ 0' : '') });
+                            }
+                            (ap.virementsAbsorbes || []).filter(v => v && Number(v.mois) === M).forEach((v, i) =>
+                                out.push({ cle: 'ab' + o.id + '-' + (v.id || i), type: 'retrait', icone: '📥', texte: 'Virement intégré à « ' + nom + ' » (retiré du Calendrier) : ' + _libVirement(v), par }));
+                        });
+                        (d.doublonsRetires || []).filter(x => x && x.v && Number(x.v.mois) === M).forEach((x, i) =>
+                            out.push({ cle: 'db' + (x.v.id || i) + '-' + i, type: 'retrait', icone: '🧹', texte: 'Doublon retiré : ' + _libVirement(x.v), par: (rc && rc.le === x.le ? 'Recalibrer ' + a : 'Retirer les doublons') + ', le ' + _dateFr(x.le) }));
+                        return out;
+                    };
+                    const operationsAutoAnnee = computed(() => {
+                        calculationTick.value;
+                        const a = anneeAffichage.value, o = {};
+                        for (let m = 1; m <= 12; m++) o[m] = operationsAutoDuMois(a, m);
+                        return o;
+                    });
                     const recalibrerAnnee = (an) => {
                         const a = Number(an), D = donneesAnnuelles.value || {}, d = D[a];
                         if (!d) { addLog('🎯 Exercice ' + a + ' absent : rien à recalibrer.', 'warn'); return null; }
@@ -21245,6 +21309,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             dy.virementsInternes = JSON.parse(JSON.stringify(s.virementsInternes || []));
                             if (s.alimentationJusteBesoin) dy.alimentationJusteBesoin = JSON.parse(JSON.stringify(s.alimentationJusteBesoin)); else delete dy.alimentationJusteBesoin;
                         });
+                        if (Array.isArray(d.doublonsRetires)) d.doublonsRetires = d.doublonsRetires.filter(x => x && x.le !== r.le);   // v37.155 : revenus avec les virements
                         delete d.recalibrage;
                         calculationTick.value++;
                         addLog('↩️ Recalibrage de ' + a + ' annulé : virements et épargne d’avant revenus.', 'success');
@@ -28988,7 +29053,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage, restesCyclePrecedent, ciblesReport, resteCible, resteMarquerPaye, resteReporter, resteClore,
-                        tachesSansDate, valeurEffective, resumeExceptions, propositionAdaptation, proposerAdaptation, validerAdaptation, basDuCompteAdapte: _basDuCompte, cleDeCompte, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
+                        tachesSansDate, valeurEffective, operationsAutoDuMois, operationsAutoAnnee, resumeExceptions, propositionAdaptation, proposerAdaptation, validerAdaptation, basDuCompteAdapte: _basDuCompte, cleDeCompte, buildJournalReleve: _buildJournalReleve, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
                         // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.

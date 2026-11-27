@@ -159,6 +159,7 @@ suite "Charge fixe selon X mois — serveur (PHP)"  php test_cfo_engine_parity/t
 suite "Les restes du cycle d'avant : payé, reporté, clos"  node test_cfo_engine_parity/test_restes_cycle.mjs
 suite "L'épargne variable se voit au Budget"  node test_cfo_engine_parity/test_epargne_variable_visible.mjs
 suite "Adapter au potentiel sans découvert, avec aperçu"  node test_cfo_engine_parity/test_adapter_sans_decouvert.mjs
+suite "Ce que l'appli pose, affiché chaque mois"  node test_cfo_engine_parity/test_operations_auto.mjs
 suite "Des dates, partout : plus aucun « j.N » ni « J−N »"  node test_cfo_engine_parity/test_dates_partout.mjs
 suite "Le même jour : les entrées d’abord, la grande case dit où elle regarde et quel virement avancer"  node test_cfo_engine_parity/test_meme_jour.mjs
 suite "Les deux graphiques du Bilan : par compte, par type de charges"  node test_cfo_engine_parity/test_graphiques_bilan.mjs
