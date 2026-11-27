@@ -1773,9 +1773,9 @@
                                 </div>
                                 <div v-for="depense in getDepensesMois(moisNum, anneeAffichage)" :key="depense.id" :data-dep-id="depense.id" class="bg-gray-50 rounded-xl group border border-transparent hover:border-slate-200 transition-all">
                                     <!-- v18.00 : overflow-x-auto pour éviter l'élargissement horizontal sur mobile -->
-                                    <div class="overflow-x-auto">
-                                    <div class="flex items-center gap-3 p-3 min-w-max md:min-w-0">
-                                        <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
+                                    <div>
+                                    <div data-dep-ligne class="flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
+                                        <input type="text" v-model="depense.nom" @input="handleDataChange" :class="['flex-1 min-w-[10rem] font-bold bg-transparent outline-none transition-all text-sm', isItemPaid(depense, depense.montant) && soldesInitiaux.moisActuel === moisNum && soldesInitiaux.anneeActuelle === anneeAffichage ? 'text-slate-400 line-through' : 'text-slate-800']"/>
                                         <input type="number" v-model.number="depense.montant" @input="handleDataChange" :disabled="depense.parts && depense.parts.length > 0" :class="['w-24 text-right font-black bg-transparent outline-none', depense.parts && depense.parts.length ? 'text-gray-400' : (depense.montant < 0 ? 'text-green-600' : 'text-red-600')]"/>
                                         <span v-if="depense.montant < 0" class="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase">Injection Banque</span>
                                         <span v-if="depense.parts && depense.parts.length" class="text-[8px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-black uppercase">✂️ {{depense.parts.length}} parties</span>
@@ -1793,7 +1793,7 @@
                                             <option v-for="m in 12" :key="m" :value="m" v-show="m !== moisNum" class="text-gray-800 bg-white">{{ nomDuMois(m) }}</option>
                                         </select>
                                         <button v-if="!depense.parts || !depense.parts.length" @click="scinderLigneArr(depense)" class="text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg transition-colors border border-blue-200 text-xs font-bold" title="Scinder en sous-parties">✂️</button>
-                                        <button title="Supprimer" aria-label="Supprimer" @click="supprimerDepense(depense.id); handleDataChange()" class="text-red-400 hover:text-red-600 px-2 font-bold md:opacity-50 md:group-hover:opacity-100 transition-opacity text-lg">✕</button>
+                                        <button title="Supprimer ce flux" aria-label="Supprimer ce flux" data-dep-supprimer @click="supprimerDepense(depense.id); handleDataChange()" class="ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-700 font-bold text-sm">✕</button>
                                     </div>
                                     </div><!-- /overflow-x-auto depense row -->
                                     <!-- v17.29 : Sous-parties chocs -->
@@ -1818,24 +1818,26 @@
                                 <!-- v17.96 : Virements internes -->
                                 <div class="mt-4 pt-4 border-t border-gray-100">
                                     <h4 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-2">🔄 Virements internes</h4>
-                                    <div v-for="vir in getVirementsMois(moisNum, anneeAffichage)" :key="vir.id" class="flex items-center gap-2 mb-2 bg-indigo-50 rounded-xl p-2.5 border border-indigo-100">
+                                    <div v-for="vir in getVirementsMois(moisNum, anneeAffichage)" :key="vir.id" data-vir-ligne class="flex flex-wrap items-center gap-2 mb-2 bg-indigo-50 rounded-xl p-2.5 border border-indigo-100">
                                         <span v-if="vir.origine === 'juste_besoin'" data-vir-auto title="Posé par l’appli (alimentation au juste besoin / Recalibrer)" class="text-[9px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded shrink-0">🤖 auto</span>
-                                        <select v-model="vir.sourceCompte" @change="handleDataChange" class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none cursor-pointer text-gray-700" title="Compte source">
+                                        <select v-model="vir.sourceCompte" @change="handleDataChange" class="flex-1 min-w-[9rem] max-w-full text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none cursor-pointer text-gray-700" title="Compte source">
                                             <option value="courant">💳 Courant</option>
                                             <option v-for="c in comptesSelectOptions" :key="'vsrc_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
                                             <option v-for="ep in epargneNonLiee" :key="'vsrep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                         </select>
                                         <span class="text-indigo-400 font-bold text-xs shrink-0">→</span>
-                                        <select v-model="vir.destinationCompte" @change="handleDataChange" class="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none cursor-pointer text-gray-700" title="Compte destination">
+                                        <select v-model="vir.destinationCompte" @change="handleDataChange" class="flex-1 min-w-[9rem] max-w-full text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none cursor-pointer text-gray-700" title="Compte destination">
                                             <option value="courant">💳 Courant</option>
                                             <option v-for="c in comptesSelectOptions" :key="'vdst_'+c.id" :value="'cpt_'+c.id">{{ c.icone }} {{ c.label }}</option>
                                             <option v-for="ep in epargneNonLiee" :key="'vdep_'+ep.id" :value="'ep_'+ep.id">🎯 {{ ep.nom }}</option>
                                         </select>
                                         <label class="flex items-center gap-1 shrink-0" title="Jour exact du mois — vide : sans jour précis"><span class="text-[10px] font-black text-gray-400">📅 le</span><input data-jour-exact type="number" min="1" :max="joursDuMoisCal(vir.mois, anneeAffichage)" v-valeur="vir.jourPrevu || ''" @change="fixerJourExact(vir, $event.target.value, vir.mois, anneeAffichage); $event.target.value = vir.jourPrevu || ''" placeholder="—" class="w-12 text-center font-black text-xs bg-white border border-gray-200 rounded-lg px-1 py-1.5 outline-none focus:ring-2 focus:ring-blue-300"/><span data-jour-mois class="text-[10px] font-black text-gray-400">{{ moisCourt(vir.mois) }}</span></label>
                                         <span v-if="jourApresPaie(vir)" data-jour-cycle-suivant :title="'Le ' + vir.jourPrevu + ' tombe après la paie (le ' + jourDePaieCal() + ') : compté dans le cycle suivant'" class="text-[8px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-black whitespace-nowrap">après paie → {{ cycleSuivantNom(vir.mois) }}</span>
-                                        <input type="number" v-model.number="vir.montant" @input="handleDataChange" min="0" class="w-24 text-right font-black text-indigo-700 bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none text-xs"/>
-                                        <span class="text-[9px] text-gray-400 font-bold shrink-0">DH</span>
-                                        <button title="Supprimer" aria-label="Supprimer" @click="supprimerVirementInterne(vir.id, anneeAffichage)" class="text-red-400 hover:text-red-600 px-1 font-bold text-sm shrink-0">✕</button>
+                                        <span class="ml-auto flex items-center gap-1 shrink-0">
+                                            <input type="number" v-model.number="vir.montant" @input="handleDataChange" min="0" class="w-24 text-right font-black text-indigo-700 bg-white border border-gray-200 rounded-lg px-2 py-1.5 outline-none text-xs"/>
+                                            <span class="text-[9px] text-gray-400 font-bold">DH</span>
+                                            <button title="Supprimer ce virement" aria-label="Supprimer ce virement" data-vir-supprimer @click="supprimerVirementInterne(vir.id, anneeAffichage)" class="ml-1 w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-700 font-bold text-sm">✕</button>
+                                        </span>
                                     </div>
                                     <button @click="ajouterVirementInterne(moisNum, anneeAffichage)" class="w-full py-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-[10px] font-black text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 uppercase transition-all tracking-[0.15em]">+ Virement interne en {{ nomDuMois(moisNum) }}</button>
                                 </div>
@@ -4170,12 +4172,12 @@
                             <span class="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-200">{{ (donneesAnnuelles[anneeAffichage].virementsInternes || []).length }} virement{{ (donneesAnnuelles[anneeAffichage].virementsInternes || []).length !== 1 ? 's' : '' }}</span>
                         </div>
                         <div class="p-3 space-y-2">
-                            <div v-for="vir in (donneesAnnuelles[anneeAffichage].virementsInternes || [])" :key="vir.id" class="bg-white rounded-xl border border-indigo-100 p-3">
+                            <div v-for="vir in (donneesAnnuelles[anneeAffichage].virementsInternes || [])" :key="vir.id" data-vir-ligne class="bg-white rounded-xl border border-indigo-100 p-3">
                                 <div class="flex items-center justify-between mb-2">
                                     <select v-model.number="vir.mois" @change="handleDataChange" class="text-xs font-bold bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1.5 outline-none text-indigo-700 cursor-pointer min-h-[44px]">
                                         <option v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :value="m">{{ nomDuMois(m) }}</option>
                                     </select>
-                                    <button title="Supprimer" aria-label="Supprimer" @click="supprimerVirementInterne(vir.id, anneeAffichage)" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-red-400 font-black text-base bg-red-50 rounded-lg border border-red-200">✕</button>
+                                    <button title="Supprimer" aria-label="Supprimer" data-vir-supprimer @click="supprimerVirementInterne(vir.id, anneeAffichage)" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-red-400 font-black text-base bg-red-50 rounded-lg border border-red-200">✕</button>
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 mb-2">
                                     <div>
@@ -9621,8 +9623,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.155 Ce que l'appli pose, affiché chaque mois";
+                    const CURRENT_VERSION = "37.156 Calendrier : chaque ✕ visible";
                     const CHANGELOG = [
+        { version: "37.156 Calendrier : chaque ✕ visible", date: "2026-11-27", changes: [
+            "✕ « L'AFFICHAGE N'EST PAS OK, JE NE PEUX PAS SUPPRIMER LE VIREMENT ! » — au Calendrier, la ligne d'un virement (deux comptes aux noms longs, le jour, « après paie → Janvier », le montant) ne passait jamais à la ligne : le ✕ sortait de l'écran, à droite. Celle d'un flux exceptionnel (« Paiement Notaire & Travaux ») cachait le sien derrière une barre de défilement horizontale.",
+            "DÉSORMAIS — les deux lignes passent à la ligne quand la place manque ; les comptes se partagent la largeur ; le montant et le ✕ restent ensemble à droite ; le ✕ est un vrai bouton encadré de rouge, toujours visible (plus de demi-transparence au survol). PREUVE — test_calendrier_lignes.mjs (vrai CSS Tailwind) : à 1280 et 820 px, le ✕ des 2 virements et du flux de décembre est entier dans sa ligne, sans défilement ; au téléphone (onglet flux), chaque ✕ entier et pas de défilement de côté ; un clic supprime le virement.",
+        ] },
         { version: "37.155 Ce que l'appli pose, affiché chaque mois", date: "2026-11-27", changes: [
             "🤖 « L'APPLI NE DOIT PAS ÊTRE MUETTE : SI RECALIBRER FAIT QUELQUE CHOSE, ELLE DOIT AFFICHER EN PERMANENCE SES TRANSACTIONS, SUR CHAQUE MOIS » — jusqu'ici, « Recalibrer » et ses étapes ne laissaient qu'une ligne dans le journal d'activité et un résumé en haut du Calendrier ; un doublon retiré disparaissait sans trace, une épargne réadaptée ne se voyait qu'en ouvrant ses exceptions.",
             "DÉSORMAIS, DANS LE CALENDRIER — l'en-tête de chaque mois concerné, même fermé : « 🤖 N posé(s) par l'appli » ; le mois ouvert : « 🤖 Posé par l'appli ce mois », une ligne par opération et qui l'a faite (« Recalibrer 2026, le 27/11/2026 ») : 🔄 virement posé pour alimenter le Courant · 🗑️ ancien virement retiré (remplacé) · ⚖️ montant d'une épargne fixé par l'adaptation (et réduit pour garder le compte source ≥ 0) · 📥 virement intégré à une épargne · 🧹 doublon retiré (désormais gardé). Les virements posés par l'appli portent « 🤖 auto ». AU RELEVÉ — « · 🤖 posé par l'appli » sur ces virements, « · ⚖️ adapté par l'appli » sur l'épargne d'un mois adapté. « Annuler le recalibrage » efface aussi ce qu'il avait dit.",
