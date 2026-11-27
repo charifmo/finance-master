@@ -1669,6 +1669,9 @@
                                 </div>
                                 <div class="text-right shrink-0">
                                     <span class="text-lg font-black text-purple-700">{{ formatMAD(obj.valeur) }}<span class="text-xs text-gray-400 font-bold ml-1">/mois</span></span>
+                                    <!-- v37.153 : les mois qui ne valent PAS ce montant (exceptions, « adapter au potentiel ») — le Relevé les applique -->
+                                    <button v-if="resumeExceptions(obj)" type="button" data-ep-variable @click="activeTab = 'wealth'" :title="'Montant variable selon le mois — se règle dans Patrimoine & Objectifs'"
+                                            class="block ml-auto mt-0.5 max-w-[22rem] text-right text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-300 rounded-md px-1.5 py-0.5 hover:bg-amber-100">📅 {{ resumeExceptions(obj) }}</button>
                                     <div class="flex items-center gap-1 mt-1 justify-end">
                                         <span class="text-[9px] text-gray-400 font-bold uppercase">Solde actuel :</span>
                                         <input type="number" v-model.number="soldesInitiaux['ep_'+obj.id]" @change="handleDataChange" class="w-24 text-right text-sm font-black bg-gray-50 border border-gray-200 rounded px-2 py-0.5 outline-none focus:border-purple-400" step="100" placeholder="0"/>
@@ -5306,7 +5309,10 @@
                             <div v-for="obj in donneesAnnuelles[anneeAffichage].epargne" :key="obj.id" class="flex justify-between items-center pb-3 mb-3 border-b border-gray-100 last:border-0 last:mb-0">
                                 <input v-if="estEnEdition('epargne:' + obj.id)" data-nom-edition type="text" v-model="obj.nom" @keydown.enter.prevent="finRenommer(false)" @keydown.esc.prevent="finRenommer(true)" @blur="finRenommer(false)" class="text-xs font-bold text-gray-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none" />
                                 <span v-else data-nom :data-ligne="'epargne:' + obj.id" @dblclick="commencerRenommer('epargne:' + obj.id, obj, 'nom', renommerEpargne(obj.id))" title="Double-clic pour renommer" class="text-xs font-black text-gray-700 uppercase tracking-wide cursor-text select-none">{{ obj.nom }}</span>
-                                <span class="text-sm font-black text-purple-700">{{ formatMAD(obj.valeur) }}<span class="text-[9px] text-gray-400 ml-1">/mois</span></span>
+                                <div class="text-right">
+                                    <span class="text-sm font-black text-purple-700">{{ formatMAD(obj.valeur) }}<span class="text-[9px] text-gray-400 ml-1">/mois</span></span>
+                                    <p v-if="resumeExceptions(obj)" data-ep-variable class="text-[9px] font-black text-amber-700 mt-0.5">📅 {{ resumeExceptions(obj) }}</p>
+                                </div>
                             </div>
                             <div v-if="!donneesAnnuelles[anneeAffichage].epargne || donneesAnnuelles[anneeAffichage].epargne.length === 0" class="text-center text-gray-400 text-xs py-3 italic">Aucun objectif.</div>
                             <p class="mt-2 text-center text-[9px] text-gray-400 font-bold uppercase tracking-widest">✏️ Éditer dans 💎 Patrimoine &amp; Objectifs</p>
@@ -9576,8 +9582,12 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.152 Les restes du cycle d'avant";
+                    const CURRENT_VERSION = "37.153 L'épargne variable se voit au Budget";
                     const CHANGELOG = [
+        { version: "37.153 L'épargne variable se voit au Budget", date: "2026-11-27", changes: [
+            "📅 « D'OÙ VIENT CE VIREMENT DE 22 K ? JE NE LE VOIS NULLE PART » — « Y'EN A PAS !! » : le Relevé du cycle de décembre montrait « 💎 Transfert → Alimentation Dépenses Annuelles & Projets 22 210 », le Budget Structurel « 3 000 DH /mois ». Les deux disaient vrai : décembre a une exception (« ⚖️ Adapter au potentiel » met dans chaque mois ce qui y reste), que le Relevé applique — mais le bloc Épargne du Budget n'affichait que le montant de base, sans trace des mois qui varient.",
+            "DÉSORMAIS — sous le montant d'une épargne qui varie : « 📅 variable : déc. 22 210 DH · adaptée au potentiel » (au bureau et au téléphone) ; un clic ouvre Patrimoine & Objectifs, où ces mois se règlent (« Montant variable selon le mois », « ↩ retirer » l'adaptation). PREUVE — test_epargne_variable_visible.mjs : décembre 22 210 et novembre 3 000 au moteur, le résumé à l'écran sur la seule ligne qui varie, le clic.",
+        ] },
         { version: "37.152 Les restes du cycle d'avant", date: "2026-11-27", changes: [
             "⏮️ « UN MÉCANISME POUR REPORTER OU MARQUER COMME PAYÉ, EN HAUT DU NOUVEAU CYCLE, EN SURLIGNANT LES CHARGES NON RENSEIGNÉES DEPUIS LE CYCLE D'AVANT » — une ligne non réglée d'un cycle clos ne passait pas dans le suivant (chaque cycle n'a que ses propres lignes) : elle sortait des prévisions sans qu'on le voie. Le Pilotage du nouveau cycle s'ouvre maintenant sur « Restés sans suite — cycle de … » : les entrées non pointées d'abord, puis les charges par jour ; « rien saisi » surligné, « 49 saisis sur 99 » pour une ligne entamée ; les totaux à payer et à encaisser.",
             "TROIS GESTES par ligne — ✓ Payé / Reçu : cochée dans SON cycle (comme en Mode Régularisation). ↪ Reporter (vers ce cycle ou l'un des 11 suivants) : le reste devient un flux exceptionnel « ↪ tel (reporté de Novembre 2026) » — une charge, ou une entrée en négatif —, à traiter dans le cycle choisi et compté par le Relevé et la projection ; la ligne d'origine est close et garde où elle est partie (jamais comptée deux fois). ✕ Clore : rien de plus attendu (une enveloppe pas toute dépensée n'est pas une dette). L'épargne et les virements : Fait ou Clore. Les enveloppes de la semaine n'y figurent pas. Pas de bandeau en consultant un cycle passé ; la liste vide, il disparaît.",
@@ -20887,6 +20897,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         addLog('⚖️ « ' + (obj.nom || 'Épargne') + ' » adaptée au potentiel de ' + a + ' : ' + plages.filter(p => valeurs[p.moisDebut] !== undefined).map(p => (p.moisDebut === p.moisFin ? 'M' + p.moisDebut : 'M' + p.moisDebut + '–M' + p.moisFin) + ' ' + formatMAD(p.nouvelleValeur)).join(' · '), 'success');
                         return valeurs;
                     };
+                    //  v37.153 — « D'OÙ VIENT CE VIREMENT DE 22 K ? JE NE LE VOIS NULLE PART » : le Budget Structurel n'affichait que le
+                    //  montant de base (3 000 / mois) ; les mois variables (exceptions, « ⚖️ Adapter au potentiel ») que le Relevé applique
+                    //  n'y laissaient aucune trace. Résumé lisible : « variable : déc. 22 210 DH · adaptée au potentiel ».
+                    const resumeExceptions = (obj) => {
+                        const ex = ((obj || {}).exceptions || []).filter(e => Number(e.moisDebut) && Number(e.moisFin));
+                        if (!ex.length) return '';
+                        const M = ['', 'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+                        const morceaux = ex.slice().sort((x, y) => Number(x.moisDebut) - Number(y.moisDebut)).map(e => {
+                            const a = Number(e.moisDebut), b = Number(e.moisFin);
+                            return (a === b ? M[a] : M[a] + '–' + M[b]) + ' ' + formatMAD(Number(e.nouvelleValeur) || 0);
+                        });
+                        return 'variable : ' + morceaux.slice(0, 4).join(' · ') + (morceaux.length > 4 ? ' · …' : '') + ((obj || {}).adapteePotentiel ? ' · adaptée au potentiel' : '');
+                    };
                     const retirerAdaptationEpargne = (obj) => {
                         if (!obj) return;
                         //  v37.93 : les virements ponctuels absorbés reviennent
@@ -28852,7 +28875,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage, restesCyclePrecedent, ciblesReport, resteCible, resteMarquerPaye, resteReporter, resteClore,
-                        tachesSansDate, valeurEffective, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
+                        tachesSansDate, valeurEffective, resumeExceptions, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
                         // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.
