@@ -133,6 +133,9 @@ const mesurer = () => {
 
 const ouvrir = async (w, h) => {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
+    //  v37.152 — horloge figée au 12 du mois (milieu de cycle, paie le 27) : à partir du 27, le mois budgétaire passe au suivant,
+    //  le surplus moyen des mois restants change de signe et le contrôle du fonds de sécurité échouait selon le jour du test.
+    { const n = new Date(); await page.clock.setFixedTime(new Date(n.getFullYear(), n.getMonth(), 12, 12, 0, 0)); }
     const erreurs = []; page.on('pageerror', e => erreurs.push(String(e)));
     page.on('dialog', d => d.dismiss());
     await page.goto(`http://127.0.0.1:${srv.address().port}/finance/`, { waitUntil: 'load' });

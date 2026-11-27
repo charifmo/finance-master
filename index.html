@@ -5502,6 +5502,38 @@
                         <button @click="pilotageViewedCycle = null" class="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg hover:bg-amber-200 transition-colors whitespace-nowrap shrink-0">Cycle actuel</button>
                     </div>
 
+                    <!-- v37.152 : LES RESTES DU CYCLE D'AVANT — surlignés en haut du nouveau cycle : payé, reporté ou clos -->
+                    <details v-if="!isPilotageRetro && restesCyclePrecedent.lignes.length" data-restes-precedent :open="uiOuvert('pilotage.restes', true)" @toggle="uiFixer('pilotage.restes', $event.target.open)"
+                             class="rounded-2xl border-2 border-amber-400 bg-amber-50 shadow-md overflow-hidden">
+                        <summary class="cursor-pointer list-none px-4 py-3 flex items-center gap-2 flex-wrap">
+                            <span class="text-base">⏮️</span>
+                            <span class="text-[11px] font-black uppercase tracking-widest text-amber-900">Restés sans suite — cycle de {{ restesCyclePrecedent.nom }}</span>
+                            <span class="ml-auto text-[11px] font-black text-amber-900 tabular-nums" data-restes-total>{{ restesCyclePrecedent.lignes.length }} ligne{{ restesCyclePrecedent.lignes.length > 1 ? 's' : '' }}<template v-if="restesCyclePrecedent.aPayer"> · {{ formatMAD(restesCyclePrecedent.aPayer) }} à payer</template><template v-if="restesCyclePrecedent.aEncaisser"> · +{{ formatMAD(restesCyclePrecedent.aEncaisser) }} à encaisser</template></span>
+                        </summary>
+                        <p class="px-4 -mt-1 pb-2 text-[11px] font-semibold text-amber-800">Ce cycle est clos et ces lignes n'ont pas été réglées. Elles ne passent pas toutes seules dans le cycle en cours : <b>✓ payé</b> (dans son cycle), <b>↪ reporter</b> (le reste devient un flux du cycle choisi) ou <b>✕ clore</b> (rien de plus attendu).</p>
+                        <div class="px-3 pb-3 space-y-2">
+                            <div v-for="l in restesCyclePrecedent.lignes" :key="l.cle" data-reste-ligne :data-libelle="l.libelle"
+                                 :class="['bg-white rounded-xl border p-2.5 flex items-center gap-2 flex-wrap', l.regle > 0 ? 'border-amber-200' : 'border-amber-400 ring-1 ring-amber-300']">
+                                <span class="text-base shrink-0">{{ l.icone }}</span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm font-black text-gray-800 truncate">{{ l.libelle }}</p>
+                                    <p class="text-[10px] font-bold text-gray-500 truncate">{{ l.groupe }} · <span :class="l.regle > 0 ? 'text-gray-500' : 'text-amber-700'" data-reste-etat>{{ l.regle > 0 ? formatMAD(l.regle) + ' saisis sur ' + formatMAD(l.due) : 'rien saisi' }}</span><template v-if="l.jourPrevu"> · le {{ l.jourPrevu }}</template></p>
+                                </div>
+                                <span :class="['text-sm font-black tabular-nums shrink-0', l.sens === 'credit' ? 'text-emerald-700' : 'text-rose-700']" data-reste-montant>{{ l.sens === 'credit' ? '+' : '' }}{{ formatMAD(l.reste) }}</span>
+                                <div class="flex items-center gap-1 flex-wrap w-full sm:w-auto justify-end">
+                                    <button type="button" data-reste-paye @click="resteMarquerPaye(l)" class="text-[10px] font-black px-2 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">✓ {{ l.sens === 'credit' ? 'Reçu' : (l.nature === 'epargne' || l.nature === 'virement' ? 'Fait' : 'Payé') }}</button>
+                                    <template v-if="l.reportable">
+                                        <select data-reste-cible :value="resteCible[l.cle] || (ciblesReport[0] && ciblesReport[0].cle)" @change="resteCible[l.cle] = $event.target.value" class="text-[10px] font-bold border border-indigo-200 rounded-lg px-1 py-1 bg-indigo-50 text-indigo-800 max-w-[11.5rem]">
+                                            <option v-for="c in ciblesReport" :key="c.cle" :value="c.cle">{{ c.nom }}</option>
+                                        </select>
+                                        <button type="button" data-reste-reporter @click="resteReporter(l)" class="text-[10px] font-black px-2 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">↪ Reporter</button>
+                                    </template>
+                                    <button type="button" data-reste-clore @click="resteClore(l)" :title="l.sens === 'credit' ? 'Cette entrée n\'arrivera pas' : 'Rien de plus à payer (une enveloppe pas toute dépensée n\'est pas une dette)'" class="text-[10px] font-black px-2 py-1 rounded-lg bg-white border border-gray-300 text-gray-600 hover:bg-gray-100">✕ Clore</button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
                     <!-- ═══ LES TROIS CHIFFRES ═══════════════════════════════════════
                          Aucun n'a de formule à lui : Urgence = les deux premiers
                          paquets de la liste, Progression = réglé + reste des mêmes
@@ -9544,8 +9576,14 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.151 Tests légers, moyens ou complets";
+                    const CURRENT_VERSION = "37.152 Les restes du cycle d'avant";
                     const CHANGELOG = [
+        { version: "37.152 Les restes du cycle d'avant", date: "2026-11-27", changes: [
+            "⏮️ « UN MÉCANISME POUR REPORTER OU MARQUER COMME PAYÉ, EN HAUT DU NOUVEAU CYCLE, EN SURLIGNANT LES CHARGES NON RENSEIGNÉES DEPUIS LE CYCLE D'AVANT » — une ligne non réglée d'un cycle clos ne passait pas dans le suivant (chaque cycle n'a que ses propres lignes) : elle sortait des prévisions sans qu'on le voie. Le Pilotage du nouveau cycle s'ouvre maintenant sur « Restés sans suite — cycle de … » : les entrées non pointées d'abord, puis les charges par jour ; « rien saisi » surligné, « 49 saisis sur 99 » pour une ligne entamée ; les totaux à payer et à encaisser.",
+            "TROIS GESTES par ligne — ✓ Payé / Reçu : cochée dans SON cycle (comme en Mode Régularisation). ↪ Reporter (vers ce cycle ou l'un des 11 suivants) : le reste devient un flux exceptionnel « ↪ tel (reporté de Novembre 2026) » — une charge, ou une entrée en négatif —, à traiter dans le cycle choisi et compté par le Relevé et la projection ; la ligne d'origine est close et garde où elle est partie (jamais comptée deux fois). ✕ Clore : rien de plus attendu (une enveloppe pas toute dépensée n'est pas une dette). L'épargne et les virements : Fait ou Clore. Les enveloppes de la semaine n'y figurent pas. Pas de bandeau en consultant un cycle passé ; la liste vide, il disparaît.",
+            "PREUVE — test_restes_cycle.mjs (vrai navigateur, 13 contrôles, au 28 nov., paie le 27) : SALAIRE, tel (49 / 99), Syndic, Nounou listés, pas « elect » (réglée par le journal) ni les courses ; ✓ Payé sur Syndic → payé en novembre, décembre garde le sien ; ↪ Reporter tel → flux de 50 dû le 28 nov. dans le cycle de décembre, à côté du tel de décembre (99, intact), projection fin 2026 −50 au dirham ; SALAIRE reporté en janvier 2027 → entrée de 20 000 le 27 déc. (cycle de janvier, pas décembre) ; ✕ Clore Nounou → aucun flux ; rétro → pas de bandeau.",
+            "TESTS — ajouter un test (une ligne « suite » de plus dans run_tests.sh) ne déclenche plus le full : le nouveau test et le socle suffisent ; une ligne existante changée, oui. Deux suites échouaient selon le jour (à partir du 27, le mois budgétaire passe au suivant) : « Interface de bureau » (fonds de sécurité) a maintenant son horloge figée au 12, comme « Pilotage Réalisé ».",
+        ] },
         { version: "37.151 Tests légers, moyens ou complets", date: "2026-11-26", changes: [
             "⏱️ « OPTIMISE LES TESTS : NE REJOUE PAS TOUS LES TNR SAUF SI C'EST COMPLEXE ET QUE ÇA TOUCHE À TOUT — 3 NIVEAUX : LÉGER, MOYEN, FULL » — les trois niveaux existaient (v37.146) mais ne triaient presque rien : le « léger » d'un changement de l'écran Finance retenait 95 suites sur 99 (il lisait les phrases du changelog et des mots que presque toutes les suites citent : chargesFixes, valeur, donneesAnnuelles…), et le « moyen » rejouait tout le domaine Finance, soit presque le complet.",
             "DÉSORMAIS — bash run_tests.sh leger | moyen | full (ou 1 | 2 | 3 ; sans argument : automatique). Léger : les suites qui nomment ce qui a changé + un socle rapide ; le changelog et les commentaires ne comptent plus, un identifiant cité par plus de 10 % des suites est écarté (et c'est dit). Moyen : le léger + un socle moyen de 23 suites (moteur, projection, cycle, Relevé, CFO). Full automatique seulement si le noyau des tests change, si deux domaines ont un changement de fond, ou au-delà de 3 000 lignes. Durée estimée affichée ; PLAN=1 montre le choix sans rien exécuter. Sur le changement de la v37.150 : léger 37 suites ≈ 68 s, moyen 45 ≈ 71 s, full 119 ≈ 208 s.",
@@ -22831,6 +22869,109 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         const somme = (sens) => Math.round(lignes.filter(t => (t.sens || 'debit') === sens).reduce((s, t) => s + (t.clos ? t.regle : (t.regle || t.due)), 0));
                         return { lignes, regle: somme('debit'), encaisse: somme('credit') };
                     });
+
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.152 — LES RESTES DU CYCLE D'AVANT, EN HAUT DU NOUVEAU CYCLE.
+                       « Je propose un mécanisme pour reporter ou marquer comme payé, en haut du nouveau cycle, en surlignant
+                       les charges non renseignées depuis le cycle d'avant. » Une ligne non réglée d'un cycle clos ne passe
+                       PAS d'elle-même dans le suivant (chaque cycle n'a que ses propres lignes) : elle disparaissait des
+                       prévisions sans qu'on le voie. Le bandeau les liste (charges, entrées, épargne, virements, flux
+                       exceptionnels ; pas les enveloppes de la semaine) et, pour chacune :
+                         ✓ Payé / Reçu — réglée dans SON cycle (comme une case cochée en rétro : l'opération va au journal) ;
+                         ↪ Reporter    — le reste devient un flux exceptionnel du cycle choisi (ce cycle ou un suivant), positif
+                                          pour une charge, négatif pour une entrée ; la ligne d'origine est close et garde
+                                          { reporte: { vers, montant, id } } — jamais comptée deux fois ;
+                         ✕ Clore       — rien de plus n'est attendu (une enveloppe pas toute dépensée n'est pas une dette).
+                       L'épargne et les virements ne se reportent pas en dépense : Fait ou Clore.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const _cyclePrecedentDe = (m, a) => (Number(m) === 1 ? { mois: 12, an: Number(a) - 1 } : { mois: Number(m) - 1, an: Number(a) });
+                    const restesCyclePrecedent = computed(() => {
+                        calculationTick.value;
+                        const mb = moisBudgetaire.value, { mois: pm, an: pa } = _cyclePrecedentDe(mb.mois, mb.an);
+                        const cyc = _cleCycle(pm, pa), d = donneesAnnuelles.value[pa];
+                        const nom = nomDuMois(pm) + ' ' + pa, lignes = [];
+                        if (!d) return { cyc, nom, lignes, aPayer: 0, aEncaisser: 0 };
+                        const pousser = (ref, libelle, dueBrut, groupe, icone, jourPrevu, nature, refCompte, sens = 'debit', reportable = true) => {
+                            const due = Math.abs(Number(dueBrut) || 0);
+                            if (!ref || due <= 0 || isItemPaid(ref, dueBrut, cyc) || estClotureItem(ref, cyc)) return;
+                            const regle = Math.abs(Number(getPaidAmount(ref, dueBrut, cyc)) || 0);
+                            const reste = Math.round((due - regle) * 100) / 100;
+                            if (reste < 1) return;
+                            lignes.push({ cle: nature + ':' + (ref.id != null ? ref.id : (ref.categorieId || libelle)), ref, libelle: libelle || '(sans nom)', due, dueBrut: Number(dueBrut) || 0,
+                                          regle, reste, groupe, icone, nature, sens, reportable, cyc, jourPrevu: Number(jourPrevu) || null, rang: _rangDansCycle(jourPrevu),
+                                          compte: compteDeFlux(nature, refCompte || ref) });
+                        };
+                        Object.values(d.revenus || {}).forEach(r => { if (r) pousser(r, r.label, getDueRevenu(r, pa, pm), 'Entrée', '💰', r.jourPrevu, 'revenu', r, 'credit'); });
+                        Object.values(d.chargesFixes || {}).forEach(f => { if (f) pousser(f, f.label, getDueFixe(f, pa, pm), 'Charge fixe', '🏢', f.jourPrevu, 'fixe'); });
+                        Object.values(d.chargesVariables || {}).forEach(cat => {
+                            if (!cat || cat.periode !== 'mois' || valeurEffective(cat, cat.valeur, pm) <= 0) return;
+                            (cat.details || []).forEach(x => { if (x) pousser(x, x.nom, dueDetailDuCycle(x, cat, pm, pa), cat.label || 'Charge variable', '🛒', x.jourPrevu || cat.jourPrevu, 'variable', x.compte ? x : cat); });
+                        });
+                        (Array.isArray(d.epargne) ? d.epargne : Object.values(d.epargne || {})).forEach(ep => { if (ep) pousser(ep, ep.nom || ep.label || 'Épargne', getDueFixe(ep, pa, pm), 'Épargne', '💎', ep.jourPrevu, 'epargne', ep, 'debit', false); });
+                        getVirementsCycle(pm, pa).forEach(vir => {
+                            const sx = cleDeCompte(vir.sourceCompte || 'courant'), dx = cleDeCompte(vir.destinationCompte || 'courant');
+                            if (sx !== dx) pousser(vir, 'Virement ' + infoCompte(sx).tag + ' → ' + infoCompte(dx).tag, Math.abs(Number(vir.montant) || 0), 'Virement', '🔄', vir.jourPrevu, 'virement', vir, 'debit', false);
+                        });
+                        getDepensesCycle(pm, pa).forEach(dep => {
+                            if (!dep || dep.sourceAssurance) return;
+                            const n = Number(dep.montant) || 0;
+                            pousser(dep, dep.nom, n, n < 0 ? 'Entrée exceptionnelle' : 'Flux exceptionnel', n < 0 ? '💚' : '⚡', dep.jourPrevu, 'exceptionnel', dep, n < 0 ? 'credit' : 'debit');
+                        });
+                        lignes.sort((x, y) => (x.sens === y.sens ? 0 : (x.sens === 'credit' ? -1 : 1)) || x.rang - y.rang || x.libelle.localeCompare(y.libelle));
+                        const somme = (sens) => Math.round(lignes.filter(l => l.sens === sens).reduce((t, l) => t + l.reste, 0));
+                        return { cyc, nom, lignes, aPayer: somme('debit'), aEncaisser: somme('credit') };
+                    });
+                    //  Où reporter : ce cycle, ou l'un des suivants (dans les années qui existent)
+                    const ciblesReport = computed(() => {
+                        const mb = moisBudgetaire.value, out = [];
+                        for (let k = 0; k < 12; k++) {
+                            const m = ((mb.mois - 1 + k) % 12) + 1, a = mb.an + Math.floor((mb.mois - 1 + k) / 12);
+                            if (!donneesAnnuelles.value[a]) continue;
+                            out.push({ cle: _cleCycle(m, a), mois: m, an: a, nom: nomDuMois(m) + ' ' + a + (k === 0 ? ' (ce cycle)' : '') });
+                        }
+                        return out;
+                    });
+                    const resteCible = reactive({});
+                    const resteMarquerPaye = (l) => {
+                        if (!l || !l.ref) return;
+                        toggleItemPaid(l.ref, l.dueBrut, l.cyc);
+                        calculationTick.value++;
+                        addLog('✓ ' + l.libelle + ' : ' + (l.sens === 'credit' ? 'reçu' : 'payé') + ' dans le cycle de ' + restesCyclePrecedent.value.nom + '.');
+                    };
+                    const resteClore = (l) => {
+                        if (!l || !l.ref) return;
+                        cloturerItem(l.ref, l.cyc);
+                        calculationTick.value++;
+                        addLog('✕ ' + l.libelle + ' : close dans le cycle de ' + restesCyclePrecedent.value.nom + ' (rien de plus attendu).');
+                    };
+                    const resteReporter = (l, cleCible) => {
+                        if (!l || !l.ref || !l.reportable) return null;
+                        const cible = ciblesReport.value.find(c => c.cle === (cleCible || resteCible[l.cle])) || ciblesReport.value[0];
+                        if (!cible) return null;
+                        const jdp = Number(jourDePaie.value) || 27, auj = new Date();
+                        //  ce cycle : dû aujourd'hui (il est en retard) ; un cycle suivant : son jour habituel, sinon sans jour
+                        const estCeCycle = cible.cle === _cleCycle(moisBudgetaire.value.mois, moisBudgetaire.value.an);
+                        const jour = estCeCycle ? auj.getDate() : (l.jourPrevu || null);
+                        let mois = cible.mois, annee = cible.an;
+                        if (jour && jour >= jdp) { const pr = _cyclePrecedentDe(cible.mois, cible.an); mois = pr.mois; annee = pr.an; }   // après la paie : rangé au mois d'avant (règle du jour de paie)
+                        const d = donneesAnnuelles.value[annee];
+                        if (!d) return null;
+                        if (!Array.isArray(d.depensesIrregulieres)) d.depensesIrregulieres = [];
+                        const flux = { id: Date.now() + Math.floor(Math.random() * 1000), mois, annee, nom: '↪ ' + l.libelle + ' (reporté de ' + restesCyclePrecedent.value.nom + ')',
+                                       montant: l.sens === 'credit' ? -l.reste : l.reste, paye: false, montantPaye: 0,
+                                       sourceCompte: l.compte || 'courant', categorieId: 'cat_irr_depense_exceptionnelle',
+                                       reportDe: { cycle: l.cyc, nature: l.nature, libelle: l.libelle } };
+                        if (jour) flux.jourPrevu = jour;
+                        d.depensesIrregulieres.push(flux);
+                        const e = _etatCycle(l.ref, l.cyc) || { paye: false, montantPaye: 0 };
+                        _poserEtatCycle(l.ref, l.cyc, Object.assign({}, e, { cloture: true, dateReelle: e.dateReelle || _aujourdhuiISO(), reporte: { vers: cible.cle, montant: l.reste, id: flux.id } }));
+                        delete resteCible[l.cle];
+                        calculationTick.value++;
+                        handleDataChange();
+                        addLog('↪ ' + l.libelle + ' : ' + formatMAD(l.reste) + ' reporté(s) au cycle de ' + nomDuMois(cible.mois) + ' ' + cible.an + '.');
+                        return flux.id;
+                    };
+
                     //  Ce qui est suspendu ce mois (exception à 0) : dit en une ligne.
                     const suspendusPilotage = computed(() => {
                         calculationTick.value;
@@ -28710,7 +28851,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         ajouterIdentifiantCompte, calibrerCompte, resoudreCompteReleve, bqChoisirCentimes, bqAnalyser, bqFusionner, bqClasser, bqMarchand, bqHash, bqLibProche, bqAnalyserOCR, bqMemeCompte, bqRibValide, rattacherTicketsALaLigne, ocrCapture, bqTexteParRangees: _texteParRangees,
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
-                        entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage,
+                        entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage, restesCyclePrecedent, ciblesReport, resteCible, resteMarquerPaye, resteReporter, resteClore,
                         tachesSansDate, valeurEffective, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
                         // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul

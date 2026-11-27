@@ -156,6 +156,7 @@ suite "Le cycle se lit comme le Relevé : dates, pourquoi du point bas, dépasse
 suite "Le journal règle sa ligne du Pilotage (factures, fixes, épargne)"  node test_cfo_engine_parity/test_journal_regle.mjs
 suite "Charge fixe selon X mois (trimestre, semestre, an)"  node test_cfo_engine_parity/test_periodicite.mjs
 suite "Charge fixe selon X mois — serveur (PHP)"  php test_cfo_engine_parity/test_periodicite.php
+suite "Les restes du cycle d'avant : payé, reporté, clos"  node test_cfo_engine_parity/test_restes_cycle.mjs
 suite "Des dates, partout : plus aucun « j.N » ni « J−N »"  node test_cfo_engine_parity/test_dates_partout.mjs
 suite "Le même jour : les entrées d’abord, la grande case dit où elle regarde et quel virement avancer"  node test_cfo_engine_parity/test_meme_jour.mjs
 suite "Les deux graphiques du Bilan : par compte, par type de charges"  node test_cfo_engine_parity/test_graphiques_bilan.mjs
