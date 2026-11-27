@@ -1182,7 +1182,8 @@
                                                 <td class="p-2 text-right font-black text-red-500 text-xs tabular-nums">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
                                                 <td class="p-2 text-right text-[10px] text-emerald-500 font-bold tabular-nums">✓ reçu</td>
                                             </tr>
-                                            <tr v-else :class="['border-b transition-all', e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50']">
+                                            <tr v-else :data-releve-cliquable="e.src ? e.src.k : null" @click="e.src && ouvrirActionReleve(e)" :title="e.src ? 'Cliquer : modifier, supprimer ou ouvrir là où ça se règle' : ''"
+                                    :class="['border-b transition-all', e.src ? 'cursor-pointer' : '', e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50']">
                                                 <td class="p-2 text-[10px] text-gray-900 font-black whitespace-nowrap">{{ dateReleve(e) }}</td>
                                                 <td class="p-2"><span v-if="e.compteKey" class="inline-block text-[8px] font-black bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded whitespace-nowrap">{{ getNomCompte(e.compteKey) }}</span></td>
                                                 <td class="p-2 text-xs text-gray-900 font-medium">{{ e.libelle }}</td>
@@ -6984,6 +6985,45 @@
 
         <!-- v37.107 — PENDANT LA SAISIE, LA FRISE EN UN APPUI : 📈 rejoint la rangée des boutons flottants (téléphone), une
              pastille « 📈 Frise du cycle » en bas à droite (ordinateur). Seulement sur l'écran Saisie. -->
+        <!-- v37.157 : le Relevé interactif — la fenêtre d'une ligne -->
+        <div v-if="actionReleve" data-action-releve :data-type="actionReleve.s.k" class="fixed inset-0 z-[1100] bg-black/50 flex items-center justify-center p-4" @click.self="actionReleve = null">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 space-y-3">
+                <div class="flex items-start gap-2">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-indigo-600">{{ actionReleve.date }} · {{ actionReleve.compte }}</p>
+                        <p class="text-sm font-black text-gray-900 break-words">{{ actionReleve.libelle }}</p>
+                        <p :class="['text-sm font-black tabular-nums', actionReleve.type === 'credit' ? 'text-green-700' : 'text-red-600']">{{ actionReleve.type === 'credit' ? '+' : '−' }}{{ formatMAD(actionReleve.montant) }}</p>
+                    </div>
+                    <button type="button" @click="actionReleve = null" aria-label="Fermer" class="w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 font-bold">✕</button>
+                </div>
+                <template v-if="actionReleve.s.k !== 'groupe'">
+                    <label v-if="['flux', 'epargne', 'revenu'].includes(actionReleve.s.k)" class="block text-[11px] font-black text-gray-600">Nom
+                        <input data-ar-nom type="text" v-model="actionReleve.f.nom" class="mt-1 w-full p-2 text-sm font-bold border border-gray-300 rounded-lg"/></label>
+                    <label class="block text-[11px] font-black text-gray-600">{{ ['epargne', 'revenu'].includes(actionReleve.s.k) ? 'Montant de ' + actionReleve.moisNom + ' (cette ligne seulement ce mois-ci)' : 'Montant' }}
+                        <input data-ar-montant type="number" min="0" v-model.number="actionReleve.f.montant" :disabled="actionReleve.sansMontant" class="mt-1 w-full p-2 text-sm font-black text-right border border-gray-300 rounded-lg disabled:bg-gray-100"/>
+                        <span v-if="actionReleve.sansMontant" class="block text-[10px] font-semibold text-gray-500 mt-0.5">Ce flux est découpé en parties : son montant se change dans le Calendrier.</span></label>
+                    <div v-if="['flux', 'virement'].includes(actionReleve.s.k)" class="grid grid-cols-2 gap-2">
+                        <label class="block text-[11px] font-black text-gray-600">Mois
+                            <select data-ar-mois v-model.number="actionReleve.f.mois" class="mt-1 w-full p-2 text-sm font-bold border border-gray-300 rounded-lg"><option v-for="m in 12" :key="m" :value="m">{{ nomDuMois(m) }}</option></select></label>
+                        <label class="block text-[11px] font-black text-gray-600">Jour
+                            <input data-ar-jour type="number" min="1" max="31" v-model="actionReleve.f.jour" placeholder="—" class="mt-1 w-full p-2 text-sm font-black text-center border border-gray-300 rounded-lg"/></label>
+                    </div>
+                    <label v-else-if="['epargne', 'revenu'].includes(actionReleve.s.k)" class="block text-[11px] font-black text-gray-600">Jour du mois
+                        <input data-ar-jour type="number" min="1" max="31" v-model="actionReleve.f.jour" placeholder="—" class="mt-1 w-full p-2 text-sm font-black text-center border border-gray-300 rounded-lg"/></label>
+                    <label v-else-if="actionReleve.s.k === 'creance'" class="block text-[11px] font-black text-gray-600">Date de remboursement attendue
+                        <input data-ar-date type="date" v-model="actionReleve.f.date" class="mt-1 w-full p-2 text-sm font-bold border border-gray-300 rounded-lg"/></label>
+                    <p class="text-[10px] font-semibold text-gray-500">Modifié ici, c'est l'élément lui-même qui change ({{ actionReleve.ou }}) : le Relevé, le Budget et la projection suivent.</p>
+                </template>
+                <p v-else data-ar-groupe class="text-[12px] font-semibold text-gray-700">Cette ligne regroupe les {{ actionReleve.s.quoi }} du cycle : chacune se modifie dans le Budget Structurel.</p>
+                <div class="flex flex-wrap items-center gap-2 pt-1">
+                    <button v-if="['flux', 'virement', 'epargne', 'revenu'].includes(actionReleve.s.k)" type="button" data-ar-supprimer @click="supprimerActionReleve()"
+                            :class="['px-3 py-1.5 rounded-lg text-xs font-black border', actionReleve.confirmer ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-300 hover:bg-red-50']">
+                        {{ actionReleve.confirmer ? (['epargne', 'revenu'].includes(actionReleve.s.k) ? 'Oui, retirer pour ' + actionReleve.moisNom : 'Oui, supprimer') : (['epargne', 'revenu'].includes(actionReleve.s.k) ? '🗑️ Retirer ce mois-ci' : '🗑️ Supprimer') }}</button>
+                    <button type="button" data-ar-aller @click="allerAActionReleve()" class="px-3 py-1.5 rounded-lg text-xs font-black border border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50">↗ Ouvrir dans {{ actionReleve.ou }}</button>
+                    <button v-if="actionReleve.s.k !== 'groupe'" type="button" data-ar-enregistrer @click="enregistrerActionReleve()" class="ml-auto px-3 py-1.5 rounded-lg text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700">✓ Enregistrer</button>
+                </div>
+            </div>
+        </div>
         <!-- v37.154 : ⚖️ Adapter au potentiel — l'aperçu avant d'appliquer -->
         <div v-if="propositionAdaptation" data-apercu-adaptation class="fixed inset-0 z-[400] bg-black/50 flex items-center justify-center p-4" @click.self="propositionAdaptation = null">
             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 space-y-3">
@@ -8412,7 +8452,7 @@
                                 <span :class="['text-[10px] font-black uppercase tracking-widest', e.type === 'cycle_sep' ? 'text-indigo-700' : 'text-emerald-700']">{{ e.libelle }}</span>
                                 <span v-if="e.type === 'cycle_sep' && e.soldeApres !== null && e.soldeApres !== undefined" class="block text-[10px] font-bold text-indigo-500">Solde entrée : {{ formatMAD(e.soldeApres) }}</span>
                             </div>
-                            <div v-else data-releve-carte :class="['px-3 py-2', e.type === 'initial' ? 'bg-blue-50' : (e.etat === 'realise' ? 'bg-emerald-50/50' : (e.type === 'credit' ? 'bg-green-50/30' : 'bg-white'))]">
+                            <div v-else data-releve-carte :data-releve-cliquable="e.src ? e.src.k : null" @click="e.src && ouvrirActionReleve(e)" :class="['px-3 py-2', e.src ? 'cursor-pointer active:bg-indigo-50' : '', e.type === 'initial' ? 'bg-blue-50' : (e.etat === 'realise' ? 'bg-emerald-50/50' : (e.type === 'credit' ? 'bg-green-50/30' : 'bg-white'))]">
                                 <div class="flex items-center justify-between gap-2 min-w-0">
                                     <span class="min-w-0 flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
                                         <span class="shrink-0 whitespace-nowrap">{{ dateReleve(e) || (e.etat === 'realise' ? '✓' : '') }}</span>
@@ -8476,7 +8516,8 @@
                                     <td class="p-2 text-right font-black text-red-500 text-xs tabular-nums">{{ e.type === 'debit' ? formatMAD(e.montant) : '' }}</td>
                                     <td class="p-2 text-right text-[10px] text-emerald-500 font-bold tabular-nums">✓ reçu</td>
                                 </tr>
-                                <tr v-else :class="['border-b transition-all', e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50']">
+                                <tr v-else :data-releve-cliquable="e.src ? e.src.k : null" @click="e.src && ouvrirActionReleve(e)" :title="e.src ? 'Cliquer : modifier, supprimer ou ouvrir là où ça se règle' : ''"
+                                    :class="['border-b transition-all', e.src ? 'cursor-pointer' : '', e.type === 'credit' ? 'border-gray-100 bg-green-50/30 hover:bg-green-50/60' : 'border-gray-100 bg-white hover:bg-gray-50']">
                                     <td class="p-2 text-[10px] text-gray-900 font-black whitespace-nowrap">{{ dateReleve(e) }}</td>
                                     <td class="p-2"><span v-if="e.compteKey" class="inline-block text-[8px] font-black bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded whitespace-nowrap">{{ getNomCompte(e.compteKey) }}</span></td>
                                     <td class="p-2 text-xs text-gray-900 font-medium">{{ e.libelle }}</td>
@@ -9623,8 +9664,13 @@
             const app = createApp({
                 components: { 'base-chart': BaseChart, 'meteo-financiere': MeteoFinanciere, 'chip-compte': ChipCompte, 'radar-comptes': RadarComptes, 'choix-categorie': ChoixCategorie, 'ruban-voyage': RubanVoyage },
                 setup() {
-                    const CURRENT_VERSION = "37.156 Calendrier : chaque ✕ visible";
+                    const CURRENT_VERSION = "37.157 Le Relevé interactif";
                     const CHANGELOG = [
+        { version: "37.157 Le Relevé interactif", date: "2026-11-27", changes: [
+            "👆 « JE VEUX QUE CE SOIT PLUS INTERACTIF, COMME LA FRISE : JE CLIQUE SUR UN TRUC, IL ME DONNE DES OPTIONS — ALLER DANS LA PARTIE MODIFIABLE, MODIFIER LA DATE, LA VALEUR OU LE NOM, ET ÇA SE MODIFIE DIRECT COMME SI JE L'AVAIS CHANGÉ LÀ-BAS ; MÊME CHOSE POUR LE DELETE » — chaque ligne prévue du Relevé de comptes sait maintenant ce qu'elle représente, et un clic ouvre sa fenêtre.",
+            "CE QU'ON PEUT FAIRE — un flux du Calendrier (« ⚠️ Medoc Ma femme ») : nom, montant, mois, jour ; 🗑️ supprimer. Un virement : montant, mois, jour ; supprimer. Une épargne ou un revenu : le nom, le jour, et le montant DE CE MOIS (le montant de base ne bouge pas) ; « 🗑️ Retirer ce mois-ci » (la ligne reste au budget). Une créance attendue : montant et date. Partout : « ↗ Ouvrir dans … » (Calendrier, mois déplié ; Patrimoine & Objectifs ; Budget Structurel ; Créances). Une ligne qui regroupe (Total Charges Fixes, Factures, enveloppes de la semaine) le dit et renvoie au Budget. C'est l'élément lui-même qui change : Relevé, Budget, Calendrier et projection suivent ; supprimer demande une confirmation (« Oui, supprimer »).",
+            "PREUVE — test_releve_interactif.mjs (vrai navigateur, vrai CSS : la fenêtre doit passer DEVANT le Relevé) : flux renommé, 3 500, le 12 → le Calendrier et le Relevé le montrent ; épargne de novembre 3 000 → 1 500 puis retirée ce mois-ci (décembre intact) ; virement déplacé au 5 décembre ; salaire de novembre seul à 18 000 ; créance au 24/11 ; flux supprimé ; ligne regroupée → Budget ; virement → Calendrier, décembre déplié.",
+        ] },
         { version: "37.156 Calendrier : chaque ✕ visible", date: "2026-11-27", changes: [
             "✕ « L'AFFICHAGE N'EST PAS OK, JE NE PEUX PAS SUPPRIMER LE VIREMENT ! » — au Calendrier, la ligne d'un virement (deux comptes aux noms longs, le jour, « après paie → Janvier », le montant) ne passait jamais à la ligne : le ✕ sortait de l'écran, à droite. Celle d'un flux exceptionnel (« Paiement Notaire & Travaux ») cachait le sien derrière une barre de défilement horizontale.",
             "DÉSORMAIS — les deux lignes passent à la ligne quand la place manque ; les comptes se partagent la largeur ; le montant et le ✕ restent ensemble à droite ; le ✕ est un vrai bouton encadré de rouge, toujours visible (plus de demi-transparence au survol). PREUVE — test_calendrier_lignes.mjs (vrai CSS Tailwind) : à 1280 et 820 px, le ✕ des 2 virements et du flux de décembre est entier dans sa ligne, sans défilement ; au téléphone (onglet flux), chaque ✕ entier et pas de défilement de côté ; un clic supprime le virement.",
@@ -19215,6 +19261,121 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                         moisSelectionnes.value = [1,2,3,4,5,6,7,8,9,10,11,12];
                     };
 
+
+                    /* ═══════════════════════════════════════════════════════════════
+                       v37.157 — LE RELEVÉ INTERACTIF (« comme la frise : je clique sur un truc, il me donne des options —
+                       aller dans la partie modifiable, modifier la date, la valeur ou le nom, et ça se modifie direct comme si
+                       je l'avais changé là-bas ; même chose pour supprimer »). Chaque ligne prévue garde ce qu'elle représente
+                       (src) ; un clic ouvre une fenêtre qui modifie L'ÉLÉMENT LUI-MÊME (le flux du Calendrier, le virement,
+                       l'épargne, le revenu, la créance) — le Relevé, le Budget, le Calendrier et la projection suivent.
+                       Une ligne qui regroupe (Total Charges Fixes, Factures, enveloppes de la semaine) renvoie vers le Budget.
+                       ═══════════════════════════════════════════════════════════════ */
+                    const actionReleve = ref(null);
+                    const _anneeDeRef = (coll, ref) => Object.keys(donneesAnnuelles.value || {}).map(Number).find(y => (((donneesAnnuelles.value[y] || {})[coll]) || []).includes(ref));
+                    //  le montant d'UN mois d'une ligne (exceptions) : égal au montant de base → l'exception du mois disparaît
+                    const _fixerMontantDuMois = (item, champBase, m, v) => {
+                        const parMois = {};
+                        (item.exceptions || []).forEach(e => { const d0 = Number(e.moisDebut), f0 = Number(e.moisFin); for (let k = d0; k <= f0 && k <= 12; k++) if (d0 && f0) parMois[k] = Number(e.nouvelleValeur) || 0; });
+                        if (Number(v) === Number(item[champBase] || 0)) delete parMois[m]; else parMois[m] = Number(v) || 0;
+                        const plages = [];
+                        Object.keys(parMois).map(Number).sort((x, y) => x - y).forEach(k => {
+                            const pl = plages[plages.length - 1];
+                            if (pl && pl.moisFin === k - 1 && pl.nouvelleValeur === parMois[k]) pl.moisFin = k;
+                            else plages.push({ id: Date.now() + plages.length, moisDebut: k, moisFin: k, nouvelleValeur: parMois[k] });
+                        });
+                        item.exceptions = plages;
+                        if (item.adapteePotentiel && item.adapteePotentiel.mois && item.adapteePotentiel.mois[m] !== undefined) delete item.adapteePotentiel.mois[m];   // ce mois est désormais le vôtre
+                    };
+                    const OU_SE_REGLE = { flux: 'Calendrier Pluriannuel', virement: 'Calendrier Pluriannuel', epargne: 'Patrimoine & Objectifs', revenu: 'Budget Structurel', groupe: 'Budget Structurel', creance: 'Créances (Pilotage)' };
+                    const ouvrirActionReleve = (e) => {
+                        const s = e && e.src; if (!s) return;
+                        const r = s.ref || {}, f = { nom: '', montant: 0, mois: null, jour: '', date: '' };
+                        if (s.k === 'flux') Object.assign(f, { nom: r.nom || r.label || '', montant: Math.abs(Number(r.montant) || 0), mois: Number(r.mois) || null, jour: r.jourPrevu || '' });
+                        else if (s.k === 'virement') Object.assign(f, { montant: Math.abs(Number(r.montant) || 0), mois: Number(r.mois) || null, jour: r.jourPrevu || '' });
+                        else if (s.k === 'epargne') Object.assign(f, { nom: r.nom || r.label || '', montant: valeurEffective(r, r.valeur, s.m), jour: r.jourPrevu || '' });
+                        else if (s.k === 'revenu') Object.assign(f, { nom: r.label || r.nom || '', montant: valeurEffective(r, r.base, s.m), jour: r.jourPrevu || '' });
+                        else if (s.k === 'creance') Object.assign(f, { montant: etatCreance(r).montant, date: String(r.dateRemboursement || '').slice(0, 10) });
+                        actionReleve.value = { s, f, libelle: e.libelle, compte: getNomCompte(e.compteKey), date: dateReleve(e), montant: e.montant, type: e.type,
+                                               ou: OU_SE_REGLE[s.k] || 'Budget Structurel', confirmer: false, sansMontant: s.k === 'flux' && Array.isArray(r.parts) && r.parts.length > 0,
+                                               moisNom: s.m ? nomDuMois(s.m) : '' };
+                    };
+                    const _numJour = (j) => { const n = parseInt(j, 10); return Number.isFinite(n) && n >= 1 ? Math.min(31, n) : null; };
+                    const enregistrerActionReleve = () => {
+                        const A = actionReleve.value; if (!A) return false;
+                        const { s, f } = A, r = s.ref;
+                        if (!r) return false;
+                        const v = Math.abs(Number(f.montant) || 0), jour = _numJour(f.jour);
+                        if (s.k === 'flux') {
+                            const an = _anneeDeRef('depensesIrregulieres', r) || anneeAffichage.value;
+                            if (f.nom !== undefined && String(f.nom).trim()) r.nom = String(f.nom).trim();
+                            if (!A.sansMontant) r.montant = (Number(r.montant) < 0 ? -1 : 1) * v;
+                            if (f.mois) r.mois = Number(f.mois);
+                            if (jour) r.jourPrevu = Math.min(jour, joursDuMoisCal(r.mois, an)); else delete r.jourPrevu;
+                        } else if (s.k === 'virement') {
+                            const an = _anneeDeRef('virementsInternes', r) || anneeAffichage.value;
+                            r.montant = v;
+                            if (f.mois) r.mois = Number(f.mois);
+                            if (jour) r.jourPrevu = Math.min(jour, joursDuMoisCal(r.mois, an)); else delete r.jourPrevu;
+                        } else if (s.k === 'epargne') {
+                            if (String(f.nom || '').trim()) { r.nom = String(f.nom).trim(); if ('label' in r) r.label = r.nom; }
+                            if (v !== valeurEffective(r, r.valeur, s.m)) _fixerMontantDuMois(r, 'valeur', s.m, v);
+                            if (jour) r.jourPrevu = jour; else delete r.jourPrevu;
+                        } else if (s.k === 'revenu') {
+                            if (String(f.nom || '').trim()) r.label = String(f.nom).trim();
+                            if (v !== valeurEffective(r, r.base, s.m)) _fixerMontantDuMois(r, 'base', s.m, v);
+                            if (jour) r.jourPrevu = jour; else delete r.jourPrevu;
+                        } else if (s.k === 'creance') {
+                            if ('montantRembourse' in r && r.montantRembourse) r.montantRembourse = v; else r.montant = v;
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) r.dateRemboursement = f.date;
+                        } else return false;
+                        calculationTick.value++;
+                        handleDataChange();
+                        addLog('✏️ « ' + A.libelle.replace(/^\S+\s/, '') + ' » modifié depuis le Relevé.', 'success');
+                        actionReleve.value = null;
+                        return true;
+                    };
+                    const supprimerActionReleve = () => {
+                        const A = actionReleve.value; if (!A) return false;
+                        if (!A.confirmer) { A.confirmer = true; return false; }   // deux temps : « Supprimer » puis « Oui, supprimer »
+                        const { s } = A, r = s.ref;
+                        if (s.k === 'flux' || s.k === 'virement') {
+                            const coll = s.k === 'flux' ? 'depensesIrregulieres' : 'virementsInternes', an = _anneeDeRef(coll, r);
+                            if (an === undefined) return false;
+                            const d = donneesAnnuelles.value[an]; d[coll] = d[coll].filter(x => x !== r);
+                            addLog('🗑️ « ' + A.libelle.replace(/^\S+\s/, '') + ' » supprimé depuis le Relevé.', 'success');
+                        } else if (s.k === 'epargne' || s.k === 'revenu') {
+                            _fixerMontantDuMois(r, s.k === 'epargne' ? 'valeur' : 'base', s.m, 0);   // la ligne reste au budget ; seulement pas ce mois-ci
+                            addLog('🗑️ « ' + A.libelle.replace(/^\S+\s/, '') + ' » retiré pour ' + A.moisNom + ' (la ligne reste au budget).', 'success');
+                        } else return false;
+                        calculationTick.value++;
+                        handleDataChange();
+                        actionReleve.value = null;
+                        return true;
+                    };
+                    const allerAActionReleve = () => {
+                        const A = actionReleve.value; if (!A) return;
+                        const { s } = A, r = s.ref || {};
+                        actionReleve.value = null;
+                        fermerReleve();
+                        const mobile = !!isMobile.value;
+                        if (s.k === 'flux' || s.k === 'virement') {
+                            const an = _anneeDeRef(s.k === 'flux' ? 'depensesIrregulieres' : 'virementsInternes', r);
+                            if (an) anneeAffichage.value = an;
+                            appMode.value = 'previsionnel';
+                            if (mobile) activeMobileTab.value = 'flux'; else activeTab.value = 'irregulieres';
+                            if (r.mois && !moisOuverts.value.includes(Number(r.mois))) moisOuverts.value.push(Number(r.mois));
+                            nextTick(() => { const el = s.k === 'flux' ? document.querySelector('[data-dep-id="' + r.id + '"]') : null; if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+                        } else if (s.k === 'epargne') {
+                            appMode.value = 'previsionnel';
+                            if (mobile) activeMobileTab.value = 'wealth'; else activeTab.value = 'wealth';
+                        } else if (s.k === 'creance') {
+                            appMode.value = 'reel'; activeTab.value = 'pilotage';
+                            nextTick(() => editAssurance(r));
+                        } else {
+                            appMode.value = 'previsionnel';
+                            if (mobile) activeMobileTab.value = 'parametres'; else activeTab.value = 'parametres';
+                        }
+                    };
                     const fermerReleve = () => {
                         showReleveModal.value = false;
                         compteReleve.value = null;
@@ -20345,16 +20506,16 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     const v = _effVal(r, r.base, m);
                                     if (v <= 0 || !isItemPaid(r, v, _cyc)) return; // non encaissé → ignoré (radar asymétrique)
                                     const paid = Math.round((regleDuItem(r, v, _cyc)) * 100) / 100;
-                                    if (paid > 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💰 ' + (r.label || r.nom || 'Revenu'), montant: paid, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), internal: false });
+                                    if (paid > 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💰 ' + (r.label || r.nom || 'Revenu'), montant: paid, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), internal: false, src: { k: 'revenu', ref: r, m } });
                                     return;
                                 }
                                 const amt = _amt(r, r.base);
-                                if (amt > 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💰 ' + (r.label || r.nom || 'Revenu'), montant: amt, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), internal: false });
+                                if (amt > 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💰 ' + (r.label || r.nom || 'Revenu'), montant: amt, type: 'credit', jourPrevu: Number(r.jourPrevu || jdp), internal: false, src: { k: 'revenu', ref: r, m } });
                                 //  v37.84 : un revenu NÉGATIF ce mois-là (règle d'exception) coûte : une sortie du même compte.
                                 //  (_amt écarte tout ce qui est ≤ 0 — « flux inactif » : zéro = suspendu, négatif = un coût)
                                 else {
                                     const vn = _effVal(r, r.base, m);
-                                    if (vn < 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💸 ' + (r.label || r.nom || 'Revenu') + ' (revenu négatif)', montant: Math.round(-vn * 100) / 100, type: 'debit', jourPrevu: Number(r.jourPrevu || jdp), internal: false });
+                                    if (vn < 0) out.push({ account: _normKey(r.destinationCompte), libelle: '💸 ' + (r.label || r.nom || 'Revenu') + ' (revenu négatif)', montant: Math.round(-vn * 100) / 100, type: 'debit', jourPrevu: Number(r.jourPrevu || jdp), internal: false, src: { k: 'revenu', ref: r, m } });
                                 }
                             });
                             // v26.20 Ledger-Math-Sync : realized-in = revenus encaissés uniquement (déjà poussés ci-dessus) → AUCUNE sortie
@@ -20377,19 +20538,19 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 // 💳 Charges fixes — Règle 1 (due − avance)
                                 Object.entries(_parCompte(resteAPayerFixesParCompte.value)).forEach(([k, v]) => {
                                     const _resteFix = Math.round(v * 100) / 100;
-                                    if (_resteFix > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false });
+                                    if (_resteFix > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _resteFix, type: 'debit', jourPrevu: 10, internal: false, src: { k: 'groupe', quoi: 'charges fixes' } });
                                 });
                                 // 🧾 Factures — Règle 1 (due − avance), même traitement que les fixes (v28.90)
                                 Object.entries(_parCompte(resteAPayerFacturesParCompte.value)).forEach(([k, v]) => {
                                     const _resteFact = Math.round(v * 100) / 100;
-                                    if (_resteFact > 0) out.push({ account: k, libelle: '🧾 Total Factures', montant: _resteFact, type: 'debit', jourPrevu: 6, internal: false });
+                                    if (_resteFact > 0) out.push({ account: k, libelle: '🧾 Total Factures', montant: _resteFact, type: 'debit', jourPrevu: 6, internal: false, src: { k: 'groupe', quoi: 'factures' } });
                                 });
                                 // 🛒 Variables consommables — Règle 2 (prorata temporis, HORS factures)
                                 //  v37.46 : une ligne par semaine restante, plus un bloc au 15
                                 Object.entries(_parCompte(enveloppeConsoParCompte.value)).forEach(([k, v]) => {
                                     const _envVar = Math.round(v * 100) / 100;
                                     semainesVariablesDuCycle(m, a, _envVar, new Date()).forEach(s =>
-                                        out.push({ account: k, libelle: s.libelle, montant: s.montant, type: 'debit', jourPrevu: s.jour, internal: false, variableSemaine: true }));
+                                        out.push({ account: k, libelle: s.libelle, montant: s.montant, type: 'debit', jourPrevu: s.jour, internal: false, variableSemaine: true, src: { k: 'groupe', quoi: 'charges variables' } }));
                                 });
                             } else {
                                 // ===== CHARGES FIXES (cycles futurs) : reduce → UNE seule ligne par compte =====
@@ -20399,7 +20560,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                     if (amt > 0) acc[k] = Math.round(((acc[k] || 0) + amt) * 100) / 100;
                                     return acc;
                                 }, {});
-                                Object.keys(_fixByAcc).forEach(k => { if (_fixByAcc[k] > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _fixByAcc[k], type: 'debit', jourPrevu: 10, internal: false }); });
+                                Object.keys(_fixByAcc).forEach(k => { if (_fixByAcc[k] > 0) out.push({ account: k, libelle: '💳 Total Charges Fixes', montant: _fixByAcc[k], type: 'debit', jourPrevu: 10, internal: false, src: { k: 'groupe', quoi: 'charges fixes' } }); });
 
                                 // ===== CHARGES VARIABLES (cycles futurs) : reduce → UNE seule ligne par compte =====
                                 const _varByAcc = Object.values(dA.chargesVariables || {}).reduce((acc, cv) => {
@@ -20410,7 +20571,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 }, {});
                                 //  v37.46 : le budget variable du cycle, une ligne par semaine réelle
                                 Object.keys(_varByAcc).forEach(k => semainesVariablesDuCycle(m, a, _varByAcc[k]).forEach(s =>
-                                    out.push({ account: k, libelle: s.libelle, montant: s.montant, type: 'debit', jourPrevu: s.jour, internal: false, variableSemaine: true })));
+                                    out.push({ account: k, libelle: s.libelle, montant: s.montant, type: 'debit', jourPrevu: s.jour, internal: false, variableSemaine: true, src: { k: 'groupe', quoi: 'charges variables' } })));
                             }
 
                             // ===== v37.35 VIREMENTS INTERNES : DEUX jambes, le même jour — une sortie sur la
@@ -20429,8 +20590,8 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 if (amt <= 0) return;
                                 const _vj = Number(vir.jourPrevu || 20);
                                 const _auto = vir.origine === 'juste_besoin' ? ' · 🤖 posé par l’appli' : '';   // v37.155
-                                out.push({ account: _vs, libelle: '🔄 Virement → ' + getNomCompte(vir.destinationCompte || 'courant') + _auto, montant: amt, type: 'debit', jourPrevu: _vj, internal: true });
-                                out.push({ account: _vd, libelle: '🔄 Virement reçu ← ' + getNomCompte(vir.sourceCompte || 'courant') + _auto, montant: amt, type: 'credit', jourPrevu: _vj, internal: true });
+                                out.push({ account: _vs, libelle: '🔄 Virement → ' + getNomCompte(vir.destinationCompte || 'courant') + _auto, montant: amt, type: 'debit', jourPrevu: _vj, internal: true, src: { k: 'virement', ref: vir } });
+                                out.push({ account: _vd, libelle: '🔄 Virement reçu ← ' + getNomCompte(vir.sourceCompte || 'courant') + _auto, montant: amt, type: 'credit', jourPrevu: _vj, internal: true, src: { k: 'virement', ref: vir } });
                             });
 
                             // ===== CHOCS EXCEPTIONNELS : DÉTAILLÉS ligne par ligne (créances via assurances_tracker) =====
@@ -20445,7 +20606,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 let amt;
                                 if (isItemPaid(dep, due, _cyc)) amt = 0; else { const r = due - (getPaidAmount(dep, due, _cyc) || 0); amt = r > 0 ? r : 0; }
                                 amt = Math.round(amt * 100) / 100;
-                                if (amt > 0) out.push({ account: _normKey(dep.sourceCompte), libelle: (isCreance ? '💚 ' : '⚠️ ') + (dep.nom || dep.label || (isCreance ? 'Créance' : 'Dépense')), montant: amt, type: isCreance ? 'credit' : 'debit', jourPrevu: Number(dep.jourPrevu || 20), internal: false });
+                                if (amt > 0) out.push({ account: _normKey(dep.sourceCompte), libelle: (isCreance ? '💚 ' : '⚠️ ') + (dep.nom || dep.label || (isCreance ? 'Créance' : 'Dépense')), montant: amt, type: isCreance ? 'credit' : 'debit', jourPrevu: Number(dep.jourPrevu || 20), internal: false , src: { k: 'flux', ref: dep } });
                             });
 
                             // ===== ÉPARGNE : DÉTAILLÉE + DOUBLE ÉCRITURE ; paye:true CENSURÉ à 100% (déjà dans les T0) =====
@@ -20460,9 +20621,9 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const _src = _normKey(e.sourceCompte || 'courant');
                                 const _dst = e.linkedAccountId ? _normKey(e.linkedAccountId) : ('ep_' + e.id);
                                 // Ligne 1 — DÉBIT sur le compte SOURCE (l'argent sort)
-                                out.push({ account: _src, libelle: '💎 Transfert → ' + lbl, montant: amt, type: 'debit', jourPrevu: _jr, internal: true });
+                                out.push({ account: _src, libelle: '💎 Transfert → ' + lbl, montant: amt, type: 'debit', jourPrevu: _jr, internal: true, src: { k: 'epargne', ref: e, m } });
                                 // Ligne 2 — CRÉDIT sur le compte DESTINATION (l'argent arrive)
-                                out.push({ account: _dst, libelle: '💎 Versement reçu — ' + lbl, montant: amt, type: 'credit', jourPrevu: _jr, internal: true });
+                                out.push({ account: _dst, libelle: '💎 Versement reçu — ' + lbl, montant: amt, type: 'credit', jourPrevu: _jr, internal: true, src: { k: 'epargne', ref: e, m } });
                             });
                             // ===== v37.43 CRÉANCES EN ATTENTE : assurances_tracker — les SEULES qu'on attend =====
                             //   ✓ encaissée (remboursement:true) : déjà dans le solde d'aujourd'hui → jamais
@@ -20487,7 +20648,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                                 const _compteTarget = _normKey(c.compteDepot || 'courant'); // routage dynamique : compteDepot → courant par défaut
                                 const _lbl = '💰 Créance ' + (ec.retard ? 'en retard (attendue le ' + ec.dateFr + ')' : 'attendue') + ' : '
                                            + (c.libelle || [c.assureur, c.type].filter(Boolean).join(' ') || 'Remboursement');
-                                out.push({ account: _compteTarget, libelle: _lbl, montant: ec.montant, type: 'credit', jourPrevu: _jourPrevu, internal: false });
+                                out.push({ account: _compteTarget, libelle: _lbl, montant: ec.montant, type: 'credit', jourPrevu: _jourPrevu, internal: false, src: { k: 'creance', ref: c } });
                             });
                             return out;
                         };
@@ -20590,7 +20751,7 @@ Structure ta réponse EXACTEMENT comme suit (en utilisant les balises <h3> et co
                             dispLegs.sort((x, y) => _cSort(x.jourPrevu) - _cSort(y.jourPrevu) || ((y.type === 'credit') - (x.type === 'credit')));
                             dispLegs.forEach(l => {
                                 const soldeCompteApres = _apply(l.account, l.montant, l.type);
-                                entries.push({ libelle: l.libelle, montant: l.montant, type: l.type, jourPrevu: l.jourPrevu, etat: 'prevu', soldeApres: soldeCompteApres, compteKey: l.account, soldeCompteApres, cycle: cyc.m + '-' + cyc.a });
+                                entries.push({ libelle: l.libelle, montant: l.montant, type: l.type, jourPrevu: l.jourPrevu, etat: 'prevu', soldeApres: soldeCompteApres, compteKey: l.account, soldeCompteApres, cycle: cyc.m + '-' + cyc.a, src: l.src || null });
                             });
 
                             // ── Avance silencieuse vers le cycle suivant (cycles intermédiaires non affichés) ──
@@ -29059,7 +29220,7 @@ Sois direct, chiffré, et cite mes lignes quand tu recommandes.`;
                         tachesPilotage, tachesATraiter, tachesTerminees, tachesGroupees,
                         resteATraiterPilotage, totalTraitePilotage, pilotageTermineOuvert, revenusRestantsPilotage,
                         entreesPilotage, tiroirsPilotage, dejaValidePilotage, suspendusPilotage, restesCyclePrecedent, ciblesReport, resteCible, resteMarquerPaye, resteReporter, resteClore,
-                        tachesSansDate, valeurEffective, operationsAutoDuMois, operationsAutoAnnee, resumeExceptions, propositionAdaptation, proposerAdaptation, validerAdaptation, basDuCompteAdapte: _basDuCompte, cleDeCompte, buildJournalReleve: _buildJournalReleve, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
+                        tachesSansDate, valeurEffective, actionReleve, ouvrirActionReleve, enregistrerActionReleve, supprimerActionReleve, allerAActionReleve, operationsAutoDuMois, operationsAutoAnnee, resumeExceptions, propositionAdaptation, proposerAdaptation, validerAdaptation, basDuCompteAdapte: _basDuCompte, cleDeCompte, buildJournalReleve: _buildJournalReleve, PERIODICITES_FIXES, periodiciteDe, estMoisDePaiement, moisDePaiement, mensuelLisse, resumePeriodicite, choisirPeriodicite, choisirDepartPeriodicite,
                         // Exposé pour les tests : le constructeur du Relevé.
                         // Exposé pour les tests : le rang du jour dans le cycle, seul
                         // arbitre du classement retard / cette semaine / plus tard.
